@@ -1,0 +1,130 @@
+/* 어르신 대상 기준을 처음부터 지켜 둔다.
+   NFR-AC-001 본문 24px 이상 · NFR-AC-002 터치 64px 이상 · NFR-EN-001 360px 폭 */
+:root {
+  --bg: #f2f4f1; --surface: #fff; --ink: #15211d; --muted: #5a6b64;
+  --rule: #d5dcd6; --accent: #0e5a50; --accent-soft: #e0ede8; --crimson: #95302a;
+}
+* { box-sizing: border-box; }
+body {
+  margin: 0; background: var(--bg); color: var(--ink);
+  font-family: system-ui, -apple-system, "Malgun Gothic", sans-serif;
+  font-size: 18px; line-height: 1.6; word-break: keep-all;
+}
+main { max-width: 760px; margin: 0 auto; padding: 24px 20px 80px; }
+header { margin-bottom: 24px; }
+h1 { font-size: 26px; margin: 0 0 4px; }
+.sub { color: var(--muted); font-size: 15px; margin: 0; }
+h2 { font-size: 15px; color: var(--accent); letter-spacing: .06em; margin: 0 0 12px; }
+
+section {
+  background: var(--surface); border: 1px solid var(--rule);
+  border-radius: 8px; padding: 18px; margin-bottom: 16px;
+}
+label { display: block; font-size: 15px; color: var(--muted); margin: 14px 0 6px; }
+input {
+  width: 100%; min-height: 56px; padding: 12px 14px; font: inherit;
+  border: 1px solid var(--rule); border-radius: 6px; background: var(--bg);
+}
+.row { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 12px; }
+button {
+  flex: 1 1 auto; min-width: 120px; min-height: 64px;   /* NFR-AC-002 */
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  gap: 2px; padding: 10px 16px; font: inherit; font-weight: 600;
+  border: 1px solid var(--accent); border-radius: 6px;
+  background: var(--accent); color: #fff; cursor: pointer;
+}
+button.ghost { background: var(--surface); color: var(--accent); }
+button small { font-size: 13px; font-weight: 400; opacity: .8; }
+button:disabled { opacity: .3; cursor: not-allowed; }
+
+.statebar { display: flex; gap: 14px; align-items: center; flex-wrap: wrap; }
+.chip {
+  padding: 6px 14px; border-radius: 4px; font-size: 15px; font-weight: 600;
+  background: var(--accent-soft); color: var(--accent);
+}
+.chip.listening { background: #0e5a50; color: #fff; }
+.chip.closed { background: var(--rule); color: var(--muted); }
+.meta { font-size: 14px; color: var(--muted); font-variant-numeric: tabular-nums; }
+.question { font-size: 24px; font-weight: 600; margin: 16px 0 0; }  /* NFR-AC-001 */
+
+.fragments { margin: 0; padding-left: 22px; }
+.fragments li { margin-bottom: 16px; }
+.fragments .q { color: var(--accent); font-size: 16px; margin: 0 0 4px; }
+.fragments .a { margin: 0; }
+
+/* 지난 회차 목록. 조각과 달리 번호가 필요 없고, 한 줄이 곧 누를 수 있는 자리다. */
+.records { list-style: none; margin: 12px 0 0; padding: 0; }
+.records li { margin-bottom: 8px; }
+.records button {
+  align-items: flex-start; text-align: left; min-height: 0; padding: 12px 14px;
+}
+h3 { font-size: 15px; font-weight: 600; color: var(--muted); margin: 22px 0 10px; }
+
+table { width: 100%; border-collapse: collapse; font-size: 15px; }
+th, td { text-align: right; padding: 8px 6px; border-bottom: 1px solid var(--rule);
+         font-variant-numeric: tabular-nums; }
+th:first-child, td:first-child { text-align: left; }
+th { font-size: 13px; color: var(--muted); font-weight: 500; }
+.note { font-size: 14px; color: var(--muted); margin: 12px 0 0; }
+
+.error {
+  background: #f6e5e3; color: var(--crimson); border: 1px solid var(--crimson);
+  border-radius: 6px; padding: 14px 16px; margin-bottom: 16px; font-size: 16px;
+}
+
+/* 마이크 — 소리가 닿고 있는지 눈으로 확인하는 자리.
+   숫자가 아니라 막대인 이유는 어르신도 보게 될 화면이기 때문이다. */
+.mic { margin-top: 12px; display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.level {
+  flex: 1; height: 10px; border-radius: 5px; overflow: hidden;
+  background: var(--rule); position: relative;
+}
+.level i {
+  display: block; height: 100%; background: var(--muted); opacity: .45;
+  transition: width 80ms linear;
+}
+.level i.on { background: var(--accent); opacity: 1; }
+/* 문턱 눈금. 막대가 이 선을 넘는 순간 판정이 열린다. */
+.level b {
+  position: absolute; top: 0; width: 2px; height: 100%;
+  background: var(--crimson); transition: left 200ms linear;
+}
+
+/* 판정 속 숫자 — 우리가 보는 자리다. 한 줄을 통째로 차지하게 두고
+   작게 깐다. 어르신에게는 위의 막대만 보이면 된다. */
+.meta.nums {
+  flex-basis: 100%; font-variant-numeric: tabular-nums;
+  font-size: 12px; color: var(--muted); opacity: .8;
+}
+
+/* 낭독 중 표시. 깜빡이는 것보다 색으로 조용히 알린다 —
+   어르신 화면에서 움직이는 것은 주의를 뺏는다. */
+.meta.reading { color: var(--accent); font-weight: 600; }
+
+/* ⑥ 기록 — 폰에서 여는 콘솔
+   여기만 일부러 검은 바탕이다. 화면의 나머지는 어르신이 보는 자리고 이 창은
+   우리가 보는 자리라, 눈으로 단번에 갈리는 편이 낫다. 높이를 고정해 두는 것도
+   같은 이유다 — 기록이 길어져도 아래 내용을 밀어내지 않는다. */
+.logbar { align-items: center; justify-content: space-between; margin-top: 0; }
+.logbar h2 { margin: 0; }
+button.mini {
+  flex: 0 0 auto; min-width: 0; min-height: 40px;
+  padding: 6px 14px; font-size: 14px; font-weight: 500;
+}
+.console {
+  margin-top: 12px; height: 260px; overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  background: #0c100e; border: 1px solid #1e2a25; border-radius: 6px;
+  padding: 10px 12px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 13px; line-height: 1.5; word-break: break-word;
+}
+.console p { display: flex; gap: 8px; margin: 0 0 2px; color: #cfe0d8; }
+.console .t { flex: 0 0 auto; color: #556b62; font-variant-numeric: tabular-nums; }
+/* 태그 폭을 고정한다. 메시지가 줄을 맞춰 서야 훑어 읽을 수 있다. */
+.console .g { flex: 0 0 3.6em; color: #4fb3a0; }
+.console .m { flex: 1 1 auto; }
+.console p.dim, .console p.dim .g { color: #61756c; }
+.console p.warn .m, .console p.warn .g { color: #e3b341; }
+.console p.bad .m, .console p.bad .g { color: #ff7b6b; }
+.console .empty { display: block; color: #556b62; }
