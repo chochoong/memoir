@@ -28,7 +28,7 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
 from app.session import controller as sc
-from app.session import store, stt, tts
+from app.session import prompt, store, stt, tts
 from app.session.machine import TransitionError
 from app.session.question import gemini_question, warmup
 
@@ -53,7 +53,12 @@ async def lifespan(app: FastAPI):
 
     DB 는 **기다린다.** 붙는 데 실패해도 메모리 전용으로 그냥 뜬다 —
     DB 가 없다고 서버가 안 뜨면 프론트 작업이 Postgres 셋업을 기다리게 된다.
+
+    프롬프트 문서는 **반대다. 못 읽으면 여기서 죽는다.** DB 가 없으면 기록이
+    안 남을 뿐이지만 프롬프트가 없으면 어르신께 이상한 질문이 나가고, 그건
+    화면에도 로그에도 표시가 안 난다. 조용히 망가지는 쪽을 막는다.
     """
+    prompt.load()
     await store.open_pool()
     asyncio.create_task(warmup())
     asyncio.create_task(stt.warmup())

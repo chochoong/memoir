@@ -16,9 +16,22 @@ FSM 도 타이머도 이 파일의 존재를 모른다.
    고정 질문으로 물러선다. **None 은 오직 판단 결과일 때만 돌려준다.**
 
 3. **회차를 끝내는 문은 이제 여기 하나뿐이다.** 턴 상한(`max_turn`)을 0(제한 없음)
-   으로 열어 둔 뒤로, 대화가 끝나는 자리는 close 판단과 「중단」 버튼밖에 없다.
-   그래서 close 에 하한을 뒀다 — `MIN_TURN`(기본 3) 전에는 모델이 close 를 골라도
-   따르지 않고 다시 여쭙는다. 상한은 없애고 하한만 남겼다.
+   으로 열어 둔 뒤로, 대화가 끝나는 자리는 종료 판단과 「중단」 버튼밖에 없다.
+   그래서 하한을 뒀다 — `MIN_TURN`(기본 3) 전에는 모델이 마무리를 골라도 따르지
+   않고 다시 여쭙는다. 상한은 없애고 하한만 남겼다.
+
+   **문 이름은 `topic_status: "closed"` 하나다.** 예전에 쓰던 `action: "close"` 는
+   버렸다. 문서(§1)가 정한 이름과 코드가 쓰던 이름이 둘 다 살아 있으면 언젠가
+   반드시 어긋나고, 어긋나는 쪽이 「회차가 안 끝난다」라 눈에도 잘 안 띈다.
+
+4. **프롬프트는 `docs/인터뷰 에이전트_프롬프트.md` 에서 읽는다** (prompt.py).
+   여기에 한 벌 더 두지 않는다. 다만 문서에 아직 없는 두 필드(`facts_found` ·
+   `information_status`)만 `_ADDENDUM` 으로 덧댄다 — 아래 참조.
+
+**빈 `question` 은 값이다.** 문서 §1 이 「질문하지 않는 종료 턴에는 question 을
+빈 문자열로 둡니다」라고 정했다. 그래서 `topic_status` 를 **먼저** 보고 빈 question
+검사는 그 뒤에 한다. 순서가 뒤집히면 어르신이 「그만하자」 하셔도 종료 턴이
+고정 질문으로 덮여 회차가 안 끝난다.
 
 환경변수는 **함수 안에서** 읽는다. main.py 가 `load_dotenv()` 를 import 뒤에
 호출하기 때문에, 모듈 수준에서 읽으면 .env 가 아직 로드되기 전이라 빈 값을 잡는다.
@@ -30,7 +43,11 @@ import asyncio
 import json
 import logging
 import os
+import re
 from typing import TYPE_CHECKING
+
+from . import prompt as promptlib
+from . import shared as shared_state
 
 if TYPE_CHECKING:
     from .controller import SessionController
@@ -40,24 +57,128 @@ log = logging.getLogger("question")
 DEFAULT_MODEL = "gemini-3.5-flash-lite"
 DEFAULT_TIMEOUT = 2.5           # T2 최솟값 3초보다 짧아야 의미가 있다
 
-# 이 턴 전에는 close 를 따르지 않는다. 아래 gemini_question 참조.
-DEFAULT_MIN_TURN = 3
+# 이 턴 전에는 마무리를 따르지 않는다. 아래 gemini_question 참조.
+#
+# 3 에서 올렸다. 문서 프롬프트로 실제 회차를 돌려 보니 **3턴 만에 닫혔다** —
+# 엽서 한 줄("열아홉에 고향을 떠나 서울로 올라왔지. 큰형이 영등포역까지 마중을
+# 나왔어")에 when·event·who·place 가 전부 들어 있어 턴 1 에 information_status 가
+# 다 차 버리고, 그러면 §1 의 「필요한 정보가 모이면 세부 질문을 계속하지
+# 않습니다」가 곧바로 발동한다. 어르신이 국밥 이야기를 막 꺼내신 참이었다.
+#
+# 아래 _ADDENDUM 의 [마무리 판단] 이 그 판단 자체를 고치고, 이 하한은 그것이
+# 흔들릴 때의 바닥이다. 둘은 같은 것을 두 겹으로 막는다.
+DEFAULT_MIN_TURN = 6
 
-_SYSTEM = """당신은 어르신의 인생 이야기를 듣는 인터뷰어입니다.
-방금 하신 말씀에 이어, 그 기억을 더 선명하게 떠올리실 수 있는 질문을 하나만 하세요.
+# 프롬프트에 실어 보낼 대화의 길이. 0 이면 전부.
+#
+# 자르는 이유가 둘이다. 하나는 지연 — 창이 없으면 턴 20 의 입력이 턴 1 의 스무
+# 배가 되고, 그게 그대로 응답 시간이 된다 (실측 질문 생성 875~1110ms 의 흔들림이
+# 여기다). 다른 하나는 품질 — 오래된 조각이 계속 실려 있으면 모델이 지금 하시는
+# 말씀 대신 옛 이야기로 되돌아간다. 엽서(0번)는 회차의 주제라 창 밖이어도 남긴다.
+DEFAULT_WINDOW = 6
 
-규칙:
-- 한 문장, 존댓말, 40자 이내.
-- 사실 확인이 아니라 감각과 마음을 묻습니다. (무엇이 보였는지, 어떤 소리가 났는지, 어떤 마음이었는지)
-- 이미 하신 질문과 겹치지 않게 합니다.
-- 어르신이 모르실 만한 어려운 말을 쓰지 않습니다.
-- **대답이 질문과 어긋나거나, 못 알아들으신 것 같거나, 한두 마디로 짧아도 close 가 아닙니다.**
-  그때는 같은 기억을 더 쉬운 말로 다시 여쭙습니다.
-- close 는 이야기가 충분히 여물어 더 여쭐 것이 없을 때만 고릅니다. 몇 마디 나누지 않았다면 고르지 않습니다.
+# 문서에 아직 없는 부분. **B안** — 인터뷰 에이전트가 질문만이 아니라 「이번 턴에
+# 무엇이 확인됐는지」까지 함께 답하게 한다.
+#
+# 문서 §1 은 `information_status` 를 **읽으라고만** 하고, 그것을 missing 에서
+# confirmed 로 바꾸는 주체가 문서 어디에도 없다. 채우는 사람이 없으면 §1 의
+# 종료 조건(「기본 정보가 모이면」)이 영원히 참이 되지 않아 대화가 안 끝난다.
+# 추출 에이전트를 따로 두면 턴마다 호출이 하나 더 붙으므로 (지연·비용 2배),
+# 어차피 속으로 판단하고 있는 것을 출력에 적게 하는 쪽을 골랐다.
+#
+# **덧대기만 한다. 문서가 이미 정한 것은 다시 적지 않는다.** 여기서 한 번
+# 어겼다가 값을 치렀다 — 「합쳐 40자」라고 적었는데 문서 §1 은 60자였고, 모델은
+# 둘 사이인 45~47자를 내놓았다. 어느 쪽도 지키지 않은 셈이다. 길이·문장 수처럼
+# 문서에 이미 있는 규칙은 문서 것으로 두고, 없는 것만 더한다.
+#
+# **출력의 필드 순서도 문서를 따른다.** 여기서 question 을 empathy 앞에 놓았더니
+# 모델이 질문 칸 안에서 먼저 공감을 하고 (JSON 은 적는 순서대로 생각한다) 그
+# 공감이 empathy 와 겹쳤다 — 같은 대본으로 6턴씩 두 번 돌려 2턴·3턴이 되풀이였다.
+# 문서 순서(공감 → 질문)로 되돌리자 같은 대본에서 0턴·0턴이 됐다. 아래
+# _one_question 이 잘라 내던 것의 출처가 여기였다.
+#
+# **문서에 합쳐지면 이 상수는 지운다.** 두 벌로 오래 두면 갈라진다.
+_ADDENDUM = """
+[공감 문장]
+- empathy에는 문장을 하나만 적습니다. 마침표는 한 번만 씁니다.
+- 어르신의 말씀을 그대로 되풀이하지 않습니다. 짧게 받아 주기만 합니다.
 
-반드시 아래 JSON 으로만 답하세요.
-{"action": "ask", "question": "질문 한 문장", "reason": "왜 이걸 묻는지 짧게"}
-{"action": "close", "question": null, "reason": "왜 마무리해도 되는지 짧게"}"""
+[이번 턴에 확인된 것]
+- facts_found에는 이번 턴에 어르신이 새로 말씀하신 사실만 적습니다.
+- 어르신이 말씀하신 표현을 그대로 짧게 적습니다. 다듬거나 추측하지 않습니다.
+- 각 항목은 15자를 넘기지 않습니다. 느낌이나 감상이 아니라 사실만 적습니다.
+- 새로 확인된 것이 없으면 빈 배열로 둡니다.
+- information_status에는 지금까지 확인된 정보의 상태를 다시 적습니다.
+- 한 번 confirmed가 된 항목은 되돌리지 않습니다.
+- 더 남기고 싶은 이야기가 있는지 여쭈는 턴에는 completion_check_asked를 true로 적습니다.
+
+[마무리 판단]
+- 어르신이 직접 그만하자고 하시기 전에는, 감각에 관한 기억이 세 가지 이상 나오기 전까지
+  topic_status를 closed로 적지 않습니다.
+- 정보가 모였더라도 어르신이 방금 새로운 이야기를 꺼내셨다면 그 이야기를 먼저 여쭙습니다.
+- 확인된 사실의 개수는 마무리의 근거가 아닙니다. 이야기가 여물었는지로 판단합니다.
+
+출력(JSON)은 반드시 아래 순서와 형식으로만 적습니다.
+{
+  "empathy": "공감 한 문장",
+  "question": "질문 한 문장 또는 빈 문자열",
+  "question_type": "회상확장|사실확인|주제전환|안전확인|없음",
+  "sense_used": "시각|청각|후각|미각|촉각|없음",
+  "facts_found": ["어르신이 새로 말씀하신 사실"],
+  "information_status": {"event": "", "when": "", "who": "", "place": "", "emotion": ""},
+  "conversation_mode": "normal|sensitive",
+  "topic_status": "active|awaiting_choice|closed",
+  "completion_check_asked": true 또는 false,
+  "ready_for_chronology": true 또는 false
+}"""
+
+
+# 공감도 질문도 **한 문장씩만** 내보낸다. 여기는 이제 바닥이다.
+#
+# 되풀이가 쏟아지던 때가 있었다 — 8턴 중 6턴이 같은 말을 고쳐 썼다. 「눈이 참
+# 많이 왔었군요. 눈이 참 많이 왔군요. 온통 하얗던 그때 풍경은 어땠나요?」
+# 프롬프트로 두 번 조였고 두 번 다 남아서, 세 번째로 조이는 대신 여기서 잘랐다.
+# 그 뒤에 원인이 프롬프트가 아니라 **출력 필드 순서**였다는 것이 드러났고
+# (위 _ADDENDUM 참조) 순서를 문서대로 되돌리자 같은 대본에서 한 번도 안 나왔다.
+#
+# 그래도 남겨 둔다. 자르는 값이 싸고, 모델이 무엇을 적어 오든 어르신 귀에 가는
+# 것은 두 문장이어야 한다. 원인을 고쳤다고 바닥까지 걷어낼 이유는 없다.
+#
+# **되풀이가 앉던 자리는 question 쪽이다.** 위 예에서 empathy 는 규칙대로 한
+# 문장이었고 (「눈이 참 많이 왔었군요.」), 두 번째 공감은 question 안에 들어
+# 있었다. 그래서 자르는 방향이 서로 반대다 — 공감은 **앞에서**, 질문은
+# **뒤에서** 가져온다. 질문은 마지막 물음표가 붙은 문장이 본체다.
+#
+# 공감의 첫 문장이 너무 짧으면 다음 문장까지 가져온다. 「네… 뜨끈한 국밥이
+# 좋으셨겠어요.」처럼 추임새로 여는 턴이 있어서, 첫 마디만 자르면 공감이
+# 통째로 사라진다.
+_SENTENCE = re.compile(r"[^.!?…]+[.!?…]*")
+_EMPATHY_MIN = 6
+
+
+def _one_sentence(text: str) -> str:
+    parts = [m.group().strip() for m in _SENTENCE.finditer(text)]
+    parts = [p for p in parts if p]
+    if len(parts) <= 1:
+        return text
+    out = ""
+    for p in parts:
+        out = f"{out} {p}".strip()
+        if len(out.rstrip(".!?… ")) >= _EMPATHY_MIN:
+            break
+    return out
+
+
+def _one_question(text: str) -> str:
+    """질문은 **뒤에서** 가져온다. 앞에 붙은 것은 공감의 되풀이다."""
+    parts = [m.group().strip() for m in _SENTENCE.finditer(text)]
+    parts = [p for p in parts if p]
+    if len(parts) <= 1:
+        return text
+    for p in reversed(parts):
+        if p.endswith(("?", "？")):
+            return p
+    return parts[-1]
 
 
 def _client():
@@ -83,9 +204,23 @@ def _transcript(ctl: "SessionController") -> str:
     비어 있다) 0번 조각의 answer 가 빈 문자열인데, 그대로 넣으면 프롬프트 맨
     위에 내용 없는 「어르신:」 한 줄이 얹힌다. 1번부터는 빈 전사가 턴을 소모하지
     않으므로 (controller._confirm) answer 가 비는 일이 없다.
+
+    **최근 WINDOW 턴만 넣는다** (위 DEFAULT_WINDOW 참조). 엽서는 회차의 주제라
+    창 밖으로 밀려나도 맨 앞에 남긴다. 잘린 자리는 말없이 넘기지 않고 한 줄로
+    알린다 — 모델이 「앞에 더 있었다」를 알아야 없는 맥락을 지어내지 않는다.
     """
+    frs = ctl.fragments
+    window = _window()
+    head, rest = frs[:1], frs[1:]
+    cut = len(rest) - window if window and len(rest) > window else 0
+
     out = []
-    for f in ctl.fragments:
+    for f in head:
+        if f["answer"]:
+            out.append(f"어르신: {f['answer']}")
+    if cut:
+        out.append(f"(앞의 {cut}턴은 줄였습니다)")
+    for f in rest[cut:]:
         if f["question"]:
             out.append(f"질문: {f['question']}")
         if f["answer"]:
@@ -115,10 +250,17 @@ async def gemini_question(ctl: "SessionController") -> str | None:
     from google.genai import types
 
     cfg = types.GenerateContentConfig(
-        system_instruction=_SYSTEM,
+        # 문서(§0 + §1)를 그대로 쓴다. 매 턴 바뀌는 공유 상태는 여기 넣지 않는다 —
+        # system 이 고정이어야 프롬프트 캐시가 듣는다 (prompt.py 참조).
+        system_instruction=promptlib.load().system + _ADDENDUM,
         response_mime_type="application/json",
-        temperature=1.0,
-        max_output_tokens=200,
+        # 1.0 에서 내렸다. 규칙이 열 줄에서 마흔 줄로 늘어난 프롬프트에서 높은
+        # 온도는 「다양한 질문」이 아니라 「규칙 이탈」로 나온다. 다양성은 온도가
+        # 아니라 asked_questions · last_sense_used 가 만들게 한다 — 그쪽은 통제된다.
+        temperature=0.7,
+        # 200 에서 올렸다. 필드가 3개에서 9개로 늘고 공감 문장이 붙는다.
+        # 200 이면 뒤쪽 필드부터 잘려 나가고, 잘린 JSON 은 파싱에서 통째로 실패한다.
+        max_output_tokens=400,
         # 지연이 곧 품질인 구간이다. 생각을 오래 할수록 어르신이 기다린다.
         thinking_config=types.ThinkingConfig(thinking_level="MINIMAL"),
         # 도구를 쓰지 않는다. 켜 두면 호출마다 AFC 로그가 한 줄씩 쌓여
@@ -126,10 +268,14 @@ async def gemini_question(ctl: "SessionController") -> str | None:
         automatic_function_calling=types.AutomaticFunctionCallingConfig(disable=True),
     )
 
+    # 공유 상태를 문서가 정한 자리에 얹고 그 아래 대화를 붙인다.
+    contents = (f"{promptlib.load().render_state(shared_state.for_interview(ctl))}\n\n"
+                f"[지금까지의 대화]\n{_transcript(ctl)}")
+
     try:
         res = await asyncio.wait_for(
             client.aio.models.generate_content(
-                model=model, contents=_transcript(ctl), config=cfg),
+                model=model, contents=contents, config=cfg),
             timeout=timeout)
         data = json.loads((res.text or "").strip())
     except asyncio.TimeoutError:
@@ -139,36 +285,78 @@ async def gemini_question(ctl: "SessionController") -> str | None:
         log.error("질문 생성 실패(%s: %s) — 고정 질문으로 물러선다", type(e).__name__, e)
         return await _fallback(ctl)
 
-    action = (data.get("action") or "").lower()
-    reason = data.get("reason") or ""
-    # 지금은 로그로만 보이지만 store 가 turn.decision(JSONB) 으로 내린다.
-    # 「왜 이 질문을 했나 · 왜 마무리했나」를 나중에 되짚을 수 있어야 한다 (FR-IV-006).
-    ctl.last_decision = {"action": action, "reason": reason}
-
-    if action == "close":
-        # **바닥을 하나 깐다.** 턴 상한을 없앤 뒤로 close 는 회차를 끝내는 유일한
-        # 문이 됐는데, 실제로 돌려보니 어르신이 질문과 어긋난 말씀을 한 번 하신
-        # 것만으로 모델이 마무리를 골랐다 (「어떻게 지금 돼가고 있어?」 → 턴 1 종료).
-        # 어르신이 못 알아들으셨거나 되물으시는 건 흔한 일이고, 그때 할 일은
-        # 회차를 닫는 게 아니라 다시 여쭙는 것이다. 그래서 min 턴 전의 close 는
-        # 따르지 않고 질문으로 되돌린다 — 상한은 없애고 하한만 남긴 셈이다.
-        if ctl.machine.turn < _min_turn():
-            log.info("AI 가 마무리를 골랐지만 아직 %d턴이다 — 다시 여쭙는다 (%s)",
-                     ctl.machine.turn, reason)
-            ctl.last_decision = {"action": "ask", "reason": reason,
-                                 "overruled": "close"}
-            return await _fallback(ctl)
-        # FR-IV-006 — 판단으로 마무리. DB 가 붙으면 turn.decision 에 들어갈 값이다.
-        log.info("AI 판단: 마무리 — %s", reason)
-        return None
-
-    q = (data.get("question") or "").strip()
-    if not q:
-        log.warning("action=ask 인데 question 이 비었다 — 고정 질문으로 물러선다")
+    if not isinstance(data, dict):
+        log.error("응답이 객체가 아니다(%s) — 고정 질문으로 물러선다", type(data).__name__)
         return await _fallback(ctl)
 
-    log.info("질문 준비 — %s (%s)", q, reason)
-    return q
+    status = str(data.get("topic_status") or "active").strip().lower()
+    mode = str(data.get("conversation_mode") or "normal").strip().lower()
+    raw_q = str(data.get("question") or "").strip()
+    q = _one_question(raw_q)
+    if q != raw_q:
+        log.info("질문을 한 문장으로 줄였다 — %r → %r", raw_q, q)
+    raw_empathy = str(data.get("empathy") or "").strip()
+    empathy = _one_sentence(raw_empathy)
+    if empathy != raw_empathy:
+        log.info("공감을 한 문장으로 줄였다 — %r → %r", raw_empathy, empathy)
+
+    # **바닥을 하나 깐다.** 턴 상한을 없앤 뒤로 여기가 회차를 끝내는 유일한 문이
+    # 됐는데, 실제로 돌려보니 어르신이 질문과 어긋난 말씀을 한 번 하신 것만으로
+    # 모델이 마무리를 골랐다 (「어떻게 지금 돼가고 있어?」 → 턴 1 종료). 어르신이
+    # 못 알아들으셨거나 되물으시는 건 흔한 일이고, 그때 할 일은 회차를 닫는 게
+    # 아니라 다시 여쭙는 것이다.
+    #
+    # **단 sensitive 는 하한을 넘어선다.** 힘든 기억에서 그만하시겠다는 뜻인데
+    # 턴이 모자라다고 또 여쭙는 것은 문서 §0 의 우선순위 1번(「힘든 기억에 대한
+    # 중단 규칙」)을 정면으로 어기는 일이다. 하한은 모델의 성급함을 막는 장치지
+    # 어르신의 뜻을 막는 장치가 아니다.
+    overruled = (status == "closed" and mode != "sensitive"
+                 and ctl.machine.turn < _min_turn())
+    effective = "active" if overruled else status
+
+    # **되돌린 결과를 상태에 적는다.** 여기에 closed 를 적어 두면 다음 턴에
+    # 모델이 그것을 읽고 또 마무리를 고른다 — 하한이 한 턴만 버티고 무너진다.
+    shared_state.merge(ctl.state, data, status=effective)
+
+    # 지금은 로그로만 보이지만 store 가 turn.decision(JSONB) 으로 내린다.
+    # 「왜 이 질문을 했나 · 왜 마무리했나」를 나중에 되짚을 수 있어야 한다 (FR-IV-006).
+    ctl.last_decision = {
+        "topic_status": effective,
+        "conversation_mode": mode,
+        "question_type": data.get("question_type"),
+        "sense_used": data.get("sense_used"),
+        "facts_found": data.get("facts_found") or [],
+        "information_status": data.get("information_status") or {},
+        "ready_for_chronology": bool(data.get("ready_for_chronology")),
+    }
+    if overruled:
+        ctl.last_decision["overruled"] = "closed"
+
+    # **종료를 먼저 본다.** 문서 §1 은 종료 턴의 question 을 빈 문자열로 두라고
+    # 정했다. 아래 「q 가 비었나」 검사를 먼저 하면 그 종료 턴이 고정 질문으로
+    # 덮여 회차가 영영 안 끝난다 — 순서가 전부다.
+    if overruled:
+        log.info("마무리를 골랐지만 아직 %d턴이다 — 다시 여쭙는다 · %s",
+                 ctl.machine.turn, shared_state.summary(ctl.state))
+        return await _fallback(ctl)
+
+    if effective == "closed":
+        # FR-IV-006 — 판단으로 마무리. turn.decision 에 들어갈 값이다.
+        log.info("마무리 — %s · %s", mode, shared_state.summary(ctl.state))
+        return None
+
+    if not q:
+        log.warning("종료가 아닌데 question 이 비었다 — 고정 질문으로 물러선다")
+        return await _fallback(ctl)
+
+    # 문서 §1 — 「공감 한 문장을 먼저 쓰고 질문 한 문장을 이어서 쓴다」.
+    # 합쳐서 내보내는 것은 어르신 귀에 한 번의 말이기 때문이다. 화면도 낭독도
+    # 이 한 줄을 쓴다.
+    said = f"{empathy} {q}".strip() if empathy else q
+    log.info("질문 준비 — %s [%s/%s·%d자] · %s",
+             said, data.get("question_type"), data.get("sense_used"), len(said),
+             shared_state.summary(ctl.state))
+    return said
 
 
 def _min_turn() -> int:
@@ -176,6 +364,14 @@ def _min_turn() -> int:
         return max(0, int(os.environ.get("MIN_TURN") or DEFAULT_MIN_TURN))
     except ValueError:
         return DEFAULT_MIN_TURN
+
+
+def _window() -> int:
+    """0 이면 자르지 않는다."""
+    try:
+        return max(0, int(os.environ.get("PROMPT_WINDOW") or DEFAULT_WINDOW))
+    except ValueError:
+        return DEFAULT_WINDOW
 
 
 async def _fallback(ctl: "SessionController") -> str:
