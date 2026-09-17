@@ -22,6 +22,7 @@ from dataclasses import dataclass, field
 from typing import Awaitable, Callable
 
 from . import audio as audiolib
+from . import shared as shared_state
 from . import store, stt, tts
 from .machine import Event, Machine, State, TransitionError
 from .timers import T2_PRESETS, TimerSet
@@ -111,6 +112,9 @@ class SessionController:
     latencies: list[dict] = field(default_factory=list)
     # question.py 가 채운다. FR-IV-006 의 근거로 turn.decision 에 내려간다.
     last_decision: dict | None = None
+    # 네 에이전트가 함께 보는 기록 (문서 §0). **모델은 읽고 코드가 쓴다** —
+    # 쓰는 자리는 shared.py 하나뿐이고, 여기는 담아 두기만 한다.
+    state: dict = field(default_factory=shared_state.initial)
 
     _buffer: str = ""
     _audio: list[bytes] = field(default_factory=list)
@@ -148,6 +152,10 @@ class SessionController:
             # 않을 소리를 기다린다.
             "question_audio": bool(self._question_audio) or bool(
                 self._speaking and not self._speaking.done()),
+            # 폰 화면의 콘솔에서 상태가 차오르는 것을 보려고 싣는다. 사실이
+            # 한 턴도 안 쌓이면 인터뷰 에이전트가 제 몫을 못 하고 있는 것인데,
+            # 로그를 열지 않고 알아채려면 여기 있어야 한다.
+            "shared_state": shared_state.for_interview(self),
             "timer_drift": self.timers.drift_report(),
         }
 

@@ -316,6 +316,22 @@ def test_tts():
           f"낭독 칸 최솟값 {worst:.0f}ms — 음수면 다음 턴 Marks 에 적힌 것이다")
 
 
+def test_all_checks_passed():
+    """
+    pytest 로 돌릴 때의 안전판.
+
+    위 check() 는 실패를 FAIL 에 적어 두기만 하고 **예외를 내지 않는다.** 다
+    돌려 보고 한꺼번에 보려고 일부러 그렇게 만든 것인데, 그 대가로 pytest 에서는
+    실패한 검사가 통과로 보인다 — `pytest tests` 가 「5 passed」라고 말해도
+    안에서 몇 개가 깨졌는지 알 수 없다. (`python -m tests.test_flow` 쪽은
+    main() 이 종료 코드로 알려 주므로 멀쩡했다.)
+
+    마지막에 여기서 한 번 터뜨려 둘을 맞춘다. 정의 순서대로 도는 pytest 에서
+    이 함수가 맨 뒤라 앞의 검사가 모두 끝난 뒤에 본다.
+    """
+    assert not FAIL, "실패: " + ", ".join(FAIL)
+
+
 def main() -> int:
     print("기억의 조각 — 상태 머신 · 타이머 검증")
     test_machine()
