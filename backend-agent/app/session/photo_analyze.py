@@ -5,11 +5,11 @@
 
 `docs/인터뷰 에이전트_프롬프트.md` §2(사진 분석 에이전트)를 그대로 불러 쓴다.
 shared_state 연결은 이 파일의 범위 밖이다 — photo_analyses 에 얹는 일은 다른
-곳(최충 님 담당)이 한다. 여기는 사진 한 장을 받아 §2 가 정한 JSON 하나를
+곳이 한다. 여기는 사진 한 장을 받아 §2 가 정한 JSON 하나를
 돌려주는 것까지만 한다.
 
-최충 님 확인 전 가정 (아래 여섯 가지는 문서·기존 코드에 명시가 없어 임시로 정함)
-- **위치**: `app/session/photo.py` — question.py·prompt.py 와 같은 계층에 둠.
+확인 전 가정 (아래 여섯 가지는 문서·기존 코드에 명시가 없어 임시로 정함)
+- **위치**: `app/session/photo_analyze.py` — question.py·prompt.py 와 같은 계층에 둠.
 - **async**: `question.py` 의 호출 관례를 따라 `async def` 로 만듦.
 - **실패 시 None**: question.py 는 "None 은 회차 종료 신호"라 실패해도 절대
   None 을 안 돌려주지만, 사진 분석에는 그런 부작용이 없다고 보고 실패 시
@@ -39,7 +39,7 @@ log = logging.getLogger("photo")
 DOC = Path(__file__).resolve().parents[2] / "docs" / "인터뷰 에이전트_프롬프트.md"
 
 DEFAULT_MODEL = "gemini-3.5-flash-lite"
-DEFAULT_TIMEOUT = 10.0          # 임시값 — 위 "최충 님 확인 전 가정" 참조
+DEFAULT_TIMEOUT = 10.0          # 임시값 — 위 "확인 전 가정" 참조
 
 COMMON = "0"
 PHOTO = "2"
@@ -134,7 +134,7 @@ async def analyze_photo(image: bytes, mime_type: str = "image/jpeg") -> dict | N
     사진 한 장을 §2 규칙대로 분석한다.
 
     실패(키 없음·타임아웃·예외·JSON 아님·dict 아님)하면 로그만 남기고 None 을
-    돌려준다 — 위 "최충 님 확인 전 가정" 참조.
+    돌려준다 — 위 "확인 전 가정" 참조.
     """
     client = _client()
     if client is None:
