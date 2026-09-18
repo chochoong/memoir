@@ -1,8 +1,17 @@
--- 기억의 조각 — Phase 1 스키마
--- psql -h localhost -U memoir -d memoir -f app/schema.sql
+-- 001 — 처음 세 테이블 (session / turn / photo)
 --
--- 마이그레이션 도구를 쓰지 않는다. 4주 프로젝트에는 이 파일 하나가 낫다.
--- 스키마를 바꿀 때는 이 파일을 고치고 DROP 후 다시 만든다 (Phase 1 한정).
+-- **이 파일은 이미 적용되었다. 고치지 않는다.**
+--
+-- 예전에는 app/schema.sql 한 장이었고, 바꿀 때는 「DROP 후 다시 만든다」였다.
+-- 실사용자가 한 명이라도 들어오면 그게 불가능해진다 — 그 뒤 첫 스키마 변경을
+-- 운영 DB 에서 수작업 SQL 로 하게 되고, 그게 사고가 나는 자리다.
+--
+-- 그래서 이 파일을 001 로 봉인하고, 앞으로의 변경은 002, 003 … 을 **새로** 더한다.
+-- migrate.py 가 적용된 파일의 체크섬을 들고 있어서, 여기를 고치면 다음 기동이
+-- 조용히 지나가는 대신 소리를 내며 멈춘다 (migrate.MigrationError).
+--
+-- 전부 CREATE ... IF NOT EXISTS 다. schema.sql 로 이미 만들어 둔 개발 DB 에도
+-- 그대로 걸리고, 001 이 적용됨으로 기록되기만 한다.
 
 CREATE TABLE IF NOT EXISTS session (
     session_id   UUID PRIMARY KEY,
@@ -14,7 +23,7 @@ CREATE TABLE IF NOT EXISTS session (
     turn         INT         NOT NULL DEFAULT 0,
     max_turn     INT         NOT NULL DEFAULT 0,   -- 0 = 제한 없음
     t2_seconds   NUMERIC(3,1) NOT NULL DEFAULT 5.0,   -- 3 / 5 / 7
-    closed_reason TEXT,                         -- max_turn | finish | abort
+    closed_reason TEXT,                         -- finish | abort | max_turn | turn_cap | expired
     created_at   TIMESTAMPTZ NOT NULL DEFAULT now(),
     closed_at    TIMESTAMPTZ
 );

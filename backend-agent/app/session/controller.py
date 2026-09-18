@@ -24,6 +24,7 @@ from typing import Awaitable, Callable
 from . import audio as audiolib
 from . import shared as shared_state
 from . import store, stt, tts
+from .conf import env_float, env_int
 from .machine import Event, Machine, State, TransitionError
 from .timers import T2_PRESETS, TimerSet
 
@@ -43,6 +44,34 @@ MAX_AUDIO_BYTES = 25 * 1024 * 1024
 
 # 빈 전사가 연속으로 몇 번까지면 다시 시도해 볼 것인가. 아래 _confirm 참조.
 MAX_EMPTY_RETRY = 2
+
+# ---------------------------------------------------------------- 안전 천장
+#
+# 아래 넷은 **설계가 아니라 사고 방지**다. 회차가 어디서 끝나는지는 여전히 AI 의
+# close 판단과 「중단」 버튼이 정한다 (machine.py 의 max_turn 주석 참조). 여기 있는
+# 것은 그 판단이 **오지 않을 때** 무한히 흐르지 않게 막는 선이다. 평소에는 한 번도
+# 걸리지 않아야 하고, 걸리면 그건 기능이 아니라 **신호**다 — 아래 turn_cap 참조.
+#
+# 넷 다 .env 로 덮을 수 있다. 값은 함수 안에서 읽는다 (conf.py 참조).
+
+# max_turn 을 주지 않은 회차(= 제한 없음)에 씌우는 천장.
+TURN_CAP = 60
+
+# 진행 중인 회차를 메모리에서 버리는 기준. 마지막 **활동**부터 잰다 —
+# 폴링은 활동이 아니다. 폴링을 활동으로 세면 열어 둔 채 잊은 탭이 영원히 산다.
+IDLE_SECONDS = 1800.0
+
+# 닫힌 회차를 지우는 기준. 0 으로 두지 않는 이유 — 화면이 300ms 폴링으로 마지막
+# 상태(CLOSED)를 받아 가야 한다. 닫는 순간 지우면 화면에는 회차가 끝난 것이 아니라
+# **사라진 것**으로 보인다.
+CLOSED_SECONDS = 300.0
+
+# 한 프로세스가 동시에 들고 있을 회차 수. 스윕이 60초에 한 번 도니 그보다 빠른
+# 폭주는 이 선이 막는다.
+MAX_LIVE = 200
+
+# 스윕 주기.
+SWEEP_EVERY = 60.0
 
 # 회차를 여는 말. **여기서는 LLM 을 부르지 않는다.**
 #
@@ -115,6 +144,8 @@ class SessionController:
     # 네 에이전트가 함께 보는 기록 (문서 §0). **모델은 읽고 코드가 쓴다** —
     # 쓰는 자리는 shared.py 하나뿐이고, 여기는 담아 두기만 한다.
     state: dict = field(default_factory=shared_state.initial)
+    # 마지막 활동 시각 (monotonic). 스윕이 보는 값이다 — 아래 touch 참조.
+    last_active: float = field(default_factory=time.monotonic)
 
     _buffer: str = ""
     _audio: list[bytes] = field(default_factory=list)
@@ -159,10 +190,38 @@ class SessionController:
             "timer_drift": self.timers.drift_report(),
         }
 
+    def turn_cap(self) -> int:
+        """
+        이번 회차를 끊을 턴 수. 0 이면 상한이 없다.
+
+        요청이 max_turn 을 주면 그것이 끝이다 (tools/replay.py 가 그렇게 쓴다).
+        주지 않았으면 안전 천장을 씌운다 — 「제한 없음」은 **AI 가 정한다**는
+        뜻이지 **영원히**라는 뜻이 아니다.
+        """
+        if self.machine.max_turn:
+            return self.machine.max_turn
+        return env_int("TURN_CAP", TURN_CAP)
+
+    def idle_seconds(self) -> float:
+        """활동이 없던 시간. 스윕과 로그가 같은 값을 보게 한 자리다."""
+        return time.monotonic() - self.last_active
+
     # ------------------------------------------------------------ 외부 이벤트
+
+    def touch(self) -> None:
+        """
+        활동이 있었다고 적는다. **상태를 바꾸는 경로에서만 부른다.**
+
+        조회(GET /api/sessions/{id})에서 부르지 않는 것이 이 함수의 핵심이다.
+        화면이 300ms 마다 때리므로, 폴링을 활동으로 세면 브라우저 탭이 열려 있는
+        동안 회차는 절대 만료되지 않는다 — 어르신이 자리를 떠나 잊은 탭도 그렇다.
+        그러면 스윕이 있으나 없으나 같아진다.
+        """
+        self.last_active = time.monotonic()
 
     async def start(self, postcard: str) -> None:
         """엽서(0번 조각)로 회차를 연다. 여는 말 낭독 상태에서 시작한다."""
+        self.touch()
         self.fragments.append({"idx": 0, "question": None, "answer": postcard})
         await store.save_session(self)
         await store.save_turn(self, self.fragments[0])
@@ -175,6 +234,7 @@ class SessionController:
 
     async def tts_done(self) -> dict:
         """낭독이 끝났다(또는 탭으로 중단). 수음을 연다."""
+        self.touch()
         self.machine.fire(Event.TTS_DONE)
         self._buffer = ""
         self.timers.reset_t1()
@@ -185,6 +245,7 @@ class SessionController:
         유효 발화 수신. 1주차는 텍스트, 2주차에 오디오 청크로 바뀐다.
         올 때마다 T1 을 리셋한다.
         """
+        self.touch()
         self.machine.fire(Event.SPEECH_RECEIVED)
         self._buffer = (self._buffer + " " + text).strip()
         self._empty_streak = 0
@@ -202,6 +263,7 @@ class SessionController:
         때문이다. 아무것도 보내지 않는 것이 곧 무음 신호다. 판정을 두 군데 두면
         둘이 어긋날 때 원인을 찾을 수 없다.
         """
+        self.touch()
         self.machine.fire(Event.SPEECH_RECEIVED)
         self._empty_streak = 0
         if sum(len(c) for c in self._audio) + len(data) > MAX_AUDIO_BYTES:
@@ -216,18 +278,61 @@ class SessionController:
 
     async def done_button(self) -> dict:
         """「다 말했어요」 — T1·T2 를 건너뛴다. 지연이 그대로 드러나는 유일한 경로."""
+        self.touch()
         self.timers.cancel_t1()
         await self._confirm(Event.DONE_BUTTON, skip_t2=True)
         return self.snapshot()
 
     async def abort(self) -> dict:
+        """사용자 중단."""
+        self.touch()
+        return await self._close("abort")
+
+    async def expire(self) -> None:
+        """
+        스윕이 버리는 회차. 중단과 같은 정리를 하지만 **이유가 다르다.**
+
+        이유를 남기는 것이 이 함수의 값이다. 남기지 않으면 그 회차는 DB 에서
+        영원히 「진행 중」으로 남고, 나중에 목록을 볼 때 아직 하는 중인 회차와
+        어르신이 떠나 버린 회차를 구분할 수 없다. expired 가 자주 쌓이면 그것도
+        신호다 — 어르신들이 어느 지점에서 이탈하는지가 거기 적힌다.
+        """
+        log.info("회차 %s 를 버린다 — %.0f분 활동이 없었다",
+                 self.session_id[:8], self.idle_seconds() / 60)
+        await self._close("expired")
+
+    def release(self) -> None:
+        """
+        타이머와 대기 태스크만 끊는다. **DB 는 건드리지 않는다.**
+
+        이미 닫힌 회차를 메모리에서 지울 때 쓴다. 그 회차의 closed_reason 은 이미
+        제 이유(finish · abort · max_turn)로 적혀 있어서, 여기서 또 쓰면 그것을
+        expired 로 덮어쓰게 된다 — **왜 끝났는지를 잃는다.**
+        """
         self.timers.cancel_all()
         for task in (self._pending, self._speaking):
             if task and not task.done():
                 task.cancel()
+
+    async def _close(self, reason: str) -> dict:
+        """ABORT 전이로 닫는다. 어느 상태에서 불러도 받는다 (machine.fire 참조)."""
+        self.release()
         self.machine.fire(Event.ABORT)
-        await store.update_session(self, closed_reason="abort")
+        await store.update_session(self, closed_reason=reason)
         return self.snapshot()
+
+    async def _finish(self, reason: str) -> None:
+        """
+        FINISH 전이로 닫는다. 중단과 구분되는 **정상 종료** 경로다.
+
+        touch() 를 하는 이유 — 닫는 것도 활동이다. 빼면 닫힌 회차의 유예 시간
+        (CLOSED_SECONDS)이 마지막 발화 시각부터 세어지고, 말씀이 길었던 회차는
+        화면이 마지막 상태를 받아 가기 전에 메모리에서 지워질 수 있다.
+        """
+        self.timers.cancel_all()
+        self.machine.fire(Event.FINISH)
+        self.touch()
+        await store.update_session(self, closed_reason=reason)
 
     # ------------------------------------------------------------ 타이머 콜백
 
@@ -286,14 +391,22 @@ class SessionController:
         await store.save_turn(self, self.fragments[-1])
         self.marks.saved_at = time.perf_counter()
 
-        if self.machine.max_turn and self.machine.turn >= self.machine.max_turn:
+        cap = self.turn_cap()
+        if cap and self.machine.turn >= cap:
             # FR-IV-006 — 최대 턴에 도달하면 판단·질문 생성을 **호출하지 않고** 종료한다.
             # 어차피 내보내지 않을 질문에 LLM 비용과 지연을 쓸 이유가 없다.
-            # max_turn 이 0 이면 이 문은 통째로 지나간다 — 회차를 끝내는 것은
-            # AI 의 close 판단과 「중단」 버튼뿐이다.
-            self.timers.cancel_all()
-            self.machine.fire(Event.FINISH)
-            await store.update_session(self, closed_reason="max_turn")
+            #
+            # **이유를 둘로 나눠 적는다.** max_turn 은 회차를 열 때 요청이 정한
+            # 끝이고, turn_cap 은 아무도 끝을 정하지 않았을 때 씌운 안전 천장이다.
+            # 후자가 기록에 남았다면 「60턴짜리 회차였다」가 아니라 **AI 가 60턴
+            # 동안 마무리를 고르지 않았다**는 뜻이라 프롬프트를 봐야 한다. 한 이름
+            # 으로 적으면 그 둘을 나중에 셀 수 없다.
+            if self.machine.max_turn:
+                await self._finish("max_turn")
+            else:
+                log.warning("턴 천장 %d 에 닿아 회차를 닫는다 — AI 가 마무리를 "
+                            "고르지 않았다. 프롬프트를 봐야 한다", cap)
+                await self._finish("turn_cap")
             return
 
         self._pending = asyncio.create_task(self._make_question())
@@ -368,9 +481,7 @@ class SessionController:
         self.marks.question_at = time.perf_counter()
 
         if q is None:
-            self.machine.fire(Event.FINISH)
-            self.timers.cancel_all()
-            await store.update_session(self, closed_reason="finish")
+            await self._finish("finish")
             return
         # **합성을 먼저 건다.** 여기서 걸면 남은 T2 안에서 끝나고, 어르신 귀에는
         # 침묵이 끝나는 순간 곧바로 목소리가 나온다. QUESTION_READY 를 먼저
@@ -436,6 +547,16 @@ class SessionController:
 
 
 # ---------------------------------------------------------------- 레지스트리
+#
+# **제거가 있어야 한다.** 예전에는 put·get 만 있었다. 어르신이 브라우저를 닫고 떠난
+# 회차가 프로세스가 죽을 때까지 남는데, 회차 하나는 fragments(전사 전부)와 확정 전
+# 발화 오디오를 들고 있다 — PCM 이 초당 32KB 라 10초 발화가 320KB 다 (audio.py 참조).
+# 하루 돌리면 메모리가 계단식으로 올라가고, 밖에서는 「이유 없이 며칠에 한 번 죽는
+# 서버」로 보인다. 타이머도 함께 남아 아무도 없는 회차에서 T1 이 계속 돈다.
+#
+# 여기 있는 것은 **한 프로세스 안의** 정리다. 인스턴스를 늘리면 _need(session_id) 가
+# 애초에 깨진다 (회차가 어느 프로세스에 있는지 알 수 없다) — 그때는 상태를 밖으로
+# (Redis 등) 내보내야 하고, 이 파일이 아니라 설계가 바뀐다.
 
 _sessions: dict[str, SessionController] = {}
 
@@ -451,3 +572,101 @@ def get(session_id: str) -> SessionController | None:
 
 def all_sessions() -> list[SessionController]:
     return list(_sessions.values())
+
+
+def live_sessions() -> list[SessionController]:
+    """아직 닫히지 않은 회차. 동시 회차 상한이 보는 값이다."""
+    return [c for c in _sessions.values() if c.machine.state is not State.CLOSED]
+
+
+def user_live(user_id: str) -> int:
+    """
+    한 사용자가 지금 들고 있는 회차 수.
+
+    **이 값으로 막는 것은 보안이 아니다.** user_id 는 X-User-Id 를 그대로 믿는
+    값이라 바꿔 넣으면 통과한다 (limits.py 참조). 로그인이 붙으면 실효를 가진다.
+    """
+    return sum(1 for c in live_sessions() if c.user_id == user_id)
+
+
+def max_live() -> int:
+    return env_int("MAX_LIVE_SESSIONS", MAX_LIVE)
+
+
+async def drop(session_id: str) -> bool:
+    """
+    회차 하나를 메모리에서 지운다. 아직 안 닫혀 있으면 이유를 남기고 닫는다.
+
+    스윕과 같은 일을 하지만 시간을 보지 않는다 — 시험과 수동 정리용이다.
+    """
+    ctl = _sessions.pop(session_id, None)
+    if ctl is None:
+        return False
+    if ctl.machine.state is State.CLOSED:
+        ctl.release()
+    else:
+        await ctl.expire()
+    return True
+
+
+async def sweep() -> int:
+    """
+    오래된 회차를 정리한다. 지운 개수를 돌려준다.
+
+    기준이 둘인 이유 —
+
+        닫힌 회차    짧게 둔다. 화면이 마지막 상태(CLOSED)를 받아 갈 시간만
+                     주면 되고, 그 뒤로는 DB 에 다 남아 있다.
+        진행 중 회차  길게 둔다. 어르신이 한참 생각하시는 중일 수 있다.
+                     잘못 지우면 말씀하시던 회차가 404 가 된다 — 되돌릴 수 없다.
+
+    **정리에 실패해도 메모리에서는 뺀다.** expire() 가 DB 쓰기를 하는데, 그게
+    실패했다고 회차를 메모리에 남겨 두면 다음 스윕에서 또 실패하고, 고쳐지지 않는
+    한 영원히 안 지워진다 — 막으려던 누수가 그대로 돌아온다. DB 기록을 잃는 것과
+    프로세스가 죽는 것 중에 앞을 고른다 (store.py 의 쓰기 원칙과 같다).
+    """
+    idle = env_float("SESSION_IDLE_SECONDS", IDLE_SECONDS)
+    grace = env_float("SESSION_CLOSED_SECONDS", CLOSED_SECONDS)
+    gone = 0
+
+    for ctl in list(_sessions.values()):
+        closed = ctl.machine.state is State.CLOSED
+        limit = grace if closed else idle
+        if limit <= 0 or ctl.idle_seconds() < limit:
+            continue
+        _sessions.pop(ctl.session_id, None)
+        gone += 1
+        if closed:
+            ctl.release()
+            continue
+        try:
+            await ctl.expire()
+        except Exception as e:                              # noqa: BLE001
+            log.error("회차 %s 정리 실패 (%s: %s) — 메모리에서는 뺀다",
+                      ctl.session_id[:8], type(e).__name__, str(e)[:120])
+            ctl.release()
+
+    if gone:
+        log.info("스윕 — 회차 %d개 정리, %d개 남음 (진행 중 %d)",
+                 gone, len(_sessions), len(live_sessions()))
+    return gone
+
+
+async def sweep_forever() -> None:
+    """
+    main.py 의 lifespan 이 띄운다.
+
+    **한 번 실패해도 멈추지 않는다.** 멈추면 그 뒤로 아무것도 정리되지 않는데
+    로그에는 예외 한 줄만 남는다 — 누수는 조용히 돌아오고, 원인은 며칠 전 그
+    한 줄이 된다. 그래서 예외를 삼키고 다음 주기를 돈다.
+    """
+    every = env_float("SWEEP_EVERY_SECONDS", SWEEP_EVERY)
+    log.info("세션 스윕 시작 — %.0f초마다", every)
+    while True:
+        try:
+            await asyncio.sleep(every)
+            await sweep()
+        except asyncio.CancelledError:
+            raise
+        except Exception as e:                              # noqa: BLE001
+            log.error("스윕 실패 (%s: %s)", type(e).__name__, str(e)[:120])

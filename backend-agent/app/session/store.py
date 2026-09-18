@@ -1,7 +1,7 @@
 """
 저장 — PostgreSQL (asyncpg)
 
-세션과 조각을 남긴다. `schema.sql` 의 세 테이블이 그대로 대상이다.
+세션·조각·사진을 남긴다. 대상 테이블은 `migrations/` 가 정의한다.
 
 **DB 가 없어도, 중간에 끊겨도 회차는 돈다.**
 
@@ -24,8 +24,9 @@ import logging
 import os
 import uuid
 from decimal import Decimal
-from pathlib import Path
 from typing import TYPE_CHECKING, Any
+
+from . import migrate
 
 if TYPE_CHECKING:
     from .controller import SessionController
@@ -33,7 +34,6 @@ if TYPE_CHECKING:
 log = logging.getLogger("store")
 
 _pool: Any = None
-_SCHEMA = Path(__file__).resolve().parents[1] / "schema.sql"
 
 
 def enabled() -> bool:
@@ -60,26 +60,44 @@ def _dsn() -> dict[str, Any]:
 
 async def open_pool() -> None:
     """
-    기동 시 한 번. 붙지 못하면 **메모리 전용으로 계속 간다.**
+    기동 시 한 번. **두 실패를 다르게 다룬다.**
 
-    DB 가 없다고 서버가 안 뜨면 프론트 작업이 Postgres 셋업을 기다리게 된다.
-    1주차 게이트는 텍스트 3턴이지 영속성이 아니다.
+        DB 에 못 붙었다        메모리 전용으로 계속 간다 (예전과 같다)
+        붙었는데 스키마 실패   기동을 멈춘다 — MigrationError 를 올린다
 
-    스키마도 여기서 적용한다. schema.sql 이 전부 CREATE TABLE IF NOT EXISTS 라
-    몇 번을 걸어도 같고, 마이그레이션 도구를 쓰지 않기로 한 이상 이게 가장 싸다.
+    앞은 관대해야 한다. DB 가 없다고 서버가 안 뜨면 프론트 작업이 Postgres
+    셋업을 기다리게 된다.
+
+    **뒤는 관대하면 안 된다.** 이 파일의 쓰기 함수들이 전부 실패를 삼키기
+    때문이다. 스키마가 틀린 채로 뜨면 모든 INSERT 가 조용히 실패하고, 화면은
+    멀쩡하고, 어르신은 한 시간을 말씀하시고, 아무것도 남지 않는다. DB 가 없는
+    것보다 나쁘다 — 없으면 적어도 로그 첫 줄에 「DB 없이 간다」가 찍힌다.
+    prompt.load() 를 기동 실패로 둔 것과 같은 이유다 (main.py lifespan 참조).
     """
     global _pool
     try:
         import asyncpg
         _pool = await asyncpg.create_pool(**_dsn(), min_size=1, max_size=5,
                                           command_timeout=5, timeout=5)
-        async with _pool.acquire() as con:
-            await con.execute(_SCHEMA.read_text(encoding="utf-8"))
-        log.info("DB 연결 · 스키마 적용 완료")
     except Exception as e:                                   # noqa: BLE001
         _pool = None
         log.warning("DB 없이 간다 (%s: %s) — 세션이 메모리에만 남는다",
                     type(e).__name__, str(e)[:120])
+        return
+
+    try:
+        con = await _pool.acquire()
+        try:
+            await migrate.apply(con)
+        finally:
+            await _pool.release(con)
+    except Exception as e:
+        await _pool.close()
+        _pool = None
+        raise migrate.MigrationError(
+            f"스키마를 올리지 못했습니다 ({type(e).__name__}: {str(e)[:200]})") from e
+
+    log.info("DB 연결 · 스키마 확인 완료")
 
 
 async def close_pool() -> None:
@@ -206,6 +224,17 @@ def _need_pool():
     return _pool
 
 
+def pool():
+    """
+    다른 모듈이 쓰는 풀. photostore.PgStore 가 이걸 쓴다.
+
+    _pool 을 직접 import 하게 두지 않는 이유 — `from .store import _pool` 로
+    가져가면 open_pool() 이 나중에 대입한 값을 못 본다. 함수로 감싸면 부를
+    때마다 지금 값을 본다.
+    """
+    return _need_pool()
+
+
 def _jsonb(v: Any) -> Any:
     """
     asyncpg 는 JSONB 를 파싱하지 않고 str 로 돌려준다.
@@ -299,3 +328,107 @@ async def load_session(session_id: str) -> dict | None:
             "created_at": t["created_at"].isoformat(),
         } for t in trows],
     }
+
+
+# ---------------------------------------------------------------- 사진
+#
+# **여기부터가 이 파일의 유일한 예외다. 사진 쓰기는 실패를 삼키지 않는다.**
+#
+# 위의 save_session · save_turn 이 실패를 삼키는 이유는 분명하다. 어르신이
+# 말씀하시는 중에 Postgres 가 비틀거렸다고 인터뷰가 끊기면 안 되고, 잃는 것은
+# 그 턴의 기록 하나다. 아무도 「저장됐다」는 말을 듣지 않았다.
+#
+# 사진은 다르다. 어르신은 사진을 고르고 올리는 **행동**을 하셨고, 화면은 그
+# 결과를 돌려준다. 여기서 실패를 삼키면 화면이 「올렸습니다」라고 말하는데 행이
+# 없다. 다음에 열면 사진이 사라져 있고, 어르신에게 그건 기억이 지워진 일이다.
+# 올리는 일은 다시 하면 되지만 「됐다고 들었는데 안 됐다」는 되돌릴 수 없다.
+#
+# 그래서 사진 함수는 올린다. 라우트가 그것을 503 으로 바꾸고 화면은 「지금은
+# 저장하지 못했습니다」라고 말한다 — 다시 하면 된다는 뜻이 전달된다.
+
+
+def _photo_row(r: Any) -> dict:
+    return {
+        "photo_id": str(r["photo_id"]),
+        "session_id": str(r["session_id"]) if r["session_id"] else None,
+        "user_id": r["user_id"],
+        "storage_key": r["storage_key"],
+        "mime": r["mime"],
+        "status": r["status"],
+        "bytes": r["bytes"],
+        "sha256": r["sha256"],
+        "width": r["width"],
+        "height": r["height"],
+        "exif_taken_at": r["exif_taken_at"].isoformat() if r["exif_taken_at"] else None,
+        "created_at": r["created_at"].isoformat(),
+    }
+
+
+async def save_photo(rec: dict) -> None:
+    """
+    사진 행 하나. **실패하면 올린다** (위 절 주석 참조).
+
+    바이트는 여기 넣지 않는다 — 이미 PhotoStore 에 들어가 있고, 이 행은 그
+    바이트를 가리키는 표지다. 순서가 「바이트 먼저, 행 나중」인 이유는
+    photo.py 에 적어 두었다.
+    """
+    pool_ = _need_pool()
+    try:
+        async with pool_.acquire() as con:
+            await con.execute(
+                """
+                INSERT INTO photo (photo_id, session_id, user_id, storage_key,
+                                   mime, status, bytes, sha256, width, height,
+                                   exif_taken_at)
+                VALUES ($1, $2, $3, $4, $5, 'stored', $6, $7, $8, $9, $10)
+                """,
+                uuid.UUID(rec["photo_id"]),
+                uuid.UUID(rec["session_id"]) if rec.get("session_id") else None,
+                rec["user_id"], rec["storage_key"], rec["mime"], rec["bytes"],
+                rec.get("sha256"), rec.get("width"), rec.get("height"),
+                rec.get("exif_taken_at"))
+    except Exception as e:                                   # noqa: BLE001
+        log.error("사진 행 저장 실패 %s (%s: %s)",
+                  rec.get("photo_id"), type(e).__name__, str(e)[:120])
+        raise StoreUnavailable("사진을 저장하지 못했습니다") from e
+
+
+async def load_photo(photo_id: str) -> dict | None:
+    """
+    사진 한 장의 표지. 없으면 None — 그건 오류가 아니다.
+
+    **status 로 거르지 않는다.** 거르면 라우트가 「없다」와 「아직 안 됐다」를
+    구분할 수 없다. 지금 흐름에서는 행이 생길 때 이미 stored 지만, 나중에
+    두 단계 저장이 필요해지면 그 구분이 라우트에 있어야 한다.
+    """
+    pool_ = _need_pool()
+    try:
+        pid = uuid.UUID(photo_id)
+    except ValueError:
+        return None                      # UUID 가 아니면 있을 수 없는 id 다
+    try:
+        async with pool_.acquire() as con:
+            row = await con.fetchrow("SELECT * FROM photo WHERE photo_id = $1", pid)
+    except Exception as e:                                   # noqa: BLE001
+        log.error("사진 읽기 실패 %s (%s: %s)", photo_id, type(e).__name__, str(e)[:120])
+        raise StoreUnavailable("사진을 읽지 못했습니다") from e
+    return _photo_row(row) if row else None
+
+
+async def delete_photo_row(photo_id: str) -> None:
+    """
+    보상 삭제. 바이트는 들어갔는데 행을 못 넣었을 때 되돌리는 쪽이다.
+
+    **실패를 삼킨다.** 여기까지 왔다면 이미 어르신께 503 을 돌려주기로 정해진
+    뒤고, 정리에 또 실패했다고 더 할 수 있는 일이 없다. 남는 것은 주인 없는
+    바이트 몇백 KB 이고, 그건 조용히 로그에만 남으면 된다.
+    """
+    if _pool is None:
+        return
+    try:
+        async with _pool.acquire() as con:
+            await con.execute("DELETE FROM photo WHERE photo_id = $1",
+                              uuid.UUID(photo_id))
+    except Exception as e:                                   # noqa: BLE001
+        log.error("사진 행 정리 실패 %s (%s: %s) — 고아 행이 남는다",
+                  photo_id, type(e).__name__, str(e)[:120])

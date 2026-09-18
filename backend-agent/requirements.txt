@@ -5,3 +5,5 @@ python-dotenv
 asyncpg
 google-genai
 httpx
+Pillow
+pillow-heif
