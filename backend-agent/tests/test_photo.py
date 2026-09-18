@@ -338,7 +338,7 @@ def test_migrations():
     found = migrate.files()
     # **이 목록은 새 마이그레이션마다 손으로 늘린다.** 귀찮으라고 그랬다 —
     # 번호를 빠뜨리거나 두 사람이 같은 번호를 쓰면 여기서 먼저 걸린다.
-    check("번호순으로 읽는다", [v for v, _ in found] == ["001", "002"],
+    check("번호순으로 읽는다", [v for v, _ in found] == ["001", "002", "003"],
           str([v for v, _ in found]))
     check("001 은 처음 세 테이블", "CREATE TABLE IF NOT EXISTS session"
           in found[0][1].read_text(encoding="utf-8"))
@@ -346,6 +346,12 @@ def test_migrations():
           "photo_blob" in found[1][1].read_text(encoding="utf-8")
           and "user_id" in found[1][1].read_text(encoding="utf-8"))
 
+    sql3 = found[2][1].read_text(encoding="utf-8")
+    check("003 은 가족·어르신·로그인 세션",
+          all(t in sql3 for t in ("app_user", "elder", "user_elder", "login_session")))
+    check("003 은 session·photo 를 안 건드린다",
+          "ALTER TABLE session" not in sql3 and "ALTER TABLE photo" not in sql3,
+          "아직 아무 문자열이나 user_id 로 들어온다 — 지금 외래 키를 걸면 위조 헤더가 500 을 낸다")
 
     # **줄 끝이 체크섬을 흔들면 안 된다.** Windows 에서 CRLF 로 체크아웃된 파일과
     # LF 로 커밋된 파일의 해시가 달라지면, 아무도 고치지 않았는데 모든 개발자의
