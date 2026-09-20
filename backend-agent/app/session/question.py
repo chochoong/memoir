@@ -24,9 +24,10 @@ FSM 도 타이머도 이 파일의 존재를 모른다.
    버렸다. 문서(§1)가 정한 이름과 코드가 쓰던 이름이 둘 다 살아 있으면 언젠가
    반드시 어긋나고, 어긋나는 쪽이 「회차가 안 끝난다」라 눈에도 잘 안 띈다.
 
-4. **프롬프트는 `docs/인터뷰 에이전트_프롬프트.md` 에서 읽는다** (prompt.py).
-   여기에 한 벌 더 두지 않는다. 다만 문서에 아직 없는 두 필드(`facts_found` ·
-   `information_status`)만 `_ADDENDUM` 으로 덧댄다 — 아래 참조.
+4. **프롬프트는 `prompts/interview_v2.2.txt` 에서 읽는다** (prompt.py).
+   여기에 한 벌 더 두지 않는다. 다만 그 파일에 아직 없는 세 필드(`facts_found` ·
+   `information_status` · `completion_check_asked`)만 `_ADDENDUM` 으로 덧댄다 —
+   아래 참조.
 
 **빈 `question` 은 값이다.** 문서 §1 이 「질문하지 않는 종료 턴에는 question 을
 빈 문자열로 둡니다」라고 정했다. 그래서 `topic_status` 를 **먼저** 보고 빈 question
@@ -86,10 +87,10 @@ DEFAULT_WINDOW = 6
 # 추출 에이전트를 따로 두면 턴마다 호출이 하나 더 붙으므로 (지연·비용 2배),
 # 어차피 속으로 판단하고 있는 것을 출력에 적게 하는 쪽을 골랐다.
 #
-# **덧대기만 한다. 문서가 이미 정한 것은 다시 적지 않는다.** 여기서 한 번
-# 어겼다가 값을 치렀다 — 「합쳐 40자」라고 적었는데 문서 §1 은 60자였고, 모델은
-# 둘 사이인 45~47자를 내놓았다. 어느 쪽도 지키지 않은 셈이다. 길이·문장 수처럼
-# 문서에 이미 있는 규칙은 문서 것으로 두고, 없는 것만 더한다.
+# **덧대기만 한다. 프롬프트가 이미 정한 것은 다시 적지 않는다.** 여기서 한 번
+# 어겼다가 값을 치렀다 — 「합쳐 40자」라고 적었는데 §1 은 다른 수였고, 모델은 둘
+# 사이의 어느 수를 내놓았다. 어느 쪽도 지키지 않은 셈이다. 길이·문장 수처럼 §1 에
+# 이미 있는 규칙(지금은 2문장·120자)은 그쪽 것으로 두고, 없는 것만 더한다.
 #
 # **출력의 필드 순서도 문서를 따른다.** 여기서 question 을 empathy 앞에 놓았더니
 # 모델이 질문 칸 안에서 먼저 공감을 하고 (JSON 은 적는 순서대로 생각한다) 그
@@ -129,7 +130,9 @@ _ADDENDUM = """
   "conversation_mode": "normal|sensitive",
   "topic_status": "active|awaiting_choice|closed",
   "completion_check_asked": true 또는 false,
-  "ready_for_chronology": true 또는 false
+  "ready_for_chronology": true 또는 false,
+  "closing_hint": "대화 종료 시 화면에 띄울 안내 문구 (종료가 아니면 null)",
+  "end_reason": "user_request|info_complete|sensitive (종료가 아니면 null)"
 }"""
 
 
@@ -258,9 +261,11 @@ async def gemini_question(ctl: "SessionController") -> str | None:
         # 온도는 「다양한 질문」이 아니라 「규칙 이탈」로 나온다. 다양성은 온도가
         # 아니라 asked_questions · last_sense_used 가 만들게 한다 — 그쪽은 통제된다.
         temperature=0.7,
-        # 200 에서 올렸다. 필드가 3개에서 9개로 늘고 공감 문장이 붙는다.
-        # 200 이면 뒤쪽 필드부터 잘려 나가고, 잘린 JSON 은 파싱에서 통째로 실패한다.
-        max_output_tokens=400,
+        # 400 에서 올렸다. 필드가 10개에서 12개로 늘고, §1 이 길이를 60자에서
+        # 2문장·120자로 열었다. 모자라면 **뒤쪽 필드부터** 잘려 나가는데 지금
+        # 뒤쪽이 end_reason·closing_hint 라 회차를 닫는 자리가 먼저 사라진다.
+        # 잘린 JSON 은 파싱에서 통째로 실패하고, 그러면 고정 질문으로 물러선다.
+        max_output_tokens=700,
         # 지연이 곧 품질인 구간이다. 생각을 오래 할수록 어르신이 기다린다.
         thinking_config=types.ThinkingConfig(thinking_level="MINIMAL"),
         # 도구를 쓰지 않는다. 켜 두면 호출마다 AFC 로그가 한 줄씩 쌓여
@@ -291,6 +296,15 @@ async def gemini_question(ctl: "SessionController") -> str | None:
 
     status = str(data.get("topic_status") or "active").strip().lower()
     mode = str(data.get("conversation_mode") or "normal").strip().lower()
+
+    # §1 이 새로 정한 두 필드. **아는 사유만 받는다** — 모델이 제 말로 지어낸
+    # 사유를 그대로 session.closed_reason 에 적으면 나중에 회차 목록을 사유로
+    # 셀 수 없다. 모르는 값은 버리고 아래에서 "finish" 로 떨어뜨린다.
+    reason = str(data.get("end_reason") or "").strip().lower()
+    if reason and reason not in shared_state.END_REASONS:
+        log.warning("모르는 종료 사유(%r) — 버린다", reason)
+        reason = ""
+    hint = str(data.get("closing_hint") or "").strip()
     raw_q = str(data.get("question") or "").strip()
     q = _one_question(raw_q)
     if q != raw_q:
@@ -314,6 +328,13 @@ async def gemini_question(ctl: "SessionController") -> str | None:
                  and ctl.machine.turn < _min_turn())
     effective = "active" if overruled else status
 
+    # **닫는 턴에만 값이 있다.** 진행 턴에 모델이 적어 와도 버린다 — 남겨 두면
+    # 아직 말씀하시는 중인 화면에 마무리 안내가 뜬다. 되돌린 턴(overruled)도
+    # 진행 턴이라 여기서 같이 지워진다.
+    if effective != "closed":
+        reason, hint = "", ""
+    ctl.closing_hint = hint or None
+
     # **되돌린 결과를 상태에 적는다.** 여기에 closed 를 적어 두면 다음 턴에
     # 모델이 그것을 읽고 또 마무리를 고른다 — 하한이 한 턴만 버티고 무너진다.
     shared_state.merge(ctl.state, data, status=effective)
@@ -328,6 +349,8 @@ async def gemini_question(ctl: "SessionController") -> str | None:
         "facts_found": data.get("facts_found") or [],
         "information_status": data.get("information_status") or {},
         "ready_for_chronology": bool(data.get("ready_for_chronology")),
+        "end_reason": reason or None,
+        "closing_hint": hint or None,
     }
     if overruled:
         ctl.last_decision["overruled"] = "closed"
@@ -342,7 +365,9 @@ async def gemini_question(ctl: "SessionController") -> str | None:
 
     if effective == "closed":
         # FR-IV-006 — 판단으로 마무리. turn.decision 에 들어갈 값이다.
-        log.info("마무리 — %s · %s", mode, shared_state.summary(ctl.state))
+        # 사유는 controller._make_question 이 여기서 받아 closed_reason 에 적는다.
+        log.info("마무리 — %s/%s · %s", mode, reason or "사유없음",
+                 shared_state.summary(ctl.state))
         return None
 
     if not q:

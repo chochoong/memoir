@@ -141,6 +141,8 @@ class SessionController:
     latencies: list[dict] = field(default_factory=list)
     # question.py 가 채운다. FR-IV-006 의 근거로 turn.decision 에 내려간다.
     last_decision: dict | None = None
+    # §1 의 closing_hint — 마칠 때 화면에 띄울 한 줄. 진행 턴에는 None 이다.
+    closing_hint: str | None = None
     # 네 에이전트가 함께 보는 기록 (문서 §0). **모델은 읽고 코드가 쓴다** —
     # 쓰는 자리는 shared.py 하나뿐이고, 여기는 담아 두기만 한다.
     state: dict = field(default_factory=shared_state.initial)
@@ -187,6 +189,10 @@ class SessionController:
             # 한 턴도 안 쌓이면 인터뷰 에이전트가 제 몫을 못 하고 있는 것인데,
             # 로그를 열지 않고 알아채려면 여기 있어야 한다.
             "shared_state": shared_state.for_interview(self),
+            # 마칠 때 화면에 띄울 한 줄. 화면이 제 말로 「마쳤습니다」를 쓰는 대신
+            # 모델이 방금 어떤 이야기를 들었는지 실린 문구를 쓴다. None 이면
+            # 화면이 쓰던 문구로 돈다 — 소리처럼, 없어도 회차는 산다.
+            "closing_hint": self.closing_hint,
             "timer_drift": self.timers.drift_report(),
         }
 
@@ -481,7 +487,11 @@ class SessionController:
         self.marks.question_at = time.perf_counter()
 
         if q is None:
-            await self._finish("finish")
+            # **왜 마쳤는지를 적는다.** §1 이 사유 세 가지를 정했고 (shared.END_REASONS)
+            # question.py 가 아는 값만 걸러 올려 준다. 없으면 "finish" 로 떨어진다 —
+            # 예전과 같은 값이라 사유가 빠진 회차도 목록에서 그대로 읽힌다.
+            reason = (self.last_decision or {}).get("end_reason") or "finish"
+            await self._finish(reason)
             return
         # **합성을 먼저 건다.** 여기서 걸면 남은 T2 안에서 끝나고, 어르신 귀에는
         # 침묵이 끝나는 순간 곧바로 목소리가 나온다. QUESTION_READY 를 먼저

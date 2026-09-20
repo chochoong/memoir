@@ -48,6 +48,15 @@ SENSES = ("시각", "청각", "후각", "미각", "촉각")
 TOPIC_STATUS = ("active", "awaiting_choice", "closed")
 MODES = ("normal", "sensitive")
 
+# §1 「종료할 때, 종료하는 이유를 한줄로 설명하고 종료한다」의 사유 세 가지.
+# 그대로 session.closed_reason 에 내려가 abort · expired · turn_cap 과 한 칸을
+# 나눠 쓴다 — 「AI 가 판단해 마쳤다」를 셋으로 가르는 것이 이 값의 몫이다.
+#
+# **허용값 목록이 001_init.sql 주석에도 있지만 그쪽은 못 고친다.** 적용된
+# 마이그레이션의 본문이 바뀌면 checksum 이 어긋나 기동이 막힌다 (migrate.py).
+# 그래서 어휘의 주인은 여기다.
+END_REASONS = ("user_request", "info_complete", "sensitive")
+
 # 정보 상태의 **되돌아가지 않는 순서**. 머지할 때 낮은 쪽으로 못 내려간다.
 #
 #   0  아직 안 물어봤다

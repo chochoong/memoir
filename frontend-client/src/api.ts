@@ -21,6 +21,7 @@ export interface Snapshot {
   next_question: string | null
   audio_bytes: number          // 지금 모여 있는 발화 오디오. 청크가 닿는지 눈으로 보려고 둔다
   question_audio: boolean      // 낭독할 소리가 준비됐나. false 면 글자만 띄운다
+  closing_hint: string | null  // 마칠 때 띄울 한 줄. 진행 중에는 null
   timer_drift: { n?: number; max_ms?: number; avg_ms?: number }
 }
 
@@ -64,6 +65,19 @@ export interface SavedFragment {
   decision: { action?: string; reason?: string } | null   // FR-IV-006 근거
   latency: Span | null
   created_at: string
+}
+
+// ---------------------------------------------------------------- 사진
+// 올린 뒤 돌아오는 것. `url` 은 **이 서버의 경로**지 스토리지 주소가 아니다
+// (backend-agent/app/session/photostore.py 머리 참조).
+
+export interface PhotoUp {
+  photo_id: string
+  url: string
+  mime: string
+  width: number
+  height: number
+  bytes: number
 }
 
 export type SessionRecord = Omit<SavedSession, 'fragment_count'> & {
@@ -153,4 +167,35 @@ export const api = {
   list: (limit = 20) => call<{ sessions: SavedSession[] }>(`/sessions?limit=${limit}`),
 
   record: (id: string) => call<SessionRecord>(`/sessions/${id}/record`),
+
+  // 사진도 오디오와 같다 — 본문은 **바이트 그대로**다. call() 을 안 쓰는 이유는
+  // 그쪽이 Content-Type: application/json 을 박기 때문이다. 여기서 보내는 type 은
+  // 참고값일 뿐이고, 형식은 서버가 앞머리 바이트로 다시 가린다.
+  //
+  // session_id 는 선택이다. 어르신이 회차를 열기 전에 사진을 고를 수 있어야 한다.
+  photo: async (file: File, sessionId?: string): Promise<PhotoUp> => {
+    const q = sessionId ? `?session_id=${encodeURIComponent(sessionId)}` : ''
+    const res = await fetch(`${BASE}/api/photos${q}`, {
+      method: 'POST',
+      body: file,
+      headers: {
+        'Content-Type': file.type || 'application/octet-stream',
+        'X-User-Id': 'dev-user',
+      },
+    })
+    if (!res.ok) {
+      const body = await res.json().catch(() => ({ detail: res.statusText }))
+      throw new ApiError(res.status, body.detail ?? '사진을 올리지 못했습니다')
+    }
+    return res.json()
+  },
+
+  // <img src> 가 쓸 주소.
+  //
+  // **이 요청에는 X-User-Id 를 실을 수 없다** — <img> 에 커스텀 헤더를 붙일
+  // 방법이 없다. 서버가 그래서 신원을 `uid` 쿠키에 한 벌 적어 둔다 (main.py 의
+  // mirror_uid). 빌드본은 같은 출처라 그 쿠키가 따라가지만, **개발 서버(5173)
+  // 에서는 포트가 달라 남의 쿠키가 되어 안 따라간다.** 사진 확인은 빌드본으로
+  // 한다.
+  photoSrc: (photoId: string) => `${BASE}/api/photos/${photoId}`,
 }
