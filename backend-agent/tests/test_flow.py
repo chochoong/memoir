@@ -22,7 +22,7 @@ for _stream in (sys.stdout, sys.stderr):
         _stream.reconfigure(encoding="utf-8")
 
 from app.session import audio as audiolib                                # noqa: E402
-from app.session.controller import SessionController                    # noqa: E402
+from app.session.controller import MAX_EMPTY_RETRY, SessionController   # noqa: E402
 from app.session.machine import Event, Machine, State, TransitionError   # noqa: E402
 from app.session.timers import T2_PRESETS                                # noqa: E402
 
@@ -199,7 +199,11 @@ def test_empty_loop():
 
     ctl2 = asyncio.run(run_broken_stt())
     n2 = sum(1 for h in ctl2.machine.history if h[1] is Event.EMPTY_TRANSCRIPT)
-    check("전사 실패는 두 번까지만 다시 시도", n2 == 3, f"최초 1 + 재시도 2 = 3, 실제 {n2}")
+    # 상한을 숫자로 박지 않는다 — 어르신이 말없이 기다리는 시간이 이 값에 비례해서,
+    # 값은 앞으로도 조정된다. 검사는 「상한을 지킨다」는 뜻만 붙잡는다.
+    want = 1 + MAX_EMPTY_RETRY
+    check(f"전사 실패는 {MAX_EMPTY_RETRY}번까지만 다시 시도", n2 == want,
+          f"최초 1 + 재시도 {MAX_EMPTY_RETRY} = {want}, 실제 {n2}")
     check("실패해도 회차는 살아 있다", ctl2.machine.state is State.LISTENING,
           f"state={ctl2.machine.state.value}")
     check("턴을 소모하지 않는다", ctl2.machine.turn == 0)

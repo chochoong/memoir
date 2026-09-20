@@ -42,8 +42,12 @@ TtsFn = Callable[[str], Awaitable[bytes]]
 # 한 발화가 이보다 커지면 받지 않는다. opus 로 두 시간쯤 된다.
 MAX_AUDIO_BYTES = 25 * 1024 * 1024
 
-# 빈 전사가 연속으로 몇 번까지면 다시 시도해 볼 것인가. 아래 _confirm 참조.
-MAX_EMPTY_RETRY = 2
+# 빈 전사가 연속으로 몇 번까지면 다시 시도해 볼 것인가. 아래 _after_empty 참조.
+#
+# 재시도 한 번의 값은 전사 타임아웃 + T1 이다 — 어르신은 그만큼(약 9초) 화면도
+# 소리도 없는 채로 기다린다. 같은 오디오를 다시 보내는 일이 그 값을 두 번
+# 지불할 만큼 잘 듣지 않는다. 한 번까지만 해 보고 다음 발화에 맡긴다.
+MAX_EMPTY_RETRY = 1
 
 # ---------------------------------------------------------------- 안전 천장
 #
@@ -430,7 +434,8 @@ class SessionController:
 
             버퍼가 비었다        말씀이 없었던 것이다. 다시 시도할 대상이 없다.
                                  T1 을 걸지 않고 기다린다 — 다음 발화가 걸어 준다.
-            버퍼에 뭔가 있다      전사가 실패한 것일 수 있다. 두 번까지 다시 해 본다.
+            버퍼에 뭔가 있다      전사가 실패한 것일 수 있다. MAX_EMPTY_RETRY 만큼
+                                 다시 해 본다.
 
         **버퍼는 비우지 않는다.** 전사에 실패한 것이라면 그 안에 어르신의 말씀이
         들어 있다. 다음 발화가 뒤에 붙어 함께 전사되면서 한 번 더 기회를 얻는다.
@@ -549,9 +554,11 @@ class SessionController:
         self.marks.delivered_at = time.perf_counter()
         spans = self.marks.spans_ms()
         self.latencies.append(spans)
-        log.info("턴 %d 지연 %.0fms  (저장 %.0f · 질문 %.0f · 전달 %.0f)",
-                 self.machine.turn, spans["total"],
-                 spans["save"], spans["question"], spans["deliver"])
+        # 앞의 넷은 더해서 total 이 되고, 합성은 전달 안에 든 값이다 (Marks.spans_ms
+        # 참조). 대괄호로 묶어 더하는 칸이 아님을 드러낸다.
+        log.info("턴 %d 지연 %.0fms  (전사 %.0f · 저장 %.0f · 질문 %.0f · 전달 %.0f [합성 %.0f])",
+                 self.machine.turn, spans["total"], spans["stt"], spans["save"],
+                 spans["question"], spans["deliver"], spans["tts"])
         await store.update_turn_marks(self, self.fragments[-1]["idx"], spans)
         await store.update_session(self)
 

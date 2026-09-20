@@ -51,8 +51,20 @@ DEFAULT_LOCALE = "ko-KR"
 # 늦더라도 받아 오는 쪽을 고른다.
 DEFAULT_TIMEOUT = 6.0
 
+# 포기한 뒤에도 응답을 이만큼 더 기다려 본다. 늦게 온 응답만이 「왜 늦었나」를
+# 말해 준다 — 쓰로틀인지 정말 느린 것인지 끊긴 것인지는 응답에만 적혀 있다.
+# 무한히 두지는 않는다.
+LATE_GRACE = 10.0
+
 _CLIENT = None
 _WARNED = False
+
+# 요청 일련번호. 뒤늦게 도착한 줄이 어느 요청 것인지 로그에서 가리려면 필요하다 —
+# 그 줄은 이미 다음 턴이 시작된 뒤에 끼어든다.
+_SEQ = 0
+# 포기한 뒤에도 도는 태스크를 붙들어 둔다. 이벤트 루프는 태스크를 약한 참조로만
+# 잡아서, 아무도 안 잡고 있으면 실행 중에 사라질 수 있다.
+_LATE: set = set()
 
 
 def _endpoint(region: str) -> str:
@@ -104,6 +116,14 @@ async def azure_transcribe(audio: bytes, mime: str = "audio/wav",
 
     429 는 한 번만 다시 시도한다. 측정 중 연속 호출에서 실제로 걸렸다 —
     무료 티어면 실사용에서도 걸린다. 재시도는 예산을 먹으므로 한 번까지다.
+
+    **시간이 넘어도 요청을 취소하지 않는다.** 취소하면 응답이 이 프로세스에
+    도달하지 못하고, 그러면 로그에 남는 것은 「시간 초과」뿐이다. 그건 증상이지
+    원인이 아니다 — 쓰로틀(429)인지 정말 느린 것인지 끊긴 것인지가 구분되지 않고,
+    아래 _post 의 429 처리도 응답보다 먼저 취소되면 닿지 못한다.
+
+    어르신을 기다리게 하지 않는 것과 원인을 아는 것은 양립한다. **기다리는 쪽만
+    그만두고(shield) 응답은 뒤에서 받아 적는다.** 예산은 그대로 지킨다.
     """
     cred = _creds()
     if not cred or not audio:
@@ -112,14 +132,58 @@ async def azure_transcribe(audio: bytes, mime: str = "audio/wav",
     timeout = float(os.environ.get("AZURE_STT_TIMEOUT", DEFAULT_TIMEOUT))
     deadline = time.perf_counter() + timeout
 
+    global _SEQ
+    _SEQ += 1
+    seq = _SEQ
+
+    task = asyncio.create_task(_post(key, region, audio, mime, hint, deadline))
     try:
-        return await asyncio.wait_for(
-            _post(key, region, audio, mime, hint, deadline), timeout=timeout)
+        return await asyncio.wait_for(asyncio.shield(task), timeout=timeout)
     except asyncio.TimeoutError:
-        log.error("전사 시간 초과 (%.1f초) — 이 턴의 말씀을 받지 못했다", timeout)
+        log.error("전사 #%d 를 %.1f초 안에 못 받았다 — 이 턴의 말씀을 받지 못했다",
+                  seq, timeout)
+        _report_late(task, seq)
+    except asyncio.CancelledError:
+        # 회차가 닫히는 길이다. 기다리는 사람도, 그 답을 적어 둘 회차도 없다.
+        task.cancel()
+        raise
     except Exception as e:                                   # noqa: BLE001
-        log.error("전사 실패 (%s: %s)", type(e).__name__, str(e)[:140])
+        log.error("전사 #%d 실패 (%s: %s)", seq, type(e).__name__, str(e)[:140])
     return ""
+
+
+def _report_late(task: "asyncio.Task", seq: int) -> None:
+    """
+    포기한 요청을 살려 둔 채 결과만 받아 적는다.
+
+    완료 콜백에서 exception() 을 반드시 읽는다. 안 읽으면 이벤트 루프가
+    「retrieved 되지 않은 예외」를 따로 뱉어 같은 실패가 두 겹으로 남는다.
+
+    **늦게 도착한 성공 결과는 버린다.** 회차는 이미 다음으로 갔고, 뒤늦은 글을
+    끼워 넣으면 조각 순서가 어긋난다. 어르신 말씀을 잃는 것도 아니다 —
+    controller._after_empty 가 버퍼를 비우지 않아 같은 오디오가 다시 올라간다.
+    """
+    started = time.perf_counter()
+    _LATE.add(task)
+
+    def done(t: "asyncio.Task") -> None:
+        _LATE.discard(t)
+        late = (time.perf_counter() - started) * 1000
+        if t.cancelled():
+            log.warning("전사 #%d — 유예 %.0f초가 지나 요청을 접었다", seq, LATE_GRACE)
+            return
+        e = t.exception()
+        if e is not None:
+            log.error("전사 #%d 뒤늦은 실패 (%s: %s) — 포기 후 %.0fms",
+                      seq, type(e).__name__, str(e)[:140], late)
+        else:
+            text = t.result()
+            log.warning("전사 #%d 뒤늦게 도착 — %s (포기 후 %.0fms)",
+                        seq, f"{len(text)}자" if text else "빈 결과", late)
+
+    task.add_done_callback(done)
+    asyncio.get_running_loop().call_later(
+        LATE_GRACE, lambda: None if task.done() else task.cancel())
 
 
 async def _post(key: str, region: str, audio: bytes, mime: str,
@@ -130,18 +194,25 @@ async def _post(key: str, region: str, audio: bytes, mime: str,
         "definition": (None, json.dumps(_definition(hint)), "application/json"),
     }
     for attempt in (1, 2):
+        sent = time.perf_counter()
         r = await client.post(_endpoint(region),
                               headers={"Ocp-Apim-Subscription-Key": key}, files=files)
+        took = (time.perf_counter() - sent) * 1000
         if r.status_code == 429 and attempt == 1:
-            wait = float(r.headers.get("Retry-After", 1))
+            # 응답에 걸린 시간과 Retry-After 유무를 같이 남긴다. 429 는 한 모양이
+            # 아니다 — 곧바로 오며 Retry-After 를 주는 것과, 한참 뒤에 오며 아무
+            # 것도 주지 않는 것이 있고, 뒤쪽은 예산을 이미 넘긴 채로 도착한다.
+            after = r.headers.get("Retry-After")
+            wait = float(after or 1)
             if time.perf_counter() + wait >= deadline:
-                log.error("429 — 재시도할 예산이 없다")
+                log.error("429 — 재시도할 예산이 없다 (응답 %.0fms · Retry-After %s)",
+                          took, after or "없음")
                 return ""
-            log.warning("429 — %.1f초 뒤 한 번 다시 시도한다", wait)
+            log.warning("429 — %.1f초 뒤 한 번 다시 시도한다 (응답 %.0fms)", wait, took)
             await asyncio.sleep(wait)
             continue
         if r.status_code != 200:
-            log.error("전사 HTTP %s — %s", r.status_code, r.text[:140])
+            log.error("전사 HTTP %s (%.0fms) — %s", r.status_code, took, r.text[:140])
             return ""
         body = r.json()
         return " ".join(p.get("text", "") for p in body.get("combinedPhrases", [])).strip()
