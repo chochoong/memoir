@@ -109,8 +109,9 @@ _ADDENDUM = """
 - 어르신이 말씀하신 표현을 그대로 짧게 적습니다. 다듬거나 추측하지 않습니다.
 - 각 항목은 15자를 넘기지 않습니다. 느낌이나 감상이 아니라 사실만 적습니다.
 - 새로 확인된 것이 없으면 빈 배열로 둡니다.
+- 앞서 확인된 사실을 어르신이 아니라고 하시면 facts_retracted에 그 사실을 그대로 적습니다.
 - information_status에는 지금까지 확인된 정보의 상태를 다시 적습니다.
-- 한 번 confirmed가 된 항목은 되돌리지 않습니다.
+- 한 번 confirmed가 된 항목은 어르신이 아니라고 하시기 전에는 되돌리지 않습니다.
 - 더 남기고 싶은 이야기가 있는지 여쭈는 턴에는 completion_check_asked를 true로 적습니다.
 
 [마무리 판단]
@@ -126,6 +127,7 @@ _ADDENDUM = """
   "question_type": "회상확장|사실확인|주제전환|안전확인|없음",
   "sense_used": "시각|청각|후각|미각|촉각|없음",
   "facts_found": ["어르신이 새로 말씀하신 사실"],
+  "facts_retracted": ["어르신이 아니라고 하신 사실"],
   "information_status": {"event": "", "when": "", "who": "", "place": "", "emotion": ""},
   "conversation_mode": "normal|sensitive",
   "topic_status": "active|awaiting_choice|closed",
@@ -199,6 +201,40 @@ def _client():
 _CLIENT = None
 
 
+# 어르신 말씀의 **끝 물음표를 떼고 모델에게 준다.** 기록은 건드리지 않는다 —
+# turn.answer 에는 들으신 그대로 남는다. 여기는 모델에게 보낼 사본이다.
+#
+# Azure 는 억양을 보고 부호를 단다. 그게 한국어에서는 뜻을 흐리는 게 아니라
+# **뒤집는다.**
+#
+#     칠순 잔치 아니야.   아니라는 말씀
+#     칠순 잔치 아니야?   맞지 않냐는 물음 — 칠순잔치라는 뜻이 된다
+#
+# 실제 회차에서 어르신이 글자까지 같은 말씀을 두 번 하셨는데 한 번은 `?` 로,
+# 한 번은 `.` 으로 왔다. 모델은 그 부호를 따라 정반대로 움직였고, 아니라는
+# 말씀을 두 번 더 하시게 만들었다.
+#
+# **못 믿을 뿐 아니라 없어도 된다.** 의문사(뭐·언제·어디)나 의문 어미(-까·-나)가
+# 있으면 부호 없이도 되물음인 줄 안다. 부호만이 단서인 것은 `아니야?` `맞아?`
+# 처럼 평서형으로 끝나는 판정의문문뿐인데, 측정한 오류가 전부 거기 몰려 있었다.
+# 평서문으로 넣은 「…사진 찍은 거야」도 확신도 0.93 으로 `?` 가 붙어 돌아왔다.
+#
+# 같은 대본 4회씩 — 칠순잔치로 단정한 턴 12회 → 5회, 어르신이 아니라고 하신 뒤
+# 빠져나오는 자리 4번째 → 2번째.
+#
+# **API 로 끌 수는 없다.** Fast Transcription 은 배치 전사의 punctuationMode 를
+# 조용히 무시하고(같은 결과, 오류도 없다), 부호 없는 형태(lexical)를 주지 않는다.
+# combinedPhrases 에 있는 것은 text 하나뿐이라 뗄 자리는 여기밖에 없다.
+#
+# **끝에 붙은 것만 뗀다.** 한 문장이 아닐 때 가운데 물음표는 어르신이 남의 말을
+# 옮기시는 자리라 (「그래서 내가 뭐냐고 물었지?」) 그대로 둔다.
+_TRAILING_Q = re.compile(r"[?？]+\s*$")
+
+
+def _heard(answer: str) -> str:
+    return _TRAILING_Q.sub("", answer.rstrip()) or answer
+
+
 def _transcript(ctl: "SessionController") -> str:
     """
     지금까지의 조각을 프롬프트에 넣을 형태로. 0번은 엽서라 질문이 없다.
@@ -220,14 +256,14 @@ def _transcript(ctl: "SessionController") -> str:
     out = []
     for f in head:
         if f["answer"]:
-            out.append(f"어르신: {f['answer']}")
+            out.append(f"어르신: {_heard(f['answer'])}")
     if cut:
         out.append(f"(앞의 {cut}턴은 줄였습니다)")
     for f in rest[cut:]:
         if f["question"]:
             out.append(f"질문: {f['question']}")
         if f["answer"]:
-            out.append(f"어르신: {f['answer']}")
+            out.append(f"어르신: {_heard(f['answer'])}")
     return "\n".join(out)
 
 
@@ -347,6 +383,7 @@ async def gemini_question(ctl: "SessionController") -> str | None:
         "question_type": data.get("question_type"),
         "sense_used": data.get("sense_used"),
         "facts_found": data.get("facts_found") or [],
+        "facts_retracted": data.get("facts_retracted") or [],
         "information_status": data.get("information_status") or {},
         "ready_for_chronology": bool(data.get("ready_for_chronology")),
         "end_reason": reason or None,
