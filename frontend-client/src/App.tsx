@@ -276,6 +276,13 @@ export default function App() {
   //
   // **tts-done 을 여기서 올리는 이유**는 낭독이 끝나는 시각을 서버가 알 수 없기
   // 때문이다. 끝까지 튼 쪽이 화면이라, 여기서 올려야 T1 이 정확한 순간부터 돈다.
+  // **회차가 바뀌면 지운다.** 여는 말은 늘 같은 문장이라, 지우지 않으면 두
+  // 번째 회차의 여는 말이 「이미 읽은 말」로 걸려 낭독이 통째로 건너뛰어진다.
+  // 그러면 tts-done 이 안 올라가고, 서버는 낭독이 끝난 줄을 몰라 수음을 열지
+  // 않는다 — 회차가 SPEAKING 에 멈춘 채 화면만 계속 물어보게 된다.
+  // 실제로 그렇게 멈춘 회차가 셋 있었다 (폴링 84회 · 오디오 0바이트).
+  useEffect(() => { spoken.current = null }, [id])
+
   useEffect(() => {
     if (!id || snap?.state !== 'SPEAKING') return
     const q = snap.next_question
