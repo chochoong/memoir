@@ -559,6 +559,10 @@ async def upload_photo(request: Request, session_id: str | None = None):
     except (store.StoreUnavailable, photostore.PhotoStoreError) as e:
         raise HTTPException(503, "지금은 사진을 저장하지 못했습니다") from e
 
+    # §2 분석을 여기서 걸어 둔다 — 회차가 열릴 때 단서가 이미 있게 한다.
+    # 기다리지 않으므로 응답 시간은 그대로다 (photo.analyze_later 참조).
+    photo.analyze_later(rec)
+
     return {
         "photo_id": rec["photo_id"],
         "url": f"/api/photos/{rec['photo_id']}",

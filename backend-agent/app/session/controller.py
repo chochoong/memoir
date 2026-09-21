@@ -87,6 +87,48 @@ SWEEP_EVERY = 60.0
 # _make_question 이 만든다 — 그 자리에는 T2 가 있어 지연이 침묵 안에 숨는다.
 OPENING = "오늘은 어떤 이야기를 들려주시겠어요?"
 
+# 사진을 들고 여는 회차의 **뒷받침** 여는 말. 단서가 없을 때만 쓴다.
+#
+# 사진을 고르고 시작했는데 첫 마디가 「오늘은 어떤 이야기를」이면, 어르신에게는
+# 사진이 닿지 않은 것으로 보인다. 실제로 그랬다 — 사진도 붙고 단서도 뽑혔는데
+# 화면은 여는 말 그대로 멈춰 있었다.
+#
+# 다만 이 문장 자체는 사진을 보지 않은 말이다. 보통은 photo_opening 이 §2 가
+# 만든 진짜 사진 질문으로 여는 말을 짓고, 여기로는 단서가 아직 없을 때만
+# 내려온다 (아래 photo_opening · start 참조).
+OPENING_PHOTO = "사진 잘 받았습니다. 이 사진은 어떤 사진인가요?"
+
+
+def photo_opening(clues: dict | None) -> str:
+    """
+    §2 가 만든 사진 질문으로 여는 말을 짓는다. 쓸 수 없으면 OPENING_PHOTO 다.
+
+    **여기서도 LLM 을 부르지 않는다** — 위 OPENING 과 같은 이유다. 부를 필요가
+    없다: 단서는 사진을 **올릴 때** 이미 계산돼 있다 (photo.analyze_later). 예전에
+    분석을 회차 시작에 붙였을 때는 1.6~3.9초가 여는 말 앞에 그대로 얹혔고, 그
+    시간이 숨을 T2 침묵이 없어서 고정 문장 말고는 낼 것이 없었다. 계산하는 자리를
+    옮기자 그 값이 공짜가 됐다.
+
+    **§2 의 말을 다듬지 않는다.** §1 의 「photo_analyses의 questions가 들어오면
+    의미를 바꾸지 않고 자연스러운 존댓말로 바꿔 묻습니다」를 코드가 대신할 수는
+    없다. 대신 **쓸 만한지만 본다.** 실제 사진 셋을 두 번씩 돌려 나온 질문 12개는
+    모두 존댓말 의문문이었고 20~42자였다 —
+    「가운데에 꽃목걸이를 하고 계신 분은 어떤 좋은 일로 축하를 받으신 건가요?」
+
+    그래도 거르는 까닭은 §2 가 시각 분석가이지 인터뷰어가 아니어서다. 여쭐
+    「내용」을 적어 버리면(「찍은 장소가 어디인지」) 어르신께 그대로 읽어 드릴 수
+    없는 말이 된다. 물음표로 끝나지 않거나 길면 고정 문장으로 돌아간다 — 어색한
+    첫 마디보다 사진을 안 본 첫 마디가 낫다.
+
+    앞에 「사진 잘 받았습니다」를 붙인다. 사진이 닿았다는 신호가 첫 마디에 있어야
+    하고, §1 의 「공감 한 문장 + 질문 한 문장, 120자」와도 같은 모양이 된다.
+    """
+    qs = (clues or {}).get("questions")
+    q = qs[0].strip() if isinstance(qs, list) and qs and isinstance(qs[0], str) else ""
+    if not q.endswith(("?", "？")) or len(q) > 100:
+        return OPENING_PHOTO
+    return f"사진 잘 받았습니다. {q}"
+
 
 async def fixed_questions(ctl: "SessionController") -> str | None:
     """Day 1~4 용 고정 문구. LLM 없이 흐름만 돌린다."""
@@ -238,39 +280,77 @@ class SessionController:
         self.fragments.append({"idx": 0, "question": None, "answer": postcard})
         await store.save_session(self)
         await store.save_turn(self, self.fragments[0])
-        # 고정 여는 말이다 — 위 OPENING 참조. 질문 생성은 어르신의 첫 말씀을
-        # 들은 뒤 _make_question 에서 처음 일어난다.
-        self._next_question = OPENING
+
+        # 여는 말을 정한다. 질문 **생성**은 어르신의 첫 말씀을 들은 뒤
+        # _make_question 에서 처음 일어난다 — 위 OPENING 참조.
+        #
+        # 사진이 있으면 단서를 먼저 본다. 읽기 한 번이면 되는 까닭은 분석이
+        # 사진을 올릴 때 이미 끝나 있어서다 (photo.analyze_later).
+        rec = await self._photo_record() if self.photo_id else None
+        clues = (rec or {}).get("clues")
+        if clues:
+            self._apply_clues(clues)
+            await store.save_photo_clues(self, clues)
+            self._next_question = photo_opening(clues)
+        else:
+            self._next_question = OPENING_PHOTO if self.photo_id else OPENING
+
         # 합성은 붙잡지 않고 띄워 둔다 — 화면이 받으러 올 때 기다리면 된다
         # (question_audio 가 최대 2초 기다린다).
         self._speak(self._next_question)
-        # 사진 분석도 붙잡지 않는다. 아래 _analyze_photo 의 설명 참조.
-        if self.photo_id:
-            self._clues = asyncio.create_task(self._analyze_photo())
 
-    async def _analyze_photo(self) -> None:
+        # 단서가 없으면 여기서 한 번 더 해 본다. 붙잡지 않는다.
+        if rec is not None and not clues:
+            self._clues = asyncio.create_task(self._analyze_photo(rec))
+
+    async def _photo_record(self) -> dict | None:
         """
-        회차를 연 사진에서 단서를 받는다 (§2 사진 분석 에이전트). **회차당 한 번이다.**
+        회차를 연 사진의 표지. 없거나 남의 것이면 None — **회차는 그대로 간다.**
 
-        **붙잡지 않고 배경으로 돈다.** start() 는 질문을 만들지 않고 고정 여는 말로
-        열기 때문에(위 OPENING 참조), 첫 질문이 필요해지는 때는 여는 말 낭독과
-        어르신의 첫 말씀이 끝난 뒤다. 분석 예산 10초는 그 안에 넉넉히 들어간다 —
-        어르신은 이것 때문에 기다리지 않는다. 회차 시작에 10초를 얹는 설계였다면
-        붙일 수 없는 기능이었다.
+        화면이 보낸 photo_id 가 틀릴 수 있다. 그때 회차를 깨지 않는 까닭은 아래
+        _analyze_photo 와 같다. 읽기가 실패해도 마찬가지다 — DB 가 한 번 비틀거렸다고
+        어르신의 회차가 열리지 않으면 안 된다.
+        """
+        pid = (self.photo_id or "")[:8]
+        try:
+            rec = await store.load_photo(self.photo_id or "")
+        except Exception as e:                               # noqa: BLE001
+            log.error("사진 %s 를 읽을 수 없다 — 사진 단서 없이 간다 (%s: %s)",
+                      pid, type(e).__name__, str(e)[:120])
+            return None
+        if rec is None or rec["user_id"] != self.user_id:
+            log.error("사진 %s 를 읽을 수 없다 — 사진 단서 없이 간다", pid)
+            return None
+        return rec
+
+    def _apply_clues(self, clues: dict) -> None:
+        """
+        단서를 state 에 얹는다. **얹는 것이 곧 §1 에 붙이는 일이다** — §1 에
+        「photo_analyses의 questions가 들어오면 의미를 바꾸지 않고 …」 규칙이 이미
+        있고, shared.for_interview 가 ctl.state 를 그대로 실어 보낸다.
+        """
+        self.state["photo_analyses"] = [clues]
+
+    async def _analyze_photo(self, rec: dict) -> None:
+        """
+        올릴 때 못 끝낸 분석을 여기서 한 번 더 한다 (§2). **회차당 한 번이다.**
+
+        **보통은 여기 오지 않는다.** 분석은 사진을 올리는 자리에서 돈다
+        (photo.analyze_later). 이 길로 오는 것은 그때 Gemini 가 실패했거나, 004
+        이전에 올라와 단서가 없는 사진이거나, 분석이 끝나기 전에 서버가 다시 뜬
+        경우다. 그래도 한 번은 더 해 봐야 그 회차에 사진 질문이 산다.
+
+        **붙잡지 않고 배경으로 돈다.** 여는 말은 이미 정해져 나갔고, 첫 질문이
+        필요해지는 때는 낭독과 어르신의 첫 말씀이 끝난 뒤다. 분석 예산 10초는 그
+        안에 넉넉히 들어간다 — 어르신은 이것 때문에 기다리지 않는다.
 
         **실패해도 회차는 그대로 간다.** 사진 단서는 있으면 좋은 것이지 회차의
         조건이 아니다. stt·tts 와 같은 정책이다. 다만 조용히 지나가지는 않는다 —
         어르신이 사진을 고르셨는데 사진 질문이 안 나오면 그 까닭이 로그에 있어야
         한다.
         """
-        pid = (self.photo_id or "")[:8]
+        pid = str(rec.get("photo_id") or self.photo_id or "")[:8]
         try:
-            rec = await store.load_photo(self.photo_id or "")
-            if rec is None or rec["user_id"] != self.user_id:
-                # 없는 id 이거나 남의 사진이다. 화면이 보낸 값이 틀린 것이라
-                # 회차를 깨지 않고 여기서 끝낸다.
-                log.error("사진 %s 를 읽을 수 없다 — 사진 단서 없이 간다", pid)
-                return
             data = await photostore.current().get(rec["storage_key"])
             clues = await photo_analyze.analyze_photo(data, rec["mime"])
         except asyncio.CancelledError:
@@ -283,11 +363,11 @@ class SessionController:
             log.error("사진 %s 에서 단서를 얻지 못했다 — 사진 질문 없이 간다", pid)
             return
 
-        # **state 에 넣는 것이 곧 붙이는 일이다.** §1 에 「photo_analyses의
-        # questions가 들어오면 의미를 바꾸지 않고 …」 규칙이 이미 있고,
-        # shared.for_interview 가 ctl.state 를 그대로 실어 보낸다.
-        self.state["photo_analyses"] = [clues]
+        self._apply_clues(clues)
         await store.save_photo_clues(self, clues)
+        # 사진에도 적어 둔다. 다음 회차는 이 사진을 다시 분석하지 않는다.
+        await store.save_photo_analysis(
+            str(rec.get("photo_id") or self.photo_id), clues)
         log.info("사진 단서 %s — 사물 %d개 · 여쭐 것 %d개", pid,
                  len(clues.get("objects") or []), len(clues.get("questions") or []))
 

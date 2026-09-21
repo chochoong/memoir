@@ -338,7 +338,7 @@ def test_migrations():
     found = migrate.files()
     # **이 목록은 새 마이그레이션마다 손으로 늘린다.** 귀찮으라고 그랬다 —
     # 번호를 빠뜨리거나 두 사람이 같은 번호를 쓰면 여기서 먼저 걸린다.
-    check("번호순으로 읽는다", [v for v, _ in found] == ["001", "002", "003"],
+    check("번호순으로 읽는다", [v for v, _ in found] == ["001", "002", "003", "004"],
           str([v for v, _ in found]))
     check("001 은 처음 세 테이블", "CREATE TABLE IF NOT EXISTS session"
           in found[0][1].read_text(encoding="utf-8"))
@@ -352,6 +352,12 @@ def test_migrations():
     check("003 은 session·photo 를 안 건드린다",
           "ALTER TABLE session" not in sql3 and "ALTER TABLE photo" not in sql3,
           "아직 아무 문자열이나 user_id 로 들어온다 — 지금 외래 키를 걸면 위조 헤더가 500 을 낸다")
+
+    sql4 = found[3][1].read_text(encoding="utf-8")
+    check("004 는 사진에 단서를 붙인다", "ADD COLUMN IF NOT EXISTS clues" in sql4)
+    check("004 는 session.photo_clues 를 안 지운다",
+          "DROP COLUMN" not in sql4 and "ALTER TABLE session" not in sql4,
+          "그쪽은 「이 회차가 무엇을 보고 물었는가」의 기록이라 남는다")
 
     # **줄 끝이 체크섬을 흔들면 안 된다.** Windows 에서 CRLF 로 체크아웃된 파일과
     # LF 로 커밋된 파일의 해시가 달라지면, 아무도 고치지 않았는데 모든 개발자의
@@ -531,12 +537,12 @@ def test_clues():
         async def get(self, key):
             return b"\xff\xd8"
 
-    async def run(photo_id, *, owner="kim", clues=CLUES):
+    async def run(photo_id, *, owner="kim", clues=CLUES, stored=None):
         seen = {}
 
         async def load_photo(pid):
             return {"photo_id": pid, "user_id": owner, "storage_key": "k",
-                    "mime": "image/jpeg", "status": "stored"}
+                    "mime": "image/jpeg", "status": "stored", "clues": stored}
 
         async def analyze(data, mime):
             seen["분석"] = True
@@ -576,20 +582,68 @@ def test_clues():
     check("DB 에도 적는다", seen.get("저장") == CLUES)
     check("§1 에게 실린다", shared.for_interview(ctl).get("photo_analyses") == [CLUES],
           "shared.for_interview 가 빼 버리면 프롬프트에 닿지 않는다")
+    check("사진이 있으면 여는 말부터 사진 이야기다",
+          ctl._next_question == C.OPENING_PHOTO, ctl._next_question)
 
     ctl, seen = asyncio.run(run(None))
     check("사진이 없으면 §2 를 부르지 않는다", "분석" not in seen)
     check("사진이 없으면 키 자체가 없다",
           "photo_analyses" not in shared.for_interview(ctl),
           "빈 배열을 매 턴 실어 보내면 그만큼 어르신이 기다린다")
+    check("사진이 없으면 여는 말은 그대로다", ctl._next_question == C.OPENING,
+          ctl._next_question)
 
     ctl, seen = asyncio.run(run("p1", owner="lee"))
     check("남의 사진은 붙지 않는다", "photo_analyses" not in ctl.state)
     check("그래도 회차는 산다", ctl.fragments[0]["answer"] == "엽서")
+    check("붙지 않아도 여는 말은 사진 이야기다", ctl._next_question == C.OPENING_PHOTO,
+          "고르신 것은 사진이다 — 붙는지는 그 뒤에 안다")
 
     ctl, seen = asyncio.run(run("p1", clues=None))
     check("분석이 빈손이어도 회차는 산다",
           "photo_analyses" not in ctl.state and ctl.fragments[0]["answer"] == "엽서")
+
+    # 올릴 때 이미 분석이 끝난 사진 — 보통은 이 길로 온다 (photo.analyze_later).
+    READY = dict(CLUES, questions=["이 사진은 어떤 날에 찍으신 건가요?"])
+    ctl, seen = asyncio.run(run("p1", stored=READY))
+    check("단서가 붙어 있으면 §2 를 다시 부르지 않는다", "분석" not in seen,
+          "사진 하나를 회차마다 다시 분석하면 그만큼 돈과 시간을 쓴다")
+    check("붙어 있던 단서가 state 로 간다", ctl.state.get("photo_analyses") == [READY])
+    check("여는 말이 §2 의 사진 질문이다",
+          ctl._next_question == "사진 잘 받았습니다. 이 사진은 어떤 날에 찍으신 건가요?",
+          ctl._next_question)
+    check("회차에도 그 단서를 적는다", seen.get("저장") == READY)
+
+
+def test_photo_opening():
+    """
+    여는 말을 §2 의 질문으로 짓는 자리. **§2 를 믿되 거른다** —
+    controller.photo_opening 주석 참조.
+    """
+    print()
+    print("[12] 사진 여는 말")
+
+    from app.session import controller as C
+
+    def op(qs):
+        return C.photo_opening({"questions": qs})
+
+    check("존댓말 의문문은 그대로 실린다",
+          op(["이 사진은 언제, 어디서 찍으신 것인가요?"])
+          == "사진 잘 받았습니다. 이 사진은 언제, 어디서 찍으신 것인가요?")
+    check("물음표로 끝나지 않으면 고정 문장이다", op(["찍은 장소가 어디인지"])
+          == C.OPENING_PHOTO,
+          "§2 는 시각 분석가라 여쭐 「내용」만 적어 놓을 때가 있다")
+    check("전각 물음표도 질문이다", op(["어떤 날인가요？"]).startswith("사진 잘 받았습니다. 어떤"))
+    check("너무 길면 고정 문장이다", op(["가" * 101 + "?"]) == C.OPENING_PHOTO,
+          "§1 의 120자 규칙을 여는 말도 지킨다")
+    check("질문이 없으면 고정 문장이다", op([]) == C.OPENING_PHOTO)
+    check("단서가 없으면 고정 문장이다", C.photo_opening(None) == C.OPENING_PHOTO)
+    check("문자열이 아니면 고정 문장이다", op([{"q": "어떤 날인가요?"}]) == C.OPENING_PHOTO,
+          "모델이 낸 JSON 은 모양이 어긋날 수 있다")
+    check("첫 마디에 사진을 받았다는 말이 있다",
+          op(["어떤 날인가요?"]).startswith("사진 잘 받았습니다"),
+          "그게 없으면 사진이 안 닿은 것으로 보인다")
 
 
 def test_all_checks_passed():
@@ -610,6 +664,7 @@ def main() -> int:
     test_migrations()
     test_routes()
     test_clues()
+    test_photo_opening()
     print(f"\n{'=' * 52}\n통과 {len(PASS)} · 실패 {len(FAIL)}")
     if FAIL:
         print("실패:", ", ".join(FAIL))

@@ -395,6 +395,9 @@ def _photo_row(r: Any) -> dict:
         "height": r["height"],
         "exif_taken_at": r["exif_taken_at"].isoformat() if r["exif_taken_at"] else None,
         "created_at": r["created_at"].isoformat(),
+        # 004 이전에 뜬 서버가 남긴 행에는 이 열이 없을 수 있다. 없으면 None 이고,
+        # 그건 「아직 분석 안 됐다」와 같은 뜻이라 호출자가 따로 다룰 것이 없다.
+        "clues": _jsonb(r["clues"]) if "clues" in r.keys() else None,
     }
 
 
@@ -447,6 +450,30 @@ async def load_photo(photo_id: str) -> dict | None:
         log.error("사진 읽기 실패 %s (%s: %s)", photo_id, type(e).__name__, str(e)[:120])
         raise StoreUnavailable("사진을 읽지 못했습니다") from e
     return _photo_row(row) if row else None
+
+
+async def save_photo_analysis(photo_id: str, clues: dict) -> None:
+    """
+    §2 단서를 **사진에** 적는다 — 회차가 아니라 사진에 (004 마이그레이션 참조).
+
+    save_photo_clues 와 짝이지만 사는 곳이 다르다. 그쪽은 「이 회차가 무엇을 보고
+    물었는가」라서 회차마다 다시 적히고, 이쪽은 「이 사진이 무엇을 담았는가」라서
+    사진당 한 번이면 된다. 둘을 하나로 합치면 같은 사진을 쓰는 두 번째 회차가
+    첫 회차의 기록을 덮어쓴다.
+
+    **실패를 삼킨다.** 단서는 있으면 좋은 것이지 사진 저장의 조건이 아니다. 못
+    적으면 다음 회차가 다시 분석할 뿐이고, 어르신에게는 아무 차이가 없다.
+    """
+    if _pool is None:
+        return
+    try:
+        async with _pool.acquire() as con:
+            await con.execute(
+                "UPDATE photo SET clues = $2 WHERE photo_id = $1",
+                uuid.UUID(photo_id), json.dumps(clues, ensure_ascii=False))
+    except Exception as e:                                   # noqa: BLE001
+        log.error("사진 단서 저장 실패 %s (%s: %s) — 다음 회차가 다시 분석한다",
+                  photo_id[:8], type(e).__name__, str(e)[:120])
 
 
 async def delete_photo_row(photo_id: str) -> None:
