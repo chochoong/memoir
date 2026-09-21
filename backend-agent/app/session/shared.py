@@ -16,8 +16,12 @@
              ready_for_chronology
 
     뺀다     conversation_history   question._transcript() 과 같은 일이다. 둘 중 하나만
-             photo_analyses 등      사진 기능이 붙기 전까지 늘 빈 배열이다
              chronology 등          §3 · §4 에이전트의 몫
+
+**photo_analyses 는 있을 때만 실린다.** initial() 에 키가 없고,
+controller._analyze_photo 가 사진을 받은 회차에서만 채운다. 사진 없이 연
+회차는 이 항목이 없는 채로 가므로 토큰을 쓰지 않는다 — 늘 빈 배열을 실어
+보내던 자리를 「없으면 없다」로 둔 것이다.
 
 **두 항목은 모델이 아니라 코드가 채운다.** 지금 있는 데이터로 공짜다.
 

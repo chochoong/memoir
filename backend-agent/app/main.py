@@ -236,6 +236,8 @@ class StartReq(BaseModel):
     # 0 = 제한 없음. 대화가 어디서 끝날지는 AI 의 close 판단이 정한다.
     # 양을 미리 묶고 싶은 쪽(시험 도구 등)이 값을 준다.
     max_turn: int = 0
+    # 회차를 여는 사진. 없이도 연다 — 엽서만으로 도는 것이 원래 길이다.
+    photo_id: str | None = None
 
 
 class SpeechReq(BaseModel):
@@ -334,7 +336,7 @@ async def create_session(req: StartReq, request: Request,
 
     ctl = sc.put(sc.SessionController(
         user_id=x_user_id, title=req.title, pace=req.pace, max_turn=req.max_turn,
-        question_fn=gemini_question))
+        photo_id=req.photo_id, question_fn=gemini_question))
     await ctl.start(req.postcard)
     return ctl.snapshot()
 

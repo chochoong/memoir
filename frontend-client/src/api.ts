@@ -122,10 +122,13 @@ async function call<T>(path: string, init?: RequestInit): Promise<T> {
 }
 
 export const api = {
-  start: (postcard: string, pace: string) =>
+  // photoId 는 선택이다. 주면 서버가 배경에서 한 번 분석해 사진 단서를
+  // 만들고, 그 뒤의 질문에 쓴다 (controller._analyze_photo). 회차 시작을
+  // 기다리게 하지 않는다.
+  start: (postcard: string, pace: string, photoId?: string) =>
     call<Snapshot>('/sessions', {
       method: 'POST',
-      body: JSON.stringify({ title: '시험', postcard, pace }),
+      body: JSON.stringify({ title: '시험', postcard, pace, photo_id: photoId }),
     }),
 
   get: (id: string) => call<Snapshot>(`/sessions/${id}`),

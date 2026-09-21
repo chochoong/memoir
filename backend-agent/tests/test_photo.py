@@ -508,6 +508,90 @@ def test_routes():
     shutil.rmtree(TMP, ignore_errors=True)
 
 
+# ---------------------------------------------------------------- 사진 단서
+
+def test_clues():
+    """
+    사진이 질문에 닿는 길. 세 군데가 이어져야 한다 —
+    controller._analyze_photo 가 §2 를 부르고, 결과를 state 에 넣고,
+    shared.for_interview 가 그것을 §1 에게 실어 보낸다.
+    """
+    print()
+    print("[11] 사진 단서가 회차에 붙는다")
+
+    import asyncio
+
+    from app.session import controller as C
+    from app.session import photo_analyze, shared
+
+    CLUES = {"scene": "실내", "objects": ["한복"], "people": "성인 2명",
+             "text_in_photo": [], "uncertain": [], "questions": ["언제 찍으셨나요?"]}
+
+    class _Bytes:
+        async def get(self, key):
+            return b"\xff\xd8"
+
+    async def run(photo_id, *, owner="kim", clues=CLUES):
+        seen = {}
+
+        async def load_photo(pid):
+            return {"photo_id": pid, "user_id": owner, "storage_key": "k",
+                    "mime": "image/jpeg", "status": "stored"}
+
+        async def analyze(data, mime):
+            seen["분석"] = True
+            return clues
+
+        async def hush(*a, **k):
+            return None
+
+        async def silent(text):
+            return b""
+
+        async def save_clues(ctl, c):
+            seen["저장"] = c
+
+        old = (store.load_photo, store.save_session, store.save_turn,
+               store.save_photo_clues, photo_analyze.analyze_photo, photostore.current)
+        store.load_photo, store.save_session, store.save_turn = load_photo, hush, hush
+        store.save_photo_clues = save_clues
+        photo_analyze.analyze_photo = analyze
+        photostore.current = lambda: _Bytes()
+        try:
+            ctl = C.SessionController(user_id="kim", title="t",
+                                      photo_id=photo_id, tts_fn=silent)
+            await ctl.start("엽서")
+            if ctl._clues:
+                await ctl._clues
+            ctl.release()
+            return ctl, seen
+        finally:
+            (store.load_photo, store.save_session, store.save_turn,
+             store.save_photo_clues, photo_analyze.analyze_photo,
+             photostore.current) = old
+
+    ctl, seen = asyncio.run(run("p1"))
+    check("사진을 주면 §2 를 부른다", seen.get("분석") is True)
+    check("단서가 state 에 들어간다", ctl.state.get("photo_analyses") == [CLUES])
+    check("DB 에도 적는다", seen.get("저장") == CLUES)
+    check("§1 에게 실린다", shared.for_interview(ctl).get("photo_analyses") == [CLUES],
+          "shared.for_interview 가 빼 버리면 프롬프트에 닿지 않는다")
+
+    ctl, seen = asyncio.run(run(None))
+    check("사진이 없으면 §2 를 부르지 않는다", "분석" not in seen)
+    check("사진이 없으면 키 자체가 없다",
+          "photo_analyses" not in shared.for_interview(ctl),
+          "빈 배열을 매 턴 실어 보내면 그만큼 어르신이 기다린다")
+
+    ctl, seen = asyncio.run(run("p1", owner="lee"))
+    check("남의 사진은 붙지 않는다", "photo_analyses" not in ctl.state)
+    check("그래도 회차는 산다", ctl.fragments[0]["answer"] == "엽서")
+
+    ctl, seen = asyncio.run(run("p1", clues=None))
+    check("분석이 빈손이어도 회차는 산다",
+          "photo_analyses" not in ctl.state and ctl.fragments[0]["answer"] == "엽서")
+
+
 def test_all_checks_passed():
     """pytest 안전판 — test_flow.py 의 같은 함수 주석 참조."""
     assert not FAIL, "실패: " + ", ".join(FAIL)
@@ -525,6 +609,7 @@ def main() -> int:
     test_store_choice()
     test_migrations()
     test_routes()
+    test_clues()
     print(f"\n{'=' * 52}\n통과 {len(PASS)} · 실패 {len(FAIL)}")
     if FAIL:
         print("실패:", ", ".join(FAIL))

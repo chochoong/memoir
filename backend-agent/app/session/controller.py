@@ -23,7 +23,7 @@ from typing import Awaitable, Callable
 
 from . import audio as audiolib
 from . import shared as shared_state
-from . import store, stt, tts
+from . import photo_analyze, photostore, store, stt, tts
 from .conf import env_float, env_int
 from .machine import Event, Machine, State, TransitionError
 from .timers import T2_PRESETS, TimerSet
@@ -134,6 +134,8 @@ class SessionController:
     session_id: str = field(default_factory=lambda: str(uuid.uuid4()))
     pace: str = "normal"                          # fast(3) / normal(5) / slow(7)
     max_turn: int = 0                             # 0 = 제한 없음 (machine.py 참조)
+    # 회차를 연 사진. 배경에서 한 번만 분석해 state["photo_analyses"] 로 간다.
+    photo_id: str | None = None
     question_fn: QuestionFn = fixed_questions
     stt_fn: SttFn = stt.azure_transcribe
     tts_fn: TtsFn = tts.synthesize
@@ -158,6 +160,7 @@ class SessionController:
     _audio_mime: str = "audio/webm"
     _empty_streak: int = 0
     _pending: asyncio.Task | None = None
+    _clues: asyncio.Task | None = None
     _next_question: str | None = None
     _question_audio: bytes = b""
     _speaking: asyncio.Task | None = None
@@ -241,6 +244,52 @@ class SessionController:
         # 합성은 붙잡지 않고 띄워 둔다 — 화면이 받으러 올 때 기다리면 된다
         # (question_audio 가 최대 2초 기다린다).
         self._speak(self._next_question)
+        # 사진 분석도 붙잡지 않는다. 아래 _analyze_photo 의 설명 참조.
+        if self.photo_id:
+            self._clues = asyncio.create_task(self._analyze_photo())
+
+    async def _analyze_photo(self) -> None:
+        """
+        회차를 연 사진에서 단서를 받는다 (§2 사진 분석 에이전트). **회차당 한 번이다.**
+
+        **붙잡지 않고 배경으로 돈다.** start() 는 질문을 만들지 않고 고정 여는 말로
+        열기 때문에(위 OPENING 참조), 첫 질문이 필요해지는 때는 여는 말 낭독과
+        어르신의 첫 말씀이 끝난 뒤다. 분석 예산 10초는 그 안에 넉넉히 들어간다 —
+        어르신은 이것 때문에 기다리지 않는다. 회차 시작에 10초를 얹는 설계였다면
+        붙일 수 없는 기능이었다.
+
+        **실패해도 회차는 그대로 간다.** 사진 단서는 있으면 좋은 것이지 회차의
+        조건이 아니다. stt·tts 와 같은 정책이다. 다만 조용히 지나가지는 않는다 —
+        어르신이 사진을 고르셨는데 사진 질문이 안 나오면 그 까닭이 로그에 있어야
+        한다.
+        """
+        pid = (self.photo_id or "")[:8]
+        try:
+            rec = await store.load_photo(self.photo_id or "")
+            if rec is None or rec["user_id"] != self.user_id:
+                # 없는 id 이거나 남의 사진이다. 화면이 보낸 값이 틀린 것이라
+                # 회차를 깨지 않고 여기서 끝낸다.
+                log.error("사진 %s 를 읽을 수 없다 — 사진 단서 없이 간다", pid)
+                return
+            data = await photostore.current().get(rec["storage_key"])
+            clues = await photo_analyze.analyze_photo(data, rec["mime"])
+        except asyncio.CancelledError:
+            raise
+        except Exception as e:                               # noqa: BLE001
+            log.error("사진 분석 실패 %s (%s: %s)", pid, type(e).__name__, str(e)[:120])
+            return
+
+        if not clues:
+            log.error("사진 %s 에서 단서를 얻지 못했다 — 사진 질문 없이 간다", pid)
+            return
+
+        # **state 에 넣는 것이 곧 붙이는 일이다.** §1 에 「photo_analyses의
+        # questions가 들어오면 의미를 바꾸지 않고 …」 규칙이 이미 있고,
+        # shared.for_interview 가 ctl.state 를 그대로 실어 보낸다.
+        self.state["photo_analyses"] = [clues]
+        await store.save_photo_clues(self, clues)
+        log.info("사진 단서 %s — 사물 %d개 · 여쭐 것 %d개", pid,
+                 len(clues.get("objects") or []), len(clues.get("questions") or []))
 
     async def tts_done(self) -> dict:
         """낭독이 끝났다(또는 탭으로 중단). 수음을 연다."""
@@ -320,7 +369,7 @@ class SessionController:
         expired 로 덮어쓰게 된다 — **왜 끝났는지를 잃는다.**
         """
         self.timers.cancel_all()
-        for task in (self._pending, self._speaking):
+        for task in (self._pending, self._speaking, self._clues):
             if task and not task.done():
                 task.cancel()
 

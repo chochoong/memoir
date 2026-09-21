@@ -48,6 +48,21 @@ def _sid(ctl: "SessionController") -> uuid.UUID:
     return uuid.UUID(ctl.session_id)
 
 
+def _pid(value: str | None) -> "uuid.UUID | None":
+    """
+    사진 id 를 UUID 로. **모양이 틀리면 예외가 아니라 None 이다.**
+
+    여기서 올리면 save_session 의 except 가 받아 회차 행이 통째로 안 써진다 —
+    화면이 보낸 사진 id 한 줄 때문에 어르신의 이야기가 저장되지 않는 것은
+    바꿀 수 없는 손해다. 틀린 id 는 controller._analyze_photo 가 사진을 못
+    읽는 것으로 드러나고, 그쪽이 까닭을 로그에 적는다.
+    """
+    try:
+        return uuid.UUID(value) if value else None
+    except ValueError:
+        return None
+
+
 def _dsn() -> dict[str, Any]:
     return dict(
         host=os.environ.get("PG_HOST", "localhost"),
@@ -116,14 +131,33 @@ async def save_session(ctl: "SessionController") -> None:
             await con.execute(
                 """
                 INSERT INTO session (session_id, user_id, title, state, turn,
-                                     max_turn, t2_seconds)
-                VALUES ($1, $2, $3, $4, $5, $6, $7)
+                                     max_turn, t2_seconds, photo_id)
+                VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
                 ON CONFLICT (session_id) DO NOTHING
                 """,
                 _sid(ctl), ctl.user_id, ctl.title, ctl.machine.state.value,
-                ctl.machine.turn, ctl.machine.max_turn, Decimal(str(ctl.timers.t2_seconds)))
+                ctl.machine.turn, ctl.machine.max_turn,
+                Decimal(str(ctl.timers.t2_seconds)), _pid(ctl.photo_id))
     except Exception as e:                                   # noqa: BLE001
         log.error("세션 저장 실패 (%s: %s)", type(e).__name__, str(e)[:120])
+
+
+async def save_photo_clues(ctl: "SessionController", clues: dict) -> None:
+    """
+    사진 단서를 회차에 적는다. **회차당 한 번이다** (controller._analyze_photo).
+
+    분석이 도는 동안 어르신이 중단하셨으면 UPDATE 가 0행을 고치고 조용히 끝난다.
+    그게 맞다 — 닫힌 회차에 단서를 적을 일은 없다.
+    """
+    if _pool is None:
+        return
+    try:
+        async with _pool.acquire() as con:
+            await con.execute(
+                "UPDATE session SET photo_clues = $2 WHERE session_id = $1",
+                _sid(ctl), json.dumps(clues, ensure_ascii=False))
+    except Exception as e:                                   # noqa: BLE001
+        log.error("사진 단서 저장 실패 (%s: %s)", type(e).__name__, str(e)[:120])
 
 
 async def save_turn(ctl: "SessionController", fragment: dict) -> None:

@@ -327,9 +327,15 @@ export default function App() {
         <label htmlFor="postcard">엽서 (0번 조각)</label>
         <input id="postcard" value={postcard} onChange={e => setPostcard(e.target.value)}
                placeholder="비워 두면 어르신 말씀만으로 시작합니다 (인명·지명은 전사에 도움이 됩니다)" />
+        <p className="note">
+          {photos.length > 0
+            ? `아래 ②에서 마지막에 올린 사진(${photos[0].photo_id.slice(0, 8)})이 함께 갑니다.`
+            : '사진을 먼저 올리면(②) 그 사진이 함께 갑니다. 없어도 엽서만으로 시작합니다.'}
+        </p>
         <div className="row">
           {PACES.map(p => (
-            <button key={p.key} onClick={() => run(() => api.start(postcard, p.key))}>
+            <button key={p.key}
+                    onClick={() => run(() => api.start(postcard, p.key, photos[0]?.photo_id))}>
               {p.label}<small>{p.hint}</small>
             </button>
           ))}
