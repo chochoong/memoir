@@ -416,8 +416,43 @@ class SessionController:
         return self.snapshot()
 
     async def done_button(self) -> dict:
-        """「다 말했어요」 — T1·T2 를 건너뛴다. 지연이 그대로 드러나는 유일한 경로."""
+        """
+        「다 말했어요」 — T1·T2 를 건너뛴다. 지연이 그대로 드러나는 유일한 경로.
+
+        **타이머보다 전이를 먼저 본다.** 다른 경로는 전부 이 순서다 — speech·
+        audio_chunk 는 machine.fire 가 앞에 있어서 PROCESSING 중에 와도 거기서
+        먼저 튕기고 reset_t1 까지 가지 않는다. 이 함수만 순서가 뒤집혀 있었다.
+
+        뒤집힌 순서가 회차를 죽였다. 무음 3초가 지나 자동 확정이 이미 도는 중에
+        버튼이 오면 cancel_t1 이 **자동 확정을 태스크째로 죽인다** — 타이머
+        태스크가 잠만 자는 것이 아니라 콜백까지 await 하기 때문이다
+        (timers._run). 그 콜백은 전사 도중에 잘려 조각 저장도 질문 생성도 못 하고,
+        이어지는 fire(DONE_BUTTON) 는 PROCESSING 에 그 전이가 없어 409 로 튕긴다.
+        남은 T2 가 격발해도 _maybe_advance 가 SPEAKING 이 아니라 되돌아가므로,
+        회차는 PROCESSING 에 영구히 멈추고 그 턴의 말씀이 사라진다.
+
+        타이머 쪽은 고치지 않았다. 「일하는 중에 취소」는 abort 가 의지하는
+        성질이다 — cancel_all 이 진행 중인 확정을 죽여 주는 것이 중단의 정의다.
+        abort 에는 기능이고 이 버튼에는 버그라서, 구분은 타이머가 아니라 여기 있다.
+        """
         self.touch()
+
+        if self.machine.state is State.PROCESSING:
+            # 화면은 LISTENING 으로 알고 버튼을 열어 두었다. 300ms 폴링이 물어온
+            # 스냅샷이라 서버가 넘어간 것을 아직 모르는 창이 있다 (App.tsx).
+            #
+            # 튕기지 않고 받는다. 누름의 뜻이 이미 이뤄지고 있기 때문이다 —
+            # T1 은 지났으니 건너뛸 것이 없고 남은 것은 T2 뿐이라, **예약된
+            # 격발을 버리고 지금 터뜨린다.** 3초 전에 누른 것과 뒤에 누른 것이
+            # 어르신께 같아진다. 경계가 만져지면 그건 버튼이 고장난 것으로 보인다.
+            #
+            # 질문이 아직 안 왔으면 t2_expired 만 서고 PROCESSING 에 머문다.
+            # 그 뒤 질문이 도착하는 순간 넘어간다 — 건너뛴 것은 기다림이지
+            # 질문이 아니다.
+            self.timers.cancel_t2()
+            await self._t2_fired()
+            return self.snapshot()
+
         self.timers.cancel_t1()
         await self._confirm(Event.DONE_BUTTON, skip_t2=True)
         return self.snapshot()
@@ -501,9 +536,12 @@ class SessionController:
         전사가 비면 T2 를 취소하고 되돌린다. 플래그는 손대지 않는다 — machine 이
         다음 확정 때 t2_expired 를 다시 False 로 놓는다.
         """
-        self.marks = Marks(confirmed_at=time.perf_counter())
-
         self.machine.fire(event)                       # LISTENING → PROCESSING (턴 +1)
+
+        # **전이가 선 뒤에 잡는다.** 앞에 두면 튕길 요청이 이번 턴의 계측을
+        # 먼저 덮어쓴다 — 돌고 있던 _confirm 이 transcribed_at 을 새 Marks 에
+        # 적어 지연 숫자가 망가진다. fire 는 동기라 시각은 사실상 같다.
+        self.marks = Marks(confirmed_at=time.perf_counter())
 
         if skip_t2:
             self.machine.t2_expired = True             # 버튼은 T2 를 건너뛴다
