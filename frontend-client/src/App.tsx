@@ -31,7 +31,9 @@ export default function App() {
   const [lat, setLat] = useState<Latency | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [postcard, setPostcard] = useState('')
-  const [utter, setUtter] = useState('덜컹덜컹 소리가 났지. 순애가 고구마를 싸왔더라고.')
+  // 빈 칸으로 연다. 「말한다」는 칸의 글자를 전사 결과인 척 밀어 넣는 개발용
+  // 길이라, 미리 적어 두면 한 번 누르는 것만으로 그 글이 그대로 턴의 답이 된다.
+  const [utter, setUtter] = useState('')
   const timer = useRef<number | null>(null)
   const [saved, setSaved] = useState<SavedSession[] | null>(null)
   const [savedErr, setSavedErr] = useState<string | null>(null)
