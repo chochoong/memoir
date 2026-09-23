@@ -1,0 +1,1725 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <meta name="theme-color" content="#17374a" />
+  <meta name="description" content="사진 한 장과 목소리로 남기는 한 편의 엽서" />
+  <title>기억의 조각</title>
+  <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%2317374a'/%3E%3Crect x='11' y='17' width='42' height='31' rx='5' fill='%23f7f2e8'/%3E%3Cpath d='M14 21l18 14 18-14' fill='none' stroke='%23d97b59' stroke-width='4' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Gowun+Batang:wght@400;700&family=Pretendard:wght@400;500;600;700&display=swap" rel="stylesheet" />
+  <style>
+    :root {
+      --ink: #17374a;
+      --muted: #667782;
+      --paper: #fffdf8;
+      --canvas: #e9f0ef;
+      --line: #d6dfdd;
+      --accent: #d96f4e;
+      --accent-dark: #b95436;
+      --soft: #f7f2e8;
+      --success: #27775d;
+      --shadow: 0 24px 64px rgba(20, 51, 68, .14);
+      --v: 0;               /* 목소리 크기 0~1 */
+      --photo-ratio: 4 / 3; /* 고른 사진의 실제 비율 */
+    }
+    * { box-sizing: border-box; }
+    html, body { min-height: 100%; }
+    body {
+      margin: 0;
+      background: radial-gradient(circle at 50% -10%, #f8fbf8 0, var(--canvas) 48%, #dfe9e7 100%);
+      color: var(--ink);
+      font-family: Pretendard, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    }
+    button, input { font: inherit; }
+    button { cursor: pointer; }
+    .app {
+      width: min(100%, 430px); min-height: 100dvh; margin: 0 auto;
+      background: var(--paper); position: relative; overflow: hidden; box-shadow: var(--shadow);
+    }
+    .topbar {
+      height: 72px; display: flex; align-items: center; justify-content: space-between;
+      padding: max(16px, env(safe-area-inset-top)) 46px 0 22px; position: relative; z-index: 3; transition: opacity .3s;
+    }
+    .brand { font-family: "Gowun Batang", serif; font-weight: 700; font-size: 1.12rem; letter-spacing: -.02em; }
+    .step { color: var(--muted); font-size: .82rem; font-weight: 600; }
+    .app.quiet .topbar { opacity: 0; pointer-events: none; }
+    main { min-height: calc(100dvh - 72px); }
+    .screen {
+      display: none; min-height: calc(100dvh - 72px);
+      padding: 16px 22px calc(120px + env(safe-area-inset-bottom)); animation: enter .42s ease both;
+    }
+    .screen.active { display: flex; flex-direction: column; }
+    /* 화면이 나타날 때 **투명도만** 바꾼다.
+       transform 을 쓰면 그 화면이 「고정 위치의 기준」이 되어 버려서, 아래에 고정해
+       둔 버튼이 화면이 아니라 긴 페이지의 맨 끝에 붙는다 (.dock 주석 참조). */
+    @keyframes enter { from { opacity: 0; } to { opacity: 1; } }
+    .eyebrow { color: var(--accent-dark); font-size: .8rem; font-weight: 700; letter-spacing: .12em; text-transform: uppercase; }
+    h1 { font-family: "Gowun Batang", serif; font-size: clamp(2rem, 8.6vw, 2.6rem); line-height: 1.2; letter-spacing: -.045em; margin: 10px 0 12px; }
+    .lead { color: var(--muted); font-size: 1rem; line-height: 1.65; margin: 0; }
+
+    /* ── 사진 카드 ─────────────────────────────────── */
+    .photo-card {
+      position: relative; width: 100%; margin: 22px 0 0;
+      aspect-ratio: var(--photo-ratio); max-height: 44dvh; min-height: 140px;
+      border-radius: 22px; overflow: hidden; border: 1px solid #e4dcca;
+      background: #f6edda; padding: 0; display: block; text-align: left;
+      box-shadow: 0 16px 34px rgba(55, 52, 43, .13); transition: transform .18s, aspect-ratio .35s ease;
+    }
+    .photo-card:active { transform: scale(.985); }
+    .photo-card img { width: 100%; height: 100%; object-fit: contain; display: block; position: relative; z-index: 1; }
+    .backdrop { position: absolute; inset: -6%; z-index: 0; background-size: cover; background-position: center; filter: blur(26px) saturate(1.15); opacity: .5; }
+    .photo-card .placeholder { position: absolute; inset: 0; display: grid; place-items: center; z-index: 1; }
+    .photo-card.has-photo .placeholder { display: none; }
+    .photo-hint {
+      position: absolute; z-index: 2; left: 14px; bottom: 14px; display: inline-flex; align-items: center; gap: 7px;
+      background: rgba(255, 253, 248, .93); color: var(--ink); border-radius: 999px;
+      padding: 9px 14px; font-size: .84rem; font-weight: 700; box-shadow: 0 6px 16px rgba(23,55,74,.14);
+    }
+    .ready-copy { margin-top: 26px; }
+    .version { margin: 18px 0 0; font-size: .74rem; color: #9aa7ac; letter-spacing: .01em; }
+
+    /* ── 하단 버튼 ─────────────────────────────────── */
+    /* 버튼은 **화면 아래에 고정**한다.
+       예전에는 앱 상자의 맨 아래(position:absolute)에 붙여 두었는데, 엽서가 길어지면
+       그 상자도 같이 길어져서 버튼이 페이지 끝까지 밀려났다 — 끝까지 스크롤하지 않으면
+       「엽서 저장」이 아예 보이지 않았다. */
+    .dock {
+      position: fixed; z-index: 5; bottom: 0;
+      left: 50%; transform: translateX(-50%); width: min(100%, 430px);
+      padding: 14px 22px calc(16px + env(safe-area-inset-bottom));
+      background: linear-gradient(to top, var(--paper) 78%, rgba(255,253,248,0)); text-align: center;
+    }
+    /* 고정된 버튼에 내용이 가리지 않도록 아래 여백을 넉넉히 둔다 */
+    .screen[data-screen="complete"] { padding-bottom: calc(168px + env(safe-area-inset-bottom)); }
+    .btn { width: 100%; min-height: 60px; border: 0; border-radius: 20px; padding: 16px 20px; font-weight: 700; font-size: 1.06rem; transition: transform .16s, background .16s, opacity .16s; }
+    .btn:active { transform: scale(.98); }
+    .btn[disabled] { opacity: .5; }
+    .btn-primary { background: var(--ink); color: #fff; box-shadow: 0 10px 24px rgba(23,55,74,.18); }
+    .btn-primary:hover { background: #0f2938; }
+    .btn-ghost { background: none; border: 0; color: var(--muted); font-size: .95rem; font-weight: 600; padding: 14px; width: 100%; }
+    .btn-ghost[hidden] { display: none; }
+
+    /* ── 대화 화면: 듣는 친구 ──────────────────────── */
+    .talk-screen { align-items: center; justify-content: center; text-align: center; padding-bottom: calc(158px + env(safe-area-inset-bottom)); }
+
+    /* ── 지금 무슨 상태인가 — 한눈에 ────────────────────
+       녹음 중       붉은 점이 뛰고, 화면 가장자리에 붉은 테가 돈다
+       읽어 주는 중   푸른 점 · 테 없음
+       정리 중       회색 점 · 캐릭터가 쉰다                        */
+    .status {
+      display: inline-flex; align-items: center; gap: 9px;
+      border-radius: 999px; padding: 9px 16px 9px 13px;
+      font-size: .92rem; font-weight: 700; letter-spacing: -.01em;
+      background: #eef3f4; color: var(--muted); transition: background .3s, color .3s;
+      position: relative; z-index: 2; margin-bottom: 10px;
+    }
+    .status-dot { width: 9px; height: 9px; border-radius: 50%; background: #93a3aa; transition: background .3s; }
+    .app[data-state="LISTENING"] .status { background: #fdece6; color: #a4422d; }
+    .app[data-state="LISTENING"] .status-dot { background: var(--accent); animation: rec 1.3s ease-in-out infinite; }
+    .app[data-state="SPEAKING"] .status { background: #e7eef2; color: #2b5568; }
+    .app[data-state="SPEAKING"] .status-dot { background: #4b7f9b; animation: rec 1.8s ease-in-out infinite; }
+    @keyframes rec { 0%, 100% { opacity: 1; transform: scale(1); } 50% { opacity: .35; transform: scale(.72); } }
+
+    /* 화면 가장자리 테 — 녹음 중에만. 목소리가 커지면 같이 진해진다 */
+    .edge {
+      position: fixed; inset: 0; z-index: 4; pointer-events: none;
+      border: 3px solid var(--accent); border-radius: 0;
+      opacity: 0; transition: opacity .35s;
+    }
+    .app[data-state="LISTENING"] .edge { opacity: calc(.28 + var(--v) * .6); }
+    @media (min-width: 520px) { .edge { border-radius: 30px; inset: 24px calc(50% - 215px); } }
+
+    /* 목소리 크기 막대 — 「지금 내 말이 들어가고 있다」를 눈으로 */
+    .meter {
+      width: min(260px, 66vw); height: 8px; border-radius: 99px; overflow: hidden;
+      background: #e9e0d2; margin: 14px auto 0; opacity: 0; transition: opacity .3s;
+    }
+    .meter i {
+      display: block; height: 100%; border-radius: 99px;
+      background: linear-gradient(90deg, #e2a58c, var(--accent));
+      width: calc(6% + var(--v) * 94%); transition: width .1s ease-out;
+    }
+    .app[data-state="LISTENING"] .meter { opacity: 1; }
+    .meter-note { margin-top: 8px; font-size: .82rem; color: var(--muted); height: 1.2em; transition: color .2s; }
+    .app.voiced .meter-note { color: var(--accent-dark); font-weight: 700; }
+
+    /* 듣는 중에는 캐릭터 뒤에 따뜻한 빛이 돈다 */
+    .halo {
+      position: absolute; inset: -6%; border-radius: 50%; z-index: -1;
+      background: radial-gradient(circle, rgba(217,111,78,.22) 0%, rgba(217,111,78,0) 65%);
+      opacity: 0; transform: scale(.9); transition: opacity .4s, transform .25s;
+    }
+    .app[data-state="LISTENING"] .halo { opacity: calc(.55 + var(--v) * .45); transform: scale(calc(1 + var(--v) * .12)); }
+    /* 대기 중에는 캐릭터가 한 걸음 물러난다 */
+    .app[data-state="SPEAKING"] .friend-wrap,
+    .app[data-state="PROCESSING"] .friend-wrap { transform: scale(.94); }
+    .friend-wrap { transition: transform .4s ease; }
+
+    .listen-state { font-weight: 700; }
+    .friend-wrap { position: relative; width: min(300px, 78vw); aspect-ratio: 1; margin: 2px auto 4px; display: grid; place-items: center; }
+    .ring { position: absolute; border-radius: 50%; border: 1.5px solid rgba(217, 111, 78, .34); inset: 8%; opacity: calc(.18 + var(--v) * .55); transform: scale(calc(1 + var(--v) * .18)); transition: transform .12s ease-out, opacity .2s; }
+    .ring.r2 { inset: -4%; border-color: rgba(23, 55, 74, .14); transform: scale(calc(1 + var(--v) * .3)); }
+    .friend-svg { width: 100%; position: relative; transform: scale(calc(1 + var(--v) * .05)) translateY(calc(var(--v) * -6px)); transition: transform .1s ease-out; }
+    .friend-svg .shadow { fill: rgba(23,55,74,.08); }
+    .friend-svg .body { stroke: #e3d2b4; stroke-width: 1.5; }
+    .friend-svg .blush { fill: #f0b7a0; opacity: .6; }
+    .friend-svg .eye-open { fill: #17374a; transform-box: fill-box; transform-origin: center; transition: transform .1s; }
+    .friend-svg .eye-arc { fill: none; stroke: #17374a; stroke-width: 6; stroke-linecap: round; opacity: 0; }
+    .friend-svg .mouth { fill: none; stroke: #17374a; stroke-width: 5.5; stroke-linecap: round; transform-box: fill-box; transform-origin: center; transform: scale(calc(1 + var(--v) * .35), calc(1 + var(--v) * .6)); transition: transform .12s ease-out; }
+    .friend-svg .sprout { fill: none; stroke: #9bb6a5; stroke-width: 5; stroke-linecap: round; }
+    .friend-svg .leaf { fill: #b4cbbb; }
+    .bob { animation: breathe 4.2s ease-in-out infinite; transform-box: fill-box; transform-origin: 50% 90%; }
+    @keyframes breathe { 0%,100% { transform: translateY(0) scale(1); } 50% { transform: translateY(-5px) scale(1.012); } }
+    .eyes.blink .eye-open { transform: scaleY(.12); }
+    .friend-wrap.happy .eye-open { opacity: 0; }
+    .friend-wrap.happy .eye-arc { opacity: 1; }
+    .friend-wrap.resting .friend-svg { filter: saturate(.85); }
+    .friend-wrap.resting .ring { opacity: .1; }
+    /* 질문을 읽어 주는 동안 — 입만 조용히 움직인다 */
+    .friend-wrap.speaking .mouth { animation: talk .62s ease-in-out infinite; }
+    @keyframes talk { 0%,100% { transform: scale(1, .7); } 50% { transform: scale(1.15, 1.5); } }
+
+    .question {
+      font-family: "Gowun Batang", serif; font-weight: 700;
+      font-size: clamp(1.35rem, 6.4vw, 1.72rem); line-height: 1.55; letter-spacing: -.03em;
+      margin: 10px 0 0; padding: 0 4px; max-width: 22ch; min-height: 2.6em;
+    }
+    .question-sub { margin-top: 14px; color: var(--muted); font-size: .95rem; }
+
+    /* ── 정리 중 ───────────────────────────────────── */
+    .center-screen { align-items: center; justify-content: center; text-align: center; }
+    .dots { display: flex; gap: 8px; justify-content: center; margin-top: 18px; }
+    .dots i { width: 9px; height: 9px; border-radius: 50%; background: var(--accent); opacity: .35; animation: hop 1.2s ease-in-out infinite; }
+    .dots i:nth-child(2) { animation-delay: .18s; }
+    .dots i:nth-child(3) { animation-delay: .36s; }
+    @keyframes hop { 0%,100% { opacity: .3; transform: translateY(0); } 40% { opacity: 1; transform: translateY(-6px); } }
+
+    /* ── 완성된 엽서 ───────────────────────────────── */
+    .postcard {
+      width: 100%; margin: 20px 0 8px; padding: 0 0 26px;
+      background: #f6edda; border: 1px solid #dfd2ba; box-shadow: 0 18px 40px rgba(55,52,43,.14);
+      text-align: left; position: relative; border-radius: 6px; overflow: hidden;
+    }
+    .postcard-frame { position: relative; overflow: hidden; background: #e7dcc4; display: none; }
+    .postcard-photo { width: 100%; display: block; position: relative; z-index: 1; aspect-ratio: var(--photo-ratio); max-height: 52dvh; object-fit: contain; }
+    .postcard-inner { padding: 0 25px; }
+    .postcard-stamp { position: absolute; z-index: 3; right: 16px; top: 16px; background: rgba(255,253,248,.9); border: 1px solid #b96850; color: #b96850; padding: 5px 7px; font-size: .55rem; letter-spacing: .1em; }
+    .postcard.no-photo .postcard-title { padding-right: 96px; }
+    .postcard-title { font-family: "Gowun Batang", serif; font-size: 1.42rem; font-weight: 700; margin: 24px 0 16px; padding-bottom: 14px; border-bottom: 1px solid #d7c9b0; letter-spacing: -.03em; }
+    .postcard-copy { font-family: "Gowun Batang", serif; font-size: 1.05rem; line-height: 1.95; margin: 0; color: #304753; white-space: pre-wrap; }
+    .postcard-sign { margin-top: 22px; padding-top: 14px; border-top: 1px dashed #d7c9b0; font-size: .8rem; color: #8b7f68; }
+    .done-icon { width: 54px; height: 54px; border-radius: 50%; background: #e6f3ee; color: var(--success); display: grid; place-items: center; margin: 4px auto 12px; }
+
+    .closed { background: var(--ink); color: #fff; }
+    .closed .screen { justify-content: center; text-align: center; }
+    .closed .topbar { visibility: hidden; }
+    .closed .lead { color: #c9d5da; }
+    .error { display: none; margin-top: 14px; color: #a4432b; font-size: .88rem; line-height: 1.5; }
+    .error.show { display: block; }
+    .banner {
+      display: none; position: absolute; z-index: 20; left: 12px; right: 12px; top: 12px;
+      background: #fff1ed; border: 1px solid #f1c9bd; color: #a4432b;
+      border-radius: 14px; padding: 12px 14px; font-size: .86rem; line-height: 1.5; box-shadow: 0 8px 20px rgba(23,55,74,.1);
+    }
+    .banner.show { display: block; }
+    /* 잠깐 떴다 사라지는 안내 (예: 말씀이 안 들어왔을 때) */
+    .toast {
+      position: absolute; z-index: 15; left: 22px; right: 22px; bottom: calc(150px + env(safe-area-inset-bottom));
+      background: rgba(23,55,74,.93); color: #fff; border-radius: 14px; padding: 12px 15px;
+      font-size: .9rem; line-height: 1.45; text-align: center;
+      opacity: 0; transform: translateY(6px); transition: opacity .25s, transform .25s; pointer-events: none;
+    }
+    .toast.show { opacity: 1; transform: none; }
+    /* 일시정지 중 */
+    .paused .listen-state { color: var(--muted); }
+    .banner button { margin-top: 10px; background: #a4432b; color: #fff; border: 0; border-radius: 10px; padding: 9px 12px; font-size: .84rem; font-weight: 700; }
+
+    /* ── 개발용 패널 (시연 중에는 닫아 둔다) ────────── */
+    /* 화면 아래쪽 큰 버튼을 절대 가리지 않도록 위쪽에 둔다 */
+    .dev-toggle { position: fixed; z-index: 40; right: 8px; top: max(10px, env(safe-area-inset-top)); width: 28px; height: 28px; border-radius: 50%; border: 1px solid var(--line); background: rgba(255,255,255,.8); color: var(--muted); font-size: .8rem; line-height: 1; opacity: .5; }
+    .dev-toggle:hover { opacity: 1; }
+    .dev { position: fixed; z-index: 39; left: 10px; right: 10px; top: 46px; bottom: auto; max-width: 410px; margin: 0 auto; display: none;
+           background: #0f2938; color: #d9e6ec; border-radius: 14px; padding: 12px 14px; font-size: .74rem; line-height: 1.55; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
+    .dev.show { display: block; }
+    .dev b { color: #ffd9a0; font-weight: 600; }
+    .dev .row { display: flex; gap: 6px; margin-top: 8px; }
+    .dev input { flex: 1; min-width: 0; background: #0a1f2b; border: 1px solid #1e4257; color: #e8f1f5; border-radius: 8px; padding: 7px 9px; font-size: .74rem; }
+    .dev button { background: #1e4257; color: #e8f1f5; border: 0; border-radius: 8px; padding: 7px 10px; font-size: .74rem; }
+    .dev pre { margin: 8px 0 0; max-height: 108px; overflow: auto; white-space: pre-wrap; color: #9fb6c0; }
+
+    @media (min-width: 520px) { body { padding: 24px 0; } .app { min-height: calc(100dvh - 48px); border-radius: 30px; } main, .screen { min-height: calc(100dvh - 120px); } }
+    @media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation-duration: .01ms !important; animation-iteration-count: 1 !important; } }
+  </style>
+</head>
+<body>
+  <div class="app" id="app">
+    <div class="edge" aria-hidden="true"></div>
+    <div class="banner" id="banner" role="alert"><span id="bannerText"></span><button id="bannerBtn" hidden></button></div>
+    <header class="topbar"><div class="brand">기억의 조각</div><div class="step" id="stepLabel">사진 고르기</div></header>
+    <main>
+
+      <!-- ── 시작 전 ───────────────────────────────── -->
+      <section class="screen active" data-screen="ready">
+        <button class="photo-card" id="photoCard" type="button" aria-label="오늘의 사진 고르기">
+          <span class="backdrop" id="photoBackdrop" aria-hidden="true" hidden></span>
+          <img id="photoPreview" alt="" hidden />
+          <span class="placeholder" aria-hidden="true">
+            <svg viewBox="0 0 220 165" width="100%" role="img">
+              <rect width="220" height="165" fill="#f6edda"/>
+              <circle cx="168" cy="40" r="17" fill="#f1cdae"/>
+              <path d="M0 122 L52 74 L96 118 L132 88 L220 150 L220 165 L0 165 Z" fill="#dfd2ba"/>
+              <path d="M0 140 L48 104 L104 148 L160 112 L220 158 L220 165 L0 165 Z" fill="#cfc0a3"/>
+            </svg>
+          </span>
+          <span class="photo-hint" id="photoHint">
+            <svg width="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>
+            오늘의 사진 넣기
+          </span>
+        </button>
+
+        <div class="ready-copy">
+          <h1>사진 한 장,<br />그리고 목소리.</h1>
+          <p class="lead">편하게 이야기해 주세요.<br />이야기가 끝나면 한 편의 엽서로 정리해 드릴게요.</p>
+          <p class="version" id="version"></p>
+        </div>
+        <p class="error" id="micError" role="alert"></p>
+        <input type="file" id="photoInput" accept="image/*" hidden />
+        <div class="dock"><button class="btn btn-primary" id="startBtn">녹음 시작</button></div>
+      </section>
+
+      <!-- ── 대화 중 (SPEAKING · LISTENING) ────────── -->
+      <section class="screen talk-screen" data-screen="talk">
+        <div class="status" id="status" role="status" aria-live="polite">
+          <span class="status-dot" aria-hidden="true"></span>
+          <span class="listen-state" id="listenState">준비하고 있어요</span>
+        </div>
+
+        <div class="friend-wrap" id="friend">
+          <span class="halo" aria-hidden="true"></span>
+          <span class="ring r1"></span><span class="ring r2"></span>
+          <svg class="friend-svg" viewBox="0 0 240 244" aria-hidden="true">
+            <defs>
+              <radialGradient id="bodyGrad" cx="36%" cy="28%" r="78%">
+                <stop offset="0%" stop-color="#fffaf0"/><stop offset="100%" stop-color="#f2e3c9"/>
+              </radialGradient>
+            </defs>
+            <ellipse class="shadow" cx="120" cy="218" rx="58" ry="10"/>
+            <g class="bob">
+              <path class="sprout" d="M118 48 C 116 28 124 18 136 14"/>
+              <circle class="leaf" cx="140" cy="13" r="8"/>
+              <circle class="body" cx="120" cy="128" r="80" fill="url(#bodyGrad)"/>
+              <ellipse class="blush" cx="74" cy="146" rx="14" ry="8.5"/>
+              <ellipse class="blush" cx="166" cy="146" rx="14" ry="8.5"/>
+              <g class="eyes" id="eyes">
+                <ellipse class="eye-open" cx="97" cy="122" rx="7.5" ry="9"/>
+                <ellipse class="eye-open" cx="143" cy="122" rx="7.5" ry="9"/>
+                <path class="eye-arc" d="M87 126 q10 -13 20 0"/>
+                <path class="eye-arc" d="M133 126 q10 -13 20 0"/>
+              </g>
+              <path class="mouth" d="M108 146 q12 11 24 0"/>
+            </g>
+          </svg>
+        </div>
+
+        <p class="question" id="question"></p>
+        <p class="question-sub" id="questionSub">천천히, 편하게 말해도 괜찮아요.</p>
+
+        <div class="meter" aria-hidden="true"><i id="meterFill"></i></div>
+        <p class="meter-note" id="meterNote"></p>
+
+        <div class="toast" id="toast" role="status"></div>
+
+        <div class="dock">
+          <button class="btn btn-primary" id="holdBtn">일시정지</button>
+          <button class="btn-ghost" id="abortBtn">녹음 정지 · 엽서 만들기</button>
+          <button class="btn-ghost" id="doneBtn" hidden>다 말했어요</button>
+          <button class="btn-ghost" id="skipBtn" hidden>소리 없이 넘어가기</button>
+        </div>
+      </section>
+
+      <!-- ── 정리 중 (PROCESSING · 엽서 생성) ──────── -->
+      <section class="screen center-screen" data-screen="writing">
+        <div class="friend-wrap resting" style="width:min(220px,58vw)">
+          <svg class="friend-svg" viewBox="0 0 240 244" aria-hidden="true">
+            <defs>
+              <radialGradient id="bodyGrad2" cx="36%" cy="28%" r="78%">
+                <stop offset="0%" stop-color="#fffaf0"/><stop offset="100%" stop-color="#f2e3c9"/>
+              </radialGradient>
+            </defs>
+            <ellipse class="shadow" cx="120" cy="218" rx="58" ry="10"/>
+            <g class="bob">
+              <path class="sprout" d="M118 48 C 116 28 124 18 136 14"/>
+              <circle class="leaf" cx="140" cy="13" r="8"/>
+              <circle class="body" cx="120" cy="128" r="80" fill="url(#bodyGrad2)"/>
+              <ellipse class="blush" cx="74" cy="146" rx="14" ry="8.5"/>
+              <ellipse class="blush" cx="166" cy="146" rx="14" ry="8.5"/>
+              <path class="eye-arc" style="opacity:1" d="M87 126 q10 -13 20 0"/>
+              <path class="eye-arc" style="opacity:1" d="M133 126 q10 -13 20 0"/>
+              <path class="mouth" d="M108 146 q12 11 24 0"/>
+            </g>
+          </svg>
+        </div>
+        <h1 id="writingTitle">이야기를<br />듣고 있어요.</h1>
+        <p class="lead" id="writingLead">잠시만 기다려 주세요.</p>
+        <div class="dots" aria-hidden="true"><i></i><i></i><i></i></div>
+      </section>
+
+      <!-- ── 완성 ──────────────────────────────────── -->
+      <section class="screen" data-screen="complete">
+        <div class="done-icon"><svg width="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m5 12 4 4L19 6"/></svg></div>
+        <div style="text-align:center"><div class="eyebrow">Postcard</div><h1 style="margin-top:8px">한 편의 엽서가<br />되었습니다.</h1></div>
+        <article class="postcard no-photo" id="card">
+          <span class="postcard-frame" id="cardFrame">
+            <span class="backdrop" id="cardBackdrop" aria-hidden="true"></span>
+            <img class="postcard-photo" id="cardPhoto" alt="" />
+          </span>
+          <span class="postcard-stamp">VOICE / MEMORY</span>
+          <div class="postcard-inner">
+            <div class="postcard-title" id="cardTitle">오늘의 목소리</div>
+            <p class="postcard-copy" id="cardCopy"></p>
+            <div class="postcard-sign" id="cardSign"></div>
+          </div>
+        </article>
+        <div class="dock">
+          <button class="btn btn-primary" id="saveBtn">엽서 저장</button>
+          <button class="btn-ghost" id="exitBtn">마치기</button>
+        </div>
+      </section>
+
+      <section class="screen" data-screen="closed"><div><div class="eyebrow" style="color:#ef9a79">Session complete</div><h1>오늘의 기록을<br />마쳤습니다.</h1><p class="lead">참여해 주셔서 감사합니다.</p></div></section>
+    </main>
+  </div>
+
+  <button class="dev-toggle" id="devToggle" title="개발용 패널">⚙</button>
+  <div class="dev" id="dev">
+    <div><b>state</b> <span id="devState">—</span> · <b>turn</b> <span id="devTurn">—</span> · <b>mic</b> <span id="devMic">off</span></div>
+    <div><b>session</b> <span id="devSession">—</span></div>
+    <div class="row">
+      <input id="devText" placeholder="마이크 없이 발화 보내기 (POST /speech)" />
+      <button id="devSend">전송</button>
+      <button id="devDone" title="다음 질문으로 즉시 넘어가기 (POST /done)">다 말했어요</button>
+    </div>
+    <pre id="devLog"></pre>
+  </div>
+
+<script>
+(function () {
+  'use strict';
+
+  /* ═══════════════════════════════════════════════════════════════
+     설정 — 바꿀 일이 있으면 전부 여기 한 곳에서 바꾼다
+     ═══════════════════════════════════════════════════════════════ */
+  const CONFIG = {
+    // 화면 아래와 개발용 패널에 그대로 찍힌다. 「고친 게 반영이 안 된 것 같다」는
+    // 대부분 예전 파일이 열려 있는 경우라서, 눈으로 확인할 자리를 만들어 둔다.
+    version: 'v0.8 · 2026-09-23 (엽서 저장 · 사진 분석 연결)',
+
+    // 이 화면을 백엔드가 직접 서빙하면(web/ 폴더) 빈 문자열 그대로 둔다.
+    // 다른 포트에서 열어 시험할 때만 'http://127.0.0.1:8010' 처럼 채운다.
+    // (그때는 백엔드 .env 의 ALLOWED_ORIGINS 에 이 화면 주소를 넣어야 한다)
+    apiBase: '',
+    userId: 'dev-user',          // 구글 로그인이 붙으면 교체 (백엔드 X-User-Id)
+
+    session: {
+      title: '',                 // 비우면 날짜로 자동 생성
+      postcard: '',              // 회차를 여는 씨앗 문장(0번 조각). 비워도 된다
+      pace: 'normal',            // fast(T2 3초) / normal(5초) / slow(7초)
+      max_turn: 0,               // 0 = 제한 없음. 끝은 AI 의 close 판단이 정한다
+    },
+
+    // ── 사진 ──────────────────────────────────────────────────────
+    // 백엔드 POST /api/photos 에 연결되어 있다 (main.py upload_photo).
+    // 서버에 DB 가 없으면 503 이 오는데, 그래도 사진은 이 화면 안에서 엽서에 들어간다.
+    photo: {
+      upload: true,              // false 면 서버에 올리지 않고 화면 안에서만 쓴다
+      maxUploadMB: 20,           // 백엔드 .env 의 MAX_UPLOAD_MB 와 맞춘다. 넘으면 줄여서 올린다
+      previewPixel: 1600,        // 화면 미리보기용 긴 변. 서버는 따로 1024px 로 만든다
+
+      // ── 사진을 보고 먼저 물어보기 (기획서 §2 사진 분석 에이전트) ──
+      // 백엔드가 **사진을 올리는 그 자리에서** 분석을 걸어 둔다 (photo.analyze_later).
+      // 그래서 고르는 순간 올려 두면, 시작을 누를 때쯤 단서가 준비되어
+      // **여는 말부터 사진 질문**이 된다.
+      uploadOnPick: true,       // 고르는 순간 올린다 (분석 시간을 벌어 준다)
+      sendIdOnCreate: true,     // 회차를 열 때 photo_id 를 함께 보낸다
+      waitBeforeStartMs: 8000,  // 시작을 눌렀을 때 올리는 중이면 이만큼까지 기다린다
+    },
+
+    // ── 엽서 글 ───────────────────────────────────────────────────
+    // 백엔드에 카드 작성 API 가 붙으면 server 를 true 로. 실패하면 자동으로
+    // 아래 규칙 기반으로 내려가므로 시연이 멈추지 않는다.
+    card: {
+      server: false,
+      path: '/sessions/{id}/card',
+      method: 'POST',
+    },
+
+    // ── 화면 문구·버튼 ────────────────────────────────────────────
+    // 버튼 이름은 여기서만 바꾼다. 코드 안을 뒤질 필요가 없다.
+    ui: {
+      labels: {
+        start:   '녹음 시작',
+        pause:   '일시정지',
+        resume:  '이어서 말하기',
+        stop:    '녹음 정지 · 엽서 만들기',
+        reading: '읽어 드리는 중…',
+        skip:    '소리 없이 넘어가기',
+        done:    '다 말했어요',
+        save:    '엽서 저장',
+        exit:    '마치기',
+      },
+      // 일시정지 버튼. 팀 논의로 뺐다 (2026-09-23).
+      // true 로 바꾸면 그대로 살아난다 — 서버에는 일시정지가 없어서, 멈춘 동안
+      // 아주 짧은 무음을 2초마다 올려 회차를 붙들어 두는 방식이다 (setHold 참조).
+      showPauseButton: false,
+      // 「다 말했어요」(다음 질문으로 즉시 넘어가기). 기본은 숨김 —
+      // 말을 마치고 3초 기다리면 저절로 넘어가므로 어르신께는 버튼이 하나 더
+      // 있는 셈이 된다. 개발용 패널에는 항상 있다.
+      showDoneButton: false,
+      // 엽서 내려받기 형식. png = 이미지 한 장 (지금 지원)
+      download: 'png',
+      // 내려받는 파일 이름을 영문으로. false 면 한글 제목을 파일명에 쓴다
+      // (환경에 따라 이름이 깨지거나 버려질 수 있다)
+      filenameAscii: true,
+    },
+
+    pollMs: 300,                 // 서버 상태를 물어보는 주기 (frontend-client 와 동일)
+    dev: false,                  // true 면 개발용 패널이 처음부터 열려 있다
+  };
+
+  /* ═══════════════════════════════════════════════════════════════
+     공통
+     ═══════════════════════════════════════════════════════════════ */
+  const $ = (q) => document.querySelector(q);
+  const screens = [...document.querySelectorAll('.screen')];
+  const logLines = [];
+
+  function log(tag, msg) {
+    const line = `${new Date().toTimeString().slice(0, 8)} ${tag} ${msg}`;
+    logLines.push(line);
+    if (logLines.length > 60) logLines.shift();
+    const box = $('#devLog');
+    if (box) { box.textContent = logLines.slice(-14).join('\n'); box.scrollTop = box.scrollHeight; }
+    if (window.console) console.log(line);
+  }
+
+  function banner(text, btnText, onClick) {
+    const b = $('#banner'), btn = $('#bannerBtn');
+    $('#bannerText').textContent = text;
+    if (btnText) { btn.hidden = false; btn.textContent = btnText; btn.onclick = onClick; }
+    else btn.hidden = true;
+    b.classList.add('show');
+  }
+  function clearBanner() { $('#banner').classList.remove('show'); }
+
+  let toastTimer = null;
+  function toast(text, ms) {
+    const t = $('#toast');
+    t.textContent = text;
+    t.classList.add('show');
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(() => t.classList.remove('show'), ms || 3200);
+  }
+
+  /* ═══════════════════════════════════════════════════════════════
+     api — frontend-client/src/api.ts 와 같은 이름, 같은 경로
+     ═══════════════════════════════════════════════════════════════ */
+  class ApiError extends Error {
+    constructor(status, message, retryAfter) {
+      super(message);
+      this.status = status;
+      this.retryAfter = retryAfter || 0;   // 429 일 때 서버가 알려주는 대기 시간(초)
+    }
+  }
+
+  async function call(path, init) {
+    const res = await fetch(`${CONFIG.apiBase}/api${path}`, Object.assign({}, init, {
+      // 서버가 신원 쿠키(uid)를 심어 준다. <img src="/api/photos/..."> 가 그 쿠키로 사진을 받는다.
+      credentials: 'include',
+      headers: Object.assign({
+        'Content-Type': 'application/json',
+        'X-User-Id': CONFIG.userId,
+      }, init && init.headers),
+    }));
+    if (!res.ok) {
+      const body = await res.json().catch(() => ({ detail: res.statusText }));
+      throw new ApiError(res.status, body.detail || '요청에 실패했습니다',
+                         Number(res.headers.get('Retry-After')) || 0);
+    }
+    return res.json();
+  }
+
+  const api = {
+    health: () => call('/health'),
+
+    // POST /api/sessions  →  StartReq(title, postcard, pace, max_turn)
+    start: (body) => call('/sessions', { method: 'POST', body: JSON.stringify(body) }),
+
+    get: (id) => call(`/sessions/${id}`),
+
+    ttsDone: (id) => call(`/sessions/${id}/tts-done`, { method: 'POST' }),
+
+    // 마이크 없이 흐름을 돌려볼 때 쓰는 텍스트 경로 (SpeechReq.text)
+    speech: (id, text) => call(`/sessions/${id}/speech`, { method: 'POST', body: JSON.stringify({ text }) }),
+
+    // 오디오는 JSON 으로 감싸지 않는다. 본문은 바이트 그대로, mime 은 Content-Type.
+    audio: (id, pcm, mime) => call(`/sessions/${id}/speech/audio`, {
+      method: 'POST', body: pcm, headers: { 'Content-Type': mime },
+    }),
+
+    // 소리가 없으면 204 → null. 오류가 아니다. 화면은 글자만 띄우면 된다.
+    questionAudio: async (id) => {
+      const res = await fetch(`${CONFIG.apiBase}/api/sessions/${id}/question/audio`,
+                              { headers: { 'X-User-Id': CONFIG.userId } });
+      if (res.status === 204) return null;
+      if (!res.ok) throw new ApiError(res.status, '소리를 받지 못했습니다');
+      const blob = await res.blob();
+      return blob.size ? blob : null;
+    },
+
+    done: (id) => call(`/sessions/${id}/done`, { method: 'POST' }),
+    abort: (id) => call(`/sessions/${id}/abort`, { method: 'POST' }),
+    latency: (id) => call(`/sessions/${id}/latency`),
+    record: (id) => call(`/sessions/${id}/record`),
+
+    // ── 사진 (main.py upload_photo · get_photo) ──
+    // 본문은 바이트 그대로. 형식은 서버가 앞머리 바이트로 가린다 (HEIC 도 받는다).
+    // session_id 는 선택 — 주면 그 회차에 붙는다.
+    // 응답: { photo_id, url, mime, width, height, bytes }
+    uploadPhoto: (bytes, mime, sessionId) =>
+      call(`/photos${sessionId ? '?session_id=' + encodeURIComponent(sessionId) : ''}`, {
+        method: 'POST', body: bytes, headers: { 'Content-Type': mime || 'application/octet-stream' },
+      }),
+    // <img src> 에 그대로 넣는 주소. 서버 응답의 url 과 같은 모양이다.
+    photoUrl: (photoId) => `${CONFIG.apiBase}/api/photos/${photoId}`,
+
+    // ── 아직 백엔드에 없는 것. 생기면 CONFIG.card 스위치만 켜면 된다 ──
+    card: (id) => call(CONFIG.card.path.replace('{id}', id), { method: CONFIG.card.method }),
+  };
+
+  /* ═══════════════════════════════════════════════════════════════
+     speaker — 질문 mp3 재생 (src/speaker.ts 를 옮긴 것)
+     ═══════════════════════════════════════════════════════════════ */
+  const SILENCE = 'data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YQAAAAA=';
+  const speaker = (function () {
+    let el = null, unlocked = false, settle = null;
+    function element() {
+      if (!el) {
+        el = new Audio();
+        el.preload = 'auto';
+        el.autoplay = false;
+        el.setAttribute('playsinline', '');
+      }
+      return el;
+    }
+    return {
+      isUnlocked: () => unlocked,
+      // 반드시 사용자 동작(클릭) 안에서 부른다. 브라우저 자동재생 차단을 푼다.
+      async unlock() {
+        if (unlocked) return true;
+        const a = element();
+        if (!a.paused) return unlocked;
+        try {
+          a.src = SILENCE; a.muted = false; a.volume = 1;
+          await a.play(); a.pause();
+          unlocked = true; log('소리', '잠금 해제');
+        } catch (e) { log('소리', '잠금 해제 실패 · ' + e); }
+        return unlocked;
+      },
+      play(blob) {
+        const a = element();
+        if (settle) { settle(false); settle = null; }
+        const url = URL.createObjectURL(blob);
+        return new Promise((resolve) => {
+          const finish = (finished) => {
+            a.onended = a.onerror = null;
+            URL.revokeObjectURL(url);
+            settle = null;
+            resolve({ finished });
+          };
+          settle = finish;
+          a.onended = () => finish(true);
+          a.onerror = () => finish(false);
+          a.src = url;
+          a.play().catch((e) => { log('낭독', '재생 거부 · ' + e); finish(false); });
+        });
+      },
+      stop() { const a = element(); try { a.pause(); } catch (_) {} if (settle) { settle(false); settle = null; } },
+    };
+  })();
+
+  /* ═══════════════════════════════════════════════════════════════
+     recorder — 소리가 있는 구간만 16kHz PCM 으로 올린다
+     (src/recorder.ts 를 그대로 옮긴 것. 상수 이름도 같다)
+
+     ※ 브라우저 기본 녹음(MediaRecorder)을 쓰지 않는 이유:
+       잘라낸 webm 조각은 이어 붙지 않아 첫 조각만 남는다.
+       머리 없는 PCM 은 이어 붙이는 것이 곧 이어 붙이는 것이다.
+     ═══════════════════════════════════════════════════════════════ */
+  const RATE = 16000;
+  const MIME = `audio/pcm;rate=${RATE}`;
+  const FRAME = 4096;
+  const PREROLL_MS = 300;
+  const CLOSE_MS = 600;
+  const FLUSH_MS = 1000;
+  const FLOOR_MIN = 0.004;
+  const OPEN_MULT = 3.5;
+  const CLOSE_MULT = 2.0;
+  const OPEN_MULT_MIN = 2.0;
+  const OPEN_MULT_MAX = 6.0;
+  const PEAK_RATIO_MIN = 3.0;
+  const PEAK_RISE = 0.2;
+  const PEAK_FALL = 0.997;
+
+  class Resampler {
+    constructor(from, to) { this.from = from; this.to = to; this.cursor = 0; this.prev = 0; this.started = false; }
+    push(input) {
+      const ratio = this.from / this.to, n = input.length;
+      if (n === 0) return new Float32Array(0);
+      const out = [];
+      let c = this.started ? this.cursor : 0;
+      while (c < n - 1) {
+        const i = Math.floor(c);
+        const a = i < 0 ? this.prev : input[i];
+        const b = input[i + 1];
+        out.push(a + (b - a) * (c - i));
+        c += ratio;
+      }
+      this.prev = input[n - 1];
+      this.started = true;
+      this.cursor = c - n;
+      return Float32Array.from(out);
+    }
+  }
+
+  function toPcm16(frames) {
+    const total = frames.reduce((s, f) => s + f.length, 0);
+    const out = new Int16Array(total);
+    let o = 0;
+    for (const f of frames) {
+      for (let i = 0; i < f.length; i++) {
+        const v = Math.max(-1, Math.min(1, f[i]));
+        out[o++] = v < 0 ? v * 0x8000 : v * 0x7fff;
+      }
+    }
+    return out.buffer;
+  }
+
+  async function startRecorder(opts) {
+    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+      throw new Error('이 주소에서는 마이크를 쓸 수 없습니다 (https 또는 localhost 가 필요합니다)');
+    }
+    const stream = await navigator.mediaDevices.getUserMedia({
+      audio: { channelCount: 1, echoCancellation: true, noiseSuppression: true, autoGainControl: true },
+    });
+    const Ctx = window.AudioContext || window.webkitAudioContext;
+    const ctx = new Ctx();
+    await ctx.resume();
+    const src = ctx.createMediaStreamSource(stream);
+    const node = ctx.createScriptProcessor(FRAME, 1, 1);
+    const mute = ctx.createGain();
+    mute.gain.value = 0;
+    const rs = new Resampler(ctx.sampleRate, RATE);
+
+    let floor = 0.02, peak = 0, voiced = false;
+    let belowMs = 0, sinceFlush = 0;
+    let pending = [], preroll = [], prerollMs = 0;
+    let stopped = false, active = false;
+
+    const gates = () => {
+      const sep = floor > 0 ? peak / floor : 0;
+      const auto = sep >= PEAK_RATIO_MIN;
+      const mult = auto ? Math.min(OPEN_MULT_MAX, Math.max(OPEN_MULT_MIN, Math.sqrt(sep))) : OPEN_MULT;
+      return {
+        auto,
+        open: Math.max(floor * mult, FLOOR_MIN),
+        close: Math.max(floor * mult * (CLOSE_MULT / OPEN_MULT), FLOOR_MIN * 0.6),
+      };
+    };
+
+    const flush = () => {
+      if (!pending.length) return;
+      const buf = toPcm16(pending);
+      pending = []; sinceFlush = 0;
+      if (buf.byteLength) opts.onChunk(buf);
+    };
+
+    node.onaudioprocess = (e) => {
+      if (stopped) return;
+      e.outputBuffer.getChannelData(0).fill(0);
+      const input = e.inputBuffer.getChannelData(0);
+      const durMs = (input.length / ctx.sampleRate) * 1000;
+
+      let sum = 0;
+      for (let i = 0; i < input.length; i++) sum += input[i] * input[i];
+      const rms = Math.sqrt(sum / input.length);
+
+      if (!active) {
+        rs.push(input);
+        const g = gates();
+        if (opts.onLevel) opts.onLevel({ rms, voiced: false, floor, peak, open: g.open, auto: g.auto });
+        return;
+      }
+
+      peak = rms > peak ? peak * (1 - PEAK_RISE) + rms * PEAK_RISE : peak * PEAK_FALL;
+      const g = gates();
+      const res = rs.push(input);
+
+      if (!voiced) {
+        floor = rms < floor ? floor * 0.85 + rms * 0.15 : floor * 0.99 + rms * 0.01;
+        preroll.push(res);
+        prerollMs += durMs;
+        while (prerollMs > PREROLL_MS && preroll.length > 1) {
+          prerollMs -= (preroll.shift().length / RATE) * 1000;
+        }
+        if (rms > g.open) {
+          voiced = true; belowMs = 0; sinceFlush = 0;
+          pending = preroll; preroll = []; prerollMs = 0;
+        }
+      } else {
+        pending.push(res);
+        sinceFlush += durMs;
+        belowMs = rms < g.close ? belowMs + durMs : 0;
+        if (belowMs >= CLOSE_MS) { voiced = false; flush(); }
+        else if (sinceFlush >= FLUSH_MS) flush();
+      }
+      if (opts.onLevel) opts.onLevel({ rms, voiced, floor, peak, open: g.open, auto: g.auto });
+    };
+
+    src.connect(node); node.connect(mute); mute.connect(ctx.destination);
+
+    return {
+      // 듣는 동안에만 켠다. 낭독 중에 켜 두면 스피커 소리가 마이크로 되돌아와
+      // T1 이 영영 리셋된다.
+      setActive(on) {
+        if (!on) { voiced = false; pending = []; preroll = []; prerollMs = 0; belowMs = 0; sinceFlush = 0; }
+        active = on;
+      },
+      stop() {
+        if (stopped) return;
+        stopped = true;
+        flush();
+        node.onaudioprocess = null;
+        try { src.disconnect(); node.disconnect(); mute.disconnect(); } catch (_) {}
+        stream.getTracks().forEach(t => t.stop());
+        ctx.close();
+      },
+    };
+  }
+
+  /* ═══════════════════════════════════════════════════════════════
+     사진
+       · 고르는 순간: 화면 안에서 미리보기만 한다 (서버에 아직 안 보낸다)
+       · 회차가 열린 뒤: POST /api/photos?session_id=… 로 올린다 → 회차에 붙는다
+       · 올리기가 실패해도 대화는 계속되고, 엽서에는 화면 안의 사진이 들어간다
+     ═══════════════════════════════════════════════════════════════ */
+  const photo = {
+    file: null,        // 고른 원본 파일. 서버에는 이것을 보낸다 (촬영 시각이 살아 있다)
+    dataUrl: '',       // 화면 미리보기용 (줄인 것)
+    ratio: 0,
+    photo_id: null,    // 서버가 준 id
+    url: '',           // 서버가 준 주소 (/api/photos/{photo_id})
+    status: 'none',    // none | picked | uploading | stored | failed
+  };
+
+  $('#photoCard').addEventListener('click', () => $('#photoInput').click());
+  $('#photoInput').addEventListener('change', (e) => {
+    const file = e.target.files && e.target.files[0];
+    if (!file) return;
+    Object.assign(photo, { file, dataUrl: '', photo_id: null, url: '', status: 'picked' });
+    const reader = new FileReader();
+    reader.onload = () => {
+      const probe = new Image();
+      probe.onload = () => {
+        applyPhotoRatio(probe.naturalWidth, probe.naturalHeight);
+        photo.dataUrl = downscale(probe, reader.result);
+        showPhoto();
+        sendPhotoEarly();
+      };
+      // 브라우저가 못 여는 형식(주로 아이폰 HEIC). 서버는 열 수 있으니 올린 뒤
+      // 서버가 만든 JPEG 로 보여준다.
+      probe.onerror = () => { photo.dataUrl = ''; showPhotoPending(); sendPhotoEarly(); };
+      probe.src = reader.result;
+    };
+    reader.readAsDataURL(file);
+  });
+
+  function applyPhotoRatio(w, h) {
+    if (!w || !h) return;
+    photo.ratio = w / h;
+    document.documentElement.style.setProperty('--photo-ratio', photo.ratio.toFixed(4));
+  }
+
+  // 휴대폰 원본은 수천 픽셀이다. 긴 변을 줄여 두면 화면에서는 차이가 없고 훨씬 가볍다.
+  function downscale(img, original) {
+    const MAX = CONFIG.photo.previewPixel, w = img.naturalWidth, h = img.naturalHeight;
+    const scale = Math.min(1, MAX / Math.max(w, h));
+    if (scale >= 1) return original;
+    try {
+      const c = document.createElement('canvas');
+      c.width = Math.round(w * scale); c.height = Math.round(h * scale);
+      c.getContext('2d').drawImage(img, 0, 0, c.width, c.height);
+      return c.toDataURL('image/jpeg', 0.88);
+    } catch (_) { return original; }
+  }
+
+  function showPhoto() {
+    const img = $('#photoPreview');
+    img.src = photo.dataUrl; img.hidden = false;
+    const bd = $('#photoBackdrop');
+    bd.hidden = false; bd.style.backgroundImage = `url("${photo.dataUrl}")`;
+    $('#photoCard').classList.add('has-photo');
+    $('#photoHint').lastChild.textContent = ' 사진 바꾸기';
+    log('사진', `선택됨 · ${photo.file ? (photo.file.size / 1024 / 1024).toFixed(1) + 'MB' : ''}`);
+  }
+
+  // 미리보기를 못 만든 사진 — 이름만 알려 두고, 서버에 올린 뒤 그 사진으로 바꾼다
+  function showPhotoPending() {
+    $('#photoCard').classList.remove('has-photo');
+    $('#photoHint').lastChild.textContent = ' 사진을 받았어요 · 바꾸기';
+    log('사진', '미리보기 불가 형식(HEIC 등) — 서버가 변환합니다');
+  }
+
+  function dataUrlToBytes(dataUrl) {
+    const [head, b64] = dataUrl.split(',');
+    const mime = (head.match(/data:([^;]+)/) || [, 'image/jpeg'])[1];
+    const bin = atob(b64);
+    const bytes = new Uint8Array(bin.length);
+    for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+    return { bytes: bytes.buffer, mime };
+  }
+
+  /**
+   * 서버로 올릴 바이트를 고른다.
+   *
+   * 원본을 먼저 보낸다. 서버(photo.py)가 HEIC 변환 · 회전 · 1024px · 위치정보 제거를
+   * 다 해 주고, **촬영 시각은 원본에만 남아 있어서** 연대기(§3)에 쓰인다.
+   * 원본이 상한(MAX_UPLOAD_MB)을 넘을 때만 화면용으로 줄인 것을 보낸다.
+   */
+  async function photoBytes() {
+    const limit = CONFIG.photo.maxUploadMB * 1024 * 1024;
+    if (photo.file && photo.file.size <= limit) {
+      return { bytes: await photo.file.arrayBuffer(), mime: photo.file.type };
+    }
+    if (photo.dataUrl) return dataUrlToBytes(photo.dataUrl);
+    return null;
+  }
+
+  /** 사진을 올린다. 실패해도 회차는 계속된다 — 사진 때문에 대화를 멈추지 않는다. */
+  async function uploadPhoto(sessionId) {
+    if (!CONFIG.photo.upload || !photo.file || photo.status === 'stored') return null;
+    const payload = await photoBytes();
+    if (!payload) {
+      log('사진', `${CONFIG.photo.maxUploadMB}MB 를 넘고 줄일 수도 없어 올리지 않습니다`);
+      return null;
+    }
+    photo.status = 'uploading';
+    try {
+      const res = await api.uploadPhoto(payload.bytes, payload.mime, sessionId);
+      photo.photo_id = res.photo_id;
+      photo.url = res.url ? `${CONFIG.apiBase}${res.url}` : api.photoUrl(res.photo_id);
+      photo.status = 'stored';
+      if (!photo.ratio && res.width && res.height) applyPhotoRatio(res.width, res.height);
+      log('사진', `저장됨 · ${res.photo_id.slice(0, 8)} · ${res.width}×${res.height} · ${(res.bytes / 1024).toFixed(0)}KB`);
+      // 미리보기를 못 만들었던 사진이면 서버가 만든 JPEG 로 채운다
+      if (!photo.dataUrl) {
+        const img = $('#photoPreview');
+        img.src = photo.url; img.hidden = false;
+        $('#photoBackdrop').hidden = false;
+        $('#photoBackdrop').style.backgroundImage = `url("${photo.url}")`;
+        $('#photoCard').classList.add('has-photo');
+      }
+      return photo.photo_id;
+    } catch (e) {
+      photo.status = 'failed';
+      // 서버가 이유별로 다른 코드를 준다. 어르신께는 알리지 않고 기록만 남긴다 —
+      // 엽서에는 화면 안의 사진이 그대로 들어간다.
+      const why =
+        e.status === 400 ? '사진 형식을 읽지 못했습니다 (다른 사진이 필요)'
+        : e.status === 413 ? '사진이 너무 큽니다'
+        : e.status === 503 ? '서버가 사진을 저장하지 못했습니다 (DB 연결 확인)'
+        : (e.message || String(e));
+      log('사진', `업로드 실패 · ${e.status || ''} ${why}`);
+      return null;
+    }
+  }
+
+  /** 엽서·화면에 쓸 사진 주소. 화면 안의 것이 있으면 그것을, 없으면 서버 것을. */
+  function photoSrc() { return photo.dataUrl || photo.url || ''; }
+
+  /**
+   * 고르는 순간 서버로 보낸다.
+   *
+   * 서버는 사진을 받자마자 §2 분석을 걸어 둔다 (photo.analyze_later). 분석에
+   * 1.6~3.9초가 걸리는데, 어르신이 사진을 고르고 화면을 보고 시작을 누르는
+   * 사이가 딱 그 시간이다. 그래서 여기서 미리 보내 두면 회차가 열릴 때
+   * **여는 말부터 사진 질문**이 된다.
+   *
+   * 실패해도 아무 일도 일어나지 않는다 — 사진은 화면 안에 그대로 있고,
+   * 회차는 사진 없이 평소대로 열린다.
+   */
+  function sendPhotoEarly() {
+    if (!CONFIG.photo.upload || !CONFIG.photo.uploadOnPick) return;
+    $('#photoHint').lastChild.textContent = ' 사진을 살펴보는 중…';
+    photoUpload = uploadPhoto(null).then((id) => {
+      $('#photoHint').lastChild.textContent = id ? ' 사진 준비 완료 · 바꾸기' : ' 사진 바꾸기';
+      return id;
+    });
+  }
+
+  /* ═══════════════════════════════════════════════════════════════
+     엽서 글 — 서버 카드 API 가 없을 때 쓰는 임시 정리
+     (CONFIG.card.server 를 켜면 서버가 쓴 글이 우선이다)
+     ═══════════════════════════════════════════════════════════════ */
+  const FILLER_SET = new Set(['어','음','아','에','그','저','저기','뭐','뭐지','뭐랄까','이제','인제','약간','막','그니까','그러니까','그래가지고','아니','엄','흠','근까','걍','좀','응','네','예','하여튼','아무튼','글쎄']);
+  const FILLER_RE = /^(어+|음+|아+|엄+|흠+|에+|우+|응+)$/;
+  const JOSA_RE = /(은|는|이|가|을|를|에|에서|에게|한테|으로|로|와|과|도|만|의|랑|이랑|부터|까지|보다|처럼|들)$/;
+  const STOP_NOUN = new Set(['것','거','그거','이거','저거','사람','생각','정도','때문','우리','제가','내가','그게','이게','저는','그런','이런','저런','진짜','정말','조금','하나','그때','지금','오늘']);
+  const NOUNISH_BLOCK = new Set(['바다','소다','하다','보다','사다','주다']);
+  const END_RE = /(습니다|합니다|였습니다|이었습니다|했어요|했습니다|거든요|더라고요|같아요|같았어요|네요|군요|겠어요|어요|아요|예요|이에요|에요|해요|이죠|죠|더라|드라|구나|였다|이다|았다|었다|한다|된다|같다|싶다|많다|좋다|[았었]어|[았었]지|[았었]네|했어|했지|갔어|갔지|왔어|왔지|봤어|봤지|났어|났지|줬어|줬지|였어|였지|이지|있지|없지|그랬어|그랬지|요|다)$/;
+  const Q_RE = /(까요|나요|을까|일까|인가요|는가요|어떨까|무엇|뭐예요|뭔가요)$/;
+  const VERBISH_TAIL = /[가나다라마오우이지치키히기되하]$/;
+
+  function polish(raw) {
+    const tokens = dropFillers(String(raw || '').replace(/\s+/g, ' ').trim().split(' ').filter(Boolean));
+    if (tokens.length < 4) {
+      return { title: '말로 남은 하루', body: '오늘의 이야기는 목소리로 남았습니다.\n글로 다 옮기지는 못했지만, 분명히 이 자리에 머물렀던 시간입니다.' };
+    }
+    return { title: pickTitle(tokens), body: toParagraphs(buildSentences(tokens)).join('\n\n') };
+  }
+  function dropFillers(tokens) {
+    const out = [];
+    for (const t of tokens) {
+      const bare = t.replace(/[.,!?~…]+$/g, '');
+      if (!bare) continue;
+      if (FILLER_RE.test(bare) || FILLER_SET.has(bare)) continue;
+      if (out.length && out[out.length - 1] === bare) continue;
+      out.push(bare);
+    }
+    return out;
+  }
+  function isSentenceEnd(t) { return t.length >= 2 && !NOUNISH_BLOCK.has(t) && END_RE.test(t); }
+  function buildSentences(tokens) {
+    const sentences = []; let buf = [];
+    tokens.forEach((tok, i) => {
+      buf.push(tok);
+      if ((isSentenceEnd(tok) && buf.length >= 3) || i === tokens.length - 1) {
+        if (buf.length) sentences.push(buf.join(' '));
+        buf = [];
+      }
+    });
+    if (buf.length) sentences.push(buf.join(' '));
+    return sentences.map(s => s.trim()).filter(s => s.length > 1)
+      .map(s => /[.?!…]$/.test(s) ? s : s + (Q_RE.test(s.split(' ').pop()) ? '?' : '.'));
+  }
+  function toParagraphs(sentences, per = 3) {
+    const out = [];
+    for (let i = 0; i < sentences.length; i += per) out.push(sentences.slice(i, i + per).join(' '));
+    return out;
+  }
+  function pickTitle(tokens) {
+    const count = new Map(), firstAt = new Map();
+    tokens.forEach((t, idx) => {
+      const bare = t.replace(JOSA_RE, '');
+      if (bare.length < 2 || STOP_NOUN.has(bare) || FILLER_SET.has(bare) || END_RE.test(bare)) return;
+      if (/(는|던)$/.test(t) && bare.length >= 3 && VERBISH_TAIL.test(bare)) return;
+      count.set(bare, (count.get(bare) || 0) + 1);
+      if (!firstAt.has(bare)) firstAt.set(bare, idx);
+    });
+    const ranked = [...count.entries()].sort((a, b) => b[1] - a[1] || firstAt.get(a[0]) - firstAt.get(b[0]));
+    if (!ranked.length) return '오늘의 목소리';
+    const top = ranked[0][0];
+    return /(기억|이야기|하루|시간|마음)$/.test(top) ? top : top + '의 기억';
+  }
+
+  /**
+   * 조각(fragments) → 엽서 한 장.
+   *
+   * 1. 서버에 카드 작성 API 가 있으면 그것을 쓴다 (기획서 §4 카드 작성 에이전트).
+   * 2. 없거나 실패하면 위 규칙 기반으로 내려간다 — 시연이 멈추지 않는다.
+   */
+  async function composePostcard(sessionId, fragments) {
+    if (CONFIG.card.server && sessionId) {
+      try {
+        const r = await api.card(sessionId);
+        log('엽서', '서버가 쓴 글을 받았습니다');
+        return { title: r.title || '오늘의 목소리', body: r.body || '', caption: r.caption || '', source: 'server' };
+      } catch (e) {
+        log('엽서', `서버 카드 실패 · ${e.message || e} — 임시 정리로 넘어갑니다`);
+      }
+    }
+    // 0번 조각은 씨앗 문장이라 뺀다. 1번부터가 어르신의 말씀이다.
+    const answers = fragments.filter(f => f.idx >= 1).map(f => f.answer).join(' ');
+    return Object.assign(polish(answers), { source: 'local' });
+  }
+
+  /* ═══════════════════════════════════════════════════════════════
+     화면 전환
+     ═══════════════════════════════════════════════════════════════ */
+  const STEP_LABEL = { ready: '사진 고르기', talk: '', writing: '정리 중', complete: '완성', closed: '종료' };
+
+  function show(name) {
+    screens.forEach(s => s.classList.toggle('active', s.dataset.screen === name));
+    $('#stepLabel').textContent = STEP_LABEL[name] || '';
+    $('#app').classList.toggle('quiet', name === 'talk' || name === 'writing');
+    window.scrollTo(0, 0);
+  }
+
+  /* ═══════════════════════════════════════════════════════════════
+     회차 — 서버 상태(snapshot)가 화면의 유일한 기준이다
+       SPEAKING   질문을 읽어 주는 중
+       LISTENING  듣는 중
+       PROCESSING 정리 중
+       CLOSED     마쳤다
+     ═══════════════════════════════════════════════════════════════ */
+  let snap = null;            // 마지막 snapshot
+  let sessionId = null;
+  let recorder = null;
+  let pollTimer = null;
+  let spoken = null;          // 이미 읽어 준 질문. 폴링이 같은 값을 물어와도 두 번 읽지 않는다
+  let uploadQueue = Promise.resolve();
+  let blinkTimer = null;
+  let levelRaf = null;
+  let level = 0;
+  let closing = false;
+  let photoUpload = null;     // 사진 올리기가 끝나기를 엽서 직전에 잠깐 기다린다
+  let held = false;           // 일시정지 중인가
+  let holdTimer = null;       // 일시정지 중 회차를 붙들어 두는 신호
+  let piece = null;           // 완성된 엽서 (제목 · 본문). 저장할 때 쓴다
+
+  function isListening() { return snap && snap.state === 'LISTENING'; }
+
+  async function beginInterview() {
+    const err = $('#micError');
+    err.classList.remove('show');
+    clearBanner();
+    $('#startBtn').disabled = true;
+
+    // 브라우저 자동재생 차단은 사용자 동작 안에서만 풀 수 있다. 지금이 그 자리다.
+    await speaker.unlock();
+
+    // 1) 마이크
+    try {
+      recorder = await startRecorder({
+        onLevel: (l) => { level = l.rms; },
+        onChunk: (pcm) => {
+          if (!sessionId || !isListening()) return;   // 낭독·정리 중 소리는 버린다
+          uploadQueue = uploadQueue
+            .then(() => api.audio(sessionId, pcm, MIME))
+            .then(s => { applySnapshot(s); log('올림', `${(pcm.byteLength / 32000).toFixed(1)}초`); })
+            .catch(e => log('올림', `실패 · ${e.message || e}`));
+        },
+      });
+      $('#devMic').textContent = 'on';
+      log('마이크', '켰습니다');
+    } catch (e) {
+      const name = (e && e.name) || '';
+      err.textContent =
+        name === 'NotAllowedError' ? '마이크 사용을 허용해 주세요 (주소창의 자물쇠 → 마이크)'
+        : name === 'NotFoundError' ? '마이크를 찾지 못했습니다'
+        : (e.message || String(e));
+      err.classList.add('show');
+      $('#startBtn').disabled = false;
+      return;
+    }
+
+    // 2) 회차 열기 — StartReq 의 필드 이름 그대로 보낸다
+    const body = {
+      title: CONFIG.session.title || `${new Date().toISOString().slice(0, 10)} 기록`,
+      postcard: CONFIG.session.postcard,
+      pace: CONFIG.session.pace,
+      max_turn: CONFIG.session.max_turn,
+    };
+
+    // 2-1) 사진을 골랐다면 그 번호(photo_id)를 함께 보낸다.
+    //
+    // 서버는 이 번호로 사진의 §2 단서를 찾아 **여는 말을 사진 질문으로** 짓는다.
+    // 고르는 순간 이미 올려 두었으므로(sendPhotoEarly) 보통은 기다릴 것이 없다.
+    // 아직 올라가는 중이면 잠깐만 기다린다 — 그래도 안 끝나면 사진 없이 연다.
+    if (photo.file && CONFIG.photo.upload) {
+      if (!photo.photo_id && photoUpload) {
+        show('writing');
+        $('#writingTitle').innerHTML = '사진을<br />보고 있어요.';
+        $('#writingLead').textContent = '무엇이 담겼는지 살펴보는 중이에요.';
+        await Promise.race([
+          photoUpload,
+          new Promise(r => setTimeout(r, CONFIG.photo.waitBeforeStartMs)),
+        ]).catch(() => {});
+      }
+      if (CONFIG.photo.sendIdOnCreate && photo.photo_id) {
+        body.photo_id = photo.photo_id;
+        log('사진', `회차에 사진을 겁니다 · ${photo.photo_id.slice(0, 8)}`);
+      }
+    }
+
+    try {
+      const s = await api.start(body);
+      sessionId = s.session_id;
+      log('회차', `${sessionId.slice(0, 8)} 열림`);
+      $('#devSession').textContent = sessionId.slice(0, 8);
+      startVisualLoop();
+      show('talk');
+      applySnapshot(s);
+      startPolling();
+      // 3) 고를 때 올리는 데 실패했다면 여기서 한 번 더 시도한다. 기다리지 않는다.
+      //    이미 올라간 사진이면 uploadPhoto 가 그냥 지나간다.
+      photoUpload = uploadPhoto(sessionId);
+    } catch (e) {
+      $('#startBtn').disabled = false;
+      if (recorder) { recorder.stop(); recorder = null; $('#devMic').textContent = 'off'; }
+      show('ready');                      // 사진 분석 화면에 머물러 있지 않게 되돌린다
+      log('회차', `열기 실패 · ${e.status || ''} ${e.message || e}`);
+      // 서버가 이유별로 다른 코드를 준다 (main.py create_session). 화면도 다르게 말한다.
+      if (e.status === 429) {
+        // 너무 자주 열었거나(10분 10회), 이미 진행 중인 회차가 있다. 서버 문구를 그대로 쓴다.
+        const wait = e.retryAfter ? ` (약 ${Math.ceil(e.retryAfter / 60)}분 뒤)` : '';
+        banner(`${e.message}${wait}`);
+      } else if (e.status === 503) {
+        banner('지금은 이야기를 시작할 수 없어요. 잠시 뒤에 다시 시도해 주세요.');
+      } else {
+        banner(
+          `서버에 연결하지 못했습니다 (${e.message || e}). 백엔드가 떠 있는지 확인해 주세요.`,
+          '서버 없이 화면만 보기', () => { clearBanner(); offlineDemo(); });
+      }
+    }
+  }
+
+  function startPolling() {
+    stopPolling();
+    pollTimer = window.setInterval(async () => {
+      if (!sessionId) return;
+      try { applySnapshot(await api.get(sessionId)); }
+      catch (e) {
+        // 404 = 서버가 회차를 정리했다 (30분 동안 활동이 없었거나 서버가 재시작됐다).
+        // 기다려도 돌아오지 않으니, 지금까지 받은 이야기로 엽서를 만든다.
+        if (e.status === 404) {
+          log('회차', '서버에서 회차가 사라졌습니다 — 받은 이야기로 마무리합니다');
+          void finishSession();
+        }
+        // 그 밖의 실패는 한 번 놓친 것뿐이다. 다음 주기에 다시 묻는다.
+      }
+    }, CONFIG.pollMs);
+  }
+  function stopPolling() { if (pollTimer) { window.clearInterval(pollTimer); pollTimer = null; } }
+
+  /** 서버가 준 snapshot 하나로 화면 전체를 맞춘다. */
+  function applySnapshot(s) {
+    if (!s) return;
+    const prev = snap;
+    snap = s;
+
+    $('#devState').textContent = s.state;
+    $('#devTurn').textContent = `${s.turn}${s.max_turn > 0 ? '/' + s.max_turn : ''}`;
+
+    // 회차가 바뀌면 「이미 읽어 준 질문」 기억을 지운다.
+    // 여는 말은 늘 같은 문장이라, 안 지우면 두 번째 회차의 낭독이 통째로
+    // 건너뛰어지고 tts-done 이 올라가지 않아 회차가 SPEAKING 에서 멈춘다.
+    // (백엔드 팀이 리액트 화면에서 먼저 겪은 버그다 — 커밋 255d9a0)
+    if (!prev || prev.session_id !== s.session_id) spoken = null;
+
+    if (!prev || prev.state !== s.state) log('상태', `${prev ? prev.state : '—'} → ${s.state}`);
+    if (prev && s.fragments.length > prev.fragments.length) {
+      const f = s.fragments[s.fragments.length - 1];
+      log('조각', `[${f.idx}] ${f.answer}`);
+    }
+
+    // 마이크 판정은 듣는 동안에만. 일시정지 중에는 꺼 둔다.
+    if (recorder) recorder.setActive(s.state === 'LISTENING' && !held);
+
+    $('#friend').classList.toggle('speaking', s.state === 'SPEAKING' && !held);
+
+    // 말씀이 하나도 안 들어온 채로 확정되면 서버는 조용히 다시 듣기로 돌아간다
+    // (빈 전사 = 턴 미소모). 화면에 변화가 없어 먹통처럼 보이므로 여기서 알린다.
+    if (prev && prev.state === 'PROCESSING' && s.state === 'LISTENING'
+        && s.fragments.length === prev.fragments.length) {
+      toast('말씀이 들어오지 않았어요. 다시 듣고 있습니다.');
+    }
+
+    renderControls(s);
+
+    if (s.next_question) $('#question').textContent = s.next_question;
+
+    if (s.state === 'CLOSED') { void finishSession(); return; }
+    if (!screens.find(x => x.classList.contains('active') && x.dataset.screen === 'talk')) show('talk');
+
+    // 질문 낭독 — 새 질문이 나왔을 때 한 번만
+    if (s.state === 'SPEAKING' && s.next_question && spoken !== s.next_question) {
+      spoken = s.next_question;
+      void readQuestion(s.session_id, s.next_question);
+    }
+  }
+
+  /**
+   * 상태에 따라 버튼과 문구를 맞춘다.
+   *
+   *   AI 가 읽는 중   일시정지 자리에 「읽어 드리는 중…」 (누를 수 없음)
+   *   듣는 중         일시정지  ·  녹음 정지
+   *   일시정지 중     이어서 말하기  ·  녹음 정지
+   *   정리 중         잠깐 누를 수 없음
+   *
+   * 「녹음 정지」는 언제나 누를 수 있다 — 멈추고 싶을 때 멈출 수 없는 것이
+   * 가장 나쁘다.
+   */
+  function renderControls(s) {
+    const L = CONFIG.ui.labels;
+    const hold = $('#holdBtn');
+    const stop = $('#abortBtn');
+    const listening = s.state === 'LISTENING';
+    const pauseOn = CONFIG.ui.showPauseButton;
+
+    // 화면 전체의 색·테·빛이 이 한 줄을 따라간다 (CSS 의 .app[data-state=…])
+    $('#app').dataset.state = held ? 'HELD' : s.state;
+    $('#app').classList.toggle('paused', held);
+    $('#friend').classList.toggle('resting', held || s.state === 'PROCESSING');
+
+    // 일시정지를 쓰지 않을 때는 「녹음 정지」가 큰 버튼 자리를 차지한다.
+    hold.hidden = !pauseOn;
+    stop.className = pauseOn ? 'btn-ghost' : 'btn btn-primary';
+    stop.textContent = L.stop;
+
+    if (!pauseOn) {
+      if (s.state === 'SPEAKING') {
+        $('#listenState').textContent = '읽어 드릴게요';
+        $('#questionSub').textContent = '잠시만 기다려 주세요.';
+      } else if (listening) {
+        $('#listenState').textContent = '녹음 중이에요';
+        $('#questionSub').textContent = '천천히, 편하게 말해도 괜찮아요.';
+      } else if (s.state === 'PROCESSING') {
+        $('#listenState').textContent = '잘 들었어요';
+        $('#questionSub').textContent = '다음 이야기를 고르고 있어요.';
+      }
+      $('#doneBtn').textContent = L.done;
+      $('#doneBtn').hidden = !(CONFIG.ui.showDoneButton && listening);
+      $('#skipBtn').textContent = L.skip;
+      return;
+    }
+
+    if (held) {
+      hold.textContent = L.resume;
+      hold.disabled = false;
+      $('#listenState').textContent = '잠시 멈췄어요';
+      $('#questionSub').textContent = '준비되시면 「' + L.resume + '」을 눌러 주세요.';
+    } else if (s.state === 'SPEAKING') {
+      hold.textContent = L.reading;
+      hold.disabled = true;
+      $('#listenState').textContent = '읽어 드릴게요';
+      $('#questionSub').textContent = '잠시만 기다려 주세요.';
+    } else if (listening) {
+      hold.textContent = L.pause;
+      hold.disabled = false;
+      $('#listenState').textContent = '녹음 중이에요';
+      $('#questionSub').textContent = '천천히, 편하게 말해도 괜찮아요.';
+    } else if (s.state === 'PROCESSING') {
+      hold.textContent = L.pause;
+      hold.disabled = true;
+      $('#listenState').textContent = '잘 들었어요';
+      $('#questionSub').textContent = '다음 이야기를 고르고 있어요.';
+    }
+
+    // 「다 말했어요」는 기본적으로 숨긴다 (CONFIG.ui.showDoneButton)
+    $('#doneBtn').textContent = L.done;
+    $('#doneBtn').hidden = !(CONFIG.ui.showDoneButton && listening && !held);
+    // 「소리 없이 넘어가기」는 **낭독이 실패했을 때만** 나온다. 평소에는 소리가
+    // 끝나면 화면이 알아서 넘어가므로 버튼이 필요 없다.
+    $('#skipBtn').textContent = L.skip;
+  }
+
+  /* ── 일시정지 / 재개 ────────────────────────────
+     서버에는 「일시정지」가 없다. 대신 아주 짧은 무음을 2초마다 올려 회차를
+     붙들어 둔다 — 서버는 「3초 동안 아무것도 안 오면 말씀이 끝난 것」으로 보기
+     때문에, 아무것도 안 보내면 멈춘 사이에 다음 질문으로 넘어가 버린다.
+     마이크는 실제로 꺼 두므로 이 동안의 말은 녹음되지 않는다.             */
+  function setHold(on) {
+    held = on;
+    if (recorder) recorder.setActive(!on && isListening());
+    clearInterval(holdTimer);
+    if (on) {
+      holdTimer = setInterval(keepAlive, 2000);
+      log('버튼', '일시정지');
+    } else {
+      log('버튼', '이어서 말하기');
+    }
+    if (snap) renderControls(snap);
+  }
+
+  function keepAlive() {
+    if (!sessionId || !isListening()) return;
+    const silence = new Int16Array(800).buffer;   // 0.05초 무음
+    uploadQueue = uploadQueue
+      .then(() => api.audio(sessionId, silence, MIME))
+      .then(applySnapshot)
+      .catch(() => {});
+  }
+
+  /**
+   * 질문 mp3 를 받아 틀고, 다 읽으면 tts-done 을 올린다.
+   * 낭독이 끝나는 시각은 서버가 알 수 없다 — 끝까지 튼 쪽이 화면이라 여기서 알린다.
+   */
+  async function readQuestion(id, q) {
+    try {
+      const blob = await api.questionAudio(id);
+      if (!blob) {
+        log('소리', '없음 — 글자로만 나갑니다');
+        $('#questionSub').textContent = '(소리 없이 글자로만 나갑니다)';
+        await api.ttsDone(id).then(applySnapshot);
+        return;
+      }
+      log('소리', `${(blob.size / 1024).toFixed(1)}KB`);
+      const r = await speaker.play(blob);
+      log('낭독', r.finished ? '끝까지 읽었습니다' : '중간에 멈췄습니다');
+      applySnapshot(await api.ttsDone(id));
+    } catch (e) {
+      log('낭독', `실패 · ${e.message || e}`);
+      $('#skipBtn').hidden = false;    // 이때만 버튼을 내보낸다
+      $('#questionSub').textContent = `소리를 틀지 못했습니다. 「${CONFIG.ui.labels.skip}」를 눌러 주세요.`;
+    }
+  }
+
+  /** 회차가 닫혔다 → 엽서 한 장으로 만든다. */
+  async function finishSession() {
+    if (closing) return;
+    closing = true;
+    held = false;
+    clearInterval(holdTimer);
+    stopPolling();
+    stopVisualLoop();
+    $('#app').dataset.state = 'CLOSED';    // 녹음 중 표시(붉은 테·막대)를 끈다
+    speaker.stop();
+    if (recorder) { recorder.stop(); recorder = null; $('#devMic').textContent = 'off'; }
+
+    show('writing');
+    $('#writingTitle').innerHTML = '이야기를<br />옮겨 적는 중이에요.';
+    $('#writingLead').textContent = '군더더기를 덜어내고 한 편의 글로 정리하고 있어요.';
+
+    // 사진이 아직 올라가는 중이면 조금만 기다린다 (HEIC 처럼 서버 변환본이 필요한 경우).
+    // 최대 5초 — 그 뒤엔 사진 없이라도 엽서를 낸다.
+    if (photoUpload && photo.status === 'uploading') {
+      await Promise.race([photoUpload, new Promise(r => setTimeout(r, 5000))]);
+    }
+
+    const fragments = (snap && snap.fragments) || [];
+    piece = await composePostcard(sessionId, fragments);
+    renderPostcard(piece);
+    show('complete');
+    log('엽서', `완성 (${piece.source})`);
+  }
+
+  function renderPostcard(piece) {
+    const card = $('#card'), frame = $('#cardFrame'), img = $('#cardPhoto');
+    const src = photoSrc();
+    if (src) {
+      img.src = src;
+      $('#cardBackdrop').style.backgroundImage = `url("${src}")`;
+      frame.style.display = 'block';
+      card.classList.remove('no-photo');
+    } else {
+      frame.style.display = 'none';
+      card.classList.add('no-photo');
+    }
+    $('#cardTitle').textContent = piece.title || '오늘의 목소리';
+    $('#cardCopy').textContent = piece.body || '';
+    const d = new Date();
+    const caption = piece.caption ? `${piece.caption} · ` : '';
+    $('#cardSign').textContent = `${caption}${d.getFullYear()}년 ${d.getMonth() + 1}월 ${d.getDate()}일 · 목소리로 남긴 이야기`;
+  }
+
+  /* ═══════════════════════════════════════════════════════════════
+     엽서 내려받기 — 이미지(PNG) 한 장
+
+     화면을 그대로 찍지 않고 캔버스에 다시 그린다. 화면은 폰 크기라 글자가
+     작고, 찍어서 키우면 흐려진다. 여기서는 1080px 폭으로 새로 그려서
+     카카오톡으로 보내도, 인쇄해도 깨지지 않게 한다.
+     ═══════════════════════════════════════════════════════════════ */
+  const CARD = {
+    W: 1080, PAD: 80,
+    PAPER: '#f6edda', INK: '#304753', LINE: '#d7c9b0', SIGN: '#8b7f68',
+    TITLE_PX: 58, BODY_PX: 38, SIGN_PX: 26, LINE_H: 1.85,
+    PHOTO_MAX_H: 840,
+  };
+
+  function wrapLines(ctx, text, maxWidth) {
+    const out = [];
+    for (const para of String(text).split('\n')) {
+      if (!para.trim()) { out.push(''); continue; }
+      let line = '';
+      for (const word of para.split(' ')) {
+        const next = line ? line + ' ' + word : word;
+        if (ctx.measureText(next).width > maxWidth && line) { out.push(line); line = word; }
+        else line = next;
+      }
+      if (line) out.push(line);
+    }
+    return out;
+  }
+
+  function loadImage(src) {
+    return new Promise((resolve, reject) => {
+      const img = new Image();
+      img.crossOrigin = 'anonymous';   // 서버 사진도 캔버스에 그릴 수 있게
+      img.onload = () => resolve(img);
+      img.onerror = reject;
+      img.src = src;
+    });
+  }
+
+  async function buildPostcardCanvas() {
+    const serif = '"Gowun Batang", serif';
+    try { await document.fonts.ready; } catch (_) {}
+
+    const title = $('#cardTitle').textContent || '오늘의 목소리';
+    const body = $('#cardCopy').textContent || '';
+    const sign = $('#cardSign').textContent || '';
+
+    // 사진 먼저 (높이를 알아야 전체 높이를 계산한다)
+    let img = null, photoH = 0;
+    const src = photoSrc();
+    if (src) {
+      try {
+        img = await loadImage(src);
+        photoH = Math.min(CARD.PHOTO_MAX_H, Math.round(CARD.W * img.naturalHeight / img.naturalWidth));
+      } catch (_) { img = null; log('엽서', '사진을 그리지 못했습니다 — 글만 저장합니다'); }
+    }
+
+    // 글 높이 재기
+    const measure = document.createElement('canvas').getContext('2d');
+    const inner = CARD.W - CARD.PAD * 2;
+    measure.font = `700 ${CARD.TITLE_PX}px ${serif}`;
+    const titleLines = wrapLines(measure, title, inner);
+    measure.font = `${CARD.BODY_PX}px ${serif}`;
+    const bodyLines = wrapLines(measure, body, inner);
+
+    const titleH = titleLines.length * CARD.TITLE_PX * 1.35;
+    const bodyH = bodyLines.length * CARD.BODY_PX * CARD.LINE_H;
+    const height = Math.round(photoH + CARD.PAD + titleH + 46 + bodyH + 60 + CARD.SIGN_PX + CARD.PAD);
+
+    const c = document.createElement('canvas');
+    c.width = CARD.W; c.height = height;
+    const ctx = c.getContext('2d');
+
+    ctx.fillStyle = CARD.PAPER;
+    ctx.fillRect(0, 0, c.width, c.height);
+
+    let y = 0;
+    if (img) {
+      // 잘라내지 않고 담는다 (화면과 같은 규칙)
+      const scale = Math.min(CARD.W / img.naturalWidth, photoH / img.naturalHeight);
+      const w = img.naturalWidth * scale, h = img.naturalHeight * scale;
+      ctx.fillStyle = '#e7dcc4';
+      ctx.fillRect(0, 0, CARD.W, photoH);
+      ctx.drawImage(img, (CARD.W - w) / 2, (photoH - h) / 2, w, h);
+      y = photoH;
+    }
+    y += CARD.PAD;
+
+    ctx.fillStyle = '#17374a';
+    ctx.font = `700 ${CARD.TITLE_PX}px ${serif}`;
+    ctx.textBaseline = 'top';
+    for (const line of titleLines) { ctx.fillText(line, CARD.PAD, y); y += CARD.TITLE_PX * 1.35; }
+
+    y += 18;
+    ctx.strokeStyle = CARD.LINE; ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.moveTo(CARD.PAD, y); ctx.lineTo(CARD.W - CARD.PAD, y); ctx.stroke();
+    y += 28;
+
+    ctx.fillStyle = CARD.INK;
+    ctx.font = `${CARD.BODY_PX}px ${serif}`;
+    for (const line of bodyLines) { ctx.fillText(line, CARD.PAD, y); y += CARD.BODY_PX * CARD.LINE_H; }
+
+    y += 34;
+    ctx.setLineDash([6, 8]);
+    ctx.beginPath(); ctx.moveTo(CARD.PAD, y); ctx.lineTo(CARD.W - CARD.PAD, y); ctx.stroke();
+    ctx.setLineDash([]);
+    y += 26;
+
+    ctx.fillStyle = CARD.SIGN;
+    ctx.font = `${CARD.SIGN_PX}px ${serif}`;
+    ctx.fillText(sign, CARD.PAD, y);
+
+    return c;
+  }
+
+  async function savePostcard() {
+    const btn = $('#saveBtn');
+    btn.disabled = true;
+    const old = btn.textContent;
+    btn.textContent = '저장하는 중…';
+    try {
+      const canvas = await buildPostcardCanvas();
+      const blob = await new Promise(r => canvas.toBlob(r, 'image/png'));
+      // 파일 이름은 기본적으로 영문·숫자만 쓴다. 한글 이름을 그대로 넣으면 일부
+      // 브라우저·환경에서 이름이 통째로 버려지고 확장자 없는 "download" 로 저장된다.
+      // 한글 이름을 쓰고 싶으면 CONFIG.ui.filenameAscii 를 false 로.
+      const d = new Date();
+      const p2 = (n) => String(n).padStart(2, '0');
+      const stamp = `${d.getFullYear()}${p2(d.getMonth() + 1)}${p2(d.getDate())}-${p2(d.getHours())}${p2(d.getMinutes())}`;
+      const name = CONFIG.ui.filenameAscii
+        ? `memoir-postcard-${stamp}.png`
+        : `기억의조각_${($('#cardTitle').textContent || '엽서').replace(/[\\/:*?"<>|]/g, '')}_${stamp}.png`;
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url; a.download = name; a.style.display = 'none';
+      document.body.appendChild(a);
+      a.click();
+      // 바로 지우면 브라우저가 파일 이름을 못 읽는 경우가 있다. 잠깐 두었다 치운다.
+      setTimeout(() => { a.remove(); URL.revokeObjectURL(url); }, 4000);
+      log('엽서', `저장 · ${name} (${(blob.size / 1024).toFixed(0)}KB)`);
+      btn.textContent = '저장했어요';
+      setTimeout(() => { btn.textContent = old; btn.disabled = false; }, 2000);
+    } catch (e) {
+      log('엽서', `저장 실패 · ${e.message || e}`);
+      btn.textContent = old; btn.disabled = false;
+      banner('엽서를 저장하지 못했습니다. 다시 눌러 주세요.');
+    }
+  }
+
+  /* ── 캐릭터 애니메이션 ──────────────────────────── */
+  function startVisualLoop() {
+    const friend = $('#friend'), app = $('#app'), note = $('#meterNote');
+    let smooth = 0, wasVoiced = null;
+    const loop = () => {
+      const on = isListening() && !held;
+      const target = on ? Math.min(1, level * 5.5) : 0;
+      smooth += (target - smooth) * 0.22;
+      document.documentElement.style.setProperty('--v', smooth.toFixed(3));
+      friend.classList.toggle('happy', smooth > 0.24);
+
+      // 「지금 내 목소리가 들어가고 있다」를 글자로도 한 번 더
+      const voiced = on && smooth > 0.12;
+      if (voiced !== wasVoiced) {
+        wasVoiced = voiced;
+        app.classList.toggle('voiced', voiced);
+        note.textContent = !on ? '' : voiced ? '잘 들리고 있어요' : '목소리를 기다리고 있어요';
+      }
+      levelRaf = requestAnimationFrame(loop);
+    };
+    loop();
+    const blink = () => {
+      const eyes = $('#eyes');
+      eyes.classList.add('blink');
+      setTimeout(() => eyes.classList.remove('blink'), 140);
+      blinkTimer = setTimeout(blink, 2600 + Math.random() * 3200);
+    };
+    blinkTimer = setTimeout(blink, 2200);
+  }
+  function stopVisualLoop() {
+    if (levelRaf) cancelAnimationFrame(levelRaf);
+    if (blinkTimer) clearTimeout(blinkTimer);
+    document.documentElement.style.setProperty('--v', 0);
+    $('#app').classList.remove('voiced');
+    $('#meterNote').textContent = '';
+  }
+
+  /* ── 서버 없이 화면만 보여주는 비상 경로 ────────── */
+  const OFFLINE_ANSWERS = [
+    '어 그게 그러니까 예순여덟이었나 하여튼 그 여름에 완행열차를 탔지 덜컹덜컹 소리가 계속 났어',
+    '순애가 같이 갔지 어 순애가 고구마를 싸왔더라고 신문지에 싸가지고',
+    '응 그 뜨거운 걸 그냥 손으로 까서 먹었어 그때는 뭐 다 그랬으니까',
+  ];
+  function offlineDemo() {
+    log('비상', '서버 없이 화면 흐름만 보여줍니다');
+    const qs = ['오늘은 어떤 이야기를 들려주시겠어요?', '그때 어떤 소리가 들렸는지 기억나세요?', '그 자리에 누가 함께 계셨어요?'];
+    let i = 0;
+    sessionId = null;
+    snap = { state: 'LISTENING', turn: 0, max_turn: 0, fragments: [], next_question: qs[0], session_id: '' };
+    show('talk');
+    startVisualLoop();
+    $('#listenState').textContent = '듣고 있어요';
+    $('#question').textContent = qs[0];
+    $('#holdBtn').disabled = true;            // 서버가 없으니 일시정지는 의미가 없다
+    $('#holdBtn').textContent = '비상 모드';
+    $('#doneBtn').hidden = false;
+    $('#doneBtn').textContent = '다음 이야기';
+    $('#skipBtn').hidden = true;
+    const next = () => {
+      i++;
+      if (i < qs.length) { $('#question').textContent = qs[i]; return; }
+      snap.fragments = OFFLINE_ANSWERS.map((a, k) => ({ idx: k + 1, question: qs[k], answer: a }));
+      snap.state = 'CLOSED';
+      void finishSession();
+    };
+    $('#doneBtn').onclick = next;
+    $('#abortBtn').onclick = () => { snap.fragments = OFFLINE_ANSWERS.map((a, k) => ({ idx: k + 1, question: qs[k], answer: a })); void finishSession(); };
+  }
+
+  /* ═══════════════════════════════════════════════════════════════
+     버튼
+     ═══════════════════════════════════════════════════════════════ */
+  $('#startBtn').addEventListener('click', () => void beginInterview());
+
+  // 일시정지 ↔ 이어서 말하기
+  $('#holdBtn').addEventListener('click', () => {
+    if (!CONFIG.ui.showPauseButton || !snap || snap.state === 'CLOSED') return;
+    setHold(!held);
+  });
+
+  async function pressDone() {
+    if (!sessionId) return;
+    log('버튼', '다 말했어요');
+    try { applySnapshot(await api.done(sessionId)); }
+    catch (e) {
+      log('버튼', `done 실패 · ${e.status || ''} ${e.message || e}`);
+      if (e.status === 409) toast('지금은 누를 수 없어요. 잠시만 기다려 주세요.');
+    }
+  }
+  $('#doneBtn').addEventListener('click', pressDone);
+
+  $('#skipBtn').addEventListener('click', async () => {
+    if (!sessionId) return;
+    speaker.stop();
+    log('버튼', '소리 없이 넘어가기');
+    try { applySnapshot(await api.ttsDone(sessionId)); } catch (e) { log('버튼', `tts-done 실패 · ${e.message || e}`); }
+  });
+
+  // 녹음 정지 — 회차를 닫고 엽서로 넘어간다
+  $('#abortBtn').addEventListener('click', async () => {
+    held = false; clearInterval(holdTimer);
+    if (recorder) recorder.setActive(false);
+    if (!sessionId) { void finishSession(); return; }
+    log('버튼', '녹음 정지');
+    try { applySnapshot(await api.abort(sessionId)); }
+    catch (e) { log('버튼', `abort 실패 · ${e.message || e}`); void finishSession(); }
+  });
+
+  $('#saveBtn').addEventListener('click', () => void savePostcard());
+  $('#exitBtn').addEventListener('click', () => { $('#app').classList.add('closed'); show('closed'); });
+
+  window.addEventListener('beforeunload', () => { if (recorder) recorder.stop(); });
+
+  /* ═══════════════════════════════════════════════════════════════
+     개발용 패널 — 시연 중에는 닫아 둔다
+     ═══════════════════════════════════════════════════════════════ */
+  $('#devToggle').addEventListener('click', () => $('#dev').classList.toggle('show'));
+  if (CONFIG.dev) $('#dev').classList.add('show');
+  $('#devSend').addEventListener('click', async () => {
+    const t = $('#devText').value.trim();
+    if (!t || !sessionId) return;
+    $('#devText').value = '';
+    try { applySnapshot(await api.speech(sessionId, t)); log('발화', t); }
+    catch (e) { log('발화', `실패 · ${e.message || e}`); }
+  });
+  $('#devText').addEventListener('keydown', (e) => { if (e.key === 'Enter') $('#devSend').click(); });
+  $('#devDone').addEventListener('click', () => void pressDone());
+
+
+  // 버전을 화면과 기록 양쪽에 남긴다
+  $('#version').textContent = CONFIG.version;
+  log('버전', CONFIG.version);
+
+  // 버튼 이름을 CONFIG 에서 한 번에 입힌다
+  $('#startBtn').textContent = CONFIG.ui.labels.start;
+  $('#saveBtn').textContent = CONFIG.ui.labels.save;
+  $('#exitBtn').textContent = CONFIG.ui.labels.exit;
+  $('#abortBtn').textContent = CONFIG.ui.labels.stop;
+  $('#holdBtn').textContent = CONFIG.ui.labels.pause;
+  if (CONFIG.ui.download !== 'png') $('#saveBtn').hidden = true;
+
+  // 서버가 살아 있는지 조용히 확인해 둔다 (CORS 설정이 맞는지도 여기서 드러난다)
+  api.health()
+    .then(h => log('서버', `연결됨 · 진행 중 회차 ${h.live ?? '?'}/${h.max_live ?? '?'} · 내 주소 ${h.client_ip || '?'} · 허용 출처 ${JSON.stringify(h.origins)}`))
+    .catch(e => log('서버', `연결 안 됨 · ${e.message || e}`));
+})();
+</script>
+</body>
+</html>
