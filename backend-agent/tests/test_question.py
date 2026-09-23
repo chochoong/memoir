@@ -50,6 +50,7 @@ class _Ctl:
         self.fragments = fragments if fragments is not None else []
         self.state = shared.initial()
         self.last_decision = None
+        self.closing_hint = None
 
 
 class _FakeClient:
@@ -91,6 +92,8 @@ def _answer(**kw):
         "topic_status": "active",
         "completion_check_asked": False,
         "ready_for_chronology": False,
+        "closing_hint": None,
+        "end_reason": None,
     }
     out.update(kw)
     return out
@@ -332,9 +335,147 @@ def test_prompt():
     check("출력 순서는 문서를 따른다 — 공감이 먼저",
           sysmsg.rindex('"empathy"') < sysmsg.rindex('"question_type"'),
           "질문이 앞서면 모델이 질문 칸 안에서 먼저 공감한다")
-    check("문서가 정한 길이를 덮어쓰지 않는다", "40자" not in sysmsg,
-          "문서 §1 은 60자다 — 두 벌이 살아 있으면 둘 다 안 지켜진다")
+    check("§1 이 정한 길이를 덮어쓰지 않는다", "40자" not in sysmsg,
+          "§1 은 2문장·120자다 — 두 벌이 살아 있으면 둘 다 안 지켜진다")
+    check("덧댄 형식이 §1 의 새 필드를 빠뜨리지 않는다",
+          "closing_hint" in sysmsg and "end_reason" in sysmsg,
+          "「반드시 아래 형식으로만」이라고 적으면서 빠뜨리면 모델이 안 적는다")
+    check("프롬프트를 prompts/ 에서 읽는다", promptlib.DOC.name == "interview_v2.2.txt",
+          promptlib.DOC.name)
 
+
+def test_end_reason():
+    """
+    **왜 마쳤는지가 남아야 한다.** session.closed_reason 한 칸으로 abort·expired 와
+    함께 읽히는 값이라, 모델이 지어낸 말이 그대로 들어가면 사유로 셀 수 없게 된다.
+    closing_hint 는 반대 방향의 고장을 본다 — 진행 중인 화면에 마무리 안내가 뜨는 것.
+    """
+    print("\n[8] 종료 사유와 안내 문구")
+
+    frs = [{"idx": 0, "question": None, "answer": "엽서"}]
+    for i in range(1, 9):
+        frs.append({"idx": i, "question": f"질문{i}", "answer": f"대답{i}"})
+
+    ctl = _Ctl(turn=8, fragments=frs)
+    out, _ = _ask(ctl, _answer(topic_status="closed", question="",
+                               end_reason="info_complete",
+                               closing_hint="오늘 이야기 잘 담았습니다."))
+    check("닫는 턴이 사유를 올려 준다", out is None
+          and (ctl.last_decision or {}).get("end_reason") == "info_complete",
+          str(ctl.last_decision))
+    check("안내 문구가 회차에 실린다", ctl.closing_hint == "오늘 이야기 잘 담았습니다.",
+          repr(ctl.closing_hint))
+
+    # 모르는 사유는 버린다 — controller 가 "finish" 로 떨어뜨린다
+    ctl2 = _Ctl(turn=8, fragments=frs)
+    _ask(ctl2, _answer(topic_status="closed", question="", end_reason="그냥 끝"))
+    check("모르는 사유는 버린다", (ctl2.last_decision or {}).get("end_reason") is None,
+          str(ctl2.last_decision))
+
+    check("사유 세 가지는 §1 이 정한 것뿐이다",
+          shared.END_REASONS == ("user_request", "info_complete", "sensitive"),
+          str(shared.END_REASONS))
+
+    # 진행 턴에 안내 문구가 와도 화면에 내리지 않는다
+    ctl3 = _Ctl(turn=8, fragments=frs)
+    out3, _ = _ask(ctl3, _answer(closing_hint="마쳤습니다", end_reason="user_request"))
+    check("진행 턴의 안내 문구는 버린다", ctl3.closing_hint is None, repr(ctl3.closing_hint))
+    check("진행 턴의 사유도 버린다", (ctl3.last_decision or {}).get("end_reason") is None,
+          "남겨 두면 다음에 닫힐 때 엉뚱한 사유가 적힌다")
+    check("진행 턴은 질문이 나간다", isinstance(out3, str) and out3, repr(out3))
+
+    # 되돌린 턴(하한)도 진행 턴이다
+    ctl4 = _Ctl(turn=2, fragments=frs[:3])
+    _ask(ctl4, _answer(topic_status="closed", question="",
+                       end_reason="info_complete", closing_hint="마쳤습니다"))
+    check("되돌린 턴은 사유를 남기지 않는다",
+          (ctl4.last_decision or {}).get("end_reason") is None
+          and ctl4.closing_hint is None,
+          "회차가 계속되는데 사유가 적혀 있으면 다음 종료가 그 사유로 기록된다")
+
+    # 힘든 기억 — 하한을 넘어 닫히고 사유도 따라간다
+    ctl5 = _Ctl(turn=1, fragments=frs[:2])
+    out5, _ = _ask(ctl5, _answer(topic_status="closed", question="",
+                                 conversation_mode="sensitive", end_reason="sensitive"))
+    check("sensitive 종료의 사유가 남는다", out5 is None
+          and (ctl5.last_decision or {}).get("end_reason") == "sensitive",
+          str(ctl5.last_decision))
+
+
+# ------------------------------------------------------------------ 전사 물음표
+
+def test_heard():
+    """
+    Azure 는 억양을 보고 부호를 단다. 한국어에서 그건 뜻을 흐리는 게 아니라
+    뒤집는다 — 「아니야.」는 부정이고 「아니야?」는 칠순잔치라는 뜻이 된다.
+    실제 회차에서 같은 말씀이 한 번은 `?`, 한 번은 `.` 으로 왔다.
+    """
+    print("\n[9] 어르신 말씀의 끝 물음표는 모델에게 가지 않는다")
+
+    frs = [{"idx": 0, "question": None, "answer": "칠순 사진 한 장."},
+           {"idx": 1, "question": "이 사진은 어떤 날인가요?", "answer": "칠순 잔치 아니야?"},
+           {"idx": 2, "question": "그럼 어떤 날인가요?", "answer": "그래서 내가 뭐냐고 물었지? 그랬더니 웃더라"}]
+    ctl = _Ctl(turn=2, fragments=frs)
+    t = Q._transcript(ctl)
+
+    check("어르신 말씀의 끝 물음표를 뗀다", "어르신: 칠순 잔치 아니야" in t
+          and "칠순 잔치 아니야?" not in t, t)
+    check("질문의 물음표는 그대로 둔다", "이 사진은 어떤 날인가요?" in t,
+          "여쭌 것은 여쭌 것이다")
+    check("문장 가운데 물음표는 건드리지 않는다", "뭐냐고 물었지?" in t,
+          "남의 말을 옮기시는 자리다")
+    check("기록은 그대로다", frs[1]["answer"] == "칠순 잔치 아니야?",
+          "turn.answer 는 회고록의 원재료다 — 들으신 그대로 남는다")
+
+    check("물음표만 있는 답도 사라지지 않는다", Q._heard("?") == "?",
+          "빈 줄을 만들면 「어르신:」 만 남는다")
+    check("부호가 없으면 그대로", Q._heard("잔치 아니야.") == "잔치 아니야.")
+
+
+# ------------------------------------------------------------------ 사실 철회
+
+def test_retract():
+    """
+    어르신이 정정하시는 건 정상적인 대화다. 지울 길이 없으면 첫 턴에 잘못
+    박힌 사실이 회차 끝까지 「확인된 사실」로 매 턴 실려 나간다.
+    """
+    print("\n[10] 아니라고 하신 사실은 지운다")
+
+    st = shared.initial()
+    shared.merge(st, _answer(facts_found=["칠순", "칠순 잔치"],
+                             information_status={"event": "confirmed"}))
+    check("래칫은 그대로 — 모델이 흔들려도 안 내려간다",
+          (shared.merge(dict(st), _answer(information_status={"event": "missing"}))
+           ["information_status"]["event"]) == "confirmed",
+          "이걸 열면 종료 조건이 턴마다 참·거짓을 오간다")
+
+    shared.merge(st, _answer(facts_retracted=["칠순 잔치"]))
+    check("아니라고 하신 사실을 지운다", st["confirmed_facts"] == [],
+          str(st["confirmed_facts"]) + " — 「칠순」도 「칠순 잔치」에 걸린다")
+    check("사건이 다시 열린다", st["information_status"]["event"] == "missing",
+          "confirmed 로 남으면 무슨 일이었는지 모르는 채 마무리될 수 있다")
+
+    st2 = shared.initial()
+    shared.merge(st2, _answer(facts_found=["막둥이 금메달", "집 앞 사진관"]))
+    shared.merge(st2, _answer(facts_retracted=["막둥이 금메달"]))
+    check("철회하지 않은 사실은 남는다", st2["confirmed_facts"] == ["집 앞 사진관"],
+          str(st2["confirmed_facts"]))
+
+    st3 = shared.initial()
+    shared.merge(st3, _answer(facts_found=["집 앞 사진관", "봄에 찍음"],
+                              information_status={"event": "confirmed"}))
+    shared.merge(st3, _answer(facts_retracted=["집"]))
+    check("한 글자짜리 철회는 듣지 않는다", len(st3["confirmed_facts"]) == 2,
+          str(st3["confirmed_facts"]) + " — 짧은 말이 걸리면 엉뚱한 사실까지 쓸려 나간다")
+    check("아무것도 안 지웠으면 사건도 그대로",
+          st3["information_status"]["event"] == "confirmed")
+
+    st4 = shared.initial()
+    shared.merge(st4, _answer(facts_found=["봄에 찍음"],
+                              information_status={"event": "confirmed", "when": "confirmed"}))
+    shared.merge(st4, _answer(facts_retracted=["봄에 찍음"]))
+    check("지금은 event 만 내린다", st4["information_status"]["when"] == "confirmed",
+          "어느 항목의 사실이었는지는 글만 보고는 모른다 — 값을 재고 정한다")
 
 def test_all_checks_passed():
     """check() 는 예외를 내지 않는다 — pytest 에서 실패가 보이도록 여기서 터뜨린다."""
@@ -350,6 +491,9 @@ def main() -> int:
     test_close()
     test_broken_answer()
     test_prompt()
+    test_end_reason()
+    test_heard()
+    test_retract()
     print(f"\n{'=' * 52}\n통과 {len(PASS)} · 실패 {len(FAIL)}")
     if FAIL:
         print("실패:", ", ".join(FAIL))

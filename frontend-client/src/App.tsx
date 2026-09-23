@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { api, ApiError, type Latency, type SavedSession, type SessionRecord, type Snapshot } from './api'
+import { api, ApiError, type Latency, type PhotoUp, type SavedSession, type SessionRecord, type Snapshot } from './api'
 import { MIME, startRecorder, type Level, type Recorder } from './recorder'
 import * as speaker from './speaker'
 import * as logbook from './log'
@@ -31,7 +31,9 @@ export default function App() {
   const [lat, setLat] = useState<Latency | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [postcard, setPostcard] = useState('')
-  const [utter, setUtter] = useState('덜컹덜컹 소리가 났지. 순애가 고구마를 싸왔더라고.')
+  // 빈 칸으로 연다. 「말한다」는 칸의 글자를 전사 결과인 척 밀어 넣는 개발용
+  // 길이라, 미리 적어 두면 한 번 누르는 것만으로 그 글이 그대로 턴의 답이 된다.
+  const [utter, setUtter] = useState('')
   const timer = useRef<number | null>(null)
   const [saved, setSaved] = useState<SavedSession[] | null>(null)
   const [savedErr, setSavedErr] = useState<string | null>(null)
@@ -49,6 +51,9 @@ export default function App() {
   // 이미 읽은 질문. 폴링이 같은 스냅샷을 여러 번 물어와도 두 번 읽지 않는다.
   const spoken = useRef<string | null>(null)
   const rec_ = useRef<Recorder | null>(null)
+  const [photos, setPhotos] = useState<PhotoUp[]>([])
+  const [photoErr, setPhotoErr] = useState<string | null>(null)
+  const [picking, setPicking] = useState(false)
   const sessionRef = useRef<string | null>(null)
   const listeningRef = useRef(false)
   // 청크 업로드는 줄을 세운다. 겹쳐 보내면 서버에 닿는 순서가 뒤집혀
@@ -92,6 +97,35 @@ export default function App() {
     } catch (e) {
       setRec(null)
       setSavedErr(e instanceof ApiError ? `${e.status} · ${e.message}` : String(e))
+    }
+  }, [])
+
+  // 사진 한 장.
+  //
+  // 회차가 열려 있으면 그 회차에 매단다. 안 열려 있어도 올라간다 — 어르신이
+  // 사진을 먼저 고르고 그 사진을 보며 이야기를 시작할 수 있어야 해서,
+  // photo.session_id 가 NULL 을 허용한다.
+  const pickPhoto = useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    // **고른 값을 비운다.** 안 비우면 같은 사진을 두 번 고를 때 change 가
+    // 안 온다 — 값이 안 바뀌었기 때문이다. 폰에서 「한 번은 되는데 두 번째는
+    // 아무 일도 안 난다」로 나타난다.
+    e.target.value = ''
+    if (!file) return
+
+    setPhotoErr(null)
+    setPicking(true)
+    logbook.log('사진', `${file.name || '이름없음'} ${(file.size / 1024).toFixed(0)}KB ${file.type || '형식미상'}`)
+    try {
+      const up = await api.photo(file, sessionRef.current ?? undefined)
+      setPhotos(list => [up, ...list])
+      logbook.log('사진', `${up.photo_id.slice(0, 8)} 저장 ${up.width}×${up.height} ${(up.bytes / 1024).toFixed(0)}KB`)
+    } catch (err) {
+      const msg = err instanceof ApiError ? `${err.status} · ${err.message}` : String(err)
+      logbook.fail('사진', msg)
+      setPhotoErr(msg)
+    } finally {
+      setPicking(false)
     }
   }, [])
 
@@ -155,7 +189,7 @@ export default function App() {
       logbook.log('질문', snap.next_question)
     }
     if (snap.state === 'CLOSED' && p?.state !== 'CLOSED') {
-      logbook.warn('회차', '마쳤습니다')
+      logbook.warn('회차', snap.closing_hint ?? '마쳤습니다')
     }
   }, [snap])
 
@@ -244,6 +278,13 @@ export default function App() {
   //
   // **tts-done 을 여기서 올리는 이유**는 낭독이 끝나는 시각을 서버가 알 수 없기
   // 때문이다. 끝까지 튼 쪽이 화면이라, 여기서 올려야 T1 이 정확한 순간부터 돈다.
+  // **회차가 바뀌면 지운다.** 여는 말은 늘 같은 문장이라, 지우지 않으면 두
+  // 번째 회차의 여는 말이 「이미 읽은 말」로 걸려 낭독이 통째로 건너뛰어진다.
+  // 그러면 tts-done 이 안 올라가고, 서버는 낭독이 끝난 줄을 몰라 수음을 열지
+  // 않는다 — 회차가 SPEAKING 에 멈춘 채 화면만 계속 물어보게 된다.
+  // 실제로 그렇게 멈춘 회차가 셋 있었다 (폴링 84회 · 오디오 0바이트).
+  useEffect(() => { spoken.current = null }, [id])
+
   useEffect(() => {
     if (!id || snap?.state !== 'SPEAKING') return
     const q = snap.next_question
@@ -281,6 +322,10 @@ export default function App() {
     return () => { cancelled = true }
   }, [id, snap?.state, snap?.next_question, voice, run])
 
+  // 열어 본 회차에 읽을 것이 하나도 없나. 질문도 답도 없는 조각만 있는 경우다 —
+  // 엽서 없이 열고 첫 말씀 전에 끝난 회차가 그렇다. 제목만 덩그러니 남기지 않는다.
+  const recEmpty = !!rec && rec.fragments.every(f => !f.answer.trim() && !f.question)
+
   return (
     <main>
       <header>
@@ -295,18 +340,52 @@ export default function App() {
         <label htmlFor="postcard">엽서 (0번 조각)</label>
         <input id="postcard" value={postcard} onChange={e => setPostcard(e.target.value)}
                placeholder="비워 두면 어르신 말씀만으로 시작합니다 (인명·지명은 전사에 도움이 됩니다)" />
+        <p className="note">
+          {photos.length > 0
+            ? `아래 ②에서 마지막에 올린 사진(${photos[0].photo_id.slice(0, 8)})이 함께 갑니다.`
+            : '사진을 먼저 올리면(②) 그 사진이 함께 갑니다. 없어도 엽서만으로 시작합니다.'}
+        </p>
         <div className="row">
           {PACES.map(p => (
-            <button key={p.key} onClick={() => run(() => api.start(postcard, p.key))}>
+            <button key={p.key}
+                    onClick={() => run(() => api.start(postcard, p.key, photos[0]?.photo_id))}>
               {p.label}<small>{p.hint}</small>
             </button>
           ))}
         </div>
       </section>
 
+      <section>
+        <h2>② 사진</h2>
+        <p className="note">
+          올리면 서버가 1024px JPEG 한 장으로 줄이고 위치 정보를 떼어냅니다.
+          아래 그림은 그러고 나서 <b>다시 받은 바이트</b>라, 보이면 올리기와
+          내려받기가 둘 다 돌아간 것입니다.
+        </p>
+        <div className="row">
+          <label className={`pick ${picking ? 'busy' : ''}`}>
+            {picking ? '올리는 중…' : '사진 고르기'}
+            <small>{sessionRef.current ? '지금 회차에 매달린다' : '회차 없이도 올라간다'}</small>
+            <input type="file" accept="image/*" hidden disabled={picking}
+                   onChange={e => void pickPhoto(e)} />
+          </label>
+        </div>
+        {photoErr && <div className="error" role="alert">{photoErr}</div>}
+        {photos.length > 0 && (
+          <ul className="photos">
+            {photos.map(ph => (
+              <li key={ph.photo_id}>
+                <img src={api.photoSrc(ph.photo_id)} alt="" loading="lazy" />
+                <span className="meta">{ph.width}×{ph.height} · {(ph.bytes / 1024).toFixed(0)}KB</span>
+              </li>
+            ))}
+          </ul>
+        )}
+      </section>
+
       {snap && (
         <section>
-          <h2>② 대화</h2>
+          <h2>③ 대화</h2>
           <div className="statebar">
             <span className={`chip ${snap.state.toLowerCase()}`}>{STATE_LABEL[snap.state]}</span>
             <span className="meta">턴 {snap.turn}{snap.max_turn > 0 ? `/${snap.max_turn}` : ''}</span>
@@ -316,6 +395,11 @@ export default function App() {
           </div>
 
           <p className="question">{snap.next_question ?? '—'}</p>
+          {/* 마칠 때 모델이 실어 보낸 한 줄 (§1 closing_hint). 없으면 위 칩의
+              「마쳤습니다」로 돈다 — 문구가 안 와도 화면은 멀쩡해야 한다. */}
+          {snap.state === 'CLOSED' && snap.closing_hint && (
+            <p className="note closing">{snap.closing_hint}</p>
+          )}
 
           <div className="row">
             <button className={mic ? '' : 'ghost'} onClick={() => void toggleMic()}>
@@ -384,7 +468,7 @@ export default function App() {
 
       {snap && snap.fragments.length > 0 && (
         <section>
-          <h2>③ 조각</h2>
+          <h2>④ 조각</h2>
           <ol className="fragments">
             {snap.fragments.map(f => (
               <li key={f.idx}>
@@ -398,7 +482,7 @@ export default function App() {
 
       {lat && lat.turns.length > 0 && (
         <section>
-          <h2>④ 지연</h2>
+          <h2>⑤ 지연</h2>
           <table>
             <thead><tr><th>턴</th><th>전사</th><th>저장</th><th>질문</th><th>낭독</th><th>전달</th><th>합계</th></tr></thead>
             <tbody>
@@ -427,7 +511,7 @@ export default function App() {
       <section>
         <div className="row">
           <button className="ghost" onClick={toggleSaved}>
-            {showSaved ? '지난 회차 접기' : '⑤ 지난 회차'}
+            {showSaved ? '지난 회차 접기' : '⑥ 지난 회차'}
             <small>{showSaved ? '화면을 비운다' : 'DB 에서 읽는다'}</small>
           </button>
           {showSaved && (
@@ -449,7 +533,9 @@ export default function App() {
                 <button className="ghost" onClick={() => openRecord(s.session_id)}>
                   {new Date(s.created_at).toLocaleString('ko-KR')}
                   <small>
-                    조각 {s.fragment_count} · {s.closed_reason ?? '진행 중'}
+                    {/* 초가 같은 회차가 나란히 설 수 있다. 시각만으로는 어느 줄을
+                        눌렀는지 알 수 없어 id 앞자리를 같이 낸다. */}
+                    {s.session_id.slice(0, 6)} · 조각 {s.fragment_count} · {s.closed_reason ?? '진행 중'}
                   </small>
                 </button>
               </li>
@@ -460,11 +546,21 @@ export default function App() {
         {rec && (
           <>
             <h3>{new Date(rec.created_at).toLocaleString('ko-KR')} · {rec.closed_reason ?? '진행 중'}</h3>
+            {recEmpty && (
+              <p className="note">남은 내용이 없습니다 · 조각 {rec.fragments.length}개</p>
+            )}
+            {!recEmpty && (
             <ol className="fragments">
               {rec.fragments.map(f => (
                 <li key={f.idx}>
                   {f.question && <p className="q">{f.question}</p>}
-                  <p className="a">{f.answer}</p>
+                  {/* **빈 답을 빈 <p> 로 두지 않는다.** 0번 엽서는 빈 채로 열리므로
+                      (start 의 postcard) 그대로 그리면 번호만 찍힌 줄이 남고, 조각이
+                      그것 하나뿐인 회차는 눌러도 아무것도 안 나온 것처럼 보인다.
+                      **없는 것과 비어 있는 것은 다른 사건이라 화면도 다르게 말한다.** */}
+                  {f.answer.trim()
+                    ? <p className="a">{f.answer}</p>
+                    : <p className="note">{f.idx === 0 ? '엽서 없이 연 회차입니다' : '(빈 칸)'}</p>}
                   {f.decision?.reason && (
                     <p className="note">근거 · {f.decision.reason}</p>
                   )}
@@ -474,6 +570,7 @@ export default function App() {
                 </li>
               ))}
             </ol>
+            )}
           </>
         )}
         </>)}

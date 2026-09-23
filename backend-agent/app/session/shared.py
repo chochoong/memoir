@@ -16,8 +16,12 @@
              ready_for_chronology
 
     뺀다     conversation_history   question._transcript() 과 같은 일이다. 둘 중 하나만
-             photo_analyses 등      사진 기능이 붙기 전까지 늘 빈 배열이다
              chronology 등          §3 · §4 에이전트의 몫
+
+**photo_analyses 는 있을 때만 실린다.** initial() 에 키가 없고,
+controller._analyze_photo 가 사진을 받은 회차에서만 채운다. 사진 없이 연
+회차는 이 항목이 없는 채로 가므로 토큰을 쓰지 않는다 — 늘 빈 배열을 실어
+보내던 자리를 「없으면 없다」로 둔 것이다.
 
 **두 항목은 모델이 아니라 코드가 채운다.** 지금 있는 데이터로 공짜다.
 
@@ -47,6 +51,15 @@ NO_SENSE = "없음"
 SENSES = ("시각", "청각", "후각", "미각", "촉각")
 TOPIC_STATUS = ("active", "awaiting_choice", "closed")
 MODES = ("normal", "sensitive")
+
+# §1 「종료할 때, 종료하는 이유를 한줄로 설명하고 종료한다」의 사유 세 가지.
+# 그대로 session.closed_reason 에 내려가 abort · expired · turn_cap 과 한 칸을
+# 나눠 쓴다 — 「AI 가 판단해 마쳤다」를 셋으로 가르는 것이 이 값의 몫이다.
+#
+# **허용값 목록이 001_init.sql 주석에도 있지만 그쪽은 못 고친다.** 적용된
+# 마이그레이션의 본문이 바뀌면 checksum 이 어긋나 기동이 막힌다 (migrate.py).
+# 그래서 어휘의 주인은 여기다.
+END_REASONS = ("user_request", "info_complete", "sensitive")
 
 # 정보 상태의 **되돌아가지 않는 순서**. 머지할 때 낮은 쪽으로 못 내려간다.
 #
@@ -179,6 +192,38 @@ def merge(state: dict, data: dict, *, status: str | None = None) -> dict:
         if f not in seen:
             seen.add(f)
             facts.append(f)
+
+    # **어르신이 아니라고 하신 것은 지운다.** 위 _RANK 의 래칫은 모델이 한 턴
+    # 흔들렸을 때 되돌아가는 것을 막는 장치지, 어르신의 정정까지 막으라는
+    # 장치가 아니었다. 둘을 가르는 신호가 이 필드다 — **철회가 유일한 내림
+    # 레버다.** 모델이 information_status 를 낮춰 적어 오는 것은 신호로 치지
+    # 않는다. 실제로 재 보니 모델은 철회를 적어 온 턴에도 event 를 confirmed 로
+    # 적었다 (4회 중 4회). 그래서 내리는 것은 코드가 한다.
+    #
+    # 이게 없으면 첫 턴에 잘못 박힌 사실이 회차 끝까지 남아 매 턴 프롬프트에
+    # 「확인된 사실」로 실려 나간다 — §0 이 모델에게 그렇게 쓰라고 정해 두었다.
+    # 실측: 「칠순 잔치 아니야」를 네 번 말씀하신 대본에서 거짓 사실이 끝까지
+    # 남은 것이 4/4 → 0/4.
+    gone = [g for g in _facts(data.get("facts_retracted")) if len(g) > 1]
+    if gone:
+        kept = [f for f in facts if not any(g in f or f in g for g in gone)]
+        if len(kept) != len(facts):
+            log.info("아니라고 하셨다 — 사실을 지운다 %s",
+                     [f for f in facts if f not in kept])
+        state["confirmed_facts"] = kept
+
+        # **사건이 다시 열린다.** event 가 confirmed 로 남아 있으면 §1 의 종료
+        # 조건이 「사건은 확인됐다」를 전제로 참이 되어, 무슨 일이었는지 모르는
+        # 채로 회차가 마무리될 수 있다.
+        #
+        # **지금은 event 만 내린다.** 어느 항목의 사실이 철회됐는지는 글만
+        # 보고는 모른다. 회차 앞머리에 confirmed 로 올라가는 것이 사실상 늘
+        # event 라 여기를 골랐다. 장소·인물의 철회까지 가리려면 모델이 항목
+        # 이름을 같이 적어 와야 하는데, 필드를 하나 더 다는 값은 재고 정한다.
+        cur = state.setdefault("information_status", {})
+        if cur.get("event") == "confirmed":
+            log.info("사건이 다시 열린다 — event confirmed → missing")
+            cur["event"] = "missing"
 
     # **회상 질문에 쓴 감각만 기억한다.** 문서 §1 이 금지한 것은 「직전 *회상*
     # 질문에서 쓴 감각」의 반복이다. 이름·시간을 묻는 턴은 sense_used 가 "없음"

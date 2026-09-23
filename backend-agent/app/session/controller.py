@@ -23,7 +23,7 @@ from typing import Awaitable, Callable
 
 from . import audio as audiolib
 from . import shared as shared_state
-from . import store, stt, tts
+from . import photo_analyze, photostore, store, stt, tts
 from .conf import env_float, env_int
 from .machine import Event, Machine, State, TransitionError
 from .timers import T2_PRESETS, TimerSet
@@ -42,8 +42,12 @@ TtsFn = Callable[[str], Awaitable[bytes]]
 # 한 발화가 이보다 커지면 받지 않는다. opus 로 두 시간쯤 된다.
 MAX_AUDIO_BYTES = 25 * 1024 * 1024
 
-# 빈 전사가 연속으로 몇 번까지면 다시 시도해 볼 것인가. 아래 _confirm 참조.
-MAX_EMPTY_RETRY = 2
+# 빈 전사가 연속으로 몇 번까지면 다시 시도해 볼 것인가. 아래 _after_empty 참조.
+#
+# 재시도 한 번의 값은 전사 타임아웃 + T1 이다 — 어르신은 그만큼(약 9초) 화면도
+# 소리도 없는 채로 기다린다. 같은 오디오를 다시 보내는 일이 그 값을 두 번
+# 지불할 만큼 잘 듣지 않는다. 한 번까지만 해 보고 다음 발화에 맡긴다.
+MAX_EMPTY_RETRY = 1
 
 # ---------------------------------------------------------------- 안전 천장
 #
@@ -82,6 +86,48 @@ SWEEP_EVERY = 60.0
 # 여는 말을 고정하면 둘 다 사라진다. 첫 **생성** 질문은 어르신의 첫 말씀을 듣고
 # _make_question 이 만든다 — 그 자리에는 T2 가 있어 지연이 침묵 안에 숨는다.
 OPENING = "오늘은 어떤 이야기를 들려주시겠어요?"
+
+# 사진을 들고 여는 회차의 **뒷받침** 여는 말. 단서가 없을 때만 쓴다.
+#
+# 사진을 고르고 시작했는데 첫 마디가 「오늘은 어떤 이야기를」이면, 어르신에게는
+# 사진이 닿지 않은 것으로 보인다. 실제로 그랬다 — 사진도 붙고 단서도 뽑혔는데
+# 화면은 여는 말 그대로 멈춰 있었다.
+#
+# 다만 이 문장 자체는 사진을 보지 않은 말이다. 보통은 photo_opening 이 §2 가
+# 만든 진짜 사진 질문으로 여는 말을 짓고, 여기로는 단서가 아직 없을 때만
+# 내려온다 (아래 photo_opening · start 참조).
+OPENING_PHOTO = "사진 잘 받았습니다. 이 사진은 어떤 사진인가요?"
+
+
+def photo_opening(clues: dict | None) -> str:
+    """
+    §2 가 만든 사진 질문으로 여는 말을 짓는다. 쓸 수 없으면 OPENING_PHOTO 다.
+
+    **여기서도 LLM 을 부르지 않는다** — 위 OPENING 과 같은 이유다. 부를 필요가
+    없다: 단서는 사진을 **올릴 때** 이미 계산돼 있다 (photo.analyze_later). 예전에
+    분석을 회차 시작에 붙였을 때는 1.6~3.9초가 여는 말 앞에 그대로 얹혔고, 그
+    시간이 숨을 T2 침묵이 없어서 고정 문장 말고는 낼 것이 없었다. 계산하는 자리를
+    옮기자 그 값이 공짜가 됐다.
+
+    **§2 의 말을 다듬지 않는다.** §1 의 「photo_analyses의 questions가 들어오면
+    의미를 바꾸지 않고 자연스러운 존댓말로 바꿔 묻습니다」를 코드가 대신할 수는
+    없다. 대신 **쓸 만한지만 본다.** 실제 사진 셋을 두 번씩 돌려 나온 질문 12개는
+    모두 존댓말 의문문이었고 20~42자였다 —
+    「가운데에 꽃목걸이를 하고 계신 분은 어떤 좋은 일로 축하를 받으신 건가요?」
+
+    그래도 거르는 까닭은 §2 가 시각 분석가이지 인터뷰어가 아니어서다. 여쭐
+    「내용」을 적어 버리면(「찍은 장소가 어디인지」) 어르신께 그대로 읽어 드릴 수
+    없는 말이 된다. 물음표로 끝나지 않거나 길면 고정 문장으로 돌아간다 — 어색한
+    첫 마디보다 사진을 안 본 첫 마디가 낫다.
+
+    앞에 「사진 잘 받았습니다」를 붙인다. 사진이 닿았다는 신호가 첫 마디에 있어야
+    하고, §1 의 「공감 한 문장 + 질문 한 문장, 120자」와도 같은 모양이 된다.
+    """
+    qs = (clues or {}).get("questions")
+    q = qs[0].strip() if isinstance(qs, list) and qs and isinstance(qs[0], str) else ""
+    if not q.endswith(("?", "？")) or len(q) > 100:
+        return OPENING_PHOTO
+    return f"사진 잘 받았습니다. {q}"
 
 
 async def fixed_questions(ctl: "SessionController") -> str | None:
@@ -130,6 +176,8 @@ class SessionController:
     session_id: str = field(default_factory=lambda: str(uuid.uuid4()))
     pace: str = "normal"                          # fast(3) / normal(5) / slow(7)
     max_turn: int = 0                             # 0 = 제한 없음 (machine.py 참조)
+    # 회차를 연 사진. 배경에서 한 번만 분석해 state["photo_analyses"] 로 간다.
+    photo_id: str | None = None
     question_fn: QuestionFn = fixed_questions
     stt_fn: SttFn = stt.azure_transcribe
     tts_fn: TtsFn = tts.synthesize
@@ -141,6 +189,8 @@ class SessionController:
     latencies: list[dict] = field(default_factory=list)
     # question.py 가 채운다. FR-IV-006 의 근거로 turn.decision 에 내려간다.
     last_decision: dict | None = None
+    # §1 의 closing_hint — 마칠 때 화면에 띄울 한 줄. 진행 턴에는 None 이다.
+    closing_hint: str | None = None
     # 네 에이전트가 함께 보는 기록 (문서 §0). **모델은 읽고 코드가 쓴다** —
     # 쓰는 자리는 shared.py 하나뿐이고, 여기는 담아 두기만 한다.
     state: dict = field(default_factory=shared_state.initial)
@@ -152,6 +202,7 @@ class SessionController:
     _audio_mime: str = "audio/webm"
     _empty_streak: int = 0
     _pending: asyncio.Task | None = None
+    _clues: asyncio.Task | None = None
     _next_question: str | None = None
     _question_audio: bytes = b""
     _speaking: asyncio.Task | None = None
@@ -187,6 +238,10 @@ class SessionController:
             # 한 턴도 안 쌓이면 인터뷰 에이전트가 제 몫을 못 하고 있는 것인데,
             # 로그를 열지 않고 알아채려면 여기 있어야 한다.
             "shared_state": shared_state.for_interview(self),
+            # 마칠 때 화면에 띄울 한 줄. 화면이 제 말로 「마쳤습니다」를 쓰는 대신
+            # 모델이 방금 어떤 이야기를 들었는지 실린 문구를 쓴다. None 이면
+            # 화면이 쓰던 문구로 돈다 — 소리처럼, 없어도 회차는 산다.
+            "closing_hint": self.closing_hint,
             "timer_drift": self.timers.drift_report(),
         }
 
@@ -225,12 +280,96 @@ class SessionController:
         self.fragments.append({"idx": 0, "question": None, "answer": postcard})
         await store.save_session(self)
         await store.save_turn(self, self.fragments[0])
-        # 고정 여는 말이다 — 위 OPENING 참조. 질문 생성은 어르신의 첫 말씀을
-        # 들은 뒤 _make_question 에서 처음 일어난다.
-        self._next_question = OPENING
+
+        # 여는 말을 정한다. 질문 **생성**은 어르신의 첫 말씀을 들은 뒤
+        # _make_question 에서 처음 일어난다 — 위 OPENING 참조.
+        #
+        # 사진이 있으면 단서를 먼저 본다. 읽기 한 번이면 되는 까닭은 분석이
+        # 사진을 올릴 때 이미 끝나 있어서다 (photo.analyze_later).
+        rec = await self._photo_record() if self.photo_id else None
+        clues = (rec or {}).get("clues")
+        if clues:
+            self._apply_clues(clues)
+            await store.save_photo_clues(self, clues)
+            self._next_question = photo_opening(clues)
+        else:
+            self._next_question = OPENING_PHOTO if self.photo_id else OPENING
+
         # 합성은 붙잡지 않고 띄워 둔다 — 화면이 받으러 올 때 기다리면 된다
         # (question_audio 가 최대 2초 기다린다).
         self._speak(self._next_question)
+
+        # 단서가 없으면 여기서 한 번 더 해 본다. 붙잡지 않는다.
+        if rec is not None and not clues:
+            self._clues = asyncio.create_task(self._analyze_photo(rec))
+
+    async def _photo_record(self) -> dict | None:
+        """
+        회차를 연 사진의 표지. 없거나 남의 것이면 None — **회차는 그대로 간다.**
+
+        화면이 보낸 photo_id 가 틀릴 수 있다. 그때 회차를 깨지 않는 까닭은 아래
+        _analyze_photo 와 같다. 읽기가 실패해도 마찬가지다 — DB 가 한 번 비틀거렸다고
+        어르신의 회차가 열리지 않으면 안 된다.
+        """
+        pid = (self.photo_id or "")[:8]
+        try:
+            rec = await store.load_photo(self.photo_id or "")
+        except Exception as e:                               # noqa: BLE001
+            log.error("사진 %s 를 읽을 수 없다 — 사진 단서 없이 간다 (%s: %s)",
+                      pid, type(e).__name__, str(e)[:120])
+            return None
+        if rec is None or rec["user_id"] != self.user_id:
+            log.error("사진 %s 를 읽을 수 없다 — 사진 단서 없이 간다", pid)
+            return None
+        return rec
+
+    def _apply_clues(self, clues: dict) -> None:
+        """
+        단서를 state 에 얹는다. **얹는 것이 곧 §1 에 붙이는 일이다** — §1 에
+        「photo_analyses의 questions가 들어오면 의미를 바꾸지 않고 …」 규칙이 이미
+        있고, shared.for_interview 가 ctl.state 를 그대로 실어 보낸다.
+        """
+        self.state["photo_analyses"] = [clues]
+
+    async def _analyze_photo(self, rec: dict) -> None:
+        """
+        올릴 때 못 끝낸 분석을 여기서 한 번 더 한다 (§2). **회차당 한 번이다.**
+
+        **보통은 여기 오지 않는다.** 분석은 사진을 올리는 자리에서 돈다
+        (photo.analyze_later). 이 길로 오는 것은 그때 Gemini 가 실패했거나, 004
+        이전에 올라와 단서가 없는 사진이거나, 분석이 끝나기 전에 서버가 다시 뜬
+        경우다. 그래도 한 번은 더 해 봐야 그 회차에 사진 질문이 산다.
+
+        **붙잡지 않고 배경으로 돈다.** 여는 말은 이미 정해져 나갔고, 첫 질문이
+        필요해지는 때는 낭독과 어르신의 첫 말씀이 끝난 뒤다. 분석 예산 10초는 그
+        안에 넉넉히 들어간다 — 어르신은 이것 때문에 기다리지 않는다.
+
+        **실패해도 회차는 그대로 간다.** 사진 단서는 있으면 좋은 것이지 회차의
+        조건이 아니다. stt·tts 와 같은 정책이다. 다만 조용히 지나가지는 않는다 —
+        어르신이 사진을 고르셨는데 사진 질문이 안 나오면 그 까닭이 로그에 있어야
+        한다.
+        """
+        pid = str(rec.get("photo_id") or self.photo_id or "")[:8]
+        try:
+            data = await photostore.current().get(rec["storage_key"])
+            clues = await photo_analyze.analyze_photo(data, rec["mime"])
+        except asyncio.CancelledError:
+            raise
+        except Exception as e:                               # noqa: BLE001
+            log.error("사진 분석 실패 %s (%s: %s)", pid, type(e).__name__, str(e)[:120])
+            return
+
+        if not clues:
+            log.error("사진 %s 에서 단서를 얻지 못했다 — 사진 질문 없이 간다", pid)
+            return
+
+        self._apply_clues(clues)
+        await store.save_photo_clues(self, clues)
+        # 사진에도 적어 둔다. 다음 회차는 이 사진을 다시 분석하지 않는다.
+        await store.save_photo_analysis(
+            str(rec.get("photo_id") or self.photo_id), clues)
+        log.info("사진 단서 %s — 사물 %d개 · 여쭐 것 %d개", pid,
+                 len(clues.get("objects") or []), len(clues.get("questions") or []))
 
     async def tts_done(self) -> dict:
         """낭독이 끝났다(또는 탭으로 중단). 수음을 연다."""
@@ -277,8 +416,43 @@ class SessionController:
         return self.snapshot()
 
     async def done_button(self) -> dict:
-        """「다 말했어요」 — T1·T2 를 건너뛴다. 지연이 그대로 드러나는 유일한 경로."""
+        """
+        「다 말했어요」 — T1·T2 를 건너뛴다. 지연이 그대로 드러나는 유일한 경로.
+
+        **타이머보다 전이를 먼저 본다.** 다른 경로는 전부 이 순서다 — speech·
+        audio_chunk 는 machine.fire 가 앞에 있어서 PROCESSING 중에 와도 거기서
+        먼저 튕기고 reset_t1 까지 가지 않는다. 이 함수만 순서가 뒤집혀 있었다.
+
+        뒤집힌 순서가 회차를 죽였다. 무음 3초가 지나 자동 확정이 이미 도는 중에
+        버튼이 오면 cancel_t1 이 **자동 확정을 태스크째로 죽인다** — 타이머
+        태스크가 잠만 자는 것이 아니라 콜백까지 await 하기 때문이다
+        (timers._run). 그 콜백은 전사 도중에 잘려 조각 저장도 질문 생성도 못 하고,
+        이어지는 fire(DONE_BUTTON) 는 PROCESSING 에 그 전이가 없어 409 로 튕긴다.
+        남은 T2 가 격발해도 _maybe_advance 가 SPEAKING 이 아니라 되돌아가므로,
+        회차는 PROCESSING 에 영구히 멈추고 그 턴의 말씀이 사라진다.
+
+        타이머 쪽은 고치지 않았다. 「일하는 중에 취소」는 abort 가 의지하는
+        성질이다 — cancel_all 이 진행 중인 확정을 죽여 주는 것이 중단의 정의다.
+        abort 에는 기능이고 이 버튼에는 버그라서, 구분은 타이머가 아니라 여기 있다.
+        """
         self.touch()
+
+        if self.machine.state is State.PROCESSING:
+            # 화면은 LISTENING 으로 알고 버튼을 열어 두었다. 300ms 폴링이 물어온
+            # 스냅샷이라 서버가 넘어간 것을 아직 모르는 창이 있다 (App.tsx).
+            #
+            # 튕기지 않고 받는다. 누름의 뜻이 이미 이뤄지고 있기 때문이다 —
+            # T1 은 지났으니 건너뛸 것이 없고 남은 것은 T2 뿐이라, **예약된
+            # 격발을 버리고 지금 터뜨린다.** 3초 전에 누른 것과 뒤에 누른 것이
+            # 어르신께 같아진다. 경계가 만져지면 그건 버튼이 고장난 것으로 보인다.
+            #
+            # 질문이 아직 안 왔으면 t2_expired 만 서고 PROCESSING 에 머문다.
+            # 그 뒤 질문이 도착하는 순간 넘어간다 — 건너뛴 것은 기다림이지
+            # 질문이 아니다.
+            self.timers.cancel_t2()
+            await self._t2_fired()
+            return self.snapshot()
+
         self.timers.cancel_t1()
         await self._confirm(Event.DONE_BUTTON, skip_t2=True)
         return self.snapshot()
@@ -310,7 +484,7 @@ class SessionController:
         expired 로 덮어쓰게 된다 — **왜 끝났는지를 잃는다.**
         """
         self.timers.cancel_all()
-        for task in (self._pending, self._speaking):
+        for task in (self._pending, self._speaking, self._clues):
             if task and not task.done():
                 task.cancel()
 
@@ -362,9 +536,12 @@ class SessionController:
         전사가 비면 T2 를 취소하고 되돌린다. 플래그는 손대지 않는다 — machine 이
         다음 확정 때 t2_expired 를 다시 False 로 놓는다.
         """
-        self.marks = Marks(confirmed_at=time.perf_counter())
-
         self.machine.fire(event)                       # LISTENING → PROCESSING (턴 +1)
+
+        # **전이가 선 뒤에 잡는다.** 앞에 두면 튕길 요청이 이번 턴의 계측을
+        # 먼저 덮어쓴다 — 돌고 있던 _confirm 이 transcribed_at 을 새 Marks 에
+        # 적어 지연 숫자가 망가진다. fire 는 동기라 시각은 사실상 같다.
+        self.marks = Marks(confirmed_at=time.perf_counter())
 
         if skip_t2:
             self.machine.t2_expired = True             # 버튼은 T2 를 건너뛴다
@@ -424,7 +601,8 @@ class SessionController:
 
             버퍼가 비었다        말씀이 없었던 것이다. 다시 시도할 대상이 없다.
                                  T1 을 걸지 않고 기다린다 — 다음 발화가 걸어 준다.
-            버퍼에 뭔가 있다      전사가 실패한 것일 수 있다. 두 번까지 다시 해 본다.
+            버퍼에 뭔가 있다      전사가 실패한 것일 수 있다. MAX_EMPTY_RETRY 만큼
+                                 다시 해 본다.
 
         **버퍼는 비우지 않는다.** 전사에 실패한 것이라면 그 안에 어르신의 말씀이
         들어 있다. 다음 발화가 뒤에 붙어 함께 전사되면서 한 번 더 기회를 얻는다.
@@ -481,7 +659,11 @@ class SessionController:
         self.marks.question_at = time.perf_counter()
 
         if q is None:
-            await self._finish("finish")
+            # **왜 마쳤는지를 적는다.** §1 이 사유 세 가지를 정했고 (shared.END_REASONS)
+            # question.py 가 아는 값만 걸러 올려 준다. 없으면 "finish" 로 떨어진다 —
+            # 예전과 같은 값이라 사유가 빠진 회차도 목록에서 그대로 읽힌다.
+            reason = (self.last_decision or {}).get("end_reason") or "finish"
+            await self._finish(reason)
             return
         # **합성을 먼저 건다.** 여기서 걸면 남은 T2 안에서 끝나고, 어르신 귀에는
         # 침묵이 끝나는 순간 곧바로 목소리가 나온다. QUESTION_READY 를 먼저
@@ -539,9 +721,11 @@ class SessionController:
         self.marks.delivered_at = time.perf_counter()
         spans = self.marks.spans_ms()
         self.latencies.append(spans)
-        log.info("턴 %d 지연 %.0fms  (저장 %.0f · 질문 %.0f · 전달 %.0f)",
-                 self.machine.turn, spans["total"],
-                 spans["save"], spans["question"], spans["deliver"])
+        # 앞의 넷은 더해서 total 이 되고, 합성은 전달 안에 든 값이다 (Marks.spans_ms
+        # 참조). 대괄호로 묶어 더하는 칸이 아님을 드러낸다.
+        log.info("턴 %d 지연 %.0fms  (전사 %.0f · 저장 %.0f · 질문 %.0f · 전달 %.0f [합성 %.0f])",
+                 self.machine.turn, spans["total"], spans["stt"], spans["save"],
+                 spans["question"], spans["deliver"], spans["tts"])
         await store.update_turn_marks(self, self.fragments[-1]["idx"], spans)
         await store.update_session(self)
 

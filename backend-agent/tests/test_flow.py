@@ -22,7 +22,7 @@ for _stream in (sys.stdout, sys.stderr):
         _stream.reconfigure(encoding="utf-8")
 
 from app.session import audio as audiolib                                # noqa: E402
-from app.session.controller import SessionController                    # noqa: E402
+from app.session.controller import MAX_EMPTY_RETRY, SessionController   # noqa: E402
 from app.session.machine import Event, Machine, State, TransitionError   # noqa: E402
 from app.session.timers import T2_PRESETS                                # noqa: E402
 
@@ -199,7 +199,11 @@ def test_empty_loop():
 
     ctl2 = asyncio.run(run_broken_stt())
     n2 = sum(1 for h in ctl2.machine.history if h[1] is Event.EMPTY_TRANSCRIPT)
-    check("전사 실패는 두 번까지만 다시 시도", n2 == 3, f"최초 1 + 재시도 2 = 3, 실제 {n2}")
+    # 상한을 숫자로 박지 않는다 — 어르신이 말없이 기다리는 시간이 이 값에 비례해서,
+    # 값은 앞으로도 조정된다. 검사는 「상한을 지킨다」는 뜻만 붙잡는다.
+    want = 1 + MAX_EMPTY_RETRY
+    check(f"전사 실패는 {MAX_EMPTY_RETRY}번까지만 다시 시도", n2 == want,
+          f"최초 1 + 재시도 {MAX_EMPTY_RETRY} = {want}, 실제 {n2}")
     check("실패해도 회차는 살아 있다", ctl2.machine.state is State.LISTENING,
           f"state={ctl2.machine.state.value}")
     check("턴을 소모하지 않는다", ctl2.machine.turn == 0)
@@ -316,6 +320,109 @@ def test_tts():
           f"낭독 칸 최솟값 {worst:.0f}ms — 음수면 다음 턴 Marks 에 적힌 것이다")
 
 
+async def _silent_tts(text: str) -> bytes:
+    """합성은 여기서 재는 것이 아니다. 실제 Azure 를 부르지 않는다."""
+    return b""
+
+
+def test_done_button_race():
+    """
+    자동 확정이 도는 중에 「다 말했어요」가 도착한다.
+
+    화면은 300ms 폴링으로 상태를 안다 (App.tsx POLL_MS). 무음 3초가 지나 서버가
+    PROCESSING 으로 넘어간 것을 화면이 아직 모르는 창이 있고, 버튼은 그 창에서
+    아직 눌린다 — 어르신 손가락이 거기 들어온다.
+
+    예전에는 cancel_t1 이 자동 확정을 **태스크째로** 죽이고(timers._run 이 잠만
+    자는 것이 아니라 콜백까지 await 한다) 버튼 자신은 PROCESSING 에 없는 전이라
+    409 로 튕겼다. 둘 다 사라져 회차는 PROCESSING 에 영구히 멈추고, 전사 도중에
+    잘렸으니 그 턴의 말씀도 저장되지 않았다.
+
+    **텍스트 경로로는 못 잡는다.** speech(text) 는 _transcribe 가 await 없이
+    버퍼를 돌려주어 창이 열리지 않는다. 오디오 + 느린 전사가 있어야 드러난다.
+    """
+    print("\n[11] 자동 확정 중에 도착한 「다 말했어요」")
+
+    async def run_race():
+        async def slow_stt(audio, mime, hint):
+            await asyncio.sleep(0.6)          # 이 사이에 버튼이 온다
+            return "그럼, 봉천동에서 살았지."
+
+        ctl = SessionController(user_id="t", title="시험", pace="slow",   # T2 = 7초
+                                stt_fn=slow_stt, tts_fn=_silent_tts)
+        ctl.timers.t1_seconds = 0.3           # 3초를 기다릴 이유가 없다
+        await ctl.start("엽서")
+        await ctl.tts_done()
+        await ctl.audio_chunk(bytes(64), "audio/wav")
+        await asyncio.sleep(0.45)             # T1 격발 뒤 · 전사 도중
+        mid = ctl.machine.state
+
+        err = None
+        t0 = time.perf_counter()
+        try:
+            await ctl.done_button()
+        except TransitionError as e:
+            err = str(e)
+        for _ in range(150):                  # 전사 0.6 + 고정 질문 0.2
+            if ctl.machine.state is State.SPEAKING:
+                break
+            await asyncio.sleep(0.02)
+        return ctl, mid, err, time.perf_counter() - t0
+
+    ctl, mid, err, el = asyncio.run(run_race())
+    check("버튼이 전사 도중에 도착했다", mid is State.PROCESSING,
+          f"state={mid.value} — 여기가 아니면 이 시험은 아무것도 재지 않는다")
+    check("409 로 튕기지 않는다", err is None, err or "")
+    check("PROCESSING 에 멈추지 않는다", ctl.machine.state is State.SPEAKING,
+          f"state={ctl.machine.state.value}")
+    # 0번 조각은 엽서다 (start). 턴 하나가 더 붙어 둘이 되어야 맞는다 —
+    # 잘린 확정은 여기를 비워 두고, 그게 말씀이 사라진다는 뜻이다.
+    check("말씀이 조각으로 남는다",
+          len(ctl.fragments) == 2 and "봉천동" in ctl.fragments[-1]["answer"],
+          f"조각 {len(ctl.fragments)}개 — 엽서 말고 턴이 없으면 말씀을 잃은 것이다")
+    check("턴을 두 번 소모하지 않는다", ctl.machine.turn == 1, f"턴 {ctl.machine.turn}")
+    check("남은 T2 7초를 기다리지 않는다", el < 2.0, f"{el:.1f}초")
+
+    # 자동 확정이 이미 반환한 뒤(전사가 끝나고 질문 생성이 도는 중) 도착하는
+    # 누름도 같은 자리다. 이쪽은 회차가 죽지는 않았지만 409 가 화면에 떴고,
+    # _confirm 이 self.marks 를 새로 잡아 그 턴의 지연 숫자를 망가뜨렸다.
+    async def run_late():
+        async def slow_question(ctl):
+            await asyncio.sleep(0.5)
+            return "그 동네에서는 어떤 일을 하셨나요?"
+
+        ctl = SessionController(user_id="t", title="시험", pace="slow",
+                                question_fn=slow_question, tts_fn=_silent_tts)
+        ctl.timers.t1_seconds = 0.3
+        await ctl.start("엽서")
+        await ctl.tts_done()
+        await ctl.speech("그럼, 봉천동에서 살았지.")
+        await asyncio.sleep(0.4)              # T1 격발 · 전사 끝 · 질문 생성 중
+        mid = ctl.machine.state
+        confirmed = ctl.marks.confirmed_at
+
+        err = None
+        try:
+            await ctl.done_button()
+        except TransitionError as e:
+            err = str(e)
+        for _ in range(150):
+            if ctl.machine.state is State.SPEAKING:
+                break
+            await asyncio.sleep(0.02)
+        return ctl, mid, err, confirmed
+
+    ctl2, mid2, err2, confirmed2 = asyncio.run(run_late())
+    check("늦은 누름도 PROCESSING 에서 받는다", mid2 is State.PROCESSING and err2 is None,
+          err2 or f"state={mid2.value}")
+    check("확정 시각이 덮이지 않는다", ctl2.marks.confirmed_at == confirmed2,
+          "덮이면 그 턴의 지연 숫자가 전부 어긋난다")
+    spans = ctl2.latencies[-1] if ctl2.latencies else {}
+    check("지연 칸이 음수로 망가지지 않는다",
+          bool(spans) and all(v >= 0 for v in spans.values()),
+          f"{spans}")
+
+
 def test_all_checks_passed():
     """
     pytest 로 돌릴 때의 안전판.
@@ -339,6 +446,7 @@ def main() -> int:
     test_empty_loop()
     test_pcm_wrap()
     test_tts()
+    test_done_button_race()
     print(f"\n{'=' * 52}\n통과 {len(PASS)} · 실패 {len(FAIL)}")
     if FAIL:
         print("실패:", ", ".join(FAIL))

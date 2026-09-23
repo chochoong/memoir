@@ -24,9 +24,10 @@ FSM 도 타이머도 이 파일의 존재를 모른다.
    버렸다. 문서(§1)가 정한 이름과 코드가 쓰던 이름이 둘 다 살아 있으면 언젠가
    반드시 어긋나고, 어긋나는 쪽이 「회차가 안 끝난다」라 눈에도 잘 안 띈다.
 
-4. **프롬프트는 `docs/인터뷰 에이전트_프롬프트.md` 에서 읽는다** (prompt.py).
-   여기에 한 벌 더 두지 않는다. 다만 문서에 아직 없는 두 필드(`facts_found` ·
-   `information_status`)만 `_ADDENDUM` 으로 덧댄다 — 아래 참조.
+4. **프롬프트는 `prompts/interview_v2.2.txt` 에서 읽는다** (prompt.py).
+   여기에 한 벌 더 두지 않는다. 다만 그 파일에 아직 없는 세 필드(`facts_found` ·
+   `information_status` · `completion_check_asked`)만 `_ADDENDUM` 으로 덧댄다 —
+   아래 참조.
 
 **빈 `question` 은 값이다.** 문서 §1 이 「질문하지 않는 종료 턴에는 question 을
 빈 문자열로 둡니다」라고 정했다. 그래서 `topic_status` 를 **먼저** 보고 빈 question
@@ -86,10 +87,10 @@ DEFAULT_WINDOW = 6
 # 추출 에이전트를 따로 두면 턴마다 호출이 하나 더 붙으므로 (지연·비용 2배),
 # 어차피 속으로 판단하고 있는 것을 출력에 적게 하는 쪽을 골랐다.
 #
-# **덧대기만 한다. 문서가 이미 정한 것은 다시 적지 않는다.** 여기서 한 번
-# 어겼다가 값을 치렀다 — 「합쳐 40자」라고 적었는데 문서 §1 은 60자였고, 모델은
-# 둘 사이인 45~47자를 내놓았다. 어느 쪽도 지키지 않은 셈이다. 길이·문장 수처럼
-# 문서에 이미 있는 규칙은 문서 것으로 두고, 없는 것만 더한다.
+# **덧대기만 한다. 프롬프트가 이미 정한 것은 다시 적지 않는다.** 여기서 한 번
+# 어겼다가 값을 치렀다 — 「합쳐 40자」라고 적었는데 §1 은 다른 수였고, 모델은 둘
+# 사이의 어느 수를 내놓았다. 어느 쪽도 지키지 않은 셈이다. 길이·문장 수처럼 §1 에
+# 이미 있는 규칙(지금은 2문장·120자)은 그쪽 것으로 두고, 없는 것만 더한다.
 #
 # **출력의 필드 순서도 문서를 따른다.** 여기서 question 을 empathy 앞에 놓았더니
 # 모델이 질문 칸 안에서 먼저 공감을 하고 (JSON 은 적는 순서대로 생각한다) 그
@@ -108,8 +109,9 @@ _ADDENDUM = """
 - 어르신이 말씀하신 표현을 그대로 짧게 적습니다. 다듬거나 추측하지 않습니다.
 - 각 항목은 15자를 넘기지 않습니다. 느낌이나 감상이 아니라 사실만 적습니다.
 - 새로 확인된 것이 없으면 빈 배열로 둡니다.
+- 앞서 확인된 사실을 어르신이 아니라고 하시면 facts_retracted에 그 사실을 그대로 적습니다.
 - information_status에는 지금까지 확인된 정보의 상태를 다시 적습니다.
-- 한 번 confirmed가 된 항목은 되돌리지 않습니다.
+- 한 번 confirmed가 된 항목은 어르신이 아니라고 하시기 전에는 되돌리지 않습니다.
 - 더 남기고 싶은 이야기가 있는지 여쭈는 턴에는 completion_check_asked를 true로 적습니다.
 
 [마무리 판단]
@@ -125,11 +127,14 @@ _ADDENDUM = """
   "question_type": "회상확장|사실확인|주제전환|안전확인|없음",
   "sense_used": "시각|청각|후각|미각|촉각|없음",
   "facts_found": ["어르신이 새로 말씀하신 사실"],
+  "facts_retracted": ["어르신이 아니라고 하신 사실"],
   "information_status": {"event": "", "when": "", "who": "", "place": "", "emotion": ""},
   "conversation_mode": "normal|sensitive",
   "topic_status": "active|awaiting_choice|closed",
   "completion_check_asked": true 또는 false,
-  "ready_for_chronology": true 또는 false
+  "ready_for_chronology": true 또는 false,
+  "closing_hint": "대화 종료 시 화면에 띄울 안내 문구 (종료가 아니면 null)",
+  "end_reason": "user_request|info_complete|sensitive (종료가 아니면 null)"
 }"""
 
 
@@ -196,6 +201,40 @@ def _client():
 _CLIENT = None
 
 
+# 어르신 말씀의 **끝 물음표를 떼고 모델에게 준다.** 기록은 건드리지 않는다 —
+# turn.answer 에는 들으신 그대로 남는다. 여기는 모델에게 보낼 사본이다.
+#
+# Azure 는 억양을 보고 부호를 단다. 그게 한국어에서는 뜻을 흐리는 게 아니라
+# **뒤집는다.**
+#
+#     칠순 잔치 아니야.   아니라는 말씀
+#     칠순 잔치 아니야?   맞지 않냐는 물음 — 칠순잔치라는 뜻이 된다
+#
+# 실제 회차에서 어르신이 글자까지 같은 말씀을 두 번 하셨는데 한 번은 `?` 로,
+# 한 번은 `.` 으로 왔다. 모델은 그 부호를 따라 정반대로 움직였고, 아니라는
+# 말씀을 두 번 더 하시게 만들었다.
+#
+# **못 믿을 뿐 아니라 없어도 된다.** 의문사(뭐·언제·어디)나 의문 어미(-까·-나)가
+# 있으면 부호 없이도 되물음인 줄 안다. 부호만이 단서인 것은 `아니야?` `맞아?`
+# 처럼 평서형으로 끝나는 판정의문문뿐인데, 측정한 오류가 전부 거기 몰려 있었다.
+# 평서문으로 넣은 「…사진 찍은 거야」도 확신도 0.93 으로 `?` 가 붙어 돌아왔다.
+#
+# 같은 대본 4회씩 — 칠순잔치로 단정한 턴 12회 → 5회, 어르신이 아니라고 하신 뒤
+# 빠져나오는 자리 4번째 → 2번째.
+#
+# **API 로 끌 수는 없다.** Fast Transcription 은 배치 전사의 punctuationMode 를
+# 조용히 무시하고(같은 결과, 오류도 없다), 부호 없는 형태(lexical)를 주지 않는다.
+# combinedPhrases 에 있는 것은 text 하나뿐이라 뗄 자리는 여기밖에 없다.
+#
+# **끝에 붙은 것만 뗀다.** 한 문장이 아닐 때 가운데 물음표는 어르신이 남의 말을
+# 옮기시는 자리라 (「그래서 내가 뭐냐고 물었지?」) 그대로 둔다.
+_TRAILING_Q = re.compile(r"[?？]+\s*$")
+
+
+def _heard(answer: str) -> str:
+    return _TRAILING_Q.sub("", answer.rstrip()) or answer
+
+
 def _transcript(ctl: "SessionController") -> str:
     """
     지금까지의 조각을 프롬프트에 넣을 형태로. 0번은 엽서라 질문이 없다.
@@ -217,14 +256,14 @@ def _transcript(ctl: "SessionController") -> str:
     out = []
     for f in head:
         if f["answer"]:
-            out.append(f"어르신: {f['answer']}")
+            out.append(f"어르신: {_heard(f['answer'])}")
     if cut:
         out.append(f"(앞의 {cut}턴은 줄였습니다)")
     for f in rest[cut:]:
         if f["question"]:
             out.append(f"질문: {f['question']}")
         if f["answer"]:
-            out.append(f"어르신: {f['answer']}")
+            out.append(f"어르신: {_heard(f['answer'])}")
     return "\n".join(out)
 
 
@@ -258,9 +297,11 @@ async def gemini_question(ctl: "SessionController") -> str | None:
         # 온도는 「다양한 질문」이 아니라 「규칙 이탈」로 나온다. 다양성은 온도가
         # 아니라 asked_questions · last_sense_used 가 만들게 한다 — 그쪽은 통제된다.
         temperature=0.7,
-        # 200 에서 올렸다. 필드가 3개에서 9개로 늘고 공감 문장이 붙는다.
-        # 200 이면 뒤쪽 필드부터 잘려 나가고, 잘린 JSON 은 파싱에서 통째로 실패한다.
-        max_output_tokens=400,
+        # 400 에서 올렸다. 필드가 10개에서 12개로 늘고, §1 이 길이를 60자에서
+        # 2문장·120자로 열었다. 모자라면 **뒤쪽 필드부터** 잘려 나가는데 지금
+        # 뒤쪽이 end_reason·closing_hint 라 회차를 닫는 자리가 먼저 사라진다.
+        # 잘린 JSON 은 파싱에서 통째로 실패하고, 그러면 고정 질문으로 물러선다.
+        max_output_tokens=700,
         # 지연이 곧 품질인 구간이다. 생각을 오래 할수록 어르신이 기다린다.
         thinking_config=types.ThinkingConfig(thinking_level="MINIMAL"),
         # 도구를 쓰지 않는다. 켜 두면 호출마다 AFC 로그가 한 줄씩 쌓여
@@ -291,6 +332,15 @@ async def gemini_question(ctl: "SessionController") -> str | None:
 
     status = str(data.get("topic_status") or "active").strip().lower()
     mode = str(data.get("conversation_mode") or "normal").strip().lower()
+
+    # §1 이 새로 정한 두 필드. **아는 사유만 받는다** — 모델이 제 말로 지어낸
+    # 사유를 그대로 session.closed_reason 에 적으면 나중에 회차 목록을 사유로
+    # 셀 수 없다. 모르는 값은 버리고 아래에서 "finish" 로 떨어뜨린다.
+    reason = str(data.get("end_reason") or "").strip().lower()
+    if reason and reason not in shared_state.END_REASONS:
+        log.warning("모르는 종료 사유(%r) — 버린다", reason)
+        reason = ""
+    hint = str(data.get("closing_hint") or "").strip()
     raw_q = str(data.get("question") or "").strip()
     q = _one_question(raw_q)
     if q != raw_q:
@@ -314,6 +364,13 @@ async def gemini_question(ctl: "SessionController") -> str | None:
                  and ctl.machine.turn < _min_turn())
     effective = "active" if overruled else status
 
+    # **닫는 턴에만 값이 있다.** 진행 턴에 모델이 적어 와도 버린다 — 남겨 두면
+    # 아직 말씀하시는 중인 화면에 마무리 안내가 뜬다. 되돌린 턴(overruled)도
+    # 진행 턴이라 여기서 같이 지워진다.
+    if effective != "closed":
+        reason, hint = "", ""
+    ctl.closing_hint = hint or None
+
     # **되돌린 결과를 상태에 적는다.** 여기에 closed 를 적어 두면 다음 턴에
     # 모델이 그것을 읽고 또 마무리를 고른다 — 하한이 한 턴만 버티고 무너진다.
     shared_state.merge(ctl.state, data, status=effective)
@@ -326,8 +383,11 @@ async def gemini_question(ctl: "SessionController") -> str | None:
         "question_type": data.get("question_type"),
         "sense_used": data.get("sense_used"),
         "facts_found": data.get("facts_found") or [],
+        "facts_retracted": data.get("facts_retracted") or [],
         "information_status": data.get("information_status") or {},
         "ready_for_chronology": bool(data.get("ready_for_chronology")),
+        "end_reason": reason or None,
+        "closing_hint": hint or None,
     }
     if overruled:
         ctl.last_decision["overruled"] = "closed"
@@ -342,7 +402,9 @@ async def gemini_question(ctl: "SessionController") -> str | None:
 
     if effective == "closed":
         # FR-IV-006 — 판단으로 마무리. turn.decision 에 들어갈 값이다.
-        log.info("마무리 — %s · %s", mode, shared_state.summary(ctl.state))
+        # 사유는 controller._make_question 이 여기서 받아 closed_reason 에 적는다.
+        log.info("마무리 — %s/%s · %s", mode, reason or "사유없음",
+                 shared_state.summary(ctl.state))
         return None
 
     if not q:

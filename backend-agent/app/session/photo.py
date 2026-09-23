@@ -34,7 +34,7 @@ import uuid
 from dataclasses import dataclass
 from datetime import datetime
 
-from . import photostore, store
+from . import photo_analyze, photostore, store
 from .conf import env_int
 
 log = logging.getLogger("photo")
@@ -282,3 +282,57 @@ def cache_seconds() -> int:
     `private` 과 함께 나간다 — 중간 캐시가 남의 사진을 들고 있게 두지 않는다.
     """
     return env_int("PHOTO_CACHE_SECONDS", 86400)
+
+
+# ---------------------------------------------------------------- 올릴 때 분석
+
+# 도는 분석들. **참조를 들고 있지 않으면 파이썬이 중간에 거둬 간다** —
+# create_task 가 돌려준 Task 를 아무도 안 붙잡으면 GC 대상이 되고, 그러면
+# 분석이 소리 없이 사라진다.
+_running: set[asyncio.Task] = set()
+
+
+def analyze_later(rec: dict) -> None:
+    """
+    사진을 올린 그 자리에서 §2 를 걸어 둔다. **기다리지 않는다.**
+
+    회차를 열 때 분석하면 늦는다. 분석은 1.6~3.9초가 걸리는데 여는 말에는 그
+    시간이 숨을 T2 침묵이 없어서, 첫 마디는 사진을 보지 않은 고정 문장이 될
+    수밖에 없었다. 사진은 시작 단추보다 먼저 올라오므로 — 고르고, 보고, 그다음에
+    누르신다 — 그 사이에 분석을 끝내 두면 여는 말부터 사진 질문으로 열 수 있다.
+
+    **올린 사람을 기다리게 하지 않는다.** 업로드 응답은 바로 나간다. 분석이
+    늦거나 실패해도 어르신이 보는 것은 달라지지 않는다 — 회차를 열 때 단서가
+    없으면 controller 가 그때 다시 분석한다 (controller._analyze_photo).
+    """
+    task = asyncio.create_task(_analyze(rec))
+    _running.add(task)
+    task.add_done_callback(_running.discard)
+
+
+async def _analyze(rec: dict) -> None:
+    """
+    §2 를 부르고 photo.clues 에 적는다. **어떤 실패도 위로 올리지 않는다** —
+    부른 쪽은 이미 어르신께 「저장했습니다」를 돌려준 뒤라 더 할 수 있는 일이 없다.
+
+    조용히 지나가지는 않는다. 사진을 올렸는데 사진 질문이 안 나오면 그 까닭이
+    로그에 있어야 한다.
+    """
+    pid = rec["photo_id"][:8]
+    try:
+        data = await photostore.current().get(rec["storage_key"])
+        clues = await photo_analyze.analyze_photo(data, rec["mime"])
+    except asyncio.CancelledError:
+        raise
+    except Exception as e:                                   # noqa: BLE001
+        log.error("사진 분석 실패 %s (%s: %s) — 회차를 열 때 다시 해 본다",
+                  pid, type(e).__name__, str(e)[:120])
+        return
+
+    if not clues:
+        log.error("사진 %s 에서 단서를 얻지 못했다 — 회차를 열 때 다시 해 본다", pid)
+        return
+
+    await store.save_photo_analysis(rec["photo_id"], clues)
+    log.info("올릴 때 사진 단서 %s — 사물 %d개 · 여쭐 것 %d개", pid,
+             len(clues.get("objects") or []), len(clues.get("questions") or []))

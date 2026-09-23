@@ -4,3 +4,4 @@ __pycache__/
 web/
 .venv/
 tools/recordings/
+logs/
