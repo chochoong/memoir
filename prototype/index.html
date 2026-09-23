@@ -415,7 +415,7 @@
   const CONFIG = {
     // 화면 아래와 개발용 패널에 그대로 찍힌다. 「고친 게 반영이 안 된 것 같다」는
     // 대부분 예전 파일이 열려 있는 경우라서, 눈으로 확인할 자리를 만들어 둔다.
-    version: 'v0.6 · 2026-09-23 (엽서 저장 · 사진 분석 대비)',
+    version: 'v0.8 · 2026-09-23 (엽서 저장 · 사진 분석 연결)',
 
     // 이 화면을 백엔드가 직접 서빙하면(web/ 폴더) 빈 문자열 그대로 둔다.
     // 다른 포트에서 열어 시험할 때만 'http://127.0.0.1:8010' 처럼 채운다.
@@ -439,14 +439,12 @@
       previewPixel: 1600,        // 화면 미리보기용 긴 변. 서버는 따로 1024px 로 만든다
 
       // ── 사진을 보고 먼저 물어보기 (기획서 §2 사진 분석 에이전트) ──
-      // **백엔드에 아직 연결되어 있지 않다.** 분석 엔진(app/session/photo_analyze.py)은
-      // 있지만 그것을 부르는 API 가 없다 (2026-09-23 확인).
-      // 아래를 true 로 바꾸면 화면은 바로 그 흐름으로 돈다.
-      analyze: false,
-      // 'session'  회차를 열 때 photo_id 를 함께 보낸다 → 서버가 분석해서 첫 질문을 만든다
-      // 'endpoint' 사진 분석 API 를 따로 부른 뒤, 받은 한 줄을 씨앗 문장(postcard)에 싣는다
-      analyzeMode: 'session',
-      analyzePath: '/photos/{id}/analyze',
+      // 백엔드가 **사진을 올리는 그 자리에서** 분석을 걸어 둔다 (photo.analyze_later).
+      // 그래서 고르는 순간 올려 두면, 시작을 누를 때쯤 단서가 준비되어
+      // **여는 말부터 사진 질문**이 된다.
+      uploadOnPick: true,       // 고르는 순간 올린다 (분석 시간을 벌어 준다)
+      sendIdOnCreate: true,     // 회차를 열 때 photo_id 를 함께 보낸다
+      waitBeforeStartMs: 8000,  // 시작을 눌렀을 때 올리는 중이면 이만큼까지 기다린다
     },
 
     // ── 엽서 글 ───────────────────────────────────────────────────
@@ -585,11 +583,6 @@
     abort: (id) => call(`/sessions/${id}/abort`, { method: 'POST' }),
     latency: (id) => call(`/sessions/${id}/latency`),
     record: (id) => call(`/sessions/${id}/record`),
-
-    // 사진 분석 (기획서 §2). 아직 백엔드에 없다 — CONFIG.photo.analyze 로 켠다.
-    // 기대하는 응답: { scene, objects, people, text_in_photo, uncertain, questions[] }
-    analyzePhoto: (photoId) =>
-      call(CONFIG.photo.analyzePath.replace('{id}', photoId), { method: 'POST' }),
 
     // ── 사진 (main.py upload_photo · get_photo) ──
     // 본문은 바이트 그대로. 형식은 서버가 앞머리 바이트로 가린다 (HEIC 도 받는다).
@@ -843,10 +836,11 @@
         applyPhotoRatio(probe.naturalWidth, probe.naturalHeight);
         photo.dataUrl = downscale(probe, reader.result);
         showPhoto();
+        sendPhotoEarly();
       };
       // 브라우저가 못 여는 형식(주로 아이폰 HEIC). 서버는 열 수 있으니 올린 뒤
       // 서버가 만든 JPEG 로 보여준다.
-      probe.onerror = () => { photo.dataUrl = ''; showPhotoPending(); };
+      probe.onerror = () => { photo.dataUrl = ''; showPhotoPending(); sendPhotoEarly(); };
       probe.src = reader.result;
     };
     reader.readAsDataURL(file);
@@ -954,6 +948,26 @@
 
   /** 엽서·화면에 쓸 사진 주소. 화면 안의 것이 있으면 그것을, 없으면 서버 것을. */
   function photoSrc() { return photo.dataUrl || photo.url || ''; }
+
+  /**
+   * 고르는 순간 서버로 보낸다.
+   *
+   * 서버는 사진을 받자마자 §2 분석을 걸어 둔다 (photo.analyze_later). 분석에
+   * 1.6~3.9초가 걸리는데, 어르신이 사진을 고르고 화면을 보고 시작을 누르는
+   * 사이가 딱 그 시간이다. 그래서 여기서 미리 보내 두면 회차가 열릴 때
+   * **여는 말부터 사진 질문**이 된다.
+   *
+   * 실패해도 아무 일도 일어나지 않는다 — 사진은 화면 안에 그대로 있고,
+   * 회차는 사진 없이 평소대로 열린다.
+   */
+  function sendPhotoEarly() {
+    if (!CONFIG.photo.upload || !CONFIG.photo.uploadOnPick) return;
+    $('#photoHint').lastChild.textContent = ' 사진을 살펴보는 중…';
+    photoUpload = uploadPhoto(null).then((id) => {
+      $('#photoHint').lastChild.textContent = id ? ' 사진 준비 완료 · 바꾸기' : ' 사진 바꾸기';
+      return id;
+    });
+  }
 
   /* ═══════════════════════════════════════════════════════════════
      엽서 글 — 서버 카드 API 가 없을 때 쓰는 임시 정리
@@ -1119,27 +1133,24 @@
       max_turn: CONFIG.session.max_turn,
     };
 
-    // 2-1) 사진을 보고 먼저 물어보는 흐름 (CONFIG.photo.analyze)
+    // 2-1) 사진을 골랐다면 그 번호(photo_id)를 함께 보낸다.
     //
-    // 이때는 **회차를 열기 전에** 사진을 올려야 한다 — 서버가 분석할 사진이
-    // 먼저 있어야 하기 때문이다. 분석이 실패해도 회차는 그냥 평소대로 열린다.
-    if (CONFIG.photo.analyze && photo.file) {
-      show('writing');
-      $('#writingTitle').innerHTML = '사진을<br />보고 있어요.';
-      $('#writingLead').textContent = '무엇이 담겼는지 살펴보고 여쭐 말을 고르는 중이에요.';
-      try {
-        await uploadPhoto(null);                       // 회차 없이 먼저 올린다
-        if (photo.photo_id) {
-          body.photo_id = photo.photo_id;              // 'session' 방식
-          if (CONFIG.photo.analyzeMode === 'endpoint') {
-            const seen = await api.analyzePhoto(photo.photo_id);
-            // 받은 것 중 한 줄만 씨앗 문장으로 쓴다. 이 문장이 회차의 주제가 된다.
-            const seed = (seen && (seen.scene || (seen.questions || [])[0])) || '';
-            if (seed) { body.postcard = seed; log('사진', `단서 · ${seed}`); }
-          }
-        }
-      } catch (e) {
-        log('사진', `분석 건너뜀 · ${e.status || ''} ${e.message || e}`);
+    // 서버는 이 번호로 사진의 §2 단서를 찾아 **여는 말을 사진 질문으로** 짓는다.
+    // 고르는 순간 이미 올려 두었으므로(sendPhotoEarly) 보통은 기다릴 것이 없다.
+    // 아직 올라가는 중이면 잠깐만 기다린다 — 그래도 안 끝나면 사진 없이 연다.
+    if (photo.file && CONFIG.photo.upload) {
+      if (!photo.photo_id && photoUpload) {
+        show('writing');
+        $('#writingTitle').innerHTML = '사진을<br />보고 있어요.';
+        $('#writingLead').textContent = '무엇이 담겼는지 살펴보는 중이에요.';
+        await Promise.race([
+          photoUpload,
+          new Promise(r => setTimeout(r, CONFIG.photo.waitBeforeStartMs)),
+        ]).catch(() => {});
+      }
+      if (CONFIG.photo.sendIdOnCreate && photo.photo_id) {
+        body.photo_id = photo.photo_id;
+        log('사진', `회차에 사진을 겁니다 · ${photo.photo_id.slice(0, 8)}`);
       }
     }
 
@@ -1152,9 +1163,8 @@
       show('talk');
       applySnapshot(s);
       startPolling();
-      // 3) 사진은 회차가 열린 뒤 그 회차에 붙여 올린다. 기다리지 않는다 —
-      //    첫 질문 낭독과 동시에 뒤에서 올라간다.
-      //    (분석 흐름에서는 위에서 이미 올렸으므로 uploadPhoto 가 그냥 지나간다)
+      // 3) 고를 때 올리는 데 실패했다면 여기서 한 번 더 시도한다. 기다리지 않는다.
+      //    이미 올라간 사진이면 uploadPhoto 가 그냥 지나간다.
       photoUpload = uploadPhoto(sessionId);
     } catch (e) {
       $('#startBtn').disabled = false;
@@ -1202,6 +1212,12 @@
 
     $('#devState').textContent = s.state;
     $('#devTurn').textContent = `${s.turn}${s.max_turn > 0 ? '/' + s.max_turn : ''}`;
+
+    // 회차가 바뀌면 「이미 읽어 준 질문」 기억을 지운다.
+    // 여는 말은 늘 같은 문장이라, 안 지우면 두 번째 회차의 낭독이 통째로
+    // 건너뛰어지고 tts-done 이 올라가지 않아 회차가 SPEAKING 에서 멈춘다.
+    // (백엔드 팀이 리액트 화면에서 먼저 겪은 버그다 — 커밋 255d9a0)
+    if (!prev || prev.session_id !== s.session_id) spoken = null;
 
     if (!prev || prev.state !== s.state) log('상태', `${prev ? prev.state : '—'} → ${s.state}`);
     if (prev && s.fragments.length > prev.fragments.length) {
@@ -1685,6 +1701,7 @@
   });
   $('#devText').addEventListener('keydown', (e) => { if (e.key === 'Enter') $('#devSend').click(); });
   $('#devDone').addEventListener('click', () => void pressDone());
+
 
   // 버전을 화면과 기록 양쪽에 남긴다
   $('#version').textContent = CONFIG.version;
