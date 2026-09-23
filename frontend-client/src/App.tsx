@@ -322,6 +322,10 @@ export default function App() {
     return () => { cancelled = true }
   }, [id, snap?.state, snap?.next_question, voice, run])
 
+  // 열어 본 회차에 읽을 것이 하나도 없나. 질문도 답도 없는 조각만 있는 경우다 —
+  // 엽서 없이 열고 첫 말씀 전에 끝난 회차가 그렇다. 제목만 덩그러니 남기지 않는다.
+  const recEmpty = !!rec && rec.fragments.every(f => !f.answer.trim() && !f.question)
+
   return (
     <main>
       <header>
@@ -529,7 +533,9 @@ export default function App() {
                 <button className="ghost" onClick={() => openRecord(s.session_id)}>
                   {new Date(s.created_at).toLocaleString('ko-KR')}
                   <small>
-                    조각 {s.fragment_count} · {s.closed_reason ?? '진행 중'}
+                    {/* 초가 같은 회차가 나란히 설 수 있다. 시각만으로는 어느 줄을
+                        눌렀는지 알 수 없어 id 앞자리를 같이 낸다. */}
+                    {s.session_id.slice(0, 6)} · 조각 {s.fragment_count} · {s.closed_reason ?? '진행 중'}
                   </small>
                 </button>
               </li>
@@ -540,11 +546,21 @@ export default function App() {
         {rec && (
           <>
             <h3>{new Date(rec.created_at).toLocaleString('ko-KR')} · {rec.closed_reason ?? '진행 중'}</h3>
+            {recEmpty && (
+              <p className="note">남은 내용이 없습니다 · 조각 {rec.fragments.length}개</p>
+            )}
+            {!recEmpty && (
             <ol className="fragments">
               {rec.fragments.map(f => (
                 <li key={f.idx}>
                   {f.question && <p className="q">{f.question}</p>}
-                  <p className="a">{f.answer}</p>
+                  {/* **빈 답을 빈 <p> 로 두지 않는다.** 0번 엽서는 빈 채로 열리므로
+                      (start 의 postcard) 그대로 그리면 번호만 찍힌 줄이 남고, 조각이
+                      그것 하나뿐인 회차는 눌러도 아무것도 안 나온 것처럼 보인다.
+                      **없는 것과 비어 있는 것은 다른 사건이라 화면도 다르게 말한다.** */}
+                  {f.answer.trim()
+                    ? <p className="a">{f.answer}</p>
+                    : <p className="note">{f.idx === 0 ? '엽서 없이 연 회차입니다' : '(빈 칸)'}</p>}
                   {f.decision?.reason && (
                     <p className="note">근거 · {f.decision.reason}</p>
                   )}
@@ -554,6 +570,7 @@ export default function App() {
                 </li>
               ))}
             </ol>
+            )}
           </>
         )}
         </>)}
