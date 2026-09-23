@@ -336,7 +336,7 @@ def test_prompt():
           sysmsg.rindex('"empathy"') < sysmsg.rindex('"question_type"'),
           "질문이 앞서면 모델이 질문 칸 안에서 먼저 공감한다")
     check("§1 이 정한 길이를 덮어쓰지 않는다", "40자" not in sysmsg,
-          "§1 은 2문장·120자다 — 두 벌이 살아 있으면 둘 다 안 지켜진다")
+          "§1 은 합쳐 60자다 — 두 벌이 살아 있으면 둘 다 안 지켜진다")
     check("덧댄 형식이 §1 의 새 필드를 빠뜨리지 않는다",
           "closing_hint" in sysmsg and "end_reason" in sysmsg,
           "「반드시 아래 형식으로만」이라고 적으면서 빠뜨리면 모델이 안 적는다")

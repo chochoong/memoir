@@ -121,7 +121,8 @@ def photo_opening(clues: dict | None) -> str:
     첫 마디보다 사진을 안 본 첫 마디가 낫다.
 
     앞에 「사진 잘 받았습니다」를 붙인다. 사진이 닿았다는 신호가 첫 마디에 있어야
-    하고, §1 의 「공감 한 문장 + 질문 한 문장, 120자」와도 같은 모양이 된다.
+    하고, §1 의 「공감 한 문장 + 질문 한 문장, 합쳐 60자」와도 같은 모양이 된다.
+    다만 아래 상한(질문 100자)은 아직 60자보다 넓다.
     """
     qs = (clues or {}).get("questions")
     q = qs[0].strip() if isinstance(qs, list) and qs and isinstance(qs[0], str) else ""

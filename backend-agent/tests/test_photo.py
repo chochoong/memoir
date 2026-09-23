@@ -636,7 +636,7 @@ def test_photo_opening():
           "§2 는 시각 분석가라 여쭐 「내용」만 적어 놓을 때가 있다")
     check("전각 물음표도 질문이다", op(["어떤 날인가요？"]).startswith("사진 잘 받았습니다. 어떤"))
     check("너무 길면 고정 문장이다", op(["가" * 101 + "?"]) == C.OPENING_PHOTO,
-          "§1 의 120자 규칙을 여는 말도 지킨다")
+          "여는 말도 한없이 길지 않다 — 상한 100자는 §1 의 60자보다 아직 넓다")
     check("질문이 없으면 고정 문장이다", op([]) == C.OPENING_PHOTO)
     check("단서가 없으면 고정 문장이다", C.photo_opening(None) == C.OPENING_PHOTO)
     check("문자열이 아니면 고정 문장이다", op([{"q": "어떤 날인가요?"}]) == C.OPENING_PHOTO,
