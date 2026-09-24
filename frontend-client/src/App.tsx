@@ -50,7 +50,7 @@ export default function App() {
   const [voice, setVoice] = useState(true)        // 낭독을 틀 것인가
   const [reading, setReading] = useState(false)   // 지금 낭독 중인가
   const [voiceNote, setVoiceNote] = useState<string | null>(null)
-  // 이미 읽은 질문. 폴링이 같은 스냅샷을 여러 번 물어와도 두 번 읽지 않는다.
+  // 이미 읽은 질문의 자리(회차:턴). 폴링이 같은 스냅샷을 여러 번 물어와도 두 번 읽지 않는다.
   const spoken = useRef<string | null>(null)
   const rec_ = useRef<Recorder | null>(null)
   const [photos, setPhotos] = useState<PhotoUp[]>([])
@@ -61,6 +61,8 @@ export default function App() {
   // 청크 업로드는 줄을 세운다. 겹쳐 보내면 서버에 닿는 순서가 뒤집혀
   // 어르신의 말이 뒤섞인 채로 전사된다.
   const queue = useRef<Promise<unknown>>(Promise.resolve())
+  // 낭독을 마치고 서버의 LISTENING 을 기다리는 회차. 이 사이에 모인 소리도 올린다.
+  const armed = useRef<string | null>(null)
 
   const run = useCallback(async (fn: () => Promise<Snapshot>) => {
     setError(null)
@@ -243,7 +245,7 @@ export default function App() {
           // 낭독 중이나 정리 중에 들어온 소리는 버린다. 스피커에서 나온 질문이
           // 그대로 되돌아와 T1 을 리셋하면 발화가 영영 확정되지 않는다.
           const sid = sessionRef.current
-          if (!sid || !listeningRef.current) return
+          if (!sid || !(listeningRef.current || armed.current === sid)) return
           queue.current = queue.current
             .then(() => api.audio(sid, pcm, MIME))
             .then(snapshot => {
@@ -298,24 +300,42 @@ export default function App() {
 
   // 듣는 동안에만 마이크 판정을 켠다. 낭독 중에 켜 두면 스피커 소리가 마이크로
   // 되돌아와, 수음이 열리는 순간 그 꼬리가 어르신의 첫마디인 양 올라간다.
+  // 켜는 쪽은 finishReading 이 한발 먼저 한다. 여기서는 끄는 때를 맞춘다.
   useEffect(() => { rec_.current?.setActive(listening) }, [listening, mic])
+  useEffect(() => { if (snap?.state !== 'SPEAKING') armed.current = null }, [snap?.state])
+
+  // 낭독이 끝났다고 알리고, **답을 기다리지 않고 바로 듣기 시작한다.**
+  //
+  // 서버가 LISTENING 으로 답한 뒤에 켜면 그 왕복(터널을 거치면 수백 ms) 동안
+  // 녹음기가 꺼져 있다. 질문이 끝나자마자 답하시면 첫 음절이 거기 빠진다 —
+  // 「지난 바다」가 「난 바다」로 적힌다. 그래서 먼저 켜고, 그사이 모인 소리는
+  // 같은 줄(queue)에서 tts-done **뒤에** 올린다. 서버는 LISTENING 이 된 뒤에야
+  // 소리를 받으므로 순서가 곧 조건이다.
+  const finishReading = useCallback(async (sid: string) => {
+    void speaker.unlock()
+    armed.current = sid
+    rec_.current?.setActive(true)
+    const done = queue.current.then(() => run(() => api.ttsDone(sid)))
+    queue.current = done
+    await done
+  }, [run])
 
   // 낭독 — 질문이 나오면 읽어 주고, 다 읽으면 스스로 수음을 연다.
   //
   // **tts-done 을 여기서 올리는 이유**는 낭독이 끝나는 시각을 서버가 알 수 없기
   // 때문이다. 끝까지 튼 쪽이 화면이라, 여기서 올려야 T1 이 정확한 순간부터 돈다.
-  // **회차가 바뀌면 지운다.** 여는 말은 늘 같은 문장이라, 지우지 않으면 두
-  // 번째 회차의 여는 말이 「이미 읽은 말」로 걸려 낭독이 통째로 건너뛰어진다.
-  // 그러면 tts-done 이 안 올라가고, 서버는 낭독이 끝난 줄을 몰라 수음을 열지
-  // 않는다 — 회차가 SPEAKING 에 멈춘 채 화면만 계속 물어보게 된다.
-  // 실제로 그렇게 멈춘 회차가 셋 있었다 (폴링 84회 · 오디오 0바이트).
-  useEffect(() => { spoken.current = null }, [id])
-
+  //
+  // **읽었는지는 문장이 아니라 회차와 턴으로 가른다.** 같은 문장이 새 턴에 다시
+  // 올 수 있다 — 여는 말은 회차마다 같고, 질문 생성이 실패하거나 마무리가
+  // 이르면 서버는 같은 고정 문장으로 되묻는다. 문장으로 거르면 그 턴의 낭독이
+  // 건너뛰어져 tts-done 이 안 올라가고, 서버는 수음을 열지 않아 회차가
+  // SPEAKING 에 멈춘다. 새 질문은 늘 새 턴에 오므로 회차:턴 은 한 번씩만 선다.
   useEffect(() => {
     if (!id || snap?.state !== 'SPEAKING') return
     const q = snap.next_question
-    if (!q || !voice || spoken.current === q) return
-    spoken.current = q
+    const key = `${id}:${snap.turn}`
+    if (!q || !voice || spoken.current === key) return
+    spoken.current = key
 
     let cancelled = false
     void (async () => {
@@ -336,7 +356,7 @@ export default function App() {
         await speaker.play(blob)
         logbook.log('낭독', `${((performance.now() - t1) / 1000).toFixed(1)}초 읽었습니다`)
         if (cancelled) return
-        await run(() => api.ttsDone(id))
+        await finishReading(id)
       } catch (e) {
         // 잠금이 안 풀렸거나 재생이 거부됐다. 「낭독 끝」을 눌러 넘어가면 된다.
         logbook.fail('낭독', e instanceof Error ? e.message : String(e))
@@ -346,7 +366,7 @@ export default function App() {
       }
     })()
     return () => { cancelled = true }
-  }, [id, snap?.state, snap?.next_question, voice, run])
+  }, [id, snap?.state, snap?.turn, snap?.next_question, voice, finishReading])
 
   // 열어 본 회차에 읽을 것이 하나도 없나. 질문도 답도 없는 조각만 있는 경우다 —
   // 씨앗 없이 열고 첫 말씀 전에 끝난 회차가 그렇다. 제목만 덩그러니 남기지 않는다.
@@ -472,7 +492,7 @@ export default function App() {
 
           <div className="row">
             <button disabled={snap.state !== 'SPEAKING'}
-                    onClick={() => { speaker.stop(); void run(() => api.ttsDone(id!)) }}>
+                    onClick={() => { speaker.stop(); void finishReading(id!) }}>
               낭독 끝<small>{reading ? '지금 넘어가기' : '수음 시작'}</small>
             </button>
             <button className="ghost" disabled={!listening} onClick={() => run(() => api.speech(id!, utter))}>

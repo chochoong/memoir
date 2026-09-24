@@ -43,6 +43,7 @@ log = logging.getLogger("tts")
 DEFAULT_VOICE = "ko-KR-SunHiNeural"
 DEFAULT_RATE = "-8%"
 DEFAULT_FORMAT = "audio-24khz-48kbitrate-mono-mp3"
+TAIL_SILENCE_MS = 150              # 마지막 음절 뒤에 남기는 무음 (_ssml 참조)
 
 # 예산은 T2 최솟값(3.0초)에서 질문 생성이 쓰고 남은 자리다. 실측 질문 p90 이
 # 1.1초쯤이라 1.9초가 남는데, 거기서 폰이 받아 가는 시간까지 빼야 한다.
@@ -86,13 +87,20 @@ def _ssml(text: str) -> str:
     **escape 를 거른다.** 질문은 Gemini 가 지은 문장이라 `&` 나 `<` 가 섞일 수
     있고, 그대로 넣으면 SSML 이 깨져 400 이 온다. 소리가 안 나는 것으로 끝나지만
     원인을 찾기는 어려운 자리다.
+
+    **끝의 무음을 깎는다.** Azure 는 기본으로 마지막 음절 뒤에 1초쯤 무음을
+    붙인다. 화면은 파일이 끝나야 수음을 여는데, 어르신은 목소리가 그친 순간
+    답을 시작하신다 — 그 1초 동안 말씀의 앞머리가 녹음기에 들어오지 못한다.
+    0 으로 자르지 않고 조금 남기는 것은 마지막 음절의 울림까지 잘라 말끝이
+    뚝 끊기게 들리지 않게 하려는 것이다.
     """
     voice = os.environ.get("AZURE_TTS_VOICE") or DEFAULT_VOICE
     rate = os.environ.get("AZURE_TTS_RATE") or DEFAULT_RATE
     return (
         "<speak version='1.0' xmlns='http://www.w3.org/2001/10/synthesis' "
-        "xml:lang='ko-KR'>"
+        "xmlns:mstts='https://www.w3.org/2001/mstts' xml:lang='ko-KR'>"
         f"<voice name='{escape(voice)}'>"
+        f"<mstts:silence type='Tailing-exact' value='{TAIL_SILENCE_MS}ms'/>"
         f"<prosody rate='{escape(rate)}'>{escape(text)}</prosody>"
         "</voice></speak>"
     )
