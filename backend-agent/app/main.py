@@ -628,43 +628,12 @@ async def get_photo(photo_id: str, request: Request):
 # 바이트는 사진과 같은 이유로 언제나 이 서버를 지나서 나간다.
 
 
-@app.post("/api/sessions/{session_id}/postcard")
-async def make_postcard(session_id: str, request: Request):
-    """
-    끝난 회차의 엽서를 굽는다. 이미 있으면 새로 구워 덮어쓴다.
-
-    **기다리는 요청이다.** 문장 뽑기와 그림 그리기가 끝나야 답이 간다 (수 초~수십 초).
-    폴링을 두지 않은 것은 누르는 사람이 결과를 보려고 누르는 것이기 때문이다 —
-    화면은 그동안 「그리는 중」을 띄우면 된다.
-
-    409 는 어르신이 다른 것을 하면 되는 경우(회차가 안 끝났다 · 말씀이 없다 ·
-    이미 굽는 중), 503 은 서버 쪽 사정이다. 화면이 둘을 다르게 말해야 한다.
-    """
-    try:
-        rec = await postcard.make(session_id, uid(request))
-    except LookupError as e:
-        raise HTTPException(404, "회차를 찾을 수 없습니다") from e
-    except postcard.PostcardNotReady as e:
-        raise HTTPException(409, str(e)) from e
-    except postcard.PostcardUnavailable as e:
-        raise HTTPException(503, str(e)) from e
-    except store.StoreUnavailable as e:
-        raise HTTPException(503, "지금은 엽서를 만들 수 없습니다") from e
-    return {
-        "url": _postcard_url(session_id, rec),
-        "text": rec["text"],
-        "width": rec["width"],
-        "height": rec["height"],
-        "bytes": rec["bytes"],
-    }
-
-
 @app.get("/api/sessions/{session_id}/postcard")
 async def get_postcard(session_id: str, request: Request):
     """
     엽서 바이트. `<img src>` 가 직접 물어 오는 자리라 신원은 쿠키로도 받는다 (uid).
 
-    ETag 는 저장 키다. 다시 구우면 키가 바뀌므로 옛 엽서가 304 로 남지 않는다.
+    ETag 는 저장 키다. 다시 저장하면 키가 바뀌므로 옛 엽서가 304 로 남지 않는다.
     """
     rec = await _read(store.load_postcard(session_id))
     if rec is None or rec["user_id"] != uid(request):
@@ -691,7 +660,7 @@ async def get_postcard(session_id: str, request: Request):
 def _postcard_url(session_id: str, rec: dict) -> str:
     """
     엽서 주소. **키의 해시를 꼬리에 단다.** 주소가 같으면 브라우저가 max-age 동안
-    묻지도 않고 옛 엽서를 보여 준다. 다시 구운 뒤에는 주소 자체가 달라야 한다.
+    묻지도 않고 옛 엽서를 보여 준다. 다시 저장한 뒤에는 주소 자체가 달라야 한다.
     """
     return f"/api/sessions/{session_id}/postcard?v={postcard.version(rec['storage_key'])}"
 
