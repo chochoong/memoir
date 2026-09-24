@@ -691,7 +691,12 @@ class SessionController:
         # 머리 없는 PCM 이면 여기서 WAV 머리를 씌운다. audio.py 의 설명 참조 —
         # 무음을 들어낸 조각들은 PCM 으로만 온전히 이어 붙는다.
         audio, mime = audiolib.for_stt(b"".join(self._audio), self._audio_mime)
+        # 같은 버퍼가 빈 전사 뒤에 다시 올라가므로 시각까지 이름에 넣는다.
+        dumped = audiolib.dump(audio, mime, f"{self.session_id[:8]}_{len(self.fragments):02d}"
+                                            f"_{time.strftime('%H%M%S')}")
         text = (await self.stt_fn(audio, mime, self._hint())).strip()
+        if dumped:
+            log.info("전사 오디오 %s → %r", dumped.name, text)
         if not text:
             # 빈 전사는 「말씀이 없었다」일 수도, 「받아오지 못했다」일 수도 있다.
             # 어르신에게는 똑같이 보이지만 로그에서는 구분되어야 한다.
@@ -700,12 +705,16 @@ class SessionController:
 
     def _hint(self) -> str:
         """
-        씨앗과 직전 답변. 인명·지명을 전사기에 흘려 넣는다.
+        씨앗. 인명·지명을 전사기에 흘려 넣는다.
 
         「순애」「서울」 같은 말은 우리가 이미 알고 있는데 STT 만 모른다.
         whisper 측정에서 이 힌트 하나로 글자 오류율이 4.2% -> 0.8% 로 내려갔다.
+
+        **지난 답변은 넣지 않는다.** 답변은 그 자체가 전사 결과라, 한 번 잘못
+        들린 말(「지난 바다」→「친한 바다」)이 힌트가 되면 다음 턴부터 전사기를
+        그 오답 쪽으로 끌어당긴다. 사람이 적은 씨앗만 믿을 수 있는 글이다.
         """
-        return " ".join(f["answer"] for f in self.fragments[-2:] if f.get("answer"))
+        return shared_state.seed(self)
 
     async def _make_question(self) -> None:
         try:

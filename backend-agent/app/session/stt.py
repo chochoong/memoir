@@ -38,9 +38,14 @@ import logging
 import os
 import time
 
+from .conf import env_float
+
 log = logging.getLogger("stt")
 
-API_VERSION = "2024-11-15"
+# phraseList 는 이 버전부터 받는다. 2024-11-15 는 그 필드를 400 으로 거절하고,
+# 모르는 이름의 필드는 말없이 버린다 — 힌트가 안 먹어도 겉으로는 멀쩡하다.
+# 지연은 같다 (중앙값 131ms → 133ms, 같은 녹음 12회씩).
+API_VERSION = "2025-10-15"
 DEFAULT_LOCALE = "ko-KR"
 
 # 실측 p90 이 15초 음성에 921ms, 34초 음성에 1656ms 다. 6초는 「느린 것」이 아니라
@@ -93,19 +98,45 @@ def _creds() -> tuple[str, str] | None:
     return None
 
 
+# 긴 것부터 본다 — 「에서」를 「서」보다, 「이랑」을 「랑」보다 먼저 떼야 한다.
+_PARTICLES = sorted(
+    "으로부터 에서부터 이랑 에서 에게 한테 께서 하고 으로 부터 까지 처럼 보다 이나 "
+    "랑 와 과 은 는 이 가 을 를 의 에 도 로".split(), key=len, reverse=True)
+
+
+def _stem(word: str) -> str:
+    """끝에 붙은 조사 하나를 뗀다. 남는 말이 두 글자 미만이면 떼지 않는다."""
+    for p in _PARTICLES:
+        if word.endswith(p) and len(word) - len(p) >= 2:
+            return word[:-len(p)]
+    return word
+
+
 def _definition(hint: str | None) -> dict:
     """
-    hint 는 씨앗·직전 답변에서 온다. 인명·지명을 phraseLists 로 흘려 넣는다.
+    hint 는 씨앗에서 온다 (controller._hint). 낱말로 쪼개 phraseList 로 넘긴다.
 
-    **효과는 확인하지 못했다.** 시험 음성에서는 Azure 가 이미 「서울」을 맞혀서
-    차이가 나타나지 않았다. 비용이 없고 실제 녹음에서 지명·인명이 틀릴 때
-    기댈 자리라 넣어 두었다. 도움이 안 된다고 판명되면 이 줄만 지우면 된다.
+    낱말로 쪼개는 것은 씨앗이 문장이기 때문이다. 문장을 통째로 넣으면 그
+    문장을 그대로 말씀하실 때만 걸린다. 문장부호는 떼어 낸다 — 「바다.」는
+    「바다」와 다른 구절로 취급된다.
+
+    **말씀하신 그 글자가 목록에 있을 때만 먹는다.** 실제 녹음에서 「친한 바다」는
+    구절 「지난 바다」로는 바로잡혔지만 「지난」「바다에」로는 그대로였다. 그래서
+    기대는 곳은 인명·지명이다.
+
+    **조사를 뗀 꼴도 함께 넣는다.** 씨앗의 이름은 「순애랑」「영등포역에서」처럼
+    조사가 붙어 오는데, 대답에서는 「순애」「순애는」으로 나온다. 붙은 꼴만 넣었을
+    때는 「순해」가 그대로였고 「순애」를 넣자 바로잡혔다. 붙은 꼴도 버리지 않는다
+    — 「만났지」처럼 조사가 아닌 끝을 잘못 뗄 수 있어서다.
     """
-    d: dict = {"locales": [os.environ.get("AZURE_STT_LOCALE", DEFAULT_LOCALE)]}
+    locale = (os.environ.get("AZURE_STT_LOCALE") or "").strip() or DEFAULT_LOCALE
+    d: dict = {"locales": [locale]}
     if hint:
-        phrases = [w for w in (hint.replace("\n", " ").split()) if len(w) > 1][:40]
+        words = [w.strip(".,!?·…\"'「」()") for w in hint.split()]
+        forms = (f for w in words for f in (w, _stem(w)))
+        phrases = list(dict.fromkeys(f for f in forms if len(f) > 1))[:40]
         if phrases:
-            d["phraseLists"] = phrases
+            d["phraseList"] = {"phrases": phrases}
     return d
 
 
@@ -129,7 +160,9 @@ async def azure_transcribe(audio: bytes, mime: str = "audio/wav",
     if not cred or not audio:
         return ""
     key, region = cred
-    timeout = float(os.environ.get("AZURE_STT_TIMEOUT", DEFAULT_TIMEOUT))
+    # 빈 값·오타는 기본값으로 돈다. 여기서 터지면 _confirm 이 전사 전에 죽어
+    # 회차가 PROCESSING 에 멈춘다 — 이 함수는 예외를 올리지 않는다는 약속이다.
+    timeout = env_float("AZURE_STT_TIMEOUT", DEFAULT_TIMEOUT)
     deadline = time.perf_counter() + timeout
 
     global _SEQ
