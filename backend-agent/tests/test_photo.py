@@ -31,6 +31,7 @@ for _stream in (sys.stdout, sys.stderr):
 from PIL import Image                                                    # noqa: E402
 
 from app.session import migrate, photo, photostore, store                # noqa: E402
+from tests._nodb import NoDb                                              # noqa: E402
 
 PASS, FAIL = [], []
 TMP = Path(__file__).resolve().parent / "_tmp_photo"
@@ -445,7 +446,7 @@ def test_routes():
 
     src = jpeg(1600, 1200)
     with _Env(GEMINI_API_KEY="", AZURE_SPEECH_KEY="", PHOTO_STORE="local",
-              PHOTO_DIR=str(TMP), CREATE_MAX_PER_WINDOW=0), _FakeRows() as rows:
+              PHOTO_DIR=str(TMP), CREATE_MAX_PER_WINDOW=0), _FakeRows() as rows, NoDb():
         photostore.reset()
         with TestClient(app) as c:
             up = c.post("/api/photos", content=src,

@@ -30,6 +30,7 @@ for _stream in (sys.stdout, sys.stderr):
 from PIL import Image                                                    # noqa: E402
 
 from app.session import photostore, postcard, store                      # noqa: E402
+from tests._nodb import NoDb                                              # noqa: E402
 
 PASS, FAIL = [], []
 TMP = Path(__file__).resolve().parent / "_tmp_postcard"
@@ -199,7 +200,7 @@ def test_routes():
 
     shutil.rmtree(TMP, ignore_errors=True)
     kim = {"X-User-Id": "kim"}
-    with _Env(AZURE_SPEECH_KEY="", PHOTO_STORE="local", PHOTO_DIR=str(TMP)), _Fake() as fake:
+    with _Env(AZURE_SPEECH_KEY="", PHOTO_STORE="local", PHOTO_DIR=str(TMP)), _Fake() as fake, NoDb():
         photostore.reset()
         with TestClient(app) as c:
             url = f"/api/sessions/{SID}/postcard"
