@@ -599,6 +599,11 @@ class SessionController:
         text = await self._transcribe()
         self.marks.transcribed_at = time.perf_counter()
 
+        # **기다리는 사이 회차가 닫혔을 수 있다.** 「다 말했어요」의 확정은 요청
+        # 안에서 돌아서 release() 가 끊지 못한다. 전사한 말씀은 아래에서 저장하고,
+        # 전이·질문 생성은 하지 않는다 — 닫힌 회차에 쓰는 LLM·TTS 비용은 아무도 듣지 않는다.
+        if not text and self._closed():
+            return
         if not text:                                   # FR-AD-312 턴 미소모
             self.timers.cancel_t2()
             self.machine.fire(Event.EMPTY_TRANSCRIPT)
@@ -615,6 +620,8 @@ class SessionController:
         # 지연 숫자를 기다리지 않고 바로 내린다. 어르신의 말을 잃지 않는 게 먼저다.
         await store.save_turn(self, self.fragments[-1])
         self.marks.saved_at = time.perf_counter()
+        if self._closed():
+            return
 
         cap = self.turn_cap()
         if cap and self.machine.turn >= cap:
@@ -635,6 +642,9 @@ class SessionController:
             return
 
         self._pending = asyncio.create_task(self._make_question())
+
+    def _closed(self) -> bool:
+        return self.machine.state is State.CLOSED
 
     def _after_empty(self) -> None:
         """

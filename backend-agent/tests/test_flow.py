@@ -423,6 +423,75 @@ def test_done_button_race():
           f"{spans}")
 
 
+def test_abort_during_confirm():
+    """
+    「다 말했어요」의 전사 도중에 「중단」이 도착한다.
+
+    버튼의 확정은 요청 안에서 await 로 돌아 release() 가 끊을 태스크가 없다.
+    전사가 끝난 뒤 닫힌 회차를 보고 멈추지 않으면 질문 생성과 낭독 합성이
+    한 번씩 더 돈다 — 아무도 듣지 않는 LLM·TTS 호출이다. 자동 확정(T1)은
+    타이머 태스크째 끊겨 이 창이 없다.
+    """
+    print("\n[12] 확정 도중의 「중단」")
+
+    async def run(said: str):
+        calls = {"질문": 0, "합성": 0}
+
+        async def slow_stt(audio, mime, hint):
+            await asyncio.sleep(0.3)          # 이 사이에 중단이 온다
+            return said
+
+        async def count_question(ctl):
+            calls["질문"] += 1
+            return "그때 기차 안은 어땠나요?"
+
+        async def count_tts(text):
+            calls["합성"] += 1
+            return b""
+
+        ctl = SessionController(user_id="t", title="시험", pace="fast",
+                                stt_fn=slow_stt, question_fn=count_question,
+                                tts_fn=count_tts)
+        await ctl.start("씨앗")
+        await asyncio.sleep(0.05)
+        await ctl.tts_done()
+        base = dict(calls)
+        await ctl.audio_chunk(bytes(64), "audio/wav")
+
+        pressed = asyncio.create_task(ctl.done_button())
+        await asyncio.sleep(0.1)              # 전사 도중
+        mid = ctl.machine.state
+        await ctl.abort()
+        err = None
+        try:
+            await pressed
+        except Exception as e:                # noqa: BLE001
+            err = f"{type(e).__name__}: {e}"
+        await asyncio.sleep(0.3)              # 새어 나간 태스크가 있다면 돌 시간
+        ctl.release()
+        spent = {k: calls[k] - base[k] for k in calls}
+        return ctl, mid, err, spent
+
+    ctl, mid, err, spent = asyncio.run(run("순애랑 기차를 탔어"))
+    check("중단이 전사 도중에 도착했다", mid is State.PROCESSING,
+          f"state={mid.value} — 여기가 아니면 이 시험은 아무것도 재지 않는다")
+    check("버튼 요청이 터지지 않는다", err is None, err or "")
+    check("중단 뒤 질문을 만들지 않는다", spent["질문"] == 0, f"{spent['질문']}회")
+    check("중단 뒤 낭독을 합성하지 않는다", spent["합성"] == 0, f"{spent['합성']}회")
+    check("회차는 닫힌 채다", ctl.machine.state is State.CLOSED,
+          f"state={ctl.machine.state.value}")
+    check("중단 직전의 말씀은 남는다",
+          len(ctl.fragments) == 2 and "순애" in ctl.fragments[-1]["answer"],
+          f"조각 {len(ctl.fragments)}개")
+
+    # 전사가 비어 돌아오면 EMPTY_TRANSCRIPT 를 쏘려 한다. CLOSED 에는 그 전이가
+    # 없어 버튼 요청이 TransitionError 로 터진다.
+    ctl2, _, err2, _ = asyncio.run(run(""))
+    check("빈 전사여도 버튼 요청이 터지지 않는다", err2 is None, err2 or "")
+    check("빈 전사여도 닫힌 채다", ctl2.machine.state is State.CLOSED,
+          f"state={ctl2.machine.state.value}")
+
+
 def test_all_checks_passed():
     """
     pytest 로 돌릴 때의 안전판.
@@ -447,6 +516,7 @@ def main() -> int:
     test_pcm_wrap()
     test_tts()
     test_done_button_race()
+    test_abort_during_confirm()
     print(f"\n{'=' * 52}\n통과 {len(PASS)} · 실패 {len(FAIL)}")
     if FAIL:
         print("실패:", ", ".join(FAIL))
