@@ -30,7 +30,7 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
 from app.session import controller as sc
-from app.session import limits, photo, photostore, prompt, store, stt, tts
+from app.session import limits, photo, photostore, postcard, prompt, store, stt, tts
 from app.session.conf import env_flag, env_int, env_str
 from app.session.machine import TransitionError
 from app.session.question import gemini_question, warmup
@@ -509,6 +509,11 @@ async def session_record(session_id: str, x_user_id: str = Header(default="dev-u
     rec = await _read(store.load_session(session_id))
     if rec is None or rec["user_id"] != x_user_id:
         raise HTTPException(404, "회차를 찾을 수 없습니다")
+    if rec["postcard"]:
+        # 저장 키는 화면에 내보내지 않는다 (photostore.py 머리). 주소로 바꿔 준다.
+        pc = rec["postcard"]
+        pc["url"] = _postcard_url(session_id, pc)
+        del pc["storage_key"]
     return rec
 
 
@@ -615,6 +620,80 @@ async def get_photo(photo_id: str, request: Request):
             "Cache-Control": f"private, max-age={photo.cache_seconds()}",
             "ETag": etag,
         })
+
+
+# ---------------------------------------------------------------- 엽서
+#
+# 회차당 한 장이라 주소에 엽서 id 가 없다. 회차 id 가 곧 엽서의 주소다.
+# 바이트는 사진과 같은 이유로 언제나 이 서버를 지나서 나간다.
+
+
+@app.post("/api/sessions/{session_id}/postcard")
+async def make_postcard(session_id: str, request: Request):
+    """
+    끝난 회차의 엽서를 굽는다. 이미 있으면 새로 구워 덮어쓴다.
+
+    **기다리는 요청이다.** 문장 뽑기와 그림 그리기가 끝나야 답이 간다 (수 초~수십 초).
+    폴링을 두지 않은 것은 누르는 사람이 결과를 보려고 누르는 것이기 때문이다 —
+    화면은 그동안 「그리는 중」을 띄우면 된다.
+
+    409 는 어르신이 다른 것을 하면 되는 경우(회차가 안 끝났다 · 말씀이 없다 ·
+    이미 굽는 중), 503 은 서버 쪽 사정이다. 화면이 둘을 다르게 말해야 한다.
+    """
+    try:
+        rec = await postcard.make(session_id, uid(request))
+    except LookupError as e:
+        raise HTTPException(404, "회차를 찾을 수 없습니다") from e
+    except postcard.PostcardNotReady as e:
+        raise HTTPException(409, str(e)) from e
+    except postcard.PostcardUnavailable as e:
+        raise HTTPException(503, str(e)) from e
+    except store.StoreUnavailable as e:
+        raise HTTPException(503, "지금은 엽서를 만들 수 없습니다") from e
+    return {
+        "url": _postcard_url(session_id, rec),
+        "text": rec["text"],
+        "width": rec["width"],
+        "height": rec["height"],
+        "bytes": rec["bytes"],
+    }
+
+
+@app.get("/api/sessions/{session_id}/postcard")
+async def get_postcard(session_id: str, request: Request):
+    """
+    엽서 바이트. `<img src>` 가 직접 물어 오는 자리라 신원은 쿠키로도 받는다 (uid).
+
+    ETag 는 저장 키다. 다시 구우면 키가 바뀌므로 옛 엽서가 304 로 남지 않는다.
+    """
+    rec = await _read(store.load_postcard(session_id))
+    if rec is None or rec["user_id"] != uid(request):
+        raise HTTPException(404, "엽서를 찾을 수 없습니다")
+
+    etag = f'"{postcard.version(rec["storage_key"])}"'
+    if request.headers.get("if-none-match") == etag:
+        return Response(status_code=304, headers={"ETag": etag})
+
+    try:
+        data = await photostore.current().get(rec["storage_key"])
+    except photostore.PhotoMissing as e:
+        log.error("엽서 바이트가 없다 %s key=%s", session_id, rec["storage_key"])
+        raise HTTPException(404, "엽서를 찾을 수 없습니다") from e
+    except photostore.PhotoStoreError as e:
+        raise HTTPException(503, "지금은 엽서를 불러오지 못했습니다") from e
+
+    return Response(
+        content=data, media_type=rec["mime"],
+        headers={"Cache-Control": f"private, max-age={photo.cache_seconds()}",
+                 "ETag": etag})
+
+
+def _postcard_url(session_id: str, rec: dict) -> str:
+    """
+    엽서 주소. **키의 해시를 꼬리에 단다.** 주소가 같으면 브라우저가 max-age 동안
+    묻지도 않고 옛 엽서를 보여 준다. 다시 구운 뒤에는 주소 자체가 달라야 한다.
+    """
+    return f"/api/sessions/{session_id}/postcard?v={postcard.version(rec['storage_key'])}"
 
 
 # ---------------------------------------------------------------- 보조

@@ -39,6 +39,8 @@ export default function App() {
   const [savedErr, setSavedErr] = useState<string | null>(null)
   const [rec, setRec] = useState<SessionRecord | null>(null)
   const [showSaved, setShowSaved] = useState(false)
+  const [baking, setBaking] = useState(false)
+  const [cardErr, setCardErr] = useState<string | null>(null)
   const [mic, setMic] = useState(false)
   const [micErr, setMicErr] = useState<string | null>(null)
   // 마이크 판정 속 숫자. 문턱은 recorder 가 스스로 정하므로 (recorder.ts 의
@@ -92,11 +94,35 @@ export default function App() {
 
   const openRecord = useCallback(async (sessionId: string) => {
     setSavedErr(null)
+    setCardErr(null)
     try {
       setRec(await api.record(sessionId))
     } catch (e) {
       setRec(null)
       setSavedErr(e instanceof ApiError ? `${e.status} · ${e.message}` : String(e))
+    }
+  }, [])
+
+  // 엽서 굽기. 답이 올 때까지 기다린다 (api.makePostcard).
+  //
+  // **기록을 다시 읽지 않고 받은 것을 끼워 넣는다.** 다시 읽으면 요청이 하나
+  // 더 들고, 그 사이에 DB 가 비틀거리면 방금 구운 엽서가 화면에서 사라진다.
+  const bake = useCallback(async (sessionId: string) => {
+    setCardErr(null)
+    setBaking(true)
+    const t0 = performance.now()
+    try {
+      const pc = await api.makePostcard(sessionId)
+      logbook.log('엽서', `${((performance.now() - t0) / 1000).toFixed(1)}초 · 「${pc.text}」`)
+      setRec(r => r && r.session_id === sessionId
+        ? { ...r, postcard: { url: pc.url, text: pc.text, created_at: new Date().toISOString() } }
+        : r)
+    } catch (e) {
+      const msg = e instanceof ApiError ? `${e.status} · ${e.message}` : String(e)
+      logbook.fail('엽서', msg)
+      setCardErr(msg)
+    } finally {
+      setBaking(false)
     }
   }, [])
 
@@ -548,6 +574,19 @@ export default function App() {
             <h3>{new Date(rec.created_at).toLocaleString('ko-KR')} · {rec.closed_reason ?? '진행 중'}</h3>
             {recEmpty && (
               <p className="note">남은 내용이 없습니다 · 조각 {rec.fragments.length}개</p>
+            )}
+            {rec.closed_at && !recEmpty && (
+              <div className="postcard">
+                {rec.postcard && (
+                  <img src={api.postcardSrc(rec.postcard.url)} alt={rec.postcard.text} />
+                )}
+                <button className={baking ? 'ghost busy' : 'ghost'} disabled={baking}
+                        onClick={() => bake(rec.session_id)}>
+                  {baking ? '엽서를 그리는 중' : rec.postcard ? '엽서 다시 만들기' : '엽서 만들기'}
+                  <small>{baking ? '수십 초 걸릴 수 있습니다' : '문장을 뽑고 그림을 그립니다'}</small>
+                </button>
+                {cardErr && <div className="error" role="alert">{cardErr}</div>}
+              </div>
             )}
             {!recEmpty && (
             <ol className="fragments">

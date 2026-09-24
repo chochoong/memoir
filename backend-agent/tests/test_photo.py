@@ -338,7 +338,7 @@ def test_migrations():
     found = migrate.files()
     # **이 목록은 새 마이그레이션마다 손으로 늘린다.** 귀찮으라고 그랬다 —
     # 번호를 빠뜨리거나 두 사람이 같은 번호를 쓰면 여기서 먼저 걸린다.
-    check("번호순으로 읽는다", [v for v, _ in found] == ["001", "002", "003", "004"],
+    check("번호순으로 읽는다", [v for v, _ in found] == ["001", "002", "003", "004", "005"],
           str([v for v, _ in found]))
     check("001 은 처음 세 테이블", "CREATE TABLE IF NOT EXISTS session"
           in found[0][1].read_text(encoding="utf-8"))

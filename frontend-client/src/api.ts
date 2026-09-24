@@ -80,8 +80,18 @@ export interface PhotoUp {
   bytes: number
 }
 
+// ---------------------------------------------------------------- 엽서
+// 끝난 회차 하나에 한 장. 주소 꼬리의 ?v= 는 다시 구우면 바뀐다 — 그래야
+// 브라우저가 옛 엽서를 캐시에서 꺼내 보이지 않는다.
+
+export interface Postcard {
+  url: string
+  text: string          // 엽서에 박힌 문장. 이미지 안의 글자와 같다
+}
+
 export type SessionRecord = Omit<SavedSession, 'fragment_count'> & {
   fragments: SavedFragment[]
+  postcard: (Postcard & { created_at: string }) | null
 }
 
 // 개발 중에만 VITE_API_BASE 를 쓴다. **빌드본은 항상 같은 출처로 부른다.**
@@ -201,4 +211,17 @@ export const api = {
   // 에서는 포트가 달라 남의 쿠키가 되어 안 따라간다.** 사진 확인은 빌드본으로
   // 한다.
   photoSrc: (photoId: string) => `${BASE}/api/photos/${photoId}`,
+
+  // 끝난 회차의 엽서를 굽는다. **수 초에서 수십 초를 기다린다** — 문장을 뽑고
+  // 그림을 그린 뒤에야 답이 온다. 이미 있으면 새로 구워 덮어쓴다.
+  //
+  // 409 는 회차가 안 끝났거나 말씀이 없거나 이미 굽는 중이고, 503 은 서버 쪽
+  // 사정이다. 화면이 둘을 다르게 말한다.
+  makePostcard: (sessionId: string) =>
+    call<Postcard & { width: number; height: number; bytes: number }>(
+      `/sessions/${sessionId}/postcard`, { method: 'POST' }),
+
+  // <img src> 가 쓸 주소. 사진과 같은 까닭으로 개발 서버(5173)에서는 쿠키가
+  // 안 따라가 안 보인다. 확인은 빌드본으로 한다.
+  postcardSrc: (url: string) => `${BASE}${url}`,
 }
