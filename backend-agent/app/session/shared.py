@@ -27,7 +27,7 @@ controller._analyze_photo 가 사진을 받은 회차에서만 채운다. 사진
 
     asked_questions   ctl.fragments 에서 뽑는다. 따로 쌓지 않는다 —
                       두 벌을 두면 어긋나고, 어긋나면 같은 질문이 또 나간다.
-    current_topic     비어 있으면 엽서(0번 조각)로 채운다. 엽서가 회차의 주제다.
+    current_topic     비어 있으면 씨앗(0번 조각)으로 채운다. 씨앗이 회차의 주제다.
 
 나머지(confirmed_facts · information_status …)는 인터뷰 에이전트가 자기 응답에
 함께 담아 오고, 그것을 여기서 머지한다 — 5단계에서 붙는다.
@@ -107,7 +107,7 @@ def initial() -> dict:
 
 def asked_questions(ctl: "SessionController") -> list[str]:
     """
-    지금까지 여쭌 질문. 0번 조각은 엽서라 question 이 None 이다.
+    지금까지 여쭌 질문. 0번 조각은 씨앗이라 question 이 None 이다.
 
     이것이 문서의 「이미 물었거나 답변이 끝난 내용을 다시 묻지 않습니다」를
     실제로 돌게 하는 값이다. 모델에게 기억을 시키는 대신 사실을 준다.
@@ -115,8 +115,8 @@ def asked_questions(ctl: "SessionController") -> list[str]:
     return [f["question"] for f in ctl.fragments if f.get("question")]
 
 
-def postcard(ctl: "SessionController") -> str:
-    """엽서 = 0번 조각의 answer. 회차를 연 씨앗 문장이다."""
+def seed(ctl: "SessionController") -> str:
+    """씨앗 = 0번 조각의 answer. 회차를 연 한 줄이다."""
     if not ctl.fragments:
         return ""
     return (ctl.fragments[0].get("answer") or "").strip()
@@ -132,7 +132,7 @@ def for_interview(ctl: "SessionController") -> dict:
     out = dict(ctl.state)
     out["asked_questions"] = asked_questions(ctl)
     if not out.get("current_topic"):
-        out["current_topic"] = postcard(ctl)
+        out["current_topic"] = seed(ctl)
     facts = out.get("confirmed_facts") or []
     if len(facts) > FACTS_SENT:
         out["confirmed_facts"] = facts[-FACTS_SENT:]

@@ -231,12 +231,12 @@ async def mirror_uid(request: Request, call_next):
 
 class StartReq(BaseModel):
     title: str
-    postcard: str
+    seed: str
     pace: str = "normal"          # fast(3초) / normal(5초) / slow(7초)
     # 0 = 제한 없음. 대화가 어디서 끝날지는 AI 의 close 판단이 정한다.
     # 양을 미리 묶고 싶은 쪽(시험 도구 등)이 값을 준다.
     max_turn: int = 0
-    # 회차를 여는 사진. 없이도 연다 — 엽서만으로 도는 것이 원래 길이다.
+    # 회차를 여는 사진. 없이도 연다 — 씨앗만으로 도는 것이 원래 길이다.
     photo_id: str | None = None
 
 
@@ -287,7 +287,7 @@ async def health(request: Request):
 async def create_session(req: StartReq, request: Request,
                          x_user_id: str = Header(default=ANON_USER)):
     """
-    회차를 연다. 엽서가 0번 조각이 되고, 첫 질문을 든 SPEAKING 상태로 시작한다.
+    회차를 연다. 씨앗이 0번 조각이 되고, 첫 질문을 든 SPEAKING 상태로 시작한다.
 
     X-User-Id 는 받아만 두고 검사하지 않는다. 구글 로그인이 붙으면 여기서 토큰을 풀어
     user_id 를 얻는다 — 그때 고칠 곳이 이 인자 하나로 끝나도록 해 둔 것이다.
@@ -337,7 +337,7 @@ async def create_session(req: StartReq, request: Request,
     ctl = sc.put(sc.SessionController(
         user_id=x_user_id, title=req.title, pace=req.pace, max_turn=req.max_turn,
         photo_id=req.photo_id, question_fn=gemini_question))
-    await ctl.start(req.postcard)
+    await ctl.start(req.seed)
     return ctl.snapshot()
 
 

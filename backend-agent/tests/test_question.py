@@ -134,11 +134,11 @@ def test_trim():
 def test_window():
     """
     창이 없으면 턴 20 의 입력이 턴 1 의 스무 배가 되고 그게 그대로 지연이 된다.
-    엽서는 회차의 주제라 창 밖으로 밀려나도 남는다.
+    씨앗은 회차의 주제라 창 밖으로 밀려나도 남는다.
     """
     print("\n[2] 대화는 최근 몇 턴만 싣는다")
 
-    frs = [{"idx": 0, "question": None, "answer": "엽서 한 줄"}]
+    frs = [{"idx": 0, "question": None, "answer": "씨앗 한 줄"}]
     for i in range(1, 11):
         frs.append({"idx": i, "question": f"질문{i}", "answer": f"대답{i}"})
     ctl = _Ctl(turn=10, fragments=frs)
@@ -149,7 +149,7 @@ def test_window():
     finally:
         os.environ.pop("PROMPT_WINDOW", None)
 
-    check("엽서는 남는다", "엽서 한 줄" in t)
+    check("씨앗은 남는다", "씨앗 한 줄" in t)
     check("창 안의 턴은 실린다", "대답10" in t and "대답8" in t)
     check("창 밖의 턴은 빠진다", "대답7" not in t, t[:60])
     check("자른 것을 말없이 넘기지 않는다", "7턴은 줄였습니다" in t,
@@ -217,7 +217,7 @@ def test_for_interview():
     ctl = _Ctl(turn=1, fragments=frs)
     out = shared.for_interview(ctl)
 
-    check("엽서가 주제가 된다", out["current_topic"] == "1968년 여름, 완행열차를 탔다.",
+    check("씨앗이 주제가 된다", out["current_topic"] == "1968년 여름, 완행열차를 탔다.",
           out["current_topic"])
     check("여쭌 질문을 fragments 에서 뽑는다",
           out["asked_questions"] == ["그때 어떤 소리가 들렸나요?"],
@@ -241,7 +241,7 @@ def test_close():
     """
     print("\n[5] 마무리 판단")
 
-    frs = [{"idx": 0, "question": None, "answer": "엽서"}]
+    frs = [{"idx": 0, "question": None, "answer": "씨앗"}]
     for i in range(1, 9):
         frs.append({"idx": i, "question": f"질문{i}", "answer": f"대답{i}"})
 
@@ -290,7 +290,7 @@ def test_broken_answer():
     """
     print("\n[6] 망가진 응답")
 
-    frs = [{"idx": 0, "question": None, "answer": "엽서"},
+    frs = [{"idx": 0, "question": None, "answer": "씨앗"},
            {"idx": 1, "question": "질문1", "answer": "대답1"}]
 
     for label, payload in (("JSON 이 아니다", "그냥 문장입니다"),
@@ -323,7 +323,7 @@ def test_prompt():
           "부풀면 입력 토큰이 서너 배가 되고 그게 그대로 지연이 된다")
 
     # 실제로 보내는 모습 — 상태가 앞, 대화가 뒤
-    ctl = _Ctl(turn=1, fragments=[{"idx": 0, "question": None, "answer": "엽서 한 줄"}])
+    ctl = _Ctl(turn=1, fragments=[{"idx": 0, "question": None, "answer": "씨앗 한 줄"}])
     _, fake = _ask(ctl, _answer())
     sent = fake.seen["contents"]
     check("상태를 대화 앞에 얹어 보낸다",
@@ -352,7 +352,7 @@ def test_end_reason():
     """
     print("\n[8] 종료 사유와 안내 문구")
 
-    frs = [{"idx": 0, "question": None, "answer": "엽서"}]
+    frs = [{"idx": 0, "question": None, "answer": "씨앗"}]
     for i in range(1, 9):
         frs.append({"idx": i, "question": f"질문{i}", "answer": f"대답{i}"})
 

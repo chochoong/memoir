@@ -37,7 +37,7 @@ from pathlib import Path
 
 sys.stdout.reconfigure(encoding="utf-8")
 
-POSTCARD = "1968년 여름, 순애랑 서울 가는 완행열차를 탔다."
+SEED = "1968년 여름, 순애랑 서울 가는 완행열차를 탔다."
 CHUNK_SEC = 1.0          # MediaRecorder 의 timeslice 와 같은 자리
 SILENCE_RATIO = 0.08     # 최대 음량 대비 이 아래면 무음으로 본다
 CTX = ssl.create_default_context()
@@ -125,7 +125,7 @@ def main() -> int:
         return 1
 
     snap = _call(a.base, "/api/sessions", json.dumps({
-        "title": "녹음 재생", "postcard": POSTCARD,
+        "title": "녹음 재생", "seed": SEED,
         "pace": a.pace, "max_turn": len(files)}).encode())
     sid = snap["session_id"]
     print(f"회차 {sid[:8]} · {a.pace} · {len(files)}턴")

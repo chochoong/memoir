@@ -30,7 +30,7 @@ export default function App() {
   const [snap, setSnap] = useState<Snapshot | null>(null)
   const [lat, setLat] = useState<Latency | null>(null)
   const [error, setError] = useState<string | null>(null)
-  const [postcard, setPostcard] = useState('')
+  const [seed, setSeed] = useState('')
   // 빈 칸으로 연다. 「말한다」는 칸의 글자를 전사 결과인 척 밀어 넣는 개발용
   // 길이라, 미리 적어 두면 한 번 누르는 것만으로 그 글이 그대로 턴의 답이 된다.
   const [utter, setUtter] = useState('')
@@ -323,7 +323,7 @@ export default function App() {
   }, [id, snap?.state, snap?.next_question, voice, run])
 
   // 열어 본 회차에 읽을 것이 하나도 없나. 질문도 답도 없는 조각만 있는 경우다 —
-  // 엽서 없이 열고 첫 말씀 전에 끝난 회차가 그렇다. 제목만 덩그러니 남기지 않는다.
+  // 씨앗 없이 열고 첫 말씀 전에 끝난 회차가 그렇다. 제목만 덩그러니 남기지 않는다.
   const recEmpty = !!rec && rec.fragments.every(f => !f.answer.trim() && !f.question)
 
   return (
@@ -337,18 +337,18 @@ export default function App() {
 
       <section>
         <h2>① 회차 시작</h2>
-        <label htmlFor="postcard">엽서 (0번 조각)</label>
-        <input id="postcard" value={postcard} onChange={e => setPostcard(e.target.value)}
+        <label htmlFor="seed">씨앗 (0번 조각)</label>
+        <input id="seed" value={seed} onChange={e => setSeed(e.target.value)}
                placeholder="비워 두면 어르신 말씀만으로 시작합니다 (인명·지명은 전사에 도움이 됩니다)" />
         <p className="note">
           {photos.length > 0
             ? `아래 ②에서 마지막에 올린 사진(${photos[0].photo_id.slice(0, 8)})이 함께 갑니다.`
-            : '사진을 먼저 올리면(②) 그 사진이 함께 갑니다. 없어도 엽서만으로 시작합니다.'}
+            : '사진을 먼저 올리면(②) 그 사진이 함께 갑니다. 없어도 씨앗만으로 시작합니다.'}
         </p>
         <div className="row">
           {PACES.map(p => (
             <button key={p.key}
-                    onClick={() => run(() => api.start(postcard, p.key, photos[0]?.photo_id))}>
+                    onClick={() => run(() => api.start(seed, p.key, photos[0]?.photo_id))}>
               {p.label}<small>{p.hint}</small>
             </button>
           ))}
@@ -554,13 +554,13 @@ export default function App() {
               {rec.fragments.map(f => (
                 <li key={f.idx}>
                   {f.question && <p className="q">{f.question}</p>}
-                  {/* **빈 답을 빈 <p> 로 두지 않는다.** 0번 엽서는 빈 채로 열리므로
-                      (start 의 postcard) 그대로 그리면 번호만 찍힌 줄이 남고, 조각이
+                  {/* **빈 답을 빈 <p> 로 두지 않는다.** 0번 씨앗은 빈 채로 열리므로
+                      (start 의 seed) 그대로 그리면 번호만 찍힌 줄이 남고, 조각이
                       그것 하나뿐인 회차는 눌러도 아무것도 안 나온 것처럼 보인다.
                       **없는 것과 비어 있는 것은 다른 사건이라 화면도 다르게 말한다.** */}
                   {f.answer.trim()
                     ? <p className="a">{f.answer}</p>
-                    : <p className="note">{f.idx === 0 ? '엽서 없이 연 회차입니다' : '(빈 칸)'}</p>}
+                    : <p className="note">{f.idx === 0 ? '씨앗 없이 연 회차입니다' : '(빈 칸)'}</p>}
                   {f.decision?.reason && (
                     <p className="note">근거 · {f.decision.reason}</p>
                   )}

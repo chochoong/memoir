@@ -566,7 +566,7 @@ def test_clues():
         try:
             ctl = C.SessionController(user_id="kim", title="t",
                                       photo_id=photo_id, tts_fn=silent)
-            await ctl.start("엽서")
+            await ctl.start("씨앗")
             if ctl._clues:
                 await ctl._clues
             ctl.release()
@@ -595,13 +595,13 @@ def test_clues():
 
     ctl, seen = asyncio.run(run("p1", owner="lee"))
     check("남의 사진은 붙지 않는다", "photo_analyses" not in ctl.state)
-    check("그래도 회차는 산다", ctl.fragments[0]["answer"] == "엽서")
+    check("그래도 회차는 산다", ctl.fragments[0]["answer"] == "씨앗")
     check("붙지 않아도 여는 말은 사진 이야기다", ctl._next_question == C.OPENING_PHOTO,
           "고르신 것은 사진이다 — 붙는지는 그 뒤에 안다")
 
     ctl, seen = asyncio.run(run("p1", clues=None))
     check("분석이 빈손이어도 회차는 산다",
-          "photo_analyses" not in ctl.state and ctl.fragments[0]["answer"] == "엽서")
+          "photo_analyses" not in ctl.state and ctl.fragments[0]["answer"] == "씨앗")
 
     # 올릴 때 이미 분석이 끝난 사진 — 보통은 이 길로 온다 (photo.analyze_later).
     READY = dict(CLUES, questions=["이 사진은 어떤 날에 찍으신 건가요?"])

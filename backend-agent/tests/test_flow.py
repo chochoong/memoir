@@ -111,7 +111,7 @@ def test_controller():
     ctl, elapsed = asyncio.run(run())
     check("다음 질문이 나왔다", ctl.machine.state is State.SPEAKING,
           f"state={ctl.machine.state.value}")
-    check("조각 2개 (엽서 + 답변 1)", len(ctl.fragments) == 2)
+    check("조각 2개 (씨앗 + 답변 1)", len(ctl.fragments) == 2)
 
     spans = ctl.latencies[0] if ctl.latencies else {}
     if spans:
@@ -132,7 +132,7 @@ def test_controller():
     async def run_btn():
         t0 = time.perf_counter()
         ctl = SessionController(user_id="t", title="시험", pace="slow")   # T2 = 7초
-        await ctl.start("엽서")
+        await ctl.start("씨앗")
         await ctl.tts_done()
         await ctl.speech("응, 그랬지.")
         await ctl.done_button()
@@ -147,7 +147,7 @@ def test_controller():
 
     async def run_empty():
         ctl = SessionController(user_id="t", title="시험", pace="fast")
-        await ctl.start("엽서")
+        await ctl.start("씨앗")
         await ctl.tts_done()
         await ctl.done_button()          # 아무 말 없이 확정
         await asyncio.sleep(0.3)
@@ -174,7 +174,7 @@ def test_empty_loop():
     async def run_silent():
         ctl = SessionController(user_id="t", title="시험", pace="fast")
         ctl.timers.t1_seconds = 0.3              # 3초씩 기다릴 이유가 없다
-        await ctl.start("엽서")
+        await ctl.start("씨앗")
         await ctl.tts_done()
         await ctl.done_button()                  # 아무 말 없이 확정
         await asyncio.sleep(2.0)                 # T1 이 여섯 번 돌 시간
@@ -191,7 +191,7 @@ def test_empty_loop():
         ctl = SessionController(user_id="t", title="시험", pace="fast",
                                 stt_fn=always_empty)
         ctl.timers.t1_seconds = 0.3
-        await ctl.start("엽서")
+        await ctl.start("씨앗")
         await ctl.tts_done()
         await ctl.audio_chunk(bytes(64), "audio/wav")
         await asyncio.sleep(2.5)
@@ -260,7 +260,7 @@ def test_tts():
             return b"ID3" + text.encode()[:8]
 
         ctl = SessionController(user_id="t", title="시험", pace="fast", tts_fn=slow_tts)
-        await ctl.start("엽서")
+        await ctl.start("씨앗")
         await ctl.tts_done()
         await ctl.speech("덜컹덜컹 소리가 났지.")
         await asyncio.sleep(T2_PRESETS["fast"] + ctl.timers.t1_seconds + 0.6)
@@ -279,7 +279,7 @@ def test_tts():
             raise RuntimeError("합성 서버가 죽었다")
 
         ctl = SessionController(user_id="t", title="시험", pace="fast", tts_fn=broken_tts)
-        await ctl.start("엽서")
+        await ctl.start("씨앗")
         await ctl.tts_done()
         await ctl.speech("덜컹덜컹 소리가 났지.")
         await asyncio.sleep(T2_PRESETS["fast"] + ctl.timers.t1_seconds + 0.6)
@@ -302,7 +302,7 @@ def test_tts():
             return b"ID3"
 
         ctl = SessionController(user_id="t", title="시험", pace="fast", tts_fn=slow_tts)
-        await ctl.start("엽서")
+        await ctl.start("씨앗")
         for say in ("첫 마디입니다.", "둘째 마디입니다.", "셋째 마디입니다."):
             await ctl.tts_done()
             await ctl.speech(say)
@@ -351,7 +351,7 @@ def test_done_button_race():
         ctl = SessionController(user_id="t", title="시험", pace="slow",   # T2 = 7초
                                 stt_fn=slow_stt, tts_fn=_silent_tts)
         ctl.timers.t1_seconds = 0.3           # 3초를 기다릴 이유가 없다
-        await ctl.start("엽서")
+        await ctl.start("씨앗")
         await ctl.tts_done()
         await ctl.audio_chunk(bytes(64), "audio/wav")
         await asyncio.sleep(0.45)             # T1 격발 뒤 · 전사 도중
@@ -375,11 +375,11 @@ def test_done_button_race():
     check("409 로 튕기지 않는다", err is None, err or "")
     check("PROCESSING 에 멈추지 않는다", ctl.machine.state is State.SPEAKING,
           f"state={ctl.machine.state.value}")
-    # 0번 조각은 엽서다 (start). 턴 하나가 더 붙어 둘이 되어야 맞는다 —
+    # 0번 조각은 씨앗이다 (start). 턴 하나가 더 붙어 둘이 되어야 맞는다 —
     # 잘린 확정은 여기를 비워 두고, 그게 말씀이 사라진다는 뜻이다.
     check("말씀이 조각으로 남는다",
           len(ctl.fragments) == 2 and "봉천동" in ctl.fragments[-1]["answer"],
-          f"조각 {len(ctl.fragments)}개 — 엽서 말고 턴이 없으면 말씀을 잃은 것이다")
+          f"조각 {len(ctl.fragments)}개 — 씨앗 말고 턴이 없으면 말씀을 잃은 것이다")
     check("턴을 두 번 소모하지 않는다", ctl.machine.turn == 1, f"턴 {ctl.machine.turn}")
     check("남은 T2 7초를 기다리지 않는다", el < 2.0, f"{el:.1f}초")
 
@@ -394,7 +394,7 @@ def test_done_button_race():
         ctl = SessionController(user_id="t", title="시험", pace="slow",
                                 question_fn=slow_question, tts_fn=_silent_tts)
         ctl.timers.t1_seconds = 0.3
-        await ctl.start("엽서")
+        await ctl.start("씨앗")
         await ctl.tts_done()
         await ctl.speech("그럼, 봉천동에서 살았지.")
         await asyncio.sleep(0.4)              # T1 격발 · 전사 끝 · 질문 생성 중

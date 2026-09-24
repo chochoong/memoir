@@ -79,7 +79,7 @@ SWEEP_EVERY = 60.0
 
 # 회차를 여는 말. **여기서는 LLM 을 부르지 않는다.**
 #
-# 예전에는 start() 가 엽서를 씨앗으로 첫 질문을 만들었다. 두 가지가 걸렸다.
+# 예전에는 start() 가 씨앗 문장으로 첫 질문을 만들었다. 두 가지가 걸렸다.
 #   · 어르신이 한 마디도 하시기 전에 주제가 정해졌다. 화면 입력창에 적혀 있던
 #     글이 프롬프트에 「어르신:」 으로 들어가 어르신의 말씀 행세를 했다.
 #   · 첫 질문에는 숨을 T2 가 없다. 생성 ~3초가 회차 시작 응답에 그대로 붙었다.
@@ -275,10 +275,10 @@ class SessionController:
         """
         self.last_active = time.monotonic()
 
-    async def start(self, postcard: str) -> None:
-        """엽서(0번 조각)로 회차를 연다. 여는 말 낭독 상태에서 시작한다."""
+    async def start(self, seed: str) -> None:
+        """씨앗(0번 조각)으로 회차를 연다. 여는 말 낭독 상태에서 시작한다."""
         self.touch()
-        self.fragments.append({"idx": 0, "question": None, "answer": postcard})
+        self.fragments.append({"idx": 0, "question": None, "answer": seed})
         await store.save_session(self)
         await store.save_turn(self, self.fragments[0])
 
@@ -643,7 +643,7 @@ class SessionController:
 
     def _hint(self) -> str:
         """
-        엽서와 직전 답변. 인명·지명을 전사기에 흘려 넣는다.
+        씨앗과 직전 답변. 인명·지명을 전사기에 흘려 넣는다.
 
         「순애」「서울」 같은 말은 우리가 이미 알고 있는데 STT 만 모른다.
         whisper 측정에서 이 힌트 하나로 글자 오류율이 4.2% -> 0.8% 로 내려갔다.

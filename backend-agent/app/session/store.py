@@ -123,7 +123,7 @@ async def close_pool() -> None:
 
 
 async def save_session(ctl: "SessionController") -> None:
-    """회차를 연다. 0번 조각(엽서)은 controller 가 따로 save_turn 으로 넣는다."""
+    """회차를 연다. 0번 조각(씨앗)은 controller 가 따로 save_turn 으로 넣는다."""
     if _pool is None:
         return
     try:
@@ -328,7 +328,7 @@ async def load_session(session_id: str) -> dict | None:
     회차 하나를 조각까지 통째로. 없으면 None — 그건 오류가 아니다.
 
     조각은 idx 순으로 준다. **idx 가 곧 서사의 시간 순서다** (FR-AD-401).
-    created_at 으로 정렬하지 않는다 — 0번 조각(엽서)과 1번이 같은 초에 들어가면
+    created_at 으로 정렬하지 않는다 — 0번 조각(씨앗)과 1번이 같은 초에 들어가면
     순서가 뒤집힌다.
     """
     pool = _need_pool()
