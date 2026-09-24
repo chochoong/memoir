@@ -23,7 +23,7 @@ from typing import Awaitable, Callable
 
 from . import audio as audiolib
 from . import shared as shared_state
-from . import photo_analyze, photostore, store, stt, tts
+from . import photo, photo_analyze, photostore, store, stt, tts
 from .conf import env_float, env_int
 from .machine import Event, Machine, State, TransitionError
 from .timers import T2_PRESETS, TimerSet
@@ -97,6 +97,10 @@ OPENING = "오늘은 어떤 이야기를 들려주시겠어요?"
 # 만든 진짜 사진 질문으로 여는 말을 짓고, 여기로는 단서가 아직 없을 때만
 # 내려온다 (아래 photo_opening · start 참조).
 OPENING_PHOTO = "사진 잘 받았습니다. 이 사진은 어떤 사진인가요?"
+
+# 회차를 열 때 돌고 있는 사진 분석을 기다리는 한도(초). 분석은 1.6~3.9초이고
+# 올린 때부터 재므로, 3초면 올리자마자 누르셔도 대개 안에 든다.
+PHOTO_WAIT = env_float("PHOTO_OPEN_WAIT_SECONDS", 3.0)
 
 
 def photo_opening(clues: dict | None) -> str:
@@ -287,8 +291,16 @@ class SessionController:
         #
         # 사진이 있으면 단서를 먼저 본다. 읽기 한 번이면 되는 까닭은 분석이
         # 사진을 올릴 때 이미 끝나 있어서다 (photo.analyze_later).
+        #
+        # 올리자마자 누르시면 그 분석이 아직 돌고 있다. 그때는 새로 걸지 않고
+        # PHOTO_WAIT 만큼 기다린다 — 분석은 올린 때부터 재므로 남은 시간은 보통
+        # 1~2초다. 그 값이 시작 응답에 얹히지만, 그래야 여는 말이 사진을 본 말이
+        # 되고 같은 사진에 §2 를 두 번 부르지 않는다.
         rec = await self._photo_record() if self.photo_id else None
         clues = (rec or {}).get("clues")
+        running = photo.in_flight(rec["photo_id"]) if rec and not clues else None
+        if running is not None:
+            clues = await self._wait_upload(running)
         if clues:
             self._apply_clues(clues)
             await store.save_photo_clues(self, clues)
@@ -300,9 +312,44 @@ class SessionController:
         # (question_audio 가 최대 2초 기다린다).
         self._speak(self._next_question)
 
-        # 단서가 없으면 여기서 한 번 더 해 본다. 붙잡지 않는다.
+        # 단서가 없으면 여기서 한 번 더 해 본다. 붙잡지 않는다. 올릴 때 분석이
+        # 아직 돌면 그것을 마저 기다리고, 빈손으로 끝났을 때만 새로 건다.
         if rec is not None and not clues:
-            self._clues = asyncio.create_task(self._analyze_photo(rec))
+            self._clues = asyncio.create_task(self._late_clues(rec, running))
+
+    async def _wait_upload(self, task: asyncio.Task) -> dict | None:
+        """
+        올릴 때 건 분석을 PHOTO_WAIT 까지 기다린다. 넘기면 None — 여는 말은
+        고정 문장으로 나가고 분석은 _late_clues 가 이어받는다.
+
+        shield 로 감싸는 까닭은 기다림을 그만둬도 분석은 계속 돌아야 해서다.
+        """
+        try:
+            return await asyncio.wait_for(asyncio.shield(task), PHOTO_WAIT)
+        except asyncio.TimeoutError:
+            log.info("사진 분석이 %.1f초 안에 안 끝났다 — 여는 말은 고정 문장이다",
+                     PHOTO_WAIT)
+        except Exception:                                    # noqa: BLE001
+            pass                                             # 분석 쪽이 이미 로그를 남겼다
+        return None
+
+    async def _late_clues(self, rec: dict, running: asyncio.Task | None) -> None:
+        """여는 말 뒤에 오는 단서. 올릴 때 분석이 돌고 있으면 그 결과를 쓴다."""
+        clues = None
+        if running is not None:
+            try:
+                clues = await asyncio.shield(running)
+            except asyncio.CancelledError:
+                raise
+            except Exception:                                # noqa: BLE001
+                clues = None
+        if not clues:
+            await self._analyze_photo(rec)
+            return
+        self._apply_clues(clues)
+        await store.save_photo_clues(self, clues)
+        log.info("사진 단서 %s — 올릴 때 분석을 이어받았다",
+                 str(rec.get("photo_id"))[:8])
 
     async def _photo_record(self) -> dict | None:
         """

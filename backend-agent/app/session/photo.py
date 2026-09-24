@@ -289,7 +289,10 @@ def cache_seconds() -> int:
 # 도는 분석들. **참조를 들고 있지 않으면 파이썬이 중간에 거둬 간다** —
 # create_task 가 돌려준 Task 를 아무도 안 붙잡으면 GC 대상이 되고, 그러면
 # 분석이 소리 없이 사라진다.
-_running: set[asyncio.Task] = set()
+#
+# 사진 id 로 찾게 둔 것은 회차가 이 분석을 기다릴 수 있게 하려는 것이다
+# (in_flight 참조).
+_running: dict[str, asyncio.Task] = {}
 
 
 def analyze_later(rec: dict) -> None:
@@ -305,12 +308,29 @@ def analyze_later(rec: dict) -> None:
     늦거나 실패해도 어르신이 보는 것은 달라지지 않는다 — 회차를 열 때 단서가
     없으면 controller 가 그때 다시 분석한다 (controller._analyze_photo).
     """
+    pid = str(rec["photo_id"])
     task = asyncio.create_task(_analyze(rec))
-    _running.add(task)
-    task.add_done_callback(_running.discard)
+    _running[pid] = task
+
+    def _drop(t: asyncio.Task) -> None:
+        if _running.get(pid) is t:
+            del _running[pid]
+
+    task.add_done_callback(_drop)
 
 
-async def _analyze(rec: dict) -> None:
+def in_flight(photo_id: str) -> asyncio.Task | None:
+    """
+    이 사진을 올릴 때 건 분석이 아직 돌고 있으면 그 Task. 결과는 단서 또는 None.
+
+    사진을 올리자마자 시작 단추를 누르면 회차가 분석보다 먼저 열린다. 그때
+    회차가 분석을 새로 걸면 같은 사진에 §2 를 두 번 부르게 된다 — 돌고 있는
+    것을 기다리는 편이 빠르고 싸다 (controller.start 참조).
+    """
+    return _running.get(str(photo_id))
+
+
+async def _analyze(rec: dict) -> dict | None:
     """
     §2 를 부르고 photo.clues 에 적는다. **어떤 실패도 위로 올리지 않는다** —
     부른 쪽은 이미 어르신께 「저장했습니다」를 돌려준 뒤라 더 할 수 있는 일이 없다.
@@ -327,12 +347,13 @@ async def _analyze(rec: dict) -> None:
     except Exception as e:                                   # noqa: BLE001
         log.error("사진 분석 실패 %s (%s: %s) — 회차를 열 때 다시 해 본다",
                   pid, type(e).__name__, str(e)[:120])
-        return
+        return None
 
     if not clues:
         log.error("사진 %s 에서 단서를 얻지 못했다 — 회차를 열 때 다시 해 본다", pid)
-        return
+        return None
 
     await store.save_photo_analysis(rec["photo_id"], clues)
     log.info("올릴 때 사진 단서 %s — 사물 %d개 · 여쭐 것 %d개", pid,
              len(clues.get("objects") or []), len(clues.get("questions") or []))
+    return clues
