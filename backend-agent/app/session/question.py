@@ -24,7 +24,7 @@ FSM 도 타이머도 이 파일의 존재를 모른다.
    버렸다. 문서(§1)가 정한 이름과 코드가 쓰던 이름이 둘 다 살아 있으면 언젠가
    반드시 어긋나고, 어긋나는 쪽이 「회차가 안 끝난다」라 눈에도 잘 안 띈다.
 
-4. **프롬프트는 `prompts/interview_v2.2.txt` 에서 읽는다** (prompt.py).
+4. **프롬프트는 `prompts/interview_v2.3.txt` 에서 읽는다** (prompt.py).
    여기에 한 벌 더 두지 않는다. 다만 그 파일에 아직 없는 세 필드(`facts_found` ·
    `information_status` · `completion_check_asked`)만 `_ADDENDUM` 으로 덧댄다 —
    아래 참조.

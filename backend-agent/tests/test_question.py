@@ -340,7 +340,7 @@ def test_prompt():
     check("덧댄 형식이 §1 의 새 필드를 빠뜨리지 않는다",
           "closing_hint" in sysmsg and "end_reason" in sysmsg,
           "「반드시 아래 형식으로만」이라고 적으면서 빠뜨리면 모델이 안 적는다")
-    check("프롬프트를 prompts/ 에서 읽는다", promptlib.DOC.name == "interview_v2.2.txt",
+    check("프롬프트를 prompts/ 에서 읽는다", promptlib.DOC.name == "interview_v2.3.txt",
           promptlib.DOC.name)
 
 
