@@ -49,12 +49,19 @@
     main { min-height: calc(100dvh - 72px); }
     .screen {
       display: none; min-height: calc(100dvh - 72px);
-      padding: 16px 22px calc(120px + env(safe-area-inset-bottom)); animation: enter .42s ease both;
+      padding: 16px 22px calc(120px + env(safe-area-inset-bottom)); animation: enter .42s ease backwards;
     }
     .screen.active { display: flex; flex-direction: column; }
     /* 화면이 나타날 때 **투명도만** 바꾼다.
        transform 을 쓰면 그 화면이 「고정 위치의 기준」이 되어 버려서, 아래에 고정해
-       둔 버튼이 화면이 아니라 긴 페이지의 맨 끝에 붙는다 (.dock 주석 참조). */
+       둔 버튼이 화면이 아니라 긴 페이지의 맨 끝에 붙는다 (.dock 주석 참조).
+
+       끝난 뒤에도 효과를 붙들어 두는 both 대신 **backwards** 를 쓴다.
+       both 로 두면 애니메이션이 끝난 뒤에도 이 화면이 「쌓임 기준」으로 남아서,
+       그 안에 있는 하단 버튼(.dock, z-index 5)이 화면 전체에 깔리는 붉은 테
+       (.edge, z-index 4)보다 아래로 내려간다 — 붉은 선이 정지 버튼을
+       가로지르는 것처럼 보였다. backwards 는 시작 전에만 적용되므로
+       끝나고 나면 z-index 가 정상으로 동작한다. */
     @keyframes enter { from { opacity: 0; } to { opacity: 1; } }
     .eyebrow { color: var(--accent-dark); font-size: .8rem; font-weight: 700; letter-spacing: .12em; text-transform: uppercase; }
     h1 { font-family: "Gowun Batang", serif; font-size: clamp(2rem, 8.6vw, 2.6rem); line-height: 1.2; letter-spacing: -.045em; margin: 10px 0 12px; }
@@ -63,7 +70,11 @@
     /* ── 사진 카드 ─────────────────────────────────── */
     .photo-card {
       position: relative; width: 100%; margin: 22px 0 0;
-      aspect-ratio: var(--photo-ratio); max-height: 44dvh; min-height: 140px;
+      aspect-ratio: var(--photo-ratio);
+      /* 세로로 긴 사진을 골랐을 때 카드가 너무 커져서 아래의 안내·버전 줄이
+         고정 버튼 밑으로 깔리는 일이 있었다. 화면이 짧을수록 카드를 먼저 줄인다.
+         화면이 넉넉하면 44dvh 가 그대로 쓰인다. */
+      max-height: min(44dvh, calc(100dvh - 478px)); min-height: 140px;
       border-radius: 22px; overflow: hidden; border: 1px solid #e4dcca;
       background: #f6edda; padding: 0; display: block; text-align: left;
       box-shadow: 0 16px 34px rgba(55, 52, 43, .13); transition: transform .18s, aspect-ratio .35s ease;
@@ -79,7 +90,7 @@
       padding: 9px 14px; font-size: .84rem; font-weight: 700; box-shadow: 0 6px 16px rgba(23,55,74,.14);
     }
     .ready-copy { margin-top: 26px; }
-    .version { margin: 18px 0 0; font-size: .74rem; color: #9aa7ac; letter-spacing: .01em; }
+    .version { margin: 14px 0 0; font-size: .74rem; color: #9aa7ac; letter-spacing: .01em; }
 
     /* ── 하단 버튼 ─────────────────────────────────── */
     /* 버튼은 **화면 아래에 고정**한다.
@@ -123,14 +134,16 @@
     .app[data-state="SPEAKING"] .status-dot { background: #4b7f9b; animation: rec 1.8s ease-in-out infinite; }
     @keyframes rec { 0%, 100% { opacity: 1; transform: scale(1); } 50% { opacity: .35; transform: scale(.72); } }
 
-    /* 화면 가장자리 테 — 녹음 중에만. 목소리가 커지면 같이 진해진다 */
+    /* 화면 가장자리 테 — 녹음 중에만. 목소리가 커지면 같이 진해진다.
+       아래쪽은 **버튼 자리(.dock) 위에서 끊는다.** 화면 끝까지 내리면 테의 아랫변이
+       「녹음 정지」 버튼을 가로질러 지나가는 것처럼 보였다. */
     .edge {
-      position: fixed; inset: 0; z-index: 4; pointer-events: none;
+      position: fixed; inset: 0 0 calc(94px + env(safe-area-inset-bottom)); z-index: 4; pointer-events: none;
       border: 3px solid var(--accent); border-radius: 0;
       opacity: 0; transition: opacity .35s;
     }
     .app[data-state="LISTENING"] .edge { opacity: calc(.28 + var(--v) * .6); }
-    @media (min-width: 520px) { .edge { border-radius: 30px; inset: 24px calc(50% - 215px); } }
+    @media (min-width: 520px) { .edge { border-radius: 30px; inset: 24px calc(50% - 215px) calc(94px + env(safe-area-inset-bottom)); } }
 
     /* 목소리 크기 막대 — 「지금 내 말이 들어가고 있다」를 눈으로 */
     .meter {
@@ -415,7 +428,7 @@
   const CONFIG = {
     // 화면 아래와 개발용 패널에 그대로 찍힌다. 「고친 게 반영이 안 된 것 같다」는
     // 대부분 예전 파일이 열려 있는 경우라서, 눈으로 확인할 자리를 만들어 둔다.
-    version: 'v0.8 · 2026-09-23 (엽서 저장 · 사진 분석 연결)',
+    version: 'v0.9.1 · 2026-09-29 (시작 화면 여백 · 녹음 테두리)',
 
     // 이 화면을 백엔드가 직접 서빙하면(web/ 폴더) 빈 문자열 그대로 둔다.
     // 다른 포트에서 열어 시험할 때만 'http://127.0.0.1:8010' 처럼 채운다.
@@ -977,17 +990,60 @@
   const FILLER_RE = /^(어+|음+|아+|엄+|흠+|에+|우+|응+)$/;
   const JOSA_RE = /(은|는|이|가|을|를|에|에서|에게|한테|으로|로|와|과|도|만|의|랑|이랑|부터|까지|보다|처럼|들)$/;
   const STOP_NOUN = new Set(['것','거','그거','이거','저거','사람','생각','정도','때문','우리','제가','내가','그게','이게','저는','그런','이런','저런','진짜','정말','조금','하나','그때','지금','오늘']);
-  const NOUNISH_BLOCK = new Set(['바다','소다','하다','보다','사다','주다']);
-  const END_RE = /(습니다|합니다|였습니다|이었습니다|했어요|했습니다|거든요|더라고요|같아요|같았어요|네요|군요|겠어요|어요|아요|예요|이에요|에요|해요|이죠|죠|더라|드라|구나|였다|이다|았다|었다|한다|된다|같다|싶다|많다|좋다|[았었]어|[았었]지|[았었]네|했어|했지|갔어|갔지|왔어|왔지|봤어|봤지|났어|났지|줬어|줬지|였어|였지|이지|있지|없지|그랬어|그랬지|요|다)$/;
+  const NOUNISH_BLOCK = new Set(['바다','소다','하다','보다','사다','주다','이야기']);
+  const END_RE = /(습니다|합니다|였습니다|이었습니다|했어요|했습니다|거든요|더라고요|같아요|같았어요|네요|군요|겠어요|어요|아요|예요|이에요|에요|해요|이죠|죠|더라|드라|구나|였다|이다|았다|었다|한다|된다|같다|싶다|많다|좋다|[았었]어|[았었]지|[았었]네|했어|했지|갔어|갔지|왔어|왔지|봤어|봤지|났어|났지|줬어|줬지|였어|였지|이지|있지|없지|그랬어|그랬지|이야|야|요|다)$/;
   const Q_RE = /(까요|나요|을까|일까|인가요|는가요|어떨까|무엇|뭐예요|뭔가요)$/;
   const VERBISH_TAIL = /[가나다라마오우이지치키히기되하]$/;
 
+  /**
+   * 엽서 글 임시 정리.
+   *
+   * **답변 하나하나를 따로 다듬는다.** 전부 이어 붙인 뒤 끊으려 하면
+   * "…사진이야 …사진이야 …갔지" 처럼 마침표 없이 한 덩어리가 된다 —
+   * 어르신 말투의 끝맺음을 규칙이 다 알아볼 수 없기 때문이다.
+   * 답변은 그 자체로 한 번의 말씀이므로, 그 경계를 문장 경계로 쓴다.
+   *
+   * 그다음 **거의 같은 문장을 지운다.** 같은 질문에 비슷하게 답하시는 일이
+   * 잦은데, 그대로 두면 엽서가 같은 말을 세 번 하는 글이 된다.
+   *
+   * 이건 어디까지나 임시다. 뜻을 이해하고 다시 쓰는 것은 AI(기획서 §4
+   * 카드 작성 에이전트)의 몫이고, 그 API 가 생기면 이 함수는 뒤로 물러난다.
+   */
   function polish(raw) {
-    const tokens = dropFillers(String(raw || '').replace(/\s+/g, ' ').trim().split(' ').filter(Boolean));
-    if (tokens.length < 4) {
+    const parts = Array.isArray(raw) ? raw : [String(raw || '')];
+    let sentences = [];
+    for (const part of parts) sentences.push(...sentencesOf(part));
+    sentences = dedupeSentences(sentences);
+
+    if (!sentences.length) {
       return { title: '말로 남은 하루', body: '오늘의 이야기는 목소리로 남았습니다.\n글로 다 옮기지는 못했지만, 분명히 이 자리에 머물렀던 시간입니다.' };
     }
-    return { title: pickTitle(tokens), body: toParagraphs(buildSentences(tokens)).join('\n\n') };
+    const tokens = dropFillers(parts.join(' ').replace(/\s+/g, ' ').trim().split(' ').filter(Boolean));
+    return { title: pickTitle(tokens), body: toParagraphs(sentences).join('\n\n') };
+  }
+
+  /** 말씀 한 번을 문장들로 끊는다. */
+  function sentencesOf(text) {
+    const tokens = dropFillers(String(text || '').replace(/\s+/g, ' ').trim().split(' ').filter(Boolean));
+    if (tokens.length < 2) return [];
+    return buildSentences(tokens);
+  }
+
+  /** 낱말이 70% 넘게 겹치면 같은 말로 보고 뒤엣것을 버린다. */
+  function dedupeSentences(list) {
+    const keep = [], seen = [];
+    for (const s of list) {
+      const words = new Set(s.replace(/[.?!…]/g, '').split(' '));
+      let dup = false;
+      for (const prev of seen) {
+        let inter = 0;
+        for (const w of words) if (prev.has(w)) inter++;
+        const union = new Set([...words, ...prev]).size;
+        if (union && inter / union >= 0.7) { dup = true; break; }
+      }
+      if (!dup) { keep.push(s); seen.push(words); }
+    }
+    return keep;
   }
   function dropFillers(tokens) {
     const out = [];
@@ -1025,6 +1081,9 @@
       const bare = t.replace(JOSA_RE, '');
       if (bare.length < 2 || STOP_NOUN.has(bare) || FILLER_SET.has(bare) || END_RE.test(bare)) return;
       if (/(는|던)$/.test(t) && bare.length >= 3 && VERBISH_TAIL.test(bare)) return;
+      // 「예순여덟이었나」처럼 긴 서술 조각은 제목이 될 수 없다.
+      // 네 글자 이상일 때만 걸러서 「신문지」 같은 진짜 낱말은 남긴다.
+      if (bare.length >= 4 && /(나|까|어|지|야|네|데|고|서|면|며|든|듯|걸)$/.test(bare)) return;
       count.set(bare, (count.get(bare) || 0) + 1);
       if (!firstAt.has(bare)) firstAt.set(bare, idx);
     });
@@ -1051,7 +1110,9 @@
       }
     }
     // 0번 조각은 씨앗 문장이라 뺀다. 1번부터가 어르신의 말씀이다.
-    const answers = fragments.filter(f => f.idx >= 1).map(f => f.answer).join(' ');
+    // **이어 붙이지 않고 답변 목록 그대로 넘긴다** — polish 가 말씀의 경계를
+    // 문장 경계로 쓴다 (polish 주석 참조).
+    const answers = fragments.filter(f => f.idx >= 1).map(f => f.answer);
     return Object.assign(polish(answers), { source: 'local' });
   }
 
