@@ -634,7 +634,7 @@ async def make_postcard(session_id: str, request: Request):
     """
     끝난 회차의 엽서를 굽는다. 이미 있으면 새로 구워 덮어쓴다.
 
-    **기다리는 요청이다.** 카드 글을 쓰고 굽기가 끝나야 답이 간다 (수 초).
+    **기다리는 요청이다.** 문장 뽑기와 그림 그리기가 끝나야 답이 간다 (수 초~수십 초).
     폴링을 두지 않은 것은 누르는 사람이 결과를 보려고 누르는 것이기 때문이다 —
     화면은 그동안 「그리는 중」을 띄우면 된다.
 
@@ -653,9 +653,7 @@ async def make_postcard(session_id: str, request: Request):
         raise HTTPException(503, "지금은 엽서를 만들 수 없습니다") from e
     return {
         "url": _postcard_url(session_id, rec),
-        "title": rec.get("title") or "",
         "text": rec["text"],
-        "caption": rec.get("caption") or "",
         "width": rec["width"],
         "height": rec["height"],
         "bytes": rec["bytes"],

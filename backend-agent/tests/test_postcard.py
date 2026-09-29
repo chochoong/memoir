@@ -3,12 +3,10 @@
 
     python -m tests.test_postcard
 
-모델은 부르지 않는다. write 를 갈아 끼우고 DB 는 메모리로 흉내 낸다.
-여기서 지키는 것.
+모델은 부르지 않는다. pick · draw 를 갈아 끼우고 DB 는 메모리로 흉내 낸다.
+여기서 지키는 것 넷.
 
-    [1] 사진은 자르지 않고, 글은 글꼴로 얹는다
-    [5] 자료는 DB 기록에서 다시 세운다  사실은 그 말씀의 턴에 붙는다
-    [6] 근거 없는 문장은 뺀다          v3 「본문 출처」
+    [1] 문장은 글꼴로 얹는다        그림 모델이 쓴 한글은 틀린 글자가 나온다
     [3] 다시 구우면 옛 바이트를 지운다  회차당 한 장이 저장소에서도 한 장이다
     [3] 행을 못 넣으면 바이트를 되돌린다 photo.save 와 같은 규칙이다
     [3] 저장 키는 화면에 안 나간다     주소는 이 서버의 경로뿐이다
@@ -72,36 +70,19 @@ def art(w=1344, h=768, color=(90, 120, 150)) -> bytes:
 
 # ---------------------------------------------------------------- 굽기
 
-CARD = postcard.Card(title="완행열차", sentences=["그해 여름 완행열차는 참 더웠지."],
-                     caption="기차 앞의 가족", sources=[{"sentence": 0, "turns": [1]}])
-
-
-def _paper(px) -> bool:
-    return all(abs(a - b) < 8 for a, b in zip(px, postcard.PAPER))
-
-
 def test_compose():
-    print("\n[1] 굽기 — 사진 위, 글 아래")
+    print("\n[1] 굽기 — 그림 위, 문장 아래")
 
     font = postcard._font_path()
-    data, w, h = postcard._compose(art(), CARD, "2026. 9. 24.", font)
+    data, w, h = postcard._compose(art(), "그해 여름 완행열차는 참 더웠지.", "2026. 9. 24.", font)
     with Image.open(io.BytesIO(data)) as im:
         check("JPEG 한 장", im.format == "JPEG", im.format)
         check("가로 3:2 엽서", im.size == (postcard.W, postcard.H) == (w, h), str(im.size))
-        mid = im.getpixel((postcard.W // 2, postcard.PHOTO_TOP + 200))
+        top = im.getpixel((postcard.W // 2, 10))
         band = im.getpixel((10, postcard.H - 10))
-    check("위에 사진이 있다", mid[2] > mid[0], str(mid))
-    check("바탕은 종이색", _paper(band), str(band))
-
-    tall, _, _ = postcard._compose(art(600, 900), CARD, "2026. 9. 24.", font)
-    with Image.open(io.BytesIO(tall)) as im:
-        side = im.getpixel((200, postcard.PHOTO_TOP + 200))
-    check("세로 사진은 자르지 않고 칸 안에 맞춘다 (옆은 종이)", _paper(side), str(side))
-
-    bare, _, _ = postcard._compose(None, CARD, "2026. 9. 24.", font)
-    with Image.open(io.BytesIO(bare)) as im:
-        top = im.getpixel((postcard.W // 2, 20))
-    check("사진이 없으면 종이 바탕에 글만", _paper(top), str(top))
+    check("위는 그림이 채운다", top[2] > top[0], str(top))
+    check("아래 띠는 종이색", all(abs(a - b) < 8 for a, b in zip(band, postcard.PAPER)),
+          str(band))
 
     f = postcard._font(font, 46)
     long = "열아홉에 고향을 떠나 서울로 올라왔지. 큰형이 영등포역까지 마중을 나왔어."
@@ -116,10 +97,10 @@ def test_compose():
           len(one) > 1 and all(f.getlength(ln) <= 400 for ln in one), f"{len(one)}줄")
 
     try:
-        postcard._compose(b"not an image", CARD, "2026. 9. 24.", font)
-        check("사진이 깨졌으면 503 쪽 오류", False, "통과했다")
+        postcard._compose(b"not an image", "문장", "2026. 9. 24.", font)
+        check("그림이 깨졌으면 503 쪽 오류", False, "통과했다")
     except postcard.PostcardUnavailable:
-        check("사진이 깨졌으면 503 쪽 오류", True)
+        check("그림이 깨졌으면 503 쪽 오류", True)
 
     with _Env(POSTCARD_FONT="Z:/없는/글꼴.ttf"):
         check("POSTCARD_FONT 가 없으면 후보로 넘어간다", postcard._font_path() != "Z:/없는/글꼴.ttf")
@@ -147,7 +128,7 @@ def test_key():
 # ---------------------------------------------------------------- 라우트
 
 class _Fake:
-    """store 의 회차·엽서 함수를 메모리로, write 를 가짜로 갈아 끼운다."""
+    """store 의 회차·엽서 함수를 메모리로, pick·draw 를 가짜로 갈아 끼운다."""
 
     def __init__(self):
         self.session = {
@@ -162,20 +143,19 @@ class _Fake:
         }
         self.card: dict | None = None
         self.fail = False
-        self.writes = 0
+        self.draws = 0
         self.gate: asyncio.Event | None = None
 
     def __enter__(self):
         self._saved = (store.load_session, store.save_postcard, store.load_postcard,
-                       postcard.write)
+                       postcard.pick, postcard.draw)
 
         async def load_session(sid):
             if sid != SID:
                 return None
             card = self.card
             return {**self.session, "fragments": list(self.session["fragments"]),
-                    "postcard": {"title": card["title"], "text": card["text"],
-                                 "caption": card["caption"], "storage_key": card["storage_key"],
+                    "postcard": {"text": card["text"], "storage_key": card["storage_key"],
                                  "created_at": "2026-09-24T10:20:00+09:00"} if card else None}
 
         async def save_postcard(rec):
@@ -188,21 +168,23 @@ class _Fake:
         async def load_postcard(sid):
             return self.card if sid == SID else None
 
-        async def write(data):
+        async def pick(said):
+            return postcard.Picked(text=f"완행열차를 탔지 {self.draws}", scene="기차")
+
+        async def draw(scene, ref):
             if self.gate:
                 await self.gate.wait()
-            self.writes += 1
-            return postcard.Card(title="완행열차", sentences=[f"완행열차를 탔지 {self.writes}."],
-                                 caption="", sources=[{"sentence": 0, "turns": [1]}])
+            self.draws += 1
+            return art(color=(90, 120, 150 - self.draws))
 
         store.load_session, store.save_postcard, store.load_postcard = (
             load_session, save_postcard, load_postcard)
-        postcard.write = write
+        postcard.pick, postcard.draw = pick, draw
         return self
 
     def __exit__(self, *a):
         (store.load_session, store.save_postcard, store.load_postcard,
-         postcard.write) = self._saved
+         postcard.pick, postcard.draw) = self._saved
 
 
 def _blobs() -> list[Path]:
@@ -236,7 +218,7 @@ def test_routes():
 
             r = c.post(url, headers={"X-User-Id": "park"})
             check("남의 회차는 404", r.status_code == 404, str(r.status_code))
-            check("거절한 뒤에는 모델을 안 불렀다", fake.writes == 0, f"{fake.writes}번")
+            check("거절한 뒤에는 그림을 안 그렸다", fake.draws == 0, f"{fake.draws}번")
 
             r = c.post(url, headers=kim)
             check("구우면 200", r.status_code == 200, r.text[:160])
@@ -263,7 +245,6 @@ def test_routes():
             rec = c.get(f"/api/sessions/{SID}/record", headers=kim).json()
             pc = rec.get("postcard") or {}
             check("기록에 엽서가 딸려 온다", pc.get("url") == first.get("url"), str(pc))
-            check("제목도 딸려 온다", pc.get("title") == "완행열차", str(pc))
             check("기록에도 저장 키는 안 나간다", "storage_key" not in pc)
 
             r2 = c.post(url, headers=kim)
@@ -286,7 +267,7 @@ def test_routes():
             await asyncio.sleep(0.05)
             try:
                 await postcard.make(SID, "kim")
-                check("굽는 중에 또 누르면 409 쪽 오류", False, "두 번 썼다")
+                check("굽는 중에 또 누르면 409 쪽 오류", False, "두 번 그렸다")
             except postcard.PostcardNotReady:
                 check("굽는 중에 또 누르면 409 쪽 오류", True)
             fake.gate.set()
@@ -294,12 +275,12 @@ def test_routes():
             fake.gate = None
         asyncio.run(twice())
 
-    # 키가 없으면 물러서지 않는다 — 가짜 write 를 빼고 진짜를 부른다.
+    # 키가 없으면 물러서지 않는다 — 가짜 pick 을 빼고 진짜를 부른다.
     with _Env(GEMINI_API_KEY=""):
         import app.session.question as q
         q._CLIENT = None
         try:
-            asyncio.run(postcard.write({"utterances": []}))
+            asyncio.run(postcard.pick([{"idx": 1, "question": None, "answer": "말씀"}]))
             check("키가 없으면 503 쪽 오류", False, "고정 문장으로 물러섰다")
         except postcard.PostcardUnavailable:
             check("키가 없으면 503 쪽 오류", True)
@@ -388,67 +369,6 @@ def test_auto():
     check("굽다 실패해도 예외가 새지 않는다", err is None, err or "")
 
 
-def test_material():
-    print("\n[5] 자료 — DB 기록에서 다시 세운다")
-    frs = [
-        {"idx": 0, "question": None, "answer": "잔치 사진", "decision": None},
-        {"idx": 1, "question": "무슨 사진이에요?", "answer": "칠순 잔치야",
-         "decision": {"facts_found": ["씨앗에서 나온 사실"]}},
-        {"idx": 2, "question": "어디서요?", "answer": "아니 칠순 아니고 환갑이야. 부산에서",
-         "decision": {"facts_found": ["칠순 잔치를 했다"]}},
-        {"idx": 3, "question": "누구와요?", "answer": "",
-         "decision": {"facts_found": ["환갑 잔치를 했다", "부산에서 했다"],
-                      "facts_retracted": ["칠순 잔치"]}},
-    ]
-    m = postcard.material(frs, {"scene": "잔칫상"})
-    st = m["shared_state"]
-    check("아니라고 하신 사실은 빠진다", "칠순 잔치를 했다" not in st["confirmed_facts"],
-          str(st["confirmed_facts"]))
-    check("사실은 그 말씀의 턴(N-1)에 붙는다",
-          {"turn": 2, "facts": ["환갑 잔치를 했다", "부산에서 했다"]} in st["facts_found"],
-          str(st["facts_found"]))
-    check("씨앗(0번)에서 나온 사실은 턴이 없다",
-          all(x["turn"] > 0 for x in st["facts_found"]), str(st["facts_found"]))
-    check("사진 분석이 실린다", st.get("photo_analyses") == [{"scene": "잔칫상"}])
-    check("빈 말씀과 씨앗은 발화에 없다",
-          [u["turn"] for u in m["utterances"]] == [1, 2], str(m["utterances"]))
-    check("사진이 없으면 photo_analyses 도 없다",
-          "photo_analyses" not in postcard.material(frs, None)["shared_state"])
-
-
-def test_checked():
-    print("\n[6] 출처 검사 — 근거 없는 문장은 뺀다")
-    card = postcard.parse({
-        "status": "completed", "title": "부산 환갑",
-        "body": "부산에서 환갑 잔치를 했어요.\n온 식구가 모였어요.\n참 좋았어요.",
-        "caption": "", "changed_fields": [], "confirmation_questions": [],
-        "sources": [{"sentence": 0, "turns": [2]}, {"sentence": 1, "turns": [9]},
-                    {"sentence": 2, "turns": [1, 2]}],
-    })
-    check("본문은 줄바꿈으로 나눈다", len(card.sentences) == 3, str(card.sentences))
-    out = postcard.checked(card, {1, 2})
-    check("없는 턴을 가리키는 문장은 뺀다",
-          out.sentences == ["부산에서 환갑 잔치를 했어요.", "참 좋았어요."], str(out.sentences))
-    check("출처 번호를 다시 매긴다", out.sources == [
-        {"sentence": 0, "turns": [2]}, {"sentence": 1, "turns": [1, 2]}], str(out.sources))
-
-    one = postcard.parse({"status": "completed", "title": "", "caption": "",
-                          "body": "환갑이었어요. 부산이었어요.", "sources": []})
-    check("한 줄로 오면 마침표에서 나눈다", len(one.sentences) == 2, str(one.sentences))
-    try:
-        postcard.checked(one, {1})
-        check("근거가 하나도 없으면 409 쪽 오류", False, "구웠다")
-    except postcard.PostcardNotReady:
-        check("근거가 하나도 없으면 409 쪽 오류", True)
-    try:
-        postcard.parse({"status": "needs_confirmation", "confirmation_questions": ["?"]})
-        check("자동 생성에서 확인 요청은 503 쪽 오류", False, "통과했다")
-    except postcard.PostcardUnavailable:
-        check("자동 생성에서 확인 요청은 503 쪽 오류", True)
-    p = postcard._prompt()
-    check("프롬프트는 문서의 코드 블록 안이다", p.startswith("목표") and "```" not in p, p[:20])
-
-
 def test_all_checks_passed():
     """pytest 안전판 — test_flow.py 의 같은 함수 주석 참조."""
     assert not FAIL, "실패: " + ", ".join(FAIL)
@@ -460,8 +380,6 @@ def main() -> int:
     test_key()
     test_routes()
     test_auto()
-    test_material()
-    test_checked()
     print(f"\n{'=' * 52}\n통과 {len(PASS)} · 실패 {len(FAIL)}")
     if FAIL:
         print("실패:", ", ".join(FAIL))
