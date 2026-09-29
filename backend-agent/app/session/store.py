@@ -350,7 +350,8 @@ async def load_session(session_id: str) -> dict | None:
                   FROM turn WHERE session_id = $1 ORDER BY idx
                 """, sid)
             prow = await con.fetchrow(
-                "SELECT text, storage_key, created_at FROM postcard WHERE session_id = $1",
+                "SELECT title, text, caption, storage_key, created_at FROM postcard"
+                " WHERE session_id = $1",
                 sid)
     except Exception as e:                                   # noqa: BLE001
         log.error("회차 읽기 실패 %s (%s: %s)", session_id, type(e).__name__, str(e)[:120])
@@ -369,7 +370,9 @@ async def load_session(session_id: str) -> dict | None:
         # 구운 엽서. 바이트 주소는 라우트가 붙이고 storage_key 는 거기서 떼어 낸다 —
         # 여기는 어디서 서빙되는지 모른다.
         "postcard": {
+            "title": prow["title"],
             "text": prow["text"],
+            "caption": prow["caption"],
             "storage_key": prow["storage_key"],
             "created_at": prow["created_at"].isoformat(),
         } if prow else None,
@@ -517,7 +520,10 @@ def _postcard_row(r: Any) -> dict:
     return {
         "session_id": str(r["session_id"]),
         "user_id": r["user_id"],
+        "title": r["title"],
         "text": r["text"],
+        "caption": r["caption"],
+        "sources": _jsonb(r["sources"]),
         "storage_key": r["storage_key"],
         "mime": r["mime"],
         "bytes": r["bytes"],
@@ -548,11 +554,14 @@ async def save_postcard(rec: dict) -> str | None:
                 WITH old AS (SELECT storage_key FROM postcard WHERE session_id = $1)
                 INSERT INTO postcard (session_id, user_id, text, storage_key, mime,
                                       bytes, width, height, photo_id,
-                                      text_model, image_model)
-                VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+                                      text_model, image_model, title, caption, sources)
+                VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
                 ON CONFLICT (session_id) DO UPDATE
                    SET user_id     = EXCLUDED.user_id,
+                       title       = EXCLUDED.title,
                        text        = EXCLUDED.text,
+                       caption     = EXCLUDED.caption,
+                       sources     = EXCLUDED.sources,
                        storage_key = EXCLUDED.storage_key,
                        mime        = EXCLUDED.mime,
                        bytes       = EXCLUDED.bytes,
@@ -567,7 +576,10 @@ async def save_postcard(rec: dict) -> str | None:
                 uuid.UUID(rec["session_id"]), rec["user_id"], rec["text"],
                 rec["storage_key"], rec["mime"], rec["bytes"], rec["width"],
                 rec["height"], _pid(rec.get("photo_id")),
-                rec.get("text_model"), rec.get("image_model"))
+                rec.get("text_model"), rec.get("image_model"),
+                rec.get("title"), rec.get("caption"),
+                json.dumps(rec.get("sources"), ensure_ascii=False)
+                if rec.get("sources") is not None else None)
     except Exception as e:                                   # noqa: BLE001
         log.error("엽서 행 저장 실패 %s (%s: %s)",
                   rec.get("session_id"), type(e).__name__, str(e)[:120])
