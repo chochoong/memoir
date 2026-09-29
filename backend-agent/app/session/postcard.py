@@ -58,7 +58,7 @@ DEFAULT_TEXT_MODEL = "gemini-3.5-flash-lite"
 DEFAULT_TEXT_TIMEOUT = 15.0
 
 # v3 「분량」. 넘으면 로그만 남긴다 — 잘라 내면 말씀의 뜻이 바뀐다.
-TITLE_MAX, BODY_MAX, CAPTION_MAX = 15, 150, 20
+TITLE_MAX, BODY_MAX, CAPTION_MAX = 15, 120, 20
 
 # 엽서 한 장. 가로 3:2 — 우편엽서의 비율이다.
 W, H = 1500, 1000
