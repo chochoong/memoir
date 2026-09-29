@@ -186,7 +186,8 @@ async def _make(rec: dict, said: list[dict]) -> dict:
     font_path = _font_path()                 # 모델 값을 쓰기 전에 먼저 본다
 
     photo = await _photo(rec.get("photo_id"))
-    card = await write(material(rec["fragments"], photo.clues if photo else None))
+    card = await write(material(rec["fragments"], photo.clues if photo else None,
+                                rec.get("closing_decision")))
     card = checked(card, {f["idx"] for f in said})
 
     data, w, h = await asyncio.to_thread(
@@ -279,7 +280,8 @@ def _date(created_at: str) -> str:
 # ---------------------------------------------------------------- 자료
 
 
-def material(fragments: list[dict], clues: dict | None) -> dict:
+def material(fragments: list[dict], clues: dict | None,
+             closing: dict | None = None) -> dict:
     """
     v3 의 「사용할 자료」를 DB 기록에서 다시 세운다.
 
@@ -288,15 +290,20 @@ def material(fragments: list[dict], clues: dict | None) -> dict:
     그래서 그 판단에서 찾은 사실은 N-1 번 턴의 말씀에 붙인다. 0번은 씨앗이라
     어르신의 말씀이 아니다 — 거기 붙을 사실은 버린다 (v3 「실제 어르신 발화 턴」).
 
-    **마지막 말씀에서 찾은 사실은 여기 없다.** 그 판단은 다음 조각이 없어 DB 에
-    내려가지 않았다. 발화 원문은 있으니 모델이 원문에서 가져가면 된다.
+    **마지막 말씀의 판단은 closing 이다.** 다음 조각이 없어 턴 행에 못 들어가고
+    회차 행에 따로 남는다 (controller._wrap_up). 마지막 조각 다음 자리에 있는
+    것처럼 끼워 넣으면 위 규칙이 그대로 마지막 말씀에 붙인다.
     """
     said = [f for f in fragments if f["idx"] > 0 and (f.get("answer") or "").strip()]
     turns = {f["idx"] for f in said}
 
+    rows = sorted(fragments, key=lambda f: f["idx"])
+    if closing and rows:
+        rows.append({"idx": rows[-1]["idx"] + 1, "decision": closing})
+
     confirmed: list[str] = []
     found: list[dict] = []
-    for f in sorted(fragments, key=lambda f: f["idx"]):
+    for f in rows:
         d = f.get("decision") or {}
         if not isinstance(d, dict):
             continue

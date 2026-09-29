@@ -199,6 +199,9 @@ class SessionController:
     latencies: list[dict] = field(default_factory=list)
     # question.py 가 채운다. FR-IV-006 의 근거로 turn.decision 에 내려간다.
     last_decision: dict | None = None
+    # last_decision 이 몇 번째 말씀을 듣고 낸 판단인가. 닫을 때 마지막 말씀의
+    # 판단이 이미 있는지를 이것으로 가린다 (_wrap_up).
+    decided_idx: int = 0
     # §1 의 closing_hint — 마칠 때 화면에 띄울 한 줄. 진행 턴에는 None 이다.
     closing_hint: str | None = None
     # 네 에이전트가 함께 보는 기록 (문서 §0). **모델은 읽고 코드가 쓴다** —
@@ -575,10 +578,41 @@ class SessionController:
         """
         if self.closed_fn is None:
             return
-        task = asyncio.create_task(
-            self.closed_fn(self.session_id, self.user_id, reason))
+        task = asyncio.create_task(self._wrap_up(reason))
         _after.add(task)
         task.add_done_callback(_after.discard)
+
+    async def _wrap_up(self, reason: str) -> None:
+        """
+        **마지막 말씀의 판단을 남긴 뒤** closed_fn 을 부른다.
+
+        판단은 다음 턴 행에 실려 내려가므로 (store.save_turn) 마지막 말씀의 판단은
+        그냥 두면 사라진다. 엽서가 그 말씀을 못 쓴다. 닫히는 길마다 사정이 다르다.
+
+            AI 의 마무리 · 질문이 나온 뒤 중단    판단이 메모리에 있다. 내리기만 한다
+            말씀 직후 중단 · max_turn             판단이 없다. question_fn 을 한 번 더
+                                                  불러 판단만 받는다. 질문은 버린다
+
+        expired 는 다시 부르지 않는다. 떠나신 회차라 엽서도 굽지 않는다.
+        """
+        said = [f for f in self.fragments if f["idx"] > 0]
+        if said:
+            last = said[-1]["idx"]
+            if self.decided_idx != last and reason != "expired":
+                before = self.last_decision
+                try:
+                    await self.question_fn(self)
+                except Exception as e:                  # noqa: BLE001
+                    log.warning("마지막 말씀의 판단을 받지 못했다 (%s: %s)",
+                                type(e).__name__, e)
+                if self.last_decision is not before:
+                    self.decided_idx = last
+            if self.decided_idx == last and self.last_decision:
+                await store.save_closing_decision(self, self.last_decision)
+            else:
+                log.warning("회차 %s — 마지막 말씀(턴 %d)의 판단이 없다. 엽서에서 빠진다",
+                            self.session_id[:8], last)
+        await self.closed_fn(self.session_id, self.user_id, reason)
 
     # ------------------------------------------------------------ 타이머 콜백
 
@@ -741,11 +775,15 @@ class SessionController:
         return shared_state.seed(self)
 
     async def _make_question(self) -> None:
+        before = self.last_decision
         try:
             q = await self.question_fn(self)
         except Exception as e:                          # noqa: BLE001
             log.error("질문 생성 실패: %s", e)          # FR-AD-315 실패 복구 지점
             q = None
+        # 고정 질문으로 물러선 턴은 판단을 새로 내지 않는다. 그때는 적지 않는다.
+        if self.last_decision is not before:
+            self.decided_idx = self.fragments[-1]["idx"]
         self._next_question = q
         self.marks.question_at = time.perf_counter()
 

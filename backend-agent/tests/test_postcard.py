@@ -9,6 +9,7 @@
     [1] 사진은 자르지 않고, 글은 글꼴로 얹는다
     [5] 자료는 DB 기록에서 다시 세운다  사실은 그 말씀의 턴에 붙는다
     [6] 틀린 출처는 버리고 문장은 둔다  v3 「본문 출처」 · 로그만 남긴다
+    [7] 마지막 말씀의 판단도 남긴다    턴 행이 없어 회차 행에 둔다
     [3] 다시 구우면 옛 바이트를 지운다  회차당 한 장이 저장소에서도 한 장이다
     [3] 행을 못 넣으면 바이트를 되돌린다 photo.save 와 같은 규칙이다
     [3] 저장 키는 화면에 안 나간다     주소는 이 서버의 경로뿐이다
@@ -415,6 +416,77 @@ def test_material():
     check("사진이 없으면 photo_analyses 도 없다",
           "photo_analyses" not in postcard.material(frs, None)["shared_state"])
 
+    last = [
+        {"idx": 0, "question": None, "answer": "", "decision": None},
+        {"idx": 1, "question": "무슨 이야기요?", "answer": "고양이", "decision": None},
+        {"idx": 2, "question": "고양이요?", "answer": "나비라고 불렀어",
+         "decision": {"facts_found": ["고양이"]}},
+    ]
+    st = postcard.material(last, None, {"facts_found": ["이름은 나비"]})["shared_state"]
+    check("마지막 말씀의 판단은 마지막 턴에 붙는다",
+          {"turn": 2, "facts": ["이름은 나비"]} in st["facts_found"], str(st["facts_found"]))
+    check("없으면 마지막 턴의 사실도 없다",
+          all(x["turn"] != 2 for x in
+              postcard.material(last, None)["shared_state"]["facts_found"]))
+
+
+def test_closing():
+    """닫힐 때 마지막 말씀의 판단을 남긴다. 없으면 한 번 더 받는다."""
+    print("\n[7] 마지막 말씀의 판단")
+    from app.session import store
+    from app.session.controller import SessionController
+
+    async def run(wait_question: bool):
+        asked: list[int] = []
+        saved: list[dict] = []
+
+        async def ask(ctl):
+            n = ctl.fragments[-1]["idx"]
+            asked.append(n)
+            ctl.last_decision = {"facts_found": [f"말씀 {n}"]}
+            return f"질문 {n}"
+
+        async def keep(ctl, decision):
+            saved.append(decision)
+
+        async def no_tts(text):
+            return b""
+
+        async def on_closed(sid, uid, reason):
+            pass
+
+        real, store.save_closing_decision = store.save_closing_decision, keep
+        try:
+            c = SessionController(user_id="u", title="시험", pace="fast", tts_fn=no_tts,
+                                  question_fn=ask, closed_fn=on_closed)
+            await c.start("씨앗")
+            await asyncio.sleep(0.05)
+            await c.tts_done()
+            await c.speech("고양이")
+            await c.done_button()
+            if wait_question:
+                for _ in range(40):
+                    if c.machine.state.value == "SPEAKING":
+                        break
+                    await asyncio.sleep(0.05)
+            await c.abort()
+            for _ in range(40):
+                if saved:
+                    break
+                await asyncio.sleep(0.05)
+            c.release()
+        finally:
+            store.save_closing_decision = real
+        return asked, saved
+
+    asked, saved = asyncio.run(run(wait_question=True))
+    check("판단이 있으면 다시 부르지 않는다", asked == [1], str(asked))
+    check("있는 판단을 남긴다", saved == [{"facts_found": ["말씀 1"]}], str(saved))
+
+    asked, saved = asyncio.run(run(wait_question=False))
+    check("말씀 직후 중단이면 한 번 더 받아 남긴다",
+          saved == [{"facts_found": ["말씀 1"]}] and asked[-1] == 1, f"{asked} {saved}")
+
 
 def test_checked():
     print("\n[6] 출처 검사 — 문장은 그대로, 틀린 출처만 버린다")
@@ -462,6 +534,7 @@ def main() -> int:
     test_auto()
     test_material()
     test_checked()
+    test_closing()
     print(f"\n{'=' * 52}\n통과 {len(PASS)} · 실패 {len(FAIL)}")
     if FAIL:
         print("실패:", ", ".join(FAIL))

@@ -236,6 +236,24 @@ async def update_session(ctl: "SessionController",
         log.error("세션 갱신 실패 (%s: %s)", type(e).__name__, str(e)[:120])
 
 
+async def save_closing_decision(ctl: "SessionController", decision: dict) -> None:
+    """
+    마지막 말씀을 듣고 낸 판단. **들어갈 턴 행이 없어서** 회차 행에 둔다.
+
+    turn N 의 decision 은 N-1 번째 말씀의 판단이다 (save_turn). 마지막 말씀
+    뒤에는 턴이 더 없으니 그 판단은 여기가 아니면 사라진다.
+    """
+    if _pool is None:
+        return
+    try:
+        async with _pool.acquire() as con:
+            await con.execute(
+                "UPDATE session SET closing_decision = $2 WHERE session_id = $1",
+                _sid(ctl), json.dumps(decision, ensure_ascii=False))
+    except Exception as e:                                   # noqa: BLE001
+        log.error("마지막 판단 저장 실패 (%s: %s)", type(e).__name__, str(e)[:120])
+
+
 # ---------------------------------------------------------------- 읽기
 #
 # **읽기는 실패를 삼키지 않는다.** 위의 쓰기 함수들과 정반대다.
@@ -367,6 +385,8 @@ async def load_session(session_id: str) -> dict | None:
             "latency": _jsonb(t["latency"]),
             "created_at": t["created_at"].isoformat(),
         } for t in trows],
+        # 마지막 말씀의 판단. 조각 어디에도 없는 값이다 (save_closing_decision).
+        "closing_decision": _jsonb(srow["closing_decision"]),
         # 구운 엽서. 바이트 주소는 라우트가 붙이고 storage_key 는 거기서 떼어 낸다 —
         # 여기는 어디서 서빙되는지 모른다.
         "postcard": {
