@@ -58,7 +58,7 @@ DEFAULT_TEXT_MODEL = "gemini-3.5-flash-lite"
 DEFAULT_TEXT_TIMEOUT = 15.0
 
 # v3 「분량」. 넘으면 로그만 남긴다 — 잘라 내면 말씀의 뜻이 바뀐다.
-TITLE_MAX, SENTENCE_MAX, CAPTION_MAX = 15, 30, 20
+TITLE_MAX, BODY_MAX, CAPTION_MAX = 15, 150, 20
 
 # 엽서 한 장. 가로 3:2 — 우편엽서의 비율이다.
 W, H = 1500, 1000
@@ -462,7 +462,7 @@ def checked(card: Card, turns: set[int]) -> Card:
 
     for label, text, limit in (("제목", card.title, TITLE_MAX),
                                ("사진 설명", card.caption, CAPTION_MAX),
-                               *(("본문", s, SENTENCE_MAX) for s in card.sentences)):
+                               ("본문", "".join(card.sentences), BODY_MAX)):
         if len(text) > limit:
             log.warning("엽서 %s 이 %d자다 (v3 한도 %d자): 「%s」", label, len(text), limit, text)
 
