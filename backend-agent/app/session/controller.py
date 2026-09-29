@@ -39,6 +39,10 @@ SttFn = Callable[[bytes, str, str | None], Awaitable[str]]
 # 낭독기. 질문 -> mp3. 실패해도 예외가 아니라 빈 바이트다.
 TtsFn = Callable[[str], Awaitable[bytes]]
 
+# 회차가 닫힌 뒤에 할 일. (session_id, user_id, closed_reason). 엽서 자동 굽기가
+# 여기 들어간다 (main.py). 기본은 없음 — 시험이 만드는 회차가 모델을 부르지 않는다.
+ClosedFn = Callable[[str, str, str], Awaitable[None]]
+
 # 한 발화가 이보다 커지면 받지 않는다. opus 로 두 시간쯤 된다.
 MAX_AUDIO_BYTES = 25 * 1024 * 1024
 
@@ -186,6 +190,7 @@ class SessionController:
     question_fn: QuestionFn = fixed_questions
     stt_fn: SttFn = stt.azure_transcribe
     tts_fn: TtsFn = tts.synthesize
+    closed_fn: ClosedFn | None = None
 
     machine: Machine = field(init=False)
     timers: TimerSet = field(init=False)
@@ -538,9 +543,12 @@ class SessionController:
 
     async def _close(self, reason: str) -> dict:
         """ABORT 전이로 닫는다. 어느 상태에서 불러도 받는다 (machine.fire 참조)."""
+        was_closed = self._closed()
         self.release()
         self.machine.fire(Event.ABORT)
         await store.update_session(self, closed_reason=reason)
+        if not was_closed:
+            self._after_close(reason)
         return self.snapshot()
 
     async def _finish(self, reason: str) -> None:
@@ -555,6 +563,22 @@ class SessionController:
         self.machine.fire(Event.FINISH)
         self.touch()
         await store.update_session(self, closed_reason=reason)
+        self._after_close(reason)
+
+    def _after_close(self, reason: str) -> None:
+        """
+        닫힌 뒤의 일을 **기다리지 않고** 건다. 엽서는 수십 초가 걸린다.
+
+        update_session 뒤에 부르는 것이 순서다 — 엽서는 DB 의 closed_at 을 보고
+        「끝난 회차」인지 가른다. 태스크는 회차가 아니라 모듈이 붙잡는다.
+        회차는 스윕이 메모리에서 지워도 엽서는 끝까지 구워져야 한다.
+        """
+        if self.closed_fn is None:
+            return
+        task = asyncio.create_task(
+            self.closed_fn(self.session_id, self.user_id, reason))
+        _after.add(task)
+        task.add_done_callback(_after.discard)
 
     # ------------------------------------------------------------ 타이머 콜백
 
@@ -810,6 +834,9 @@ class SessionController:
 # (Redis 등) 내보내야 하고, 이 파일이 아니라 설계가 바뀐다.
 
 _sessions: dict[str, SessionController] = {}
+
+# 닫힌 회차의 뒷일(_after_close). 붙잡아 두지 않으면 도는 중에 GC 될 수 있다.
+_after: set[asyncio.Task] = set()
 
 
 def put(ctl: SessionController) -> SessionController:
