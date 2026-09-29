@@ -567,7 +567,7 @@
   const api = {
     health: () => call('/health'),
 
-    // POST /api/sessions  →  StartReq(title, postcard, pace, max_turn)
+    // POST /api/sessions  →  StartReq(title, seed, pace, max_turn)
     start: (body) => call('/sessions', { method: 'POST', body: JSON.stringify(body) }),
 
     get: (id) => call(`/sessions/${id}`),
@@ -1189,7 +1189,7 @@
     // 2) 회차 열기 — StartReq 의 필드 이름 그대로 보낸다
     const body = {
       title: CONFIG.session.title || `${new Date().toISOString().slice(0, 10)} 기록`,
-      postcard: CONFIG.session.postcard,
+      seed: CONFIG.session.postcard,
       pace: CONFIG.session.pace,
       max_turn: CONFIG.session.max_turn,
     };
