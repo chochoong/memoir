@@ -50,7 +50,12 @@ log = logging.getLogger("photo")
 
 # 키에 허용하는 모양. 이 밖의 문자는 만들지도, 받지도 않는다 —
 # LocalStore 가 키를 경로로 쓰기 때문에 `..` 하나가 곧 경로 탈출이다.
-KEY_OK = re.compile(r"^photos/\d{4}/\d{2}/[0-9a-f-]{36}/[a-z]+\.(jpg|png|webp)$")
+#
+# 엽서도 같은 저장소에 든다 (postcard.py). 엽서의 마지막 조각은 변형 이름이 아니라
+# 바이트의 해시다 — 다시 구울 때마다 키가 바뀌어야 옛 엽서가 캐시에 남지 않는다.
+KEY_OK = re.compile(
+    r"^(photos/\d{4}/\d{2}/[0-9a-f-]{36}/[a-z]+"
+    r"|postcards/\d{4}/\d{2}/[0-9a-f-]{36}/[0-9a-f]{16})\.(jpg|png|webp)$")
 
 EXT = {"image/jpeg": "jpg", "image/png": "png", "image/webp": "webp"}
 

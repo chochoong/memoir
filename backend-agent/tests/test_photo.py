@@ -31,6 +31,7 @@ for _stream in (sys.stdout, sys.stderr):
 from PIL import Image                                                    # noqa: E402
 
 from app.session import migrate, photo, photostore, store                # noqa: E402
+from tests._nodb import NoDb                                              # noqa: E402
 
 PASS, FAIL = [], []
 TMP = Path(__file__).resolve().parent / "_tmp_photo"
@@ -338,7 +339,7 @@ def test_migrations():
     found = migrate.files()
     # **이 목록은 새 마이그레이션마다 손으로 늘린다.** 귀찮으라고 그랬다 —
     # 번호를 빠뜨리거나 두 사람이 같은 번호를 쓰면 여기서 먼저 걸린다.
-    check("번호순으로 읽는다", [v for v, _ in found] == ["001", "002", "003", "004"],
+    check("번호순으로 읽는다", [v for v, _ in found] == ["001", "002", "003", "004", "005", "006", "007"],
           str([v for v, _ in found]))
     check("001 은 처음 세 테이블", "CREATE TABLE IF NOT EXISTS session"
           in found[0][1].read_text(encoding="utf-8"))
@@ -445,7 +446,7 @@ def test_routes():
 
     src = jpeg(1600, 1200)
     with _Env(GEMINI_API_KEY="", AZURE_SPEECH_KEY="", PHOTO_STORE="local",
-              PHOTO_DIR=str(TMP), CREATE_MAX_PER_WINDOW=0), _FakeRows() as rows:
+              PHOTO_DIR=str(TMP), CREATE_MAX_PER_WINDOW=0), _FakeRows() as rows, NoDb():
         photostore.reset()
         with TestClient(app) as c:
             up = c.post("/api/photos", content=src,
@@ -566,7 +567,7 @@ def test_clues():
         try:
             ctl = C.SessionController(user_id="kim", title="t",
                                       photo_id=photo_id, tts_fn=silent)
-            await ctl.start("엽서")
+            await ctl.start("씨앗")
             if ctl._clues:
                 await ctl._clues
             ctl.release()
@@ -595,13 +596,13 @@ def test_clues():
 
     ctl, seen = asyncio.run(run("p1", owner="lee"))
     check("남의 사진은 붙지 않는다", "photo_analyses" not in ctl.state)
-    check("그래도 회차는 산다", ctl.fragments[0]["answer"] == "엽서")
+    check("그래도 회차는 산다", ctl.fragments[0]["answer"] == "씨앗")
     check("붙지 않아도 여는 말은 사진 이야기다", ctl._next_question == C.OPENING_PHOTO,
           "고르신 것은 사진이다 — 붙는지는 그 뒤에 안다")
 
     ctl, seen = asyncio.run(run("p1", clues=None))
     check("분석이 빈손이어도 회차는 산다",
-          "photo_analyses" not in ctl.state and ctl.fragments[0]["answer"] == "엽서")
+          "photo_analyses" not in ctl.state and ctl.fragments[0]["answer"] == "씨앗")
 
     # 올릴 때 이미 분석이 끝난 사진 — 보통은 이 길로 온다 (photo.analyze_later).
     READY = dict(CLUES, questions=["이 사진은 어떤 날에 찍으신 건가요?"])
@@ -613,6 +614,63 @@ def test_clues():
           ctl._next_question == "사진 잘 받았습니다. 이 사진은 어떤 날에 찍으신 건가요?",
           ctl._next_question)
     check("회차에도 그 단서를 적는다", seen.get("저장") == READY)
+
+    # 올리자마자 시작을 누른 경우 — 올릴 때 건 분석이 아직 돌고 있다.
+    from app.session import photo
+
+    async def racing(delay, wait):
+        calls = []
+
+        async def load_photo(pid):
+            return {"photo_id": pid, "user_id": "kim", "storage_key": "k",
+                    "mime": "image/jpeg", "status": "stored", "clues": None}
+
+        async def analyze(data, mime):
+            calls.append(1)
+            await asyncio.sleep(delay)
+            return READY
+
+        async def hush(*a, **k):
+            return None
+
+        async def silent(text):
+            return b""
+
+        old = (store.load_photo, store.save_session, store.save_turn,
+               store.save_photo_clues, store.save_photo_analysis,
+               photo_analyze.analyze_photo, photostore.current, C.PHOTO_WAIT)
+        store.load_photo, store.save_session, store.save_turn = load_photo, hush, hush
+        store.save_photo_clues = store.save_photo_analysis = hush
+        photo_analyze.analyze_photo = analyze
+        photostore.current = lambda: _Bytes()
+        C.PHOTO_WAIT = wait
+        try:
+            photo.analyze_later({"photo_id": "p9", "storage_key": "k",
+                                 "mime": "image/jpeg"})
+            ctl = C.SessionController(user_id="kim", title="t",
+                                      photo_id="p9", tts_fn=silent)
+            await ctl.start("씨앗")
+            opening = ctl._next_question
+            if ctl._clues:
+                await ctl._clues
+            ctl.release()
+            return ctl, opening, len(calls)
+        finally:
+            (store.load_photo, store.save_session, store.save_turn,
+             store.save_photo_clues, store.save_photo_analysis,
+             photo_analyze.analyze_photo, photostore.current, C.PHOTO_WAIT) = old
+
+    ctl, opening, n = asyncio.run(racing(0.2, 2.0))
+    check("돌던 분석을 기다려 여는 말이 사진 질문이 된다",
+          opening == "사진 잘 받았습니다. 이 사진은 어떤 날에 찍으신 건가요?", opening)
+    check("같은 사진을 두 번 분석하지 않는다", n == 1, f"{n}번")
+    check("기다린 단서가 state 로 간다", ctl.state.get("photo_analyses") == [READY])
+
+    ctl, opening, n = asyncio.run(racing(0.5, 0.1))
+    check("한도를 넘기면 고정 문장으로 연다", opening == C.OPENING_PHOTO, opening)
+    check("넘겨도 새로 걸지 않고 이어받는다", n == 1, f"{n}번")
+    check("이어받은 단서가 뒤늦게 붙는다", ctl.state.get("photo_analyses") == [READY])
+    check("끝난 분석은 목록에서 빠진다", photo.in_flight("p9") is None)
 
 
 def test_photo_opening():
@@ -636,7 +694,7 @@ def test_photo_opening():
           "§2 는 시각 분석가라 여쭐 「내용」만 적어 놓을 때가 있다")
     check("전각 물음표도 질문이다", op(["어떤 날인가요？"]).startswith("사진 잘 받았습니다. 어떤"))
     check("너무 길면 고정 문장이다", op(["가" * 101 + "?"]) == C.OPENING_PHOTO,
-          "§1 의 120자 규칙을 여는 말도 지킨다")
+          "여는 말도 한없이 길지 않다 — 상한 100자는 §1 의 60자보다 아직 넓다")
     check("질문이 없으면 고정 문장이다", op([]) == C.OPENING_PHOTO)
     check("단서가 없으면 고정 문장이다", C.photo_opening(None) == C.OPENING_PHOTO)
     check("문자열이 아니면 고정 문장이다", op([{"q": "어떤 날인가요?"}]) == C.OPENING_PHOTO,

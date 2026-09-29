@@ -111,7 +111,7 @@ def test_controller():
     ctl, elapsed = asyncio.run(run())
     check("다음 질문이 나왔다", ctl.machine.state is State.SPEAKING,
           f"state={ctl.machine.state.value}")
-    check("조각 2개 (엽서 + 답변 1)", len(ctl.fragments) == 2)
+    check("조각 2개 (씨앗 + 답변 1)", len(ctl.fragments) == 2)
 
     spans = ctl.latencies[0] if ctl.latencies else {}
     if spans:
@@ -132,7 +132,7 @@ def test_controller():
     async def run_btn():
         t0 = time.perf_counter()
         ctl = SessionController(user_id="t", title="시험", pace="slow")   # T2 = 7초
-        await ctl.start("엽서")
+        await ctl.start("씨앗")
         await ctl.tts_done()
         await ctl.speech("응, 그랬지.")
         await ctl.done_button()
@@ -147,7 +147,7 @@ def test_controller():
 
     async def run_empty():
         ctl = SessionController(user_id="t", title="시험", pace="fast")
-        await ctl.start("엽서")
+        await ctl.start("씨앗")
         await ctl.tts_done()
         await ctl.done_button()          # 아무 말 없이 확정
         await asyncio.sleep(0.3)
@@ -174,7 +174,7 @@ def test_empty_loop():
     async def run_silent():
         ctl = SessionController(user_id="t", title="시험", pace="fast")
         ctl.timers.t1_seconds = 0.3              # 3초씩 기다릴 이유가 없다
-        await ctl.start("엽서")
+        await ctl.start("씨앗")
         await ctl.tts_done()
         await ctl.done_button()                  # 아무 말 없이 확정
         await asyncio.sleep(2.0)                 # T1 이 여섯 번 돌 시간
@@ -191,7 +191,7 @@ def test_empty_loop():
         ctl = SessionController(user_id="t", title="시험", pace="fast",
                                 stt_fn=always_empty)
         ctl.timers.t1_seconds = 0.3
-        await ctl.start("엽서")
+        await ctl.start("씨앗")
         await ctl.tts_done()
         await ctl.audio_chunk(bytes(64), "audio/wav")
         await asyncio.sleep(2.5)
@@ -260,7 +260,7 @@ def test_tts():
             return b"ID3" + text.encode()[:8]
 
         ctl = SessionController(user_id="t", title="시험", pace="fast", tts_fn=slow_tts)
-        await ctl.start("엽서")
+        await ctl.start("씨앗")
         await ctl.tts_done()
         await ctl.speech("덜컹덜컹 소리가 났지.")
         await asyncio.sleep(T2_PRESETS["fast"] + ctl.timers.t1_seconds + 0.6)
@@ -279,7 +279,7 @@ def test_tts():
             raise RuntimeError("합성 서버가 죽었다")
 
         ctl = SessionController(user_id="t", title="시험", pace="fast", tts_fn=broken_tts)
-        await ctl.start("엽서")
+        await ctl.start("씨앗")
         await ctl.tts_done()
         await ctl.speech("덜컹덜컹 소리가 났지.")
         await asyncio.sleep(T2_PRESETS["fast"] + ctl.timers.t1_seconds + 0.6)
@@ -302,7 +302,7 @@ def test_tts():
             return b"ID3"
 
         ctl = SessionController(user_id="t", title="시험", pace="fast", tts_fn=slow_tts)
-        await ctl.start("엽서")
+        await ctl.start("씨앗")
         for say in ("첫 마디입니다.", "둘째 마디입니다.", "셋째 마디입니다."):
             await ctl.tts_done()
             await ctl.speech(say)
@@ -351,7 +351,7 @@ def test_done_button_race():
         ctl = SessionController(user_id="t", title="시험", pace="slow",   # T2 = 7초
                                 stt_fn=slow_stt, tts_fn=_silent_tts)
         ctl.timers.t1_seconds = 0.3           # 3초를 기다릴 이유가 없다
-        await ctl.start("엽서")
+        await ctl.start("씨앗")
         await ctl.tts_done()
         await ctl.audio_chunk(bytes(64), "audio/wav")
         await asyncio.sleep(0.45)             # T1 격발 뒤 · 전사 도중
@@ -375,11 +375,11 @@ def test_done_button_race():
     check("409 로 튕기지 않는다", err is None, err or "")
     check("PROCESSING 에 멈추지 않는다", ctl.machine.state is State.SPEAKING,
           f"state={ctl.machine.state.value}")
-    # 0번 조각은 엽서다 (start). 턴 하나가 더 붙어 둘이 되어야 맞는다 —
+    # 0번 조각은 씨앗이다 (start). 턴 하나가 더 붙어 둘이 되어야 맞는다 —
     # 잘린 확정은 여기를 비워 두고, 그게 말씀이 사라진다는 뜻이다.
     check("말씀이 조각으로 남는다",
           len(ctl.fragments) == 2 and "봉천동" in ctl.fragments[-1]["answer"],
-          f"조각 {len(ctl.fragments)}개 — 엽서 말고 턴이 없으면 말씀을 잃은 것이다")
+          f"조각 {len(ctl.fragments)}개 — 씨앗 말고 턴이 없으면 말씀을 잃은 것이다")
     check("턴을 두 번 소모하지 않는다", ctl.machine.turn == 1, f"턴 {ctl.machine.turn}")
     check("남은 T2 7초를 기다리지 않는다", el < 2.0, f"{el:.1f}초")
 
@@ -394,7 +394,7 @@ def test_done_button_race():
         ctl = SessionController(user_id="t", title="시험", pace="slow",
                                 question_fn=slow_question, tts_fn=_silent_tts)
         ctl.timers.t1_seconds = 0.3
-        await ctl.start("엽서")
+        await ctl.start("씨앗")
         await ctl.tts_done()
         await ctl.speech("그럼, 봉천동에서 살았지.")
         await asyncio.sleep(0.4)              # T1 격발 · 전사 끝 · 질문 생성 중
@@ -423,6 +423,177 @@ def test_done_button_race():
           f"{spans}")
 
 
+def test_abort_during_confirm():
+    """
+    「다 말했어요」의 전사 도중에 「중단」이 도착한다.
+
+    버튼의 확정은 요청 안에서 await 로 돌아 release() 가 끊을 태스크가 없다.
+    전사가 끝난 뒤 닫힌 회차를 보고 멈추지 않으면 질문 생성과 낭독 합성이
+    한 번씩 더 돈다 — 아무도 듣지 않는 LLM·TTS 호출이다. 자동 확정(T1)은
+    타이머 태스크째 끊겨 이 창이 없다.
+    """
+    print("\n[12] 확정 도중의 「중단」")
+
+    async def run(said: str):
+        calls = {"질문": 0, "합성": 0}
+
+        async def slow_stt(audio, mime, hint):
+            await asyncio.sleep(0.3)          # 이 사이에 중단이 온다
+            return said
+
+        async def count_question(ctl):
+            calls["질문"] += 1
+            return "그때 기차 안은 어땠나요?"
+
+        async def count_tts(text):
+            calls["합성"] += 1
+            return b""
+
+        ctl = SessionController(user_id="t", title="시험", pace="fast",
+                                stt_fn=slow_stt, question_fn=count_question,
+                                tts_fn=count_tts)
+        await ctl.start("씨앗")
+        await asyncio.sleep(0.05)
+        await ctl.tts_done()
+        base = dict(calls)
+        await ctl.audio_chunk(bytes(64), "audio/wav")
+
+        pressed = asyncio.create_task(ctl.done_button())
+        await asyncio.sleep(0.1)              # 전사 도중
+        mid = ctl.machine.state
+        await ctl.abort()
+        err = None
+        try:
+            await pressed
+        except Exception as e:                # noqa: BLE001
+            err = f"{type(e).__name__}: {e}"
+        await asyncio.sleep(0.3)              # 새어 나간 태스크가 있다면 돌 시간
+        ctl.release()
+        spent = {k: calls[k] - base[k] for k in calls}
+        return ctl, mid, err, spent
+
+    ctl, mid, err, spent = asyncio.run(run("순애랑 기차를 탔어"))
+    check("중단이 전사 도중에 도착했다", mid is State.PROCESSING,
+          f"state={mid.value} — 여기가 아니면 이 시험은 아무것도 재지 않는다")
+    check("버튼 요청이 터지지 않는다", err is None, err or "")
+    check("중단 뒤 질문을 만들지 않는다", spent["질문"] == 0, f"{spent['질문']}회")
+    check("중단 뒤 낭독을 합성하지 않는다", spent["합성"] == 0, f"{spent['합성']}회")
+    check("회차는 닫힌 채다", ctl.machine.state is State.CLOSED,
+          f"state={ctl.machine.state.value}")
+    check("중단 직전의 말씀은 남는다",
+          len(ctl.fragments) == 2 and "순애" in ctl.fragments[-1]["answer"],
+          f"조각 {len(ctl.fragments)}개")
+
+    # 전사가 비어 돌아오면 EMPTY_TRANSCRIPT 를 쏘려 한다. CLOSED 에는 그 전이가
+    # 없어 버튼 요청이 TransitionError 로 터진다.
+    ctl2, _, err2, _ = asyncio.run(run(""))
+    check("빈 전사여도 버튼 요청이 터지지 않는다", err2 is None, err2 or "")
+    check("빈 전사여도 닫힌 채다", ctl2.machine.state is State.CLOSED,
+          f"state={ctl2.machine.state.value}")
+
+
+def test_stt_env():
+    """
+    .env 의 전사 설정을 비워 둬도 전사는 예외를 올리지 않는다.
+
+    `AZURE_STT_TIMEOUT=` 은 변수가 **있고 값이 빈** 것이라 get() 의 기본값이
+    안 걸린다. float("") 가 터지면 _confirm 이 전사 전에 죽어, 회차가 PROCESSING
+    에 멈추고 그 턴의 말씀이 저장되지 않는다. 네트워크는 부르지 않는다.
+    """
+    import os
+    from app.session import stt
+
+    print("\n[13] 비워 둔 전사 설정")
+    keys = ("AZURE_SPEECH_KEY", "AZURE_SPEECH_REGION", "AZURE_STT_TIMEOUT", "AZURE_STT_LOCALE")
+    old_env = {k: os.environ.get(k) for k in keys}
+    old_post = stt._post
+    seen = {}
+
+    async def fake_post(key, region, audio, mime, hint, deadline):
+        seen["locale"] = stt._definition(hint)["locales"]
+        return "순애랑 기차를 탔어"
+
+    os.environ.update({"AZURE_SPEECH_KEY": "k", "AZURE_SPEECH_REGION": "koreacentral",
+                       "AZURE_STT_TIMEOUT": "", "AZURE_STT_LOCALE": ""})
+    stt._post = fake_post
+    try:
+        err, text = None, ""
+        try:
+            text = asyncio.run(stt.azure_transcribe(b"RIFF", "audio/wav"))
+        except Exception as e:                # noqa: BLE001
+            err = f"{type(e).__name__}: {e}"
+        check("빈 시간 한도로도 예외가 없다", err is None, err or "")
+        check("기본 한도로 전사가 돈다", text == "순애랑 기차를 탔어", repr(text))
+        check("빈 언어는 기본값(ko-KR)으로 간다", seen.get("locale") == ["ko-KR"],
+              str(seen.get("locale")))
+    finally:
+        stt._post = old_post
+        for k, v in old_env.items():
+            if v is None:
+                os.environ.pop(k, None)
+            else:
+                os.environ[k] = v
+
+
+def test_stt_dump():
+    """
+    전사 오디오는 STT_DUMP_DIR 을 적었을 때만, 공개 주소가 없을 때만 남는다.
+    남긴 파일은 전사기가 받은 바이트와 같아야 들어 볼 의미가 있다.
+    """
+    import os
+    import tempfile
+
+    print("\n[14] 전사 오디오 남기기")
+    keys = ("STT_DUMP_DIR", "PUBLIC_ORIGIN")
+    old_env = {k: os.environ.get(k) for k in keys}
+    try:
+        with tempfile.TemporaryDirectory() as tmp:
+            wav, mime = audiolib.for_stt(bytes([1, 0]) * 1600, "audio/pcm;rate=16000")
+
+            os.environ.pop("STT_DUMP_DIR", None)
+            os.environ.pop("PUBLIC_ORIGIN", None)
+            check("비워 두면 남기지 않는다", audiolib.dump(wav, mime, "a") is None)
+
+            os.environ["STT_DUMP_DIR"] = str(Path(tmp) / "d")
+            f = audiolib.dump(wav, mime, "b")
+            check("적으면 wav 로 남긴다", f is not None and f.suffix == ".wav", str(f))
+            check("전사기가 받은 바이트 그대로다", f is not None and f.read_bytes() == wav)
+
+            os.environ["PUBLIC_ORIGIN"] = "https://memoa.kr"
+            check("공개 주소가 있으면 남기지 않는다", audiolib.dump(wav, mime, "c") is None)
+    finally:
+        for k, v in old_env.items():
+            if v is None:
+                os.environ.pop(k, None)
+            else:
+                os.environ[k] = v
+
+
+def test_stt_hint():
+    """
+    전사 힌트는 씨앗에서만 오고, Azure 가 받는 모양(phraseList.phrases)으로 간다.
+
+    모르는 이름의 필드는 Azure 가 말없이 버려서, 모양이 틀려도 전사는 멀쩡히
+    돈다 — 힌트가 먹는지는 겉으로 드러나지 않으므로 모양을 여기서 못 박는다.
+    """
+    from app.session import stt
+
+    print("\n[15] 전사 힌트")
+    ctl = SessionController(user_id="t", title="시험")
+    ctl.fragments = [{"idx": 0, "question": None, "answer": "열아홉에 영등포역, 순애랑."},
+                     {"idx": 1, "question": "q", "answer": "친한 바다"}]
+    check("힌트는 씨앗뿐이다", ctl._hint() == "열아홉에 영등포역, 순애랑.", repr(ctl._hint()))
+
+    d = stt._definition("열아홉에 영등포역, 영등포역 순애. 에")
+    check("phraseList.phrases 로 간다",
+          d.get("phraseList") == {"phrases": ["열아홉에", "열아홉", "영등포역", "순애"]}, str(d))
+    d = stt._definition("순애랑 영등포역에서 만났지")
+    check("조사를 뗀 이름도 넣는다",
+          d["phraseList"]["phrases"] == ["순애랑", "순애", "영등포역에서", "영등포역", "만났지"], str(d))
+    check("떼고 한 글자만 남으면 안 뗀다", stt._stem("누나") == "누나" and stt._stem("순이가") == "순이")
+    check("힌트가 없으면 필드도 없다", "phraseList" not in stt._definition(""))
+
+
 def test_all_checks_passed():
     """
     pytest 로 돌릴 때의 안전판.
@@ -447,6 +618,10 @@ def main() -> int:
     test_pcm_wrap()
     test_tts()
     test_done_button_race()
+    test_abort_during_confirm()
+    test_stt_env()
+    test_stt_dump()
+    test_stt_hint()
     print(f"\n{'=' * 52}\n통과 {len(PASS)} · 실패 {len(FAIL)}")
     if FAIL:
         print("실패:", ", ".join(FAIL))

@@ -123,7 +123,7 @@ async def close_pool() -> None:
 
 
 async def save_session(ctl: "SessionController") -> None:
-    """회차를 연다. 0번 조각(엽서)은 controller 가 따로 save_turn 으로 넣는다."""
+    """회차를 연다. 0번 조각(씨앗)은 controller 가 따로 save_turn 으로 넣는다."""
     if _pool is None:
         return
     try:
@@ -236,6 +236,24 @@ async def update_session(ctl: "SessionController",
         log.error("세션 갱신 실패 (%s: %s)", type(e).__name__, str(e)[:120])
 
 
+async def save_closing_decision(ctl: "SessionController", decision: dict) -> None:
+    """
+    마지막 말씀을 듣고 낸 판단. **들어갈 턴 행이 없어서** 회차 행에 둔다.
+
+    turn N 의 decision 은 N-1 번째 말씀의 판단이다 (save_turn). 마지막 말씀
+    뒤에는 턴이 더 없으니 그 판단은 여기가 아니면 사라진다.
+    """
+    if _pool is None:
+        return
+    try:
+        async with _pool.acquire() as con:
+            await con.execute(
+                "UPDATE session SET closing_decision = $2 WHERE session_id = $1",
+                _sid(ctl), json.dumps(decision, ensure_ascii=False))
+    except Exception as e:                                   # noqa: BLE001
+        log.error("마지막 판단 저장 실패 (%s: %s)", type(e).__name__, str(e)[:120])
+
+
 # ---------------------------------------------------------------- 읽기
 #
 # **읽기는 실패를 삼키지 않는다.** 위의 쓰기 함수들과 정반대다.
@@ -287,6 +305,8 @@ def _session_row(r: Any) -> dict:
         "session_id": str(r["session_id"]),
         "user_id": r["user_id"],
         "title": r["title"],
+        # 엽서를 그릴 때 참고로 줄 사진. 사진 없이 연 회차는 None 이다.
+        "photo_id": str(r["photo_id"]) if r["photo_id"] else None,
         "state": r["state"],
         "turn": r["turn"],
         "max_turn": r["max_turn"],
@@ -328,7 +348,7 @@ async def load_session(session_id: str) -> dict | None:
     회차 하나를 조각까지 통째로. 없으면 None — 그건 오류가 아니다.
 
     조각은 idx 순으로 준다. **idx 가 곧 서사의 시간 순서다** (FR-AD-401).
-    created_at 으로 정렬하지 않는다 — 0번 조각(엽서)과 1번이 같은 초에 들어가면
+    created_at 으로 정렬하지 않는다 — 0번 조각(씨앗)과 1번이 같은 초에 들어가면
     순서가 뒤집힌다.
     """
     pool = _need_pool()
@@ -347,6 +367,10 @@ async def load_session(session_id: str) -> dict | None:
                 SELECT idx, question, answer, decision, latency, created_at
                   FROM turn WHERE session_id = $1 ORDER BY idx
                 """, sid)
+            prow = await con.fetchrow(
+                "SELECT title, text, caption, storage_key, created_at FROM postcard"
+                " WHERE session_id = $1",
+                sid)
     except Exception as e:                                   # noqa: BLE001
         log.error("회차 읽기 실패 %s (%s: %s)", session_id, type(e).__name__, str(e)[:120])
         raise StoreUnavailable("회차를 읽지 못했습니다") from e
@@ -361,6 +385,17 @@ async def load_session(session_id: str) -> dict | None:
             "latency": _jsonb(t["latency"]),
             "created_at": t["created_at"].isoformat(),
         } for t in trows],
+        # 마지막 말씀의 판단. 조각 어디에도 없는 값이다 (save_closing_decision).
+        "closing_decision": _jsonb(srow["closing_decision"]),
+        # 구운 엽서. 바이트 주소는 라우트가 붙이고 storage_key 는 거기서 떼어 낸다 —
+        # 여기는 어디서 서빙되는지 모른다.
+        "postcard": {
+            "title": prow["title"],
+            "text": prow["text"],
+            "caption": prow["caption"],
+            "storage_key": prow["storage_key"],
+            "created_at": prow["created_at"].isoformat(),
+        } if prow else None,
     }
 
 
@@ -493,3 +528,95 @@ async def delete_photo_row(photo_id: str) -> None:
     except Exception as e:                                   # noqa: BLE001
         log.error("사진 행 정리 실패 %s (%s: %s) — 고아 행이 남는다",
                   photo_id, type(e).__name__, str(e)[:120])
+
+
+# ---------------------------------------------------------------- 엽서
+#
+# 사진 절과 같은 규칙이다. **실패하면 올린다.** 엽서는 어르신이 버튼을 눌러
+# 기다리는 결과물이라, 못 넣었는데 성공했다고 말하면 보관함에 빈 칸이 생긴다.
+
+
+def _postcard_row(r: Any) -> dict:
+    return {
+        "session_id": str(r["session_id"]),
+        "user_id": r["user_id"],
+        "title": r["title"],
+        "text": r["text"],
+        "caption": r["caption"],
+        "sources": _jsonb(r["sources"]),
+        "storage_key": r["storage_key"],
+        "mime": r["mime"],
+        "bytes": r["bytes"],
+        "width": r["width"],
+        "height": r["height"],
+        "photo_id": str(r["photo_id"]) if r["photo_id"] else None,
+        "text_model": r["text_model"],
+        "image_model": r["image_model"],
+        "created_at": r["created_at"].isoformat(),
+    }
+
+
+async def save_postcard(rec: dict) -> str | None:
+    """
+    엽서 행을 넣거나 덮어쓴다. **덮어쓰기 전의 키를 돌려준다.**
+
+    옛 바이트를 지우는 것은 호출자다. 여기서 지우면 행과 바이트를 한 함수가 같이
+    쥐게 되는데, 바이트는 이 파일이 아니라 PhotoStore 의 일이다.
+
+    옛 키는 CTE 로 같은 문장 안에서 읽는다. 따로 SELECT 하면 그 사이에 다른
+    요청이 행을 바꿔 엉뚱한 키를 지울 수 있다.
+    """
+    pool_ = _need_pool()
+    try:
+        async with pool_.acquire() as con:
+            return await con.fetchval(
+                """
+                WITH old AS (SELECT storage_key FROM postcard WHERE session_id = $1)
+                INSERT INTO postcard (session_id, user_id, text, storage_key, mime,
+                                      bytes, width, height, photo_id,
+                                      text_model, image_model, title, caption, sources)
+                VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
+                ON CONFLICT (session_id) DO UPDATE
+                   SET user_id     = EXCLUDED.user_id,
+                       title       = EXCLUDED.title,
+                       text        = EXCLUDED.text,
+                       caption     = EXCLUDED.caption,
+                       sources     = EXCLUDED.sources,
+                       storage_key = EXCLUDED.storage_key,
+                       mime        = EXCLUDED.mime,
+                       bytes       = EXCLUDED.bytes,
+                       width       = EXCLUDED.width,
+                       height      = EXCLUDED.height,
+                       photo_id    = EXCLUDED.photo_id,
+                       text_model  = EXCLUDED.text_model,
+                       image_model = EXCLUDED.image_model,
+                       created_at  = now()
+                RETURNING (SELECT storage_key FROM old)
+                """,
+                uuid.UUID(rec["session_id"]), rec["user_id"], rec["text"],
+                rec["storage_key"], rec["mime"], rec["bytes"], rec["width"],
+                rec["height"], _pid(rec.get("photo_id")),
+                rec.get("text_model"), rec.get("image_model"),
+                rec.get("title"), rec.get("caption"),
+                json.dumps(rec.get("sources"), ensure_ascii=False)
+                if rec.get("sources") is not None else None)
+    except Exception as e:                                   # noqa: BLE001
+        log.error("엽서 행 저장 실패 %s (%s: %s)",
+                  rec.get("session_id"), type(e).__name__, str(e)[:120])
+        raise StoreUnavailable("엽서를 저장하지 못했습니다") from e
+
+
+async def load_postcard(session_id: str) -> dict | None:
+    """회차의 엽서. 아직 안 구웠으면 None — 그건 오류가 아니다."""
+    pool_ = _need_pool()
+    try:
+        sid = uuid.UUID(session_id)
+    except ValueError:
+        return None
+    try:
+        async with pool_.acquire() as con:
+            row = await con.fetchrow("SELECT * FROM postcard WHERE session_id = $1", sid)
+    except Exception as e:                                   # noqa: BLE001
+        log.error("엽서 읽기 실패 %s (%s: %s)", session_id, type(e).__name__, str(e)[:120])
+        raise StoreUnavailable("엽서를 읽지 못했습니다") from e
+    return _postcard_row(row) if row else None

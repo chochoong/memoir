@@ -81,6 +81,15 @@ button:disabled { opacity: .3; cursor: not-allowed; }
 }
 .photos .meta { display: block; margin-top: 4px; font-size: 12px; }
 
+/* 엽서는 가로 3:2 한 장이다. 자르지 않고 폭에 맞춘다 — 아래 띠의 문장이 잘리면
+   엽서가 아니다. */
+.postcard { margin: 0 0 18px; }
+.postcard img {
+  display: block; width: 100%; height: auto; margin-bottom: 10px;
+  border: 1px solid var(--rule); border-radius: 6px; background: var(--bg);
+}
+.postcard .busy { opacity: .5; cursor: progress; }
+
 h3 { font-size: 15px; font-weight: 600; color: var(--muted); margin: 22px 0 10px; }
 
 table { width: 100%; border-collapse: collapse; font-size: 15px; }

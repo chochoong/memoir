@@ -5,3 +5,4 @@ web/
 .venv/
 tools/recordings/
 logs/
+stt_dump/

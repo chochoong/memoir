@@ -49,7 +49,7 @@ load_dotenv(Path(__file__).resolve().parent.parent / ".env")
 from app.session import stt                                        # noqa: E402
 from app.session.audio import pcm16_to_wav                         # noqa: E402
 
-POSTCARD = "1968년 여름, 순애랑 서울 가는 완행열차를 탔다."
+SEED = "1968년 여름, 순애랑 서울 가는 완행열차를 탔다."
 CHUNK_SEC = 1.0
 SILENCE_RATIO = 0.08
 
@@ -257,7 +257,7 @@ async def run(a) -> int:
         print(f"── {p.name}  소리 {sec:.1f}초")
         ref = ""
         for r in range(a.rounds):
-            hist = f"질문: {POSTCARD}"
+            hist = f"질문: {SEED}"
             ms_a, txt_a, q_a, split = await _path_a(audio, hist)
             lat["A"].append(ms_a)
             if not ref:

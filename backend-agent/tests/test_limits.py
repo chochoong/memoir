@@ -28,6 +28,7 @@ from app.session import controller as sc                                 # noqa:
 from app.session import limits, store                                    # noqa: E402
 from app.session.controller import SessionController                     # noqa: E402
 from app.session.machine import Event, State                             # noqa: E402
+from tests._nodb import NoDb                                              # noqa: E402
 
 PASS, FAIL = [], []
 
@@ -125,7 +126,7 @@ def test_turn_cap():
     async def run_to_cap():
         with _Env(TURN_CAP=2), _Reasons() as r:
             ctl = _fresh()
-            await ctl.start("엽서입니다")
+            await ctl.start("씨앗입니다")
             await _turn(ctl, "첫 번째 말씀입니다")
             mid = ctl.machine.state
             await _turn(ctl, "두 번째 말씀입니다")
@@ -143,7 +144,7 @@ def test_turn_cap():
     async def run_max_turn():
         with _Reasons() as r:
             ctl = _fresh(max_turn=1)
-            await ctl.start("엽서입니다")
+            await ctl.start("씨앗입니다")
             await _turn(ctl, "한 마디만 하겠습니다")
             return ctl, r.seen
 
@@ -456,10 +457,10 @@ def test_route_limits():
 
     sc._sessions.clear()
     limits.reset()
-    body = {"title": "시험", "postcard": "엽서 한 줄", "pace": "fast"}
+    body = {"title": "시험", "seed": "씨앗 한 줄", "pace": "fast"}
 
     with _Env(GEMINI_API_KEY="", AZURE_SPEECH_KEY="",
-              CREATE_MAX_PER_WINDOW=99, USER_LIVE_MAX=1), TestClient(app) as c:
+              CREATE_MAX_PER_WINDOW=99, USER_LIVE_MAX=1), NoDb(), TestClient(app) as c:
         anon = [c.post("/api/sessions", json=body).status_code for _ in range(4)]
         check("로그인 전에는 사용자별 상한이 아무도 막지 않는다",
               anon == [200] * 4, f"{anon} — 막으면 네 번째 어르신이 열지도 않은 "
