@@ -141,7 +141,7 @@ def test_prompt():
     system = P._load_prompt()
     check("§0 과 §2 를 읽는다", len(system) > 200, f"{len(system)}자")
     check("상태 틀은 끼우지 않는다", "{shared_state}" not in system)
-    check("§2 의 관찰 규칙이 실린다", "사진에서 실제로 보이는 것만 적습니다" in system)
+    check("§2 의 관찰 규칙이 실린다", "[입력과 관찰]" in system)
     check("인터뷰 에이전트(§1) 규칙은 안 섞인다", "감각 질문 규칙" not in system)
 
 

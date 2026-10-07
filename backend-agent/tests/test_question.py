@@ -105,7 +105,7 @@ def test_trim():
     """
     모델이 두 문장을 적어 와도 어르신 귀에 가는 것은 한 문장씩이다.
 
-    원인은 출력 필드 순서였고 그것을 고쳤지만 (question.py _ADDENDUM 참조)
+    원인은 출력 필드 순서였고 그것을 고쳤지만 (question.py 「출력의 필드 순서」 참조)
     여기는 바닥으로 남겼다. 바닥이 정말 받치는지 본다.
     """
     print("\n[1] 공감·질문을 한 문장으로 줄인다")
@@ -330,17 +330,17 @@ def test_prompt():
           sent.index("[현재 공유 상태]") < sent.index("[지금까지의 대화]"), sent[:40])
 
     sysmsg = fake.seen["config"].system_instruction
-    check("덧댄 규칙이 system 에 실린다", "facts_found" in sysmsg,
-          "문서에 없는 필드는 여기서 덧댄다")
+    check("문서의 출력 형식이 system 에 실린다", "facts_found" in sysmsg,
+          "인터뷰.md 가 13개 키를 정한다")
     check("출력 순서는 문서를 따른다 — 공감이 먼저",
           sysmsg.rindex('"empathy"') < sysmsg.rindex('"question_type"'),
           "질문이 앞서면 모델이 질문 칸 안에서 먼저 공감한다")
     check("§1 이 정한 길이를 덮어쓰지 않는다", "40자" not in sysmsg,
           "§1 은 합쳐 60자다 — 두 벌이 살아 있으면 둘 다 안 지켜진다")
-    check("덧댄 형식이 §1 의 새 필드를 빠뜨리지 않는다",
+    check("출력 형식이 §1 의 필드를 빠뜨리지 않는다",
           "closing_hint" in sysmsg and "end_reason" in sysmsg,
           "「반드시 아래 형식으로만」이라고 적으면서 빠뜨리면 모델이 안 적는다")
-    check("프롬프트를 prompts/ 에서 읽는다", promptlib.DOC.name == "interview_v2.3.txt",
+    check("프롬프트를 첨부프롬프트_md/ 에서 읽는다", promptlib.DOC.name == "인터뷰.md",
           promptlib.DOC.name)
 
 

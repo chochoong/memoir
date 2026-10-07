@@ -3,7 +3,7 @@
 
 업로드·전처리·저장은 photo.py 다. 이 파일은 저장된 사진을 읽어 단서를 낸다.
 
-`docs/인터뷰 에이전트_프롬프트.md` §2(사진 분석 에이전트)를 그대로 불러 쓴다.
+`첨부프롬프트_md/사진.md` §0 + §2(사진 분석 에이전트)를 그대로 불러 쓴다.
 shared_state 연결은 이 파일의 범위 밖이다 — photo_analyses 에 얹는 일은 다른
 곳이 한다. 여기는 사진 한 장을 받아 §2 가 정한 JSON 하나를
 돌려주는 것까지만 한다.
@@ -36,7 +36,7 @@ from pathlib import Path
 log = logging.getLogger("photo")
 
 # app/session/photo.py → backend-agent/
-DOC = Path(__file__).resolve().parents[2] / "docs" / "인터뷰 에이전트_프롬프트.md"
+DOC = Path(__file__).resolve().parents[2] / "첨부프롬프트_md" / "사진.md"
 
 DEFAULT_MODEL = "gemini-3.5-flash-lite"
 DEFAULT_TIMEOUT = 10.0          # 임시값 — 위 "확인 전 가정" 참조

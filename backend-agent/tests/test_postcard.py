@@ -518,7 +518,7 @@ def test_checked():
     except postcard.PostcardUnavailable:
         check("자동 생성에서 확인 요청은 503 쪽 오류", True)
     p = postcard._prompt()
-    check("프롬프트는 문서의 코드 블록 안이다", p.startswith("목표") and "```" not in p, p[:20])
+    check("프롬프트는 문서의 코드 블록 안이다", p.startswith("당신은 사용자 기억을") and "```" not in p, p[:20])
 
 
 def test_all_checks_passed():
