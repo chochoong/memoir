@@ -27,6 +27,17 @@
 **실패는 회차를 끝내지 않는다.** 빈 바이트를 돌려주면 화면은 글자만 띄우고
 「낭독 끝」 버튼으로 넘어간다. 어르신은 소리 없이 글을 읽게 되지만 회차는 산다.
 
+**Gemini 로 읽는 갈래가 있다 (실험).** 기본은 위 그대로 Azure 다.
+
+    TTS_PROVIDER=gemini              한 번에 받는다 (synthesize → wav). 들어 보기용 —
+                                     2~3초라 예산을 넘기므로 GEMINI_TTS_TIMEOUT 만큼
+                                     기다린다. 그만큼 질문이 늦게 나간다
+    TTS_PROVIDER=gemini TTS_STREAM=1 조각으로 받아 흘려보낸다 (Speech). 첫 소리 1초 안팎
+
+Gemini 가 실패하면(429 · 시간 초과 · 오류) **Azure 가 대신 읽는다.** 스트리밍에서는
+Azure 에도 같은 날 PCM(24kHz 16비트)을 달라고 해서, 화면은 누가 읽었는지 몰라도
+같은 길로 튼다. 왜 실험인지는 tts_gemini.py 머리말에 숫자로 적었다.
+
 환경변수는 **함수 안에서** 읽는다. main.py 가 load_dotenv() 를 import 뒤에
 호출하기 때문에, 모듈 수준에서 읽으면 .env 가 아직 로드되기 전이라 빈 값을 잡는다.
 """
@@ -36,13 +47,22 @@ from __future__ import annotations
 import asyncio
 import logging
 import os
+import time
+from typing import AsyncIterator
 from xml.sax.saxutils import escape
+
+from . import tts_gemini
+from .audio import pcm16_to_wav
+from .conf import env_flag, env_float, env_str
 
 log = logging.getLogger("tts")
 
 DEFAULT_VOICE = "ko-KR-SunHiNeural"
 DEFAULT_RATE = "-8%"
 DEFAULT_FORMAT = "audio-24khz-48kbitrate-mono-mp3"
+# 스트리밍에서 Azure 가 대신 읽을 때. Gemini 조각과 같은 꼴이어야 화면이 한 길로 튼다.
+PCM_FORMAT = "raw-24khz-16bit-mono-pcm"
+PCM_RATE = 24000
 TAIL_SILENCE_MS = 150              # 마지막 음절 뒤에 남기는 무음 (_ssml 참조)
 
 # 예산은 T2 최솟값(3.0초)에서 질문 생성이 쓰고 남은 자리다. 실측 질문 p90 이
@@ -80,6 +100,15 @@ def _creds() -> tuple[str, str] | None:
         _WARNED = True
         log.warning("AZURE_SPEECH_KEY/REGION 이 없다 — 질문은 글자로만 나간다")
     return None
+
+
+def provider() -> str:
+    return "gemini" if env_str("TTS_PROVIDER").lower() == "gemini" else "azure"
+
+
+def streaming() -> bool:
+    """조각으로 흘려보내는가. Gemini 일 때만 뜻이 있다 — Azure 는 0.2초면 다 온다."""
+    return provider() == "gemini" and env_flag("TTS_STREAM")
 
 
 def _ssml(text: str) -> str:
@@ -123,6 +152,23 @@ async def synthesize(text: str) -> bytes:
         log.error("질문이 %d자다 — 합성하지 않는다 (한 문장이어야 한다)", len(text))
         return b""
 
+    if provider() == "gemini" and tts_gemini.available():
+        # 한 번에 받는 갈래다. 예산(1.6초)을 지키면 늘 빈손이라 따로 기다린다.
+        wait = env_float("GEMINI_TTS_TIMEOUT", 3.0)
+        try:
+            pcm, rate = await asyncio.wait_for(tts_gemini.synth(text), timeout=wait)
+            trim = Trim(rate)
+            pcm = trim.feed(pcm) + trim.end()
+            if pcm:
+                return pcm16_to_wav(pcm, rate)
+            log.warning("Gemini 낭독이 무음뿐이다 — Azure 로 읽는다")
+        except asyncio.TimeoutError:
+            log.warning("Gemini 낭독 %.1f초 초과 — Azure 로 읽는다", wait)
+        except Exception as e:                               # noqa: BLE001
+            tts_gemini.note_failure(e)
+            log.error("Gemini 낭독 실패 (%s: %s) — Azure 로 읽는다",
+                      type(e).__name__, str(e)[:140])
+
     key, region = cred
     try:
         timeout = float(os.environ.get("AZURE_TTS_TIMEOUT") or DEFAULT_TIMEOUT)
@@ -138,13 +184,13 @@ async def synthesize(text: str) -> bytes:
     return b""
 
 
-async def _post(key: str, region: str, text: str) -> bytes:
+async def _post(key: str, region: str, text: str, fmt: str | None = None) -> bytes:
     r = await _client().post(
         _endpoint(region),
         headers={
             "Ocp-Apim-Subscription-Key": key,
             "Content-Type": "application/ssml+xml",
-            "X-Microsoft-OutputFormat": os.environ.get("AZURE_TTS_FORMAT") or DEFAULT_FORMAT,
+            "X-Microsoft-OutputFormat": fmt or os.environ.get("AZURE_TTS_FORMAT") or DEFAULT_FORMAT,
             # 이 헤더가 없으면 400 이 온다. Azure TTS 의 요구사항이다.
             "User-Agent": "memoir-agent",
         },
@@ -153,6 +199,249 @@ async def _post(key: str, region: str, text: str) -> bytes:
         log.error("낭독 HTTP %s — %s", r.status_code, r.text[:140])
         return b""
     return r.content
+
+
+# ---------------------------------------------------------------- 무음 깎기
+
+FRAME_MS = 10
+LOUD = 600                 # 프레임 최댓값이 이보다 크면 소리다 (16비트 기준 -35dBFS 쯤)
+LEAD_KEEP_MS = 40          # 첫 소리 앞에 남기는 무음 — 첫 자음이 잘리지 않게
+
+
+class Trim:
+    """
+    앞 무음을 걷고 끝 무음을 TAIL_SILENCE_MS 로 맞춘다. **조각을 받는 대로**
+    내보낸다 — 끝을 모르는 채로 끝을 깎아야 해서, 조용한 구간은 다음 소리가
+    올 때까지 붙잡아 둔다. 문장 사이 쉼은 그렇게 늦게 나가지만 조각이 재생보다
+    빨리 오므로 귀에는 차이가 없다.
+
+    **앞을 깎는 것이 곧 첫 소리를 당기는 것이다.** Gemini 는 앞에 260ms 쯤
+    무음을 붙이고 (bench_tts.py), 그건 고스란히 어르신이 기다리는 시간이다.
+    끝을 깎는 까닭은 Azure 와 같다 — 파일이 끝나야 수음이 열린다 (_ssml 참조).
+    Gemini 는 끝에 300ms 쯤을 붙인다.
+    """
+
+    def __init__(self, rate: int):
+        self.frame = rate * FRAME_MS // 1000 * 2           # 프레임 바이트
+        self.lead = rate * LEAD_KEEP_MS // 1000 * 2
+        self.tail = rate * TAIL_SILENCE_MS // 1000 * 2
+        self.started = False
+        self.held = bytearray()
+
+    def _loud(self, buf: bytes | bytearray, i: int) -> bool:
+        f = memoryview(buf)[i:i + self.frame].cast("h")
+        return max(f, default=0) > LOUD or -min(f, default=0) > LOUD
+
+    def feed(self, pcm: bytes) -> bytes:
+        self.held += pcm
+        whole = len(self.held) - len(self.held) % self.frame
+        loud = [i for i in range(0, whole, self.frame) if self._loud(self.held, i)]
+        if not self.started:
+            if not loud:
+                # 아직 무음뿐이다. 앞에 남길 만큼만 들고 나머지는 버린다.
+                keep = len(self.held) - len(self.held) % 2
+                del self.held[: max(0, keep - self.lead - self.frame)]
+                return b""
+            self.started = True
+            cut = max(0, loud[0] - self.lead)
+            del self.held[:cut]
+            loud = [i - cut for i in loud]
+        if not loud:
+            return b""
+        end = loud[-1] + self.frame                        # 마지막 소리 프레임의 끝
+        out = bytes(self.held[:end])
+        del self.held[:end]
+        return out
+
+    def end(self) -> bytes:
+        """남은 무음에서 TAIL_SILENCE_MS 만큼만 내보낸다."""
+        if not self.started:
+            return b""
+        out = bytes(self.held[: self.tail])
+        self.held.clear()
+        return out[: len(out) - len(out) % 2]
+
+
+# ---------------------------------------------------------------- 스트리밍
+
+
+class Speech:
+    """
+    한 질문의 낭독. 조각을 모아 두고, 받으러 온 쪽에 처음부터 흘려준다.
+
+    **합성은 질문이 준비되는 순간 시작한다** (controller._speak) — 화면이 받으러
+    오는 때가 아니다. 그 사이에 온 조각은 여기 쌓여 있다가 한꺼번에 나가고,
+    그 뒤로는 오는 대로 나간다. Azure 갈래가 T2 안에 숨는 것과 같은 이치다.
+
+    조각은 늘 날 PCM 16비트 모노, rate 는 self.rate 다. 누가 읽었는지는
+    self.source 에 남는다 ("gemini" · "azure" · "" = 못 읽었다).
+    """
+
+    def __init__(self, text: str):
+        self.text = text
+        self.rate = PCM_RATE
+        self.chunks: list[bytes] = []
+        self.done = False
+        self.source = ""
+        self.first_at: float | None = None             # 첫 소리 조각이 온 시각 (perf_counter)
+        self._cond = asyncio.Condition()
+        self._task: asyncio.Task | None = None
+
+    @classmethod
+    def start(cls, text: str) -> "Speech":
+        sp = cls(text)
+        sp._task = asyncio.create_task(sp._run())
+        return sp
+
+    # -------------------------------------------- 받는 쪽
+
+    @property
+    def pending(self) -> bool:
+        """소리가 있거나, 아직 만드는 중이다."""
+        return bool(self.chunks) or not self.done
+
+    def pcm(self) -> bytes:
+        return b"".join(self.chunks)
+
+    async def wait_first(self, timeout: float | None = None) -> bool:
+        """첫 소리가 왔으면 True. 소리 없이 끝났거나 시간이 지나면 False."""
+        try:
+            async with self._cond:
+                await asyncio.wait_for(
+                    self._cond.wait_for(lambda: bool(self.chunks) or self.done), timeout)
+        except asyncio.TimeoutError:
+            pass
+        return bool(self.chunks)
+
+    async def wait_done(self, timeout: float | None = None) -> None:
+        try:
+            async with self._cond:
+                await asyncio.wait_for(self._cond.wait_for(lambda: self.done), timeout)
+        except asyncio.TimeoutError:
+            pass
+
+    async def iter_chunks(self) -> AsyncIterator[bytes]:
+        """처음부터 끝까지. 받는 쪽이 여럿이어도 각자 처음부터 받는다."""
+        i = 0
+        while True:
+            async with self._cond:
+                await self._cond.wait_for(lambda: len(self.chunks) > i or self.done)
+                new, finished = self.chunks[i:], self.done
+            i += len(new)
+            for c in new:
+                yield c
+            if finished and i >= len(self.chunks):
+                return
+
+    def cancel(self) -> None:
+        if self._task and not self._task.done():
+            self._task.cancel()
+
+    # -------------------------------------------- 만드는 쪽
+
+    async def _push(self, pcm: bytes) -> None:
+        if not pcm:
+            return
+        async with self._cond:
+            if self.first_at is None:
+                self.first_at = time.perf_counter()
+            self.chunks.append(pcm)
+            self._cond.notify_all()
+
+    async def _finish(self) -> None:
+        async with self._cond:
+            self.done = True
+            self._cond.notify_all()
+
+    async def _run(self) -> None:
+        try:
+            if not await self._gemini():
+                await self._azure()
+        except asyncio.CancelledError:
+            raise
+        except Exception as e:                               # noqa: BLE001
+            log.error("낭독 스트림 실패 (%s: %s)", type(e).__name__, str(e)[:140])
+        finally:
+            # 취소돼도 받는 쪽을 풀어 준다. 안 그러면 화면의 요청이 영영 매달린다.
+            self.done = True
+            try:
+                async with self._cond:
+                    self._cond.notify_all()
+            except RuntimeError:
+                pass
+
+    async def _gemini(self) -> bool:
+        """
+        Gemini 로 읽었으면 True. **첫 조각 전에** 실패하면 False — Azure 가 대신한다.
+        읽는 도중에 끊기면 True 다. 이미 들려 드린 말을 다른 목소리로 처음부터
+        다시 읽는 것보다, 받은 데까지만 읽고 「낭독 끝」으로 넘어가는 게 낫다.
+        """
+        if not tts_gemini.available():
+            return False
+        first_wait = env_float("GEMINI_TTS_FIRST_TIMEOUT", 1.3)
+        gap_wait = env_float("GEMINI_TTS_GAP_TIMEOUT", 2.0)
+        agen = tts_gemini.stream(self.text)
+        trim: Trim | None = None
+        heard = False
+        try:
+            wait = first_wait
+            while True:
+                try:
+                    pcm, rate = await asyncio.wait_for(agen.__anext__(), timeout=wait)
+                except StopAsyncIteration:
+                    break
+                if trim is None:
+                    self.rate, trim = rate, Trim(rate)
+                out = trim.feed(pcm)
+                if out:
+                    heard = True
+                    self.source = "gemini"
+                    await self._push(out)
+                # 첫 **소리** 전까지는 첫 조각 예산으로 잰다. 앞 무음 조각만 오고
+                # 말이 안 나오는 것도 「첫 소리를 못 받았다」이다.
+                wait = gap_wait if heard else first_wait
+            if trim is not None:
+                await self._push(trim.end())
+            return heard
+        except asyncio.TimeoutError:
+            log.warning("Gemini 스트림이 %.1f초 동안 조용하다 — %s",
+                        wait, "받은 데까지 읽는다" if heard else "Azure 로 읽는다")
+            return heard
+        except asyncio.CancelledError:
+            raise
+        except Exception as e:                               # noqa: BLE001
+            tts_gemini.note_failure(e)
+            log.error("Gemini 스트림 실패 (%s: %s) — %s", type(e).__name__, str(e)[:140],
+                      "받은 데까지 읽는다" if heard else "Azure 로 읽는다")
+            return heard
+        finally:
+            await agen.aclose()
+
+    async def _azure(self) -> None:
+        cred = _creds()
+        if not cred:
+            return
+        try:
+            pcm = await asyncio.wait_for(
+                _post(*cred, self.text, fmt=PCM_FORMAT),
+                timeout=env_float("AZURE_TTS_TIMEOUT", DEFAULT_TIMEOUT))
+        except asyncio.TimeoutError:
+            log.warning("Azure 대신 읽기도 시간 초과 — 글자만 내보낸다")
+            return
+        self.rate = PCM_RATE
+        trim = Trim(PCM_RATE)
+        out = trim.feed(pcm) + trim.end()
+        if out:
+            self.source = "azure"
+            await self._push(out)
+
+
+def stream_factory():
+    """
+    컨트롤러가 회차를 열 때 부른다. 스트리밍이 켜져 있으면 Speech.start, 아니면
+    None — 그러면 컨트롤러는 예전처럼 tts_fn(synthesize) 으로 한 덩어리를 받는다.
+    """
+    return Speech.start if streaming() else None
 
 
 async def warmup() -> None:
@@ -176,6 +465,20 @@ async def warmup() -> None:
     except Exception as e:                                   # noqa: BLE001
         log.warning("Azure TTS 예열 실패 (%s) — 첫 낭독이 느릴 수 있다",
                     type(e).__name__)
+
+    # Gemini 도 같은 이유로 깨운다. 안 깨우면 첫 질문의 첫 소리가 2초를 넘겼다
+    # (예열한 측정은 0.9초). **한도를 한 번 쓴다** — 하루 100번 중 하나다.
+    if provider() != "gemini" or not tts_gemini.available():
+        return
+    try:
+        t0 = time.perf_counter()
+        pcm, _ = await asyncio.wait_for(tts_gemini.synth("안녕하세요"), timeout=15)
+        log.info("Gemini TTS 예열 완료 (%s · %.1f초 · %d바이트)", tts_gemini._model(),
+                 time.perf_counter() - t0, len(pcm))
+    except Exception as e:                                   # noqa: BLE001
+        tts_gemini.note_failure(e)
+        log.warning("Gemini TTS 예열 실패 (%s: %s) — 첫 낭독이 느리거나 Azure 로 읽는다",
+                    type(e).__name__, str(e)[:140])
 
 
 async def aclose() -> None:

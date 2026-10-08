@@ -39,6 +39,10 @@ SttFn = Callable[[bytes, str, str | None], Awaitable[str]]
 # 낭독기. 질문 -> mp3. 실패해도 예외가 아니라 빈 바이트다.
 TtsFn = Callable[[str], Awaitable[bytes]]
 
+# 흘려 읽는 낭독기. 질문 -> tts.Speech (조각이 차오르는 그릇). None 이면 위 TtsFn
+# 으로 한 덩어리를 받는다 — 기본이 그쪽이다 (tts.stream_factory · TTS_STREAM).
+StreamFn = Callable[[str], "tts.Speech"]
+
 # 회차가 닫힌 뒤에 할 일. (session_id, user_id, closed_reason). 엽서 자동 굽기가
 # 여기 들어간다 (main.py). 기본은 없음 — 시험이 만드는 회차가 모델을 부르지 않는다.
 ClosedFn = Callable[[str, str, str], Awaitable[None]]
@@ -190,6 +194,9 @@ class SessionController:
     question_fn: QuestionFn = fixed_questions
     stt_fn: SttFn = stt.azure_transcribe
     tts_fn: TtsFn = tts.synthesize
+    # **회차를 열 때 한 번 정한다.** 회차 도중에 .env 를 바꿔도 이 회차는 처음
+    # 방식대로 읽는다 — 화면이 받는 길이 턴마다 바뀌면 안 된다.
+    stream_fn: StreamFn | None = field(default_factory=tts.stream_factory)
     closed_fn: ClosedFn | None = None
 
     machine: Machine = field(init=False)
@@ -218,6 +225,7 @@ class SessionController:
     _clues: asyncio.Task | None = None
     _next_question: str | None = None
     _question_audio: bytes = b""
+    _speech: tts.Speech | None = None
     _speaking: asyncio.Task | None = None
 
     def __post_init__(self) -> None:
@@ -245,8 +253,12 @@ class SessionController:
             # 「소리가 있다」 또는 「아직 만드는 중이다」. 끝난 태스크는 세지
             # 않는다 — 합성이 실패로 끝나도 있다고 말하게 되고, 화면은 오지
             # 않을 소리를 기다린다.
-            "question_audio": bool(self._question_audio) or bool(
-                self._speaking and not self._speaking.done()),
+            "question_audio": (self._speech.pending if self._speech else
+                               bool(self._question_audio) or bool(
+                                   self._speaking and not self._speaking.done())),
+            # 참이면 화면은 /question/stream 으로 조각을 받아 오는 대로 튼다.
+            # 거짓이면 예전처럼 /question/audio 로 파일 하나를 받는다.
+            "question_audio_stream": self._speech is not None,
             # 폰 화면의 콘솔에서 상태가 차오르는 것을 보려고 싣는다. 사실이
             # 한 턴도 안 쌓이면 인터뷰 에이전트가 제 몫을 못 하고 있는 것인데,
             # 로그를 열지 않고 알아채려면 여기 있어야 한다.
@@ -543,6 +555,8 @@ class SessionController:
         for task in (self._pending, self._speaking, self._clues):
             if task and not task.done():
                 task.cancel()
+        if self._speech:
+            self._speech.cancel()
 
     async def _close(self, reason: str) -> dict:
         """ABORT 전이로 닫는다. 어느 상태에서 불러도 받는다 (machine.fire 참조)."""
@@ -809,12 +823,28 @@ class SessionController:
         self._question_audio = b""
         if self._speaking and not self._speaking.done():
             self._speaking.cancel()
+        if self._speech:
+            self._speech.cancel()
+            self._speech = None
 
         # **지금 턴의 Marks 를 붙잡아 둔다.** self.marks 를 태스크 안에서 읽으면
         # 늦게 끝난 합성이 **다음 턴의** 기록에 시각을 적는다. 전달이 빠른 경로
         # (「다 말했어요」는 T2 를 건너뛴다)에서 실제로 낭독 칸이 음수로 나왔다 —
         # 이번 턴 question_at 보다 앞선 시각이 적혔다는 뜻이다.
         marks = self.marks
+
+        if self.stream_fn:
+            # 조각은 Speech 가 모으고, 여기서는 첫 소리가 온 시각만 적는다.
+            # 그 순간부터 소리를 틀 수 있으니 낭독 칸은 거기까지다.
+            speech = self.stream_fn(q)
+            self._speech = speech
+
+            async def first() -> None:
+                if await speech.wait_first():
+                    marks.spoken_at = speech.first_at or time.perf_counter()
+
+            self._speaking = asyncio.create_task(first())
+            return
 
         async def run() -> None:
             try:
@@ -836,12 +866,23 @@ class SessionController:
         질문 글자를 띄운 채고, 소리는 그 위에 얹히는 것이다. 못 받으면 빈
         바이트가 가고 화면은 「낭독 끝」 버튼으로 넘어간다.
         """
+        if self._speech:
+            # 흘려 읽는 회차에서 파일 하나로 달라는 것은 화면의 「소리 시험」
+            # 버튼이다. 끝까지 모아 wav 로 준다. 한 덩어리 기다림이라 넉넉히 둔다.
+            speech = self._speech
+            await speech.wait_done(max(wait, 8.0))
+            pcm = speech.pcm()
+            return audiolib.pcm16_to_wav(pcm, speech.rate) if pcm else b""
         if self._speaking and not self._speaking.done():
             try:
                 await asyncio.wait_for(asyncio.shield(self._speaking), timeout=wait)
             except (asyncio.TimeoutError, asyncio.CancelledError):
                 log.warning("낭독 소리를 %.1f초 안에 못 만들었다 — 글자만 나간다", wait)
         return self._question_audio
+
+    def question_speech(self) -> tts.Speech | None:
+        """흘려 읽는 회차의 지금 낭독. 아니면 None."""
+        return self._speech
 
     async def _maybe_advance(self) -> None:
         """질문 준비 + T2 만료가 모두 참일 때만 다음 턴으로."""

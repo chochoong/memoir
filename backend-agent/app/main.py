@@ -25,7 +25,7 @@ from pathlib import Path
 from dotenv import load_dotenv
 from fastapi import FastAPI, Header, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse, Response
+from fastapi.responses import FileResponse, Response, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
@@ -421,8 +421,39 @@ async def question_audio(session_id: str):
     audio = await _need(session_id).question_audio()
     if not audio:
         return Response(status_code=204)
-    return Response(content=audio, media_type="audio/mpeg",
+    # Gemini 갈래는 wav 를 준다 (tts.py). 형식을 앞머리로 가린다 — 사파리는
+    # mime 이 틀리면 재생을 거부한다.
+    mime = "audio/wav" if audio[:4] == b"RIFF" else "audio/mpeg"
+    return Response(content=audio, media_type=mime,
                     headers={"Cache-Control": "no-store"})
+
+
+@app.get("/api/sessions/{session_id}/question/stream")
+async def question_stream(session_id: str):
+    """
+    지금 질문의 낭독을 **조각으로 흘려보낸다.** 날 PCM 16비트 모노 —
+    rate 는 Content-Type 에 실린다. 스냅샷의 question_audio_stream 이 참일 때
+    화면이 여기로 온다 (TTS_STREAM=1).
+
+    **첫 소리가 올 때까지는 머리를 보내지 않는다.** 그래야 소리 없이 끝난
+    경우에 위 /question/audio 와 똑같이 204 로 말할 수 있다. 한번 200 을
+    보내면 「소리가 없다」를 알릴 길이 빈 본문뿐이다.
+
+    합성은 여기서 시작하지 않는다. 질문이 준비되는 순간(controller._speak)
+    이미 걸려서 조각이 쌓이고 있다. 늦게 온 요청은 쌓인 것부터 받는다.
+
+    **중간 프록시가 모아 보내면 스트리밍이 아니다.** X-Accel-Buffering 은
+    nginx 계열에 「모으지 말라」는 표시다. 터널(Tailscale · Cloudflare)을
+    거쳐서도 첫 소리가 당겨지는지는 화면 로그의 「첫 소리」 줄로 본다.
+    """
+    speech = _need(session_id).question_speech()
+    if speech is None or not await speech.wait_first(timeout=3.0):
+        return Response(status_code=204)
+    return StreamingResponse(
+        speech.iter_chunks(),
+        media_type=f"audio/L16;rate={speech.rate};channels=1",
+        headers={"Cache-Control": "no-store", "X-Accel-Buffering": "no",
+                 "X-Speech-Source": speech.source or "none"})
 
 
 @app.post("/api/sessions/{session_id}/done")
