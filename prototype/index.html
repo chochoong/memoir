@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
   <meta name="theme-color" content="#17374a" />
   <meta name="description" content="사진 한 장과 목소리로 남기는 한 편의 엽서" />
-  <title>기억의 조각</title>
+  <title>내말싸미</title>
   <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%2317374a'/%3E%3Crect x='11' y='17' width='42' height='31' rx='5' fill='%23f7f2e8'/%3E%3Cpath d='M14 21l18 14 18-14' fill='none' stroke='%23d97b59' stroke-width='4' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E" />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
@@ -105,12 +105,14 @@
     }
     /* 고정된 버튼에 내용이 가리지 않도록 아래 여백을 넉넉히 둔다 */
     .screen[data-screen="complete"] { padding-bottom: calc(168px + env(safe-area-inset-bottom)); }
-    .btn { width: 100%; min-height: 60px; border: 0; border-radius: 20px; padding: 16px 20px; font-weight: 700; font-size: 1.06rem; transition: transform .16s, background .16s, opacity .16s; }
+    /* 시작 화면은 「지난 이야기」가 붙어 버튼이 둘이다 — 그만큼 더 비운다 */
+    .screen[data-screen="ready"] { padding-bottom: calc(168px + env(safe-area-inset-bottom)); }
+    .btn { width: 100%; min-height: 64px; border: 0; border-radius: 20px; padding: 16px 20px; font-weight: 700; font-size: 1.06rem; transition: transform .16s, background .16s, opacity .16s; }
     .btn:active { transform: scale(.98); }
     .btn[disabled] { opacity: .5; }
     .btn-primary { background: var(--ink); color: #fff; box-shadow: 0 10px 24px rgba(23,55,74,.18); }
     .btn-primary:hover { background: #0f2938; }
-    .btn-ghost { background: none; border: 0; color: var(--muted); font-size: .95rem; font-weight: 600; padding: 14px; width: 100%; }
+    .btn-ghost { background: none; border: 0; color: var(--muted); font-size: .95rem; font-weight: 600; padding: 14px; width: 100%; min-height: 64px; }
     .btn-ghost[hidden] { display: none; }
 
     /* ── 대화 화면: 듣는 친구 ──────────────────────── */
@@ -250,6 +252,66 @@
     .paused .listen-state { color: var(--muted); }
     .banner button { margin-top: 10px; background: #a4432b; color: #fff; border: 0; border-radius: 10px; padding: 9px 12px; font-size: .84rem; font-weight: 700; }
 
+
+    /* ══════════════════════════════════════════════════════════════
+       보관함 (AR) — 지난 이야기 목록
+       · 색·버튼·글꼴은 위에서 이미 정한 것을 그대로 쓴다. 여기서는
+         이 화면에만 있는 것만 더한다.
+       · 누르는 것은 전부 높이 64px 이상 (NFR-DE-001)
+       ══════════════════════════════════════════════════════════════ */
+    .screen[data-screen="archive"] { padding-bottom: calc(168px + env(safe-area-inset-bottom)); }
+
+    .sum { background: var(--soft); border-radius: 22px; padding: 20px 22px; margin: 8px 0 18px; }
+    .sum-top { display: flex; align-items: baseline; gap: 10px; }
+    .sum-n { font-family: "Gowun Batang", serif; font-size: 2.6rem; font-weight: 700; line-height: 1; }
+    .sum-u { font-size: 1.1rem; font-weight: 600; }
+    .sum-sub { color: var(--muted); font-size: .98rem; margin: 8px 0 0; }
+
+    /* 정렬 — 어르신 화면이라 고를 것을 둘로 묶는다 */
+    .tabs { display: flex; gap: 10px; margin: 0 0 14px; }
+    .tab {
+      flex: 1; min-height: 64px; border-radius: 18px; border: 2px solid var(--line);
+      background: var(--paper); color: var(--muted); font-weight: 700; font-size: 1.02rem;
+    }
+    .tab[aria-pressed="true"] { border-color: var(--ink); color: var(--ink); background: #fff; }
+
+    /* 조각 카드 — 카드 전체가 누르는 자리다 */
+    .piece {
+      display: flex; gap: 16px; width: 100%; text-align: left; align-items: flex-start;
+      background: var(--paper); border: 1px solid var(--line); border-radius: 22px;
+      padding: 16px; margin: 0 0 12px; min-height: 104px;
+    }
+    .piece:active { transform: scale(.995); }
+    .thumb {
+      flex: 0 0 84px; width: 84px; height: 84px; border-radius: 16px; position: relative;
+      overflow: hidden; border: 1px solid rgba(23,55,74,.12); background: var(--soft);
+    }
+    .thumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
+    .thumb .no { display: grid; place-items: center; width: 100%; height: 100%;
+                 color: var(--muted); font-size: .8rem; font-weight: 600; }
+    .p-ttl { display: block; font-family: "Gowun Batang", serif; font-size: 1.5rem;
+             font-weight: 700; line-height: 1.3; margin: 0 0 6px; }
+    .p-body { display: block; font-size: 1.02rem; line-height: 1.5; color: var(--muted);
+              margin: 0 0 10px; }
+    .p-meta { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+    .ar-date { color: var(--muted); font-size: .92rem; }
+    .era { font-size: .88rem; font-weight: 700; padding: 4px 10px; border-radius: 999px;
+           background: #e7eef0; color: #3d5a68; }
+    .era.none { background: #fbeede; color: #a0741e; }
+
+    /* 「하나도 없다」와 「못 읽었다」는 다른 사건이다 (백엔드 list_sessions 주석) */
+    .blank { text-align: center; padding: 56px 10px 24px; }
+    .blank-face { font-size: 3.4rem; line-height: 1; }
+    .blank h2 { font-family: "Gowun Batang", serif; font-size: 1.7rem; margin: 18px 0 10px; }
+    .blank p { color: var(--muted); font-size: 1.05rem; line-height: 1.6; margin: 0 0 8px; }
+    .why { display: inline-block; margin-top: 6px; padding: 8px 14px; border-radius: 12px;
+           background: #fbeede; color: #a0741e; font-size: .95rem; font-weight: 600; }
+
+    /* 불러오는 동안 — 빈 화면 대신 자리를 먼저 보여준다 */
+    .skel { height: 104px; border-radius: 22px; background: var(--soft); margin: 0 0 12px;
+            opacity: .7; animation: pulse 1.4s ease-in-out infinite; }
+    @keyframes pulse { 0%,100% { opacity: .45 } 50% { opacity: .8 } }
+
     /* ── 개발용 패널 (시연 중에는 닫아 둔다) ────────── */
     /* 화면 아래쪽 큰 버튼을 절대 가리지 않도록 위쪽에 둔다 */
     .dev-toggle { position: fixed; z-index: 40; right: 8px; top: max(10px, env(safe-area-inset-top)); width: 28px; height: 28px; border-radius: 50%; border: 1px solid var(--line); background: rgba(255,255,255,.8); color: var(--muted); font-size: .8rem; line-height: 1; opacity: .5; }
@@ -271,7 +333,7 @@
   <div class="app" id="app">
     <div class="edge" aria-hidden="true"></div>
     <div class="banner" id="banner" role="alert"><span id="bannerText"></span><button id="bannerBtn" hidden></button></div>
-    <header class="topbar"><div class="brand">기억의 조각</div><div class="step" id="stepLabel">사진 고르기</div></header>
+    <header class="topbar"><div class="brand">내말싸미</div><div class="step" id="stepLabel">사진 고르기</div></header>
     <main>
 
       <!-- ── 시작 전 ───────────────────────────────── -->
@@ -300,7 +362,10 @@
         </div>
         <p class="error" id="micError" role="alert"></p>
         <input type="file" id="photoInput" accept="image/*" hidden />
-        <div class="dock"><button class="btn btn-primary" id="startBtn">녹음 시작</button></div>
+        <div class="dock">
+          <button class="btn btn-primary" id="startBtn">녹음 시작</button>
+          <button class="btn-ghost" id="archiveBtn">지난 이야기</button>
+        </div>
       </section>
 
       <!-- ── 대화 중 (SPEAKING · LISTENING) ────────── -->
@@ -383,7 +448,7 @@
       <!-- ── 완성 ──────────────────────────────────── -->
       <section class="screen" data-screen="complete">
         <div class="done-icon"><svg width="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m5 12 4 4L19 6"/></svg></div>
-        <div style="text-align:center"><div class="eyebrow">Postcard</div><h1 style="margin-top:8px">한 편의 엽서가<br />되었습니다.</h1></div>
+        <div style="text-align:center"><div class="eyebrow">Postcard</div><h1 style="margin-top:8px" id="cardHead">한 편의 엽서가<br />되었습니다.</h1></div>
         <article class="postcard no-photo" id="card">
           <span class="postcard-frame" id="cardFrame">
             <span class="backdrop" id="cardBackdrop" aria-hidden="true"></span>
@@ -402,7 +467,59 @@
         </div>
       </section>
 
-      <section class="screen" data-screen="closed"><div><div class="eyebrow" style="color:#ef9a79">Session complete</div><h1>오늘의 기록을<br />마쳤습니다.</h1><p class="lead">참여해 주셔서 감사합니다.</p></div></section>
+      <section class="screen" data-screen="closed">
+        <div><div class="eyebrow" style="color:#ef9a79">Session complete</div><h1>오늘의 기록을<br />마쳤습니다.</h1><p class="lead">참여해 주셔서 감사합니다.</p></div>
+        <div class="dock">
+          <button class="btn btn-primary" id="closedArchiveBtn">지난 이야기 보기</button>
+        </div>
+      </section>
+
+      <!-- ── 보관함 (AR) ───────────────────────────── -->
+      <section class="screen" data-screen="archive">
+        <h1>지난 이야기</h1>
+
+        <!-- 불러오는 중 -->
+        <div data-ar="load">
+          <div class="skel"></div><div class="skel"></div><div class="skel"></div>
+        </div>
+
+        <!-- 목록 -->
+        <div data-ar="list" hidden>
+          <div class="sum">
+            <div class="sum-top"><span class="sum-n" id="arCount">0</span><span class="sum-u">조각</span></div>
+            <p class="sum-sub" id="arRange"></p>
+          </div>
+          <div class="tabs">
+            <button class="tab" aria-pressed="true" data-sort="new">최근 순</button>
+            <button class="tab" aria-pressed="false" data-sort="long">이야기 많은 순</button>
+          </div>
+          <div id="arList"></div>
+        </div>
+
+        <!-- 하나도 없을 때 -->
+        <div data-ar="empty" hidden>
+          <div class="blank">
+            <div class="blank-face" aria-hidden="true">&#127793;</div>
+            <h2>아직 모은 이야기가<br />없습니다.</h2>
+            <p>사진 한 장을 고르고 몇 마디 들려주시면<br />첫 조각이 여기 쌓입니다.</p>
+          </div>
+        </div>
+
+        <!-- 못 읽었을 때 — 「없음」과 반드시 구분한다 -->
+        <div data-ar="error" hidden>
+          <div class="blank">
+            <div class="blank-face" aria-hidden="true">&#128246;</div>
+            <h2>이야기를 불러오지<br />못했습니다.</h2>
+            <p>저장된 이야기는 그대로 있습니다.<br />잠시 뒤 다시 눌러 주세요.</p>
+            <span class="why" id="arWhy">연결이 잠깐 끊겼어요</span>
+          </div>
+        </div>
+
+        <div class="dock">
+          <button class="btn btn-primary" id="arMain">새 이야기 시작하기</button>
+          <button class="btn-ghost" id="arBack" hidden>돌아가기</button>
+        </div>
+      </section>
     </main>
   </div>
 
@@ -428,7 +545,7 @@
   const CONFIG = {
     // 화면 아래와 개발용 패널에 그대로 찍힌다. 「고친 게 반영이 안 된 것 같다」는
     // 대부분 예전 파일이 열려 있는 경우라서, 눈으로 확인할 자리를 만들어 둔다.
-    version: 'v0.11 · 2026-09-29 (정지 전 마지막 말씀 확정)',
+    version: 'v0.12 · 2026-10-07 (보관함)',
 
     // 이 화면을 백엔드가 직접 서빙하면(web/ 폴더) 빈 문자열 그대로 둔다.
     // 다른 포트에서 열어 시험할 때만 'http://127.0.0.1:8010' 처럼 채운다.
@@ -446,6 +563,19 @@
       // 끄면 말을 마치자마자 누른 말씀이 엽서에서 빠진다 (confirmLastSpeech 주석 참조).
       confirmBeforeStop: true,
       confirmWaitMs: 12000,      // 그 확정을 기다리는 상한
+    },
+
+    // ── 보관함 ────────────────────────────────────────────────────
+    // GET /api/sessions (main.py list_sessions). 못 읽으면 503 이 온다 —
+    // 서버가 일부러 그렇게 둔다. 빈 목록으로 답하면 화면이 「기록이 없습니다」
+    // 라고 말하게 되고, 그건 어르신에게 조각이 사라졌다는 말이 되기 때문이다.
+    archive: {
+      limit: 20,
+      // 확정된 회차만 보여준다 (FR-AR-501). 아직 안 끝난 회차는 목록에 넣지 않는다.
+      closedOnly: true,
+      // 목록 응답에 엽서 제목·본문이 실리면 true 로 바꾼다 — 그때 카드에 본문
+      // 두 줄이 같이 나온다. 지금은 session 표 컬럼만 와서 끌 수밖에 없다.
+      previewInList: false,
     },
 
     // ── 사진 ──────────────────────────────────────────────────────
@@ -609,7 +739,9 @@
     done: (id) => call(`/sessions/${id}/done`, { method: 'POST' }),
     abort: (id) => call(`/sessions/${id}/abort`, { method: 'POST' }),
     latency: (id) => call(`/sessions/${id}/latency`),
-    record: (id) => call(`/sessions/${id}/record`),
+
+    // 지난 회차 목록. 빈 목록(없음)과 503(못 읽음)은 다른 사건이다.
+    sessions: (limit) => call(`/sessions?limit=${limit || CONFIG.archive.limit}`),
 
     // ── 사진 (main.py upload_photo · get_photo) ──
     // 본문은 바이트 그대로. 형식은 서버가 앞머리 바이트로 가린다 (HEIC 도 받는다).
@@ -1230,7 +1362,7 @@
   /* ═══════════════════════════════════════════════════════════════
      화면 전환
      ═══════════════════════════════════════════════════════════════ */
-  const STEP_LABEL = { ready: '사진 고르기', talk: '', writing: '정리 중', complete: '완성', closed: '종료' };
+  const STEP_LABEL = { ready: '사진 고르기', talk: '', writing: '정리 중', complete: '완성', closed: '종료', archive: '보관함' };
 
   function show(name) {
     screens.forEach(s => s.classList.toggle('active', s.dataset.screen === name));
@@ -1659,7 +1791,7 @@
 
     // 사진 먼저 (높이를 알아야 전체 높이를 계산한다)
     let img = null, photoH = 0;
-    const src = photoSrc();
+    const src = arViewing ? arPhoto : photoSrc();   // 보관함에서는 그 회차의 사진
     if (src) {
       try {
         img = await loadImage(src);
@@ -1734,9 +1866,11 @@
       // 서버가 구운 그림이 있으면 그것을 내려받는다. 화면에서 다시 그린 것보다
       // 팀이 정한 엽서 모양에 가깝고, 저장한 것과 서버에 남은 것이 같아진다.
       let blob = null, ext = 'png';
-      if (CONFIG.card.useServerImage && piece && piece.url) {
+      // 보관함에서 연 엽서라면 그 회차의 그림을 받아야 한다. piece 는 지금 회차의 것이다.
+      const serverUrl = arViewing ? arCardUrl : (piece && piece.url);
+      if (CONFIG.card.useServerImage && serverUrl) {
         try {
-          blob = await api.postcardImage(piece.url);
+          blob = await api.postcardImage(serverUrl);
           ext = (blob.type || '').includes('png') ? 'png' : 'jpg';
           log('엽서', `서버 그림을 받았습니다 (${(blob.size / 1024).toFixed(0)}KB)`);
         } catch (e) {
@@ -1756,7 +1890,7 @@
       const stamp = `${d.getFullYear()}${p2(d.getMonth() + 1)}${p2(d.getDate())}-${p2(d.getHours())}${p2(d.getMinutes())}`;
       const name = CONFIG.ui.filenameAscii
         ? `memoir-postcard-${stamp}.${ext}`
-        : `기억의조각_${($('#cardTitle').textContent || '엽서').replace(/[\\/:*?"<>|]/g, '')}_${stamp}.${ext}`;
+        : `내말싸미_${($('#cardTitle').textContent || '엽서').replace(/[\\/:*?"<>|]/g, '')}_${stamp}.${ext}`;
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url; a.download = name; a.style.display = 'none';
@@ -1842,6 +1976,168 @@
     $('#doneBtn').onclick = next;
     $('#abortBtn').onclick = () => { snap.fragments = OFFLINE_ANSWERS.map((a, k) => ({ idx: k + 1, question: qs[k], answer: a })); void finishSession(); };
   }
+
+
+  /* ═══════════════════════════════════════════════════════════════
+     보관함 — 지난 이야기
+       · 자료는 GET /api/sessions 하나로 끝난다 (main.py list_sessions).
+       · 화면 상태가 넷이다 — 불러오는 중 / 목록 / 없음 / 못 읽음.
+         마지막 둘을 합치면 안 된다. 「없다」와 「못 읽었다」는 어르신에게
+         전혀 다른 말이고, 서버도 그래서 빈 목록 대신 503 을 준다.
+     ═══════════════════════════════════════════════════════════════ */
+  const $$ = (q) => [...document.querySelectorAll(q)];
+  let arRows = [];                 // 마지막으로 받아 둔 목록
+  let arSort = 'new';
+  let arViewing = false;           // 보관함에서 연 엽서를 보고 있는가
+  let arPhoto = '';                // 그 회차의 사진 주소 — 저장할 때도 이것을 쓴다
+  let arCardUrl = '';              // 그 회차에 서버가 구워 둔 엽서 그림 주소
+
+  function arShow(which) {
+    ['load', 'list', 'empty', 'error'].forEach(k =>
+      $(`[data-ar="${k}"]`).hidden = (k !== which));
+    // 아래 버튼의 말도 상태에 따라 바뀐다
+    const main = $('#arMain'), back = $('#arBack');
+    main.textContent = which === 'error' ? '다시 불러오기' : '새 이야기 시작하기';
+    main.disabled = which === 'load';
+    back.hidden = which === 'load';
+  }
+
+  /* 제목이 비어 있으면 날짜로 부른다 — session.title 은 비어 있을 수 있다 */
+  function arTitle(s) {
+    if (s.title && s.title.trim()) return s.title.trim();
+    const d = new Date(s.created_at);
+    return `${d.getMonth() + 1}월 ${d.getDate()}일의 이야기`;
+  }
+  const arDate = iso => {
+    const d = new Date(iso);
+    return `${d.getFullYear()}. ${String(d.getMonth() + 1).padStart(2, '0')}. ${String(d.getDate()).padStart(2, '0')}`;
+  };
+
+  function arDraw() {
+    const rows = arSort === 'long'
+      ? [...arRows].sort((a, b) => (b.fragment_count || 0) - (a.fragment_count || 0))
+      : arRows;                                     /* 기본은 서버가 준 최신순 그대로 */
+
+    $('#arList').innerHTML = rows.map(s => {
+      const n = s.fragment_count || 0;
+      const thumb = s.photo_id
+        ? `<span class="thumb"><img src="${api.photoUrl(s.photo_id)}" alt="" loading="lazy" /></span>`
+        : `<span class="thumb"><span class="no">사진 없음</span></span>`;
+      // 목록 응답에 엽서 본문이 실리면 그때 두 줄을 같이 보여준다 (CONFIG.archive.previewInList)
+      const body = (CONFIG.archive.previewInList && s.postcard_body)
+        ? `<span class="p-body">${s.postcard_body}</span>` : '';
+      return `<button class="piece" data-id="${s.session_id}">
+          ${thumb}
+          <span style="flex:1; min-width:0">
+            <span class="p-ttl">${arTitle(s)}</span>${body}
+            <span class="p-meta">
+              <span class="ar-date">${arDate(s.created_at)}</span>
+              <span class="era${n ? '' : ' none'}">${n ? n + '조각' : '조각 없음'}</span>
+            </span>
+          </span>
+        </button>`;
+    }).join('');
+
+    const total = rows.reduce((a, s) => a + (s.fragment_count || 0), 0);
+    $('#arCount').textContent = total;
+    if (rows.length) {
+      const first = arDate(rows[rows.length - 1].created_at);
+      $('#arRange').textContent = `${first} 부터 ${rows.length}번의 이야기를 모았습니다.`;
+    }
+    $$('#arList .piece').forEach(b => b.onclick = () => void arOpen(b.dataset.id));
+  }
+
+  /* 지난 엽서를 완성 화면에 그린다.
+     renderPostcard() 를 그대로 못 쓰는 이유 — 그쪽은 photoSrc(), 곧 **지금 회차의
+     사진**을 본다. 보관함에서는 그 회차의 사진과 그때의 날짜를 써야 한다. */
+  function arPaint(pc, photoUrl, createdAt) {
+    const card = $('#card'), frame = $('#cardFrame'), img = $('#cardPhoto');
+    arPhoto = photoUrl || '';
+    arCardUrl = pc.url || '';
+    if (photoUrl) {
+      img.src = photoUrl;
+      $('#cardBackdrop').style.backgroundImage = `url("${photoUrl}")`;
+      frame.style.display = 'block';
+      card.classList.remove('no-photo');
+    } else {
+      frame.style.display = 'none';
+      card.classList.add('no-photo');
+    }
+    $('#cardTitle').textContent = pc.title || '오늘의 목소리';
+    $('#cardCopy').textContent = pc.text || '';
+    const d = new Date(createdAt);
+    const caption = pc.caption ? `${pc.caption} · ` : '';
+    $('#cardSign').textContent =
+      `${caption}${d.getFullYear()}년 ${d.getMonth() + 1}월 ${d.getDate()}일 · 목소리로 남긴 이야기`;
+  }
+
+  /* 카드를 누르면 그 회차의 엽서를 꺼내 완성 화면으로 보여준다.
+     목록에는 엽서 글이 없으므로 여기서 한 번 더 받아 온다. */
+  async function arOpen(id) {
+    try {
+      const rec = await api.record(id);
+      const pc = rec && rec.postcard;
+      if (!pc || !(pc.text || pc.title)) { toast('아직 엽서가 만들어지지 않았어요'); return; }
+      arPaint(pc, rec.photo_id ? api.photoUrl(rec.photo_id) : '', rec.created_at);
+      arViewing = true;
+      show('complete');
+      // 지난 엽서를 보는 중에는 「마치기」가 끝내는 말이 아니다. 목록으로 돌아간다.
+      // 「되었습니다」도 지금 막 만든 것처럼 들리므로 바꿔 둔다.
+      $('#stepLabel').textContent = '지난 이야기';
+      $('#exitBtn').textContent = '목록으로';
+      $('#cardHead').innerHTML = '그날 남기신<br />이야기입니다.';
+      log('보관함', `지난 엽서를 열었습니다 · ${id.slice(0, 8)}`);
+    } catch (e) {
+      toast('이야기를 열지 못했어요');
+      log('보관함', `열기 실패 · ${e.status || ''} ${e.message || e}`);
+    }
+  }
+
+  async function openArchive() {
+    show('archive');
+    arShow('load');
+    try {
+      const res = await api.sessions();
+      let rows = (res && res.sessions) || [];
+      // 확정된 회차만 (FR-AR-501). 진행 중인 회차는 보여 주지 않는다.
+      if (CONFIG.archive.closedOnly) rows = rows.filter(s => s.closed_at);
+      arRows = rows;
+      if (!rows.length) { arShow('empty'); log('보관함', '기록 없음'); return; }
+      arDraw(); arShow('list');
+      log('보관함', `${rows.length}회차`);
+    } catch (e) {
+      // 못 읽은 것이다. 「없다」고 말하지 않는다.
+      $('#arWhy').textContent = e.status === 503 ? '서버가 기록을 읽지 못했어요'
+                              : e.status ? `서버가 ${e.status} 로 답했어요`
+                              : '연결이 잠깐 끊겼어요';
+      arShow('error');
+      log('보관함', `실패 · ${e.status || ''} ${e.message || e}`);
+    }
+  }
+
+  $('#archiveBtn').addEventListener('click', () => void openArchive());
+  $('#closedArchiveBtn').addEventListener('click', () => void openArchive());
+  $('#arBack').addEventListener('click', () => show($('#app').classList.contains('closed') ? 'closed' : 'ready'));
+  $('#arMain').addEventListener('click', () => {
+    if ($('[data-ar="error"]').hidden === false) { void openArchive(); return; }
+    location.reload();                   // 새 회차는 처음부터 (MVP 범위)
+  });
+  $('#exitBtn').addEventListener('click', (e) => {
+    if (!arViewing) return;
+    e.stopImmediatePropagation();
+    arViewing = false;
+    arPhoto = arCardUrl = '';
+    $('#exitBtn').textContent = '마치기';
+    $('#cardHead').innerHTML = '한 편의 엽서가<br />되었습니다.';
+    show('archive');
+  }, true);
+
+  $$('.tab').forEach(b => b.addEventListener('click', () => {
+    $$('.tab').forEach(x => x.setAttribute('aria-pressed', 'false'));
+    b.setAttribute('aria-pressed', 'true');
+    arSort = b.dataset.sort;
+    arDraw();
+  }));
 
   /* ═══════════════════════════════════════════════════════════════
      버튼
