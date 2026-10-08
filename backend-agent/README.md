@@ -6,7 +6,7 @@
 
 ```powershell
 pip install -r requirements.txt
-python -m tests.test_flow                          # 23건 검증
+python -m tests.test_flow                          # 75건 검증
 uvicorn app.main:app --reload --port 8010
 ```
 
@@ -23,22 +23,33 @@ app/
   session/
     machine.py            4단계 상태 머신 — 순수 파이썬. 프레임워크 의존 없음
     timers.py             T1 / T2 + 격발 오차 계측
+    controller.py         FSM + 타이머 + 저장을 묶는 곳
+    shared.py             공유 상태 — 모델은 읽기만, 쓰는 것은 여기 (사실 병합 · 요약)
+    prompt.py             인터뷰 프롬프트 로더 (첨부프롬프트_md/인터뷰.md)
+    question.py           다음 질문 생성 (Gemini). 실패해도 회차를 끊지 않는다
+    audio.py              브라우저 PCM 조각 → 전사기에 넘길 한 덩어리 (WAV)
+    stt.py                전사 (Azure). 실패해도 회차를 끊지 않는다
+    tts.py                낭독 (Azure Neural TTS). 합성은 T2 안에 숨는다
+    photo.py              사진 검증 · 변환 (HEIC→JPEG · EXIF · 1024px)
+    photostore.py         사진 바이트 저장 심 — pg / local (나중에 blob)
+    photo_analyze.py      사진 분석 (Gemini VLM) → 단서 JSON
+    postcard.py           엽서 — 카드 작성 (CardAgent v3) · 출처 검사 · Pillow 굽기
+    store.py              저장 (asyncpg). DB 가 없어도 회차는 돈다
     migrate.py            마이그레이션 적용 · 체크섬 · advisory lock
     conf.py               환경변수 읽기 (틀린 값을 조용히 0 으로 만들지 않는다)
     limits.py             회차 생성 상한 (IP · 사용자)
-    photo.py              사진 검증 · 변환 (HEIC→JPEG · EXIF · 1024px)
-    photostore.py         사진 바이트 저장 심 — pg / local (나중에 blob)
-    controller.py         FSM + 타이머 + 저장을 묶는 곳
-    question.py           다음 질문 생성 (Gemini). 실패해도 회차를 끊지 않는다
-    stt.py                전사 (Azure). 실패해도 회차를 끊지 않는다
-    store.py              저장 (asyncpg). DB 가 없어도 회차는 돈다
-tests/test_flow.py        전이 · 타이머 · 지연 · 빈 전사 루프 검증 28건
+첨부프롬프트_md/          에이전트 프롬프트 — 인터뷰 · 사진 · 엽서 (코드가 읽음) · 연대기 · 자서전 · 검증
+tests/                    test_flow (전이 · 타이머 · 지연 · 빈 전사 루프) · limits · photo
+                          · photo_analyze · postcard · question. _nodb 는 실제 DB 에 안 붙게 한다
 tools/replay.py           녹음 파일을 실제 회차처럼 흘려보낸다 (마이크 없이)
+tools/bench_audio.py      같은 녹음으로 전사·질문 경로(Azure+Gemini / Gemini 단독)를 잰다
+tools/try_photo.py        사진 한 장을 실제 Gemini 로 분석해 본다 (DB·서버 없이)
 web/                      프론트 빌드본 (있으면 서빙. git 에는 올리지 않는다)
 run.ps1                   기동 — 배포용(터널 뒤)과 -Dev 두 가지
 deploy/                   cloudflared 설정 본
 docs/배포.md              도메인 · 터널 · 재부팅 생존 · 확인 목록
 docs/사진이사.md          pg → Blob 로 옮기는 절차 (코드는 아직 없다)
+docs/인터뷰 에이전트_프롬프트.md   예전 프롬프트 원문 (코드는 더 이상 읽지 않는다)
 ```
 
 `machine.py`가 FastAPI도 asyncio도 import하지 않는 게 중요하다. 순수 파이썬이라야 전이를 전부 단위 테스트로 돌려볼 수 있고, 실시간 계층을 바꿔도 살아남는다.

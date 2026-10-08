@@ -4,7 +4,7 @@
     DB 기록 ─→ 자료 묶기 ─→ 카드 작성 (Gemini 글, CardAgent v3) ─→ 검사 ─→ 굽기 (Pillow) ─→ 저장
                사실·발화·사진분석   title · body · caption · sources     출처    회차 사진 + 글
 
-**프롬프트는 `prompts/CardAgent_prompt_v3.md` 다.** 팀 문서의 한 절을 그대로 둔
+**프롬프트는 `첨부프롬프트_md/엽서.md` 다.** 팀 문서의 한 절을 그대로 둔
 파일이라, 코드는 그 안의 ``` 블록만 읽는다. 새 판이 오면 파일만 바꾸면 된다.
 
 **그림은 그리지 않는다.** 회차를 연 사진이 있으면 그 사진을 얹고, 없으면 종이
@@ -52,13 +52,13 @@ from .shared import _facts
 
 log = logging.getLogger("postcard")
 
-PROMPT = Path(__file__).resolve().parents[2] / "prompts" / "CardAgent_prompt_v3.md"
+PROMPT = Path(__file__).resolve().parents[2] / "첨부프롬프트_md" / "엽서.md"
 
 DEFAULT_TEXT_MODEL = "gemini-3.5-flash-lite"
 DEFAULT_TEXT_TIMEOUT = 15.0
 
 # v3 「분량」. 넘으면 로그만 남긴다 — 잘라 내면 말씀의 뜻이 바뀐다.
-TITLE_MAX, SENTENCE_MAX, CAPTION_MAX = 15, 30, 20
+TITLE_MAX, BODY_MAX, CAPTION_MAX = 15, 120, 20
 
 # 엽서 한 장. 가로 3:2 — 우편엽서의 비율이다.
 W, H = 1500, 1000
@@ -462,7 +462,7 @@ def checked(card: Card, turns: set[int]) -> Card:
 
     for label, text, limit in (("제목", card.title, TITLE_MAX),
                                ("사진 설명", card.caption, CAPTION_MAX),
-                               *(("본문", s, SENTENCE_MAX) for s in card.sentences)):
+                               ("본문", "".join(card.sentences), BODY_MAX)):
         if len(text) > limit:
             log.warning("엽서 %s 이 %d자다 (v3 한도 %d자): 「%s」", label, len(text), limit, text)
 
