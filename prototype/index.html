@@ -545,7 +545,7 @@
   const CONFIG = {
     // 화면 아래와 개발용 패널에 그대로 찍힌다. 「고친 게 반영이 안 된 것 같다」는
     // 대부분 예전 파일이 열려 있는 경우라서, 눈으로 확인할 자리를 만들어 둔다.
-    version: 'v0.13 · 2026-10-08 (보관함 + 백엔드 bc6e7d0 반영 · 정지 뒤 낭독 완료 안 보냄)',
+    version: 'v0.13.1 · 2026-10-08 (끝난 뒤 연 보관함도 밝은 바탕)',
 
     // 이 화면을 백엔드가 직접 서빙하면(web/ 폴더) 빈 문자열 그대로 둔다.
     // 다른 포트에서 열어 시험할 때만 'http://127.0.0.1:8010' 처럼 채운다.
@@ -1368,6 +1368,9 @@
     screens.forEach(s => s.classList.toggle('active', s.dataset.screen === name));
     $('#stepLabel').textContent = STEP_LABEL[name] || '';
     $('#app').classList.toggle('quiet', name === 'talk' || name === 'writing');
+    // 어두운 바탕은 끝 화면에만 건다. 「마치기」에서 한 번 걸고 두면 거기서 연
+    // 보관함까지 어두워져, 시작 화면에서 연 보관함과 색이 달라진다.
+    $('#app').classList.toggle('closed', name === 'closed');
     window.scrollTo(0, 0);
   }
 
@@ -1995,6 +1998,7 @@
   let arViewing = false;           // 보관함에서 연 엽서를 보고 있는가
   let arPhoto = '';                // 그 회차의 사진 주소 — 저장할 때도 이것을 쓴다
   let arCardUrl = '';              // 그 회차에 서버가 구워 둔 엽서 그림 주소
+  let ended = false;               // 「마치기」로 끝 화면에 왔다 — 보관함에서 돌아갈 곳이 거기다
 
   function arShow(which) {
     ['load', 'list', 'empty', 'error'].forEach(k =>
@@ -2121,7 +2125,7 @@
 
   $('#archiveBtn').addEventListener('click', () => void openArchive());
   $('#closedArchiveBtn').addEventListener('click', () => void openArchive());
-  $('#arBack').addEventListener('click', () => show($('#app').classList.contains('closed') ? 'closed' : 'ready'));
+  $('#arBack').addEventListener('click', () => show(ended ? 'closed' : 'ready'));
   $('#arMain').addEventListener('click', () => {
     if ($('[data-ar="error"]').hidden === false) { void openArchive(); return; }
     location.reload();                   // 새 회차는 처음부터 (MVP 범위)
@@ -2220,7 +2224,7 @@
   });
 
   $('#saveBtn').addEventListener('click', () => void savePostcard());
-  $('#exitBtn').addEventListener('click', () => { $('#app').classList.add('closed'); show('closed'); });
+  $('#exitBtn').addEventListener('click', () => { ended = true; show('closed'); });
 
   window.addEventListener('beforeunload', () => { if (recorder) recorder.stop(); });
 
