@@ -70,6 +70,8 @@ def _dsn() -> dict[str, Any]:
         user=os.environ.get("PG_USER", "memoir"),
         password=os.environ.get("PG_PASSWORD", ""),
         database=os.environ.get("PG_DB", "memoir"),
+        # 비우면 asyncpg 기본(prefer). Supabase 처럼 밖에 있는 DB 는 require.
+        ssl=os.environ.get("PG_SSL") or None,
     )
 
 

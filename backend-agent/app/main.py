@@ -36,6 +36,9 @@ from app.session.machine import TransitionError
 from app.session.question import gemini_question, warmup
 
 load_dotenv()
+# MEMOIR_DB=supabase 면 .env.supabase 의 PG_* 가 .env 를 덮는다 (run.ps1 -Supabase).
+if os.environ.get("MEMOIR_DB") == "supabase":
+    load_dotenv(".env.supabase", override=True)
 
 logging.basicConfig(
     level=logging.INFO,

@@ -6,13 +6,23 @@
 # 개발용 `uvicorn app.main:app --reload` 와 다른 점이 셋이고, 셋 다 이유가 있다.
 # docs/배포.md 「왜 이 세 옵션인가」 절과 짝이다.
 
-param([switch]$Dev)
+param([switch]$Dev, [switch]$Supabase)
 
 $ErrorActionPreference = "Stop"
 Set-Location $PSScriptRoot
 
 if (-not (Test-Path ".env")) {
     Write-Error ".env 가 없다. .env.example 을 복사해 채운다"
+}
+
+# -Supabase   DB 만 Supabase(memoir-dev)로 돌린다. 나머지 설정은 .env 그대로다.
+if ($Supabase) {
+    if (-not (Test-Path ".env.supabase")) {
+        Write-Error ".env.supabase 가 없다"
+    }
+    $env:MEMOIR_DB = "supabase"
+} else {
+    Remove-Item Env:MEMOIR_DB -ErrorAction SilentlyContinue
 }
 
 if ($Dev) {
