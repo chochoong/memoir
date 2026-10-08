@@ -25,9 +25,15 @@ if ($Supabase) {
     Remove-Item Env:MEMOIR_DB -ErrorAction SilentlyContinue
 }
 
+# MEMOIR_DB 는 이 창(프로세스)에 남는다. 끝날 때 지우지 않으면 같은 창에서
+# uvicorn 을 직접 띄웠을 때 -Supabase 없이도 공유 DB 에 붙는다. Ctrl+C 로
+# 끊어도 finally 는 돈다.
+$code = 0
+try {
+
 if ($Dev) {
-    # --reload-include "*.txt"
-    #   감시기는 기본이 *.py 뿐이다. 프롬프트(prompts\*.txt)를 고쳐도 서버는
+    # --reload-dir app --reload-dir 첨부프롬프트_md --reload-include "*/첨부프롬프트_md/*.md"
+    #   감시기는 기본이 *.py 뿐이다. 프롬프트(첨부프롬프트_md\*.md)를 고쳐도 서버는
     #   모른다 — prompt.load() 가 lru_cache 라 기동 때 읽은 것을 프로세스가
     #   죽을 때까지 쓴다. .py 를 같이 건드린 날만 곁다리로 적용돼서, 될 때도
     #   있고 안 될 때도 있는 것처럼 보였다.
@@ -41,9 +47,23 @@ if ($Dev) {
     #   **평소 자세에는 붙이지 않는다.** 배포 중에 프롬프트를 저장하면 서버가
     #   그 자리에서 재시작되고, 진행 중인 회차가 끊긴다 (docs/배포.md 「지금
     #   알고 있는 한계」). 거기서는 파일을 고친 뒤 사람이 다시 띄운다.
-    python -m uvicorn app.main:app --reload --reload-include "*.txt" --port 8010
-    exit $LASTEXITCODE
-}
+    #
+    #   감시 폴더를 둘로 좁힌다. 폴더를 안 주면 backend-agent 전체를 보고,
+    #   그러면 README·docs 의 .md 를 고칠 때도 재시작된다.
+    #
+    #   **패턴을 "*.md" 로 쓰지 않는다.** Windows 에서 uvicorn(click)은 인자의
+    #   와일드카드를 넘기기 전에 현재 폴더에서 펼친다. "*.md" 는 README.md 한
+    #   개가 되어 프롬프트를 고쳐도 아무 일도 없었다 (예전 "*.txt" 도
+    #   requirements.txt 가 되어 같은 꼴이었다). "*/첨부프롬프트_md/*.md" 는
+    #   현재 폴더에서 펼칠 것이 없어 그대로 넘어가고, 감시기는 경로를 오른쪽부터
+    #   맞추므로 프롬프트 파일에 걸린다.
+    python -m uvicorn app.main:app --reload `
+        --reload-dir app --reload-dir 첨부프롬프트_md `
+        --reload-include "*/첨부프롬프트_md/*.md" `
+        --port 8010
+    $code = $LASTEXITCODE
+
+} else {
 
 if (-not (Test-Path "web\index.html")) {
     Write-Warning "web\index.html 이 없다 — 화면이 안 나온다. frontend-client 에서 npm run build 한 뒤 dist 를 web\ 에 넣는다 (docs/배포.md 5단계)"
@@ -69,3 +89,11 @@ python -m uvicorn app.main:app `
     --proxy-headers --forwarded-allow-ips 127.0.0.1 `
     --workers 1 `
     --log-level info
+$code = $LASTEXITCODE
+
+}
+
+} finally {
+    Remove-Item Env:MEMOIR_DB -ErrorAction SilentlyContinue
+}
+exit $code
