@@ -18,7 +18,7 @@ if (-not (Test-Path ".env")) {
 # -Supabase   DB 만 Supabase(memoir-dev)로 돌린다. 나머지 설정은 .env 그대로다.
 if ($Supabase) {
     if (-not (Test-Path ".env.supabase")) {
-        Write-Error ".env.supabase 가 없다"
+        Write-Error ".env.supabase 가 없다. .env.supabase.example 을 복사해 비밀번호를 채운다"
     }
     $env:MEMOIR_DB = "supabase"
 } else {
