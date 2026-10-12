@@ -312,6 +312,26 @@
             opacity: .7; animation: pulse 1.4s ease-in-out infinite; }
     @keyframes pulse { 0%,100% { opacity: .45 } 50% { opacity: .8 } }
 
+    /* ── 자서전 만들기 (업무지시서 04) ─────────────────────── */
+    .screen[data-screen="memoir"] { padding-bottom: calc(168px + env(safe-area-inset-bottom)); }
+    .btn-line { width: 100%; min-height: 64px; border-radius: 20px; border: 2px solid var(--ink);
+                background: #fff; color: var(--ink); font-weight: 700; font-size: 1.06rem; margin: 0 0 14px; }
+    .mm-guide { font-size: 1.1rem; line-height: 1.5; margin: 4px 0 16px; }
+    .mm-sample { display: inline-block; margin: 0 0 14px; padding: 6px 12px; border-radius: 12px;
+                 background: #fbeede; color: #a0741e; font-size: .9rem; font-weight: 700; }
+    .mm-sample[hidden], #mmMain[hidden] { display: none; }   /* display 를 준 요소는 hidden 이 안 먹는다 */
+    .piece[aria-pressed="true"] { border: 3px solid var(--ink); background: #fff; }
+    .pick-mark { flex: 0 0 40px; width: 40px; height: 40px; border-radius: 50%; align-self: center;
+                 border: 2px solid var(--line); display: grid; place-items: center;
+                 font-weight: 700; font-size: 1.05rem; color: transparent; }
+    .piece[aria-pressed="true"] .pick-mark { background: var(--ink); border-color: var(--ink); color: #fff; }
+    /* AI 가 쓴 글은 textContent 로만 넣는다. 한글은 낱말 단위로 줄을 바꾸고(keep-all),
+       띄어쓰기 없이 긴 글자열만 화면 폭에서 끊는다(anywhere) */
+    .mm-title { font-family: "Gowun Batang", serif; font-size: 1.7rem; line-height: 1.35;
+                margin: 6px 0 18px; word-break: keep-all; overflow-wrap: anywhere; }
+    .mm-body p { font-family: "Gowun Batang", serif; font-size: 1.2rem; line-height: 1.9;
+                 margin: 0 0 10px; word-break: keep-all; overflow-wrap: anywhere; white-space: pre-wrap; }
+
     /* ── 개발용 패널 (시연 중에는 닫아 둔다) ────────── */
     /* 화면 아래쪽 큰 버튼을 절대 가리지 않도록 위쪽에 둔다 */
     .dev-toggle { position: fixed; z-index: 40; right: 8px; top: max(10px, env(safe-area-inset-top)); width: 28px; height: 28px; border-radius: 50%; border: 1px solid var(--line); background: rgba(255,255,255,.8); color: var(--muted); font-size: .8rem; line-height: 1; opacity: .5; }
@@ -489,6 +509,7 @@
             <div class="sum-top"><span class="sum-n" id="arCount">0</span><span class="sum-u">조각</span></div>
             <p class="sum-sub" id="arRange"></p>
           </div>
+          <button class="btn-line" id="arMemoir">엽서로 자서전 만들기</button>
           <div class="tabs">
             <button class="tab" aria-pressed="true" data-sort="new">최근 순</button>
             <button class="tab" aria-pressed="false" data-sort="long">이야기 많은 순</button>
@@ -520,6 +541,71 @@
           <button class="btn-ghost" id="arBack" hidden>돌아가기</button>
         </div>
       </section>
+
+      <!-- 자서전 만들기 — 업무지시서 04 v1.1 · 연결 규격 C1 v1.1. 저장 · 목록 · 다시 만들기는 이번 범위가 아니다 -->
+      <section class="screen" data-screen="memoir">
+        <h1>자서전 만들기</h1>
+        <span class="mm-sample" id="mmSample" hidden>예시 응답 모드 — 실제로 자서전을 만들지 않습니다</span>
+
+        <div data-mm="load">
+          <div class="skel"></div><div class="skel"></div><div class="skel"></div>
+        </div>
+
+        <div data-mm="pick" hidden>
+          <p class="mm-guide" id="mmGuide">엽서 3~5장을 골라 주세요.</p>
+          <div id="mmList"></div>
+        </div>
+
+        <div data-mm="none" hidden>
+          <div class="blank">
+            <div class="blank-face" aria-hidden="true">&#127793;</div>
+            <h2>고를 수 있는 엽서가<br />아직 없습니다.</h2>
+            <p>이야기를 마치면 엽서가 한 장씩 생깁니다.</p>
+          </div>
+        </div>
+
+        <div data-mm="loadfail" hidden>
+          <div class="blank">
+            <div class="blank-face" aria-hidden="true">&#128246;</div>
+            <h2>엽서 목록을 불러오지<br />못했습니다.</h2>
+            <p>저장된 이야기는 그대로 있습니다.<br />잠시 뒤 다시 눌러 주세요.</p>
+          </div>
+        </div>
+
+        <div data-mm="wait" hidden>
+          <div class="blank">
+            <div class="blank-face" aria-hidden="true">&#9997;&#65039;</div>
+            <h2>자서전 초안을<br />쓰고 있어요.</h2>
+            <p>잠시 기다려 주세요.</p>
+          </div>
+        </div>
+
+        <div data-mm="result" hidden>
+          <h2 class="mm-title" id="mmTitle"></h2>
+          <div class="mm-body" id="mmBody"></div>
+        </div>
+
+        <div data-mm="short" hidden>
+          <div class="blank">
+            <div class="blank-face" aria-hidden="true">&#128221;</div>
+            <h2>자서전을 쓸 만큼 분명한<br />이야기가 부족해요.</h2>
+            <p>다른 엽서를 골라 주세요.</p>
+          </div>
+        </div>
+
+        <div data-mm="fail" hidden>
+          <div class="blank">
+            <div class="blank-face" aria-hidden="true">&#9888;&#65039;</div>
+            <h2>자서전을 만들지<br />못했어요.</h2>
+            <p id="mmFailMsg"></p>
+          </div>
+        </div>
+
+        <div class="dock">
+          <button class="btn btn-primary" id="mmMain" disabled>자서전 만들기</button>
+          <button class="btn-ghost" id="mmBack">지난 이야기로 돌아가기</button>
+        </div>
+      </section>
     </main>
   </div>
 
@@ -545,7 +631,7 @@
   const CONFIG = {
     // 화면 아래와 개발용 패널에 그대로 찍힌다. 「고친 게 반영이 안 된 것 같다」는
     // 대부분 예전 파일이 열려 있는 경우라서, 눈으로 확인할 자리를 만들어 둔다.
-    version: 'v0.13.1 · 2026-10-08 (끝난 뒤 연 보관함도 밝은 바탕)',
+    version: 'v0.15 · 2026-10-12 (자서전 화면 · 업무지시서 04 v1.1 · 예시 응답)',
 
     // 이 화면을 백엔드가 직접 서빙하면(web/ 폴더) 빈 문자열 그대로 둔다.
     // 다른 포트에서 열어 시험할 때만 'http://127.0.0.1:8010' 처럼 채운다.
@@ -576,6 +662,29 @@
       // 목록 응답에 엽서 제목·본문이 실리면 true 로 바꾼다 — 그때 카드에 본문
       // 두 줄이 같이 나온다. 지금은 session 표 컬럼만 와서 끌 수밖에 없다.
       previewInList: false,
+    },
+
+    // ── 자서전 초안 (업무지시서 04 · 연결 규격 C1) ─────────────────
+    // POST /api/memoirs/preview 에 엽서 3~5장을 보내고, 다 쓸 때까지 한 번 기다린다.
+    // **이 주소는 아직 서버에 없다** — C1 은 연결을 위한 제안이다. 서버가 붙기
+    // 전까지는 아래 mock 의 예시 응답으로 화면이 돈다.
+    memoir: {
+      path: '/memoirs/preview',
+      // 엽서가 있는 회차의 session_id(UUID) 를 담는다 (C1 v1.1). 엽서는 회차당 한
+      // 장이라 따로 ID 가 없고, postcard 표의 키가 session_id 다.
+      idsField: 'session_ids',
+      min: 3,
+      max: 5,
+      // 고를 엽서를 찾을 회차 수. 시험 세트가 이 범위를 벗어나면 늘린다 (서버 상한 100).
+      listLimit: 20,
+      // 화면 쪽 안전장치일 뿐이다. 모델 호출 제한(서버 MEMOIR_TEXT_TIMEOUT, 지금 20초)을
+      // 넘기면 서버가 504 로 먼저 답한다. 연결이 걸려 버렸을 때만 여기서 접는다.
+      timeoutMs: 60000,
+      // 예시 응답. '' 이면 실제 서버를 부른다. 서버가 붙으면 '' 로 바꾼다.
+      //   ready · 400 · 404 · 422 · 502 · 504 · invalid · timeout · insufficient
+      // 주소 뒤에 ?memoirMock=502 처럼 붙여 바꿔 볼 수도 있다 (?memoirMock= 은 실제 서버).
+      mock: 'ready',
+      mockDelayMs: 1500,
     },
 
     // ── 사진 ──────────────────────────────────────────────────────
@@ -766,6 +875,27 @@
       });
       if (!res.ok) throw new ApiError(res.status, '엽서 그림을 받지 못했습니다');
       return res.blob();
+    },
+
+    // ── 자서전 초안 (C1 v1.1) ──
+    // 다른 API 와 같은 call() 을 쓴다. 실패는 HTTP 상태 + {"detail": …} 로 온다.
+    // 화면 안내는 상태로만 고르고 detail 은 화면에 내지 않는다 (mmWhy).
+    // 사용자 ID 는 본문이 아니라 call() 이 붙이는 X-User-Id 헤더로 간다.
+    memoirPreview: (ids, signal) => call(CONFIG.memoir.path, {
+      method: 'POST', signal,
+      body: JSON.stringify({ [CONFIG.memoir.idsField]: ids }),
+    }),
+
+    // 이 회차에 엽서가 있나. GET /postcard 는 JPEG 라 json() 으로 읽지 않는다.
+    // 있으면 받은 그림을 그대로 썸네일로 쓰고(주소 하나), 404 면 null 이다.
+    // 그 밖의 실패(502 · 503 · 연결 끊김)는 던진다 — 「엽서 없음」 으로 숨기지 않는다.
+    postcardThumb: async (sessionId) => {
+      const res = await fetch(`${CONFIG.apiBase}/api/sessions/${sessionId}/postcard`, {
+        credentials: 'include', headers: { 'X-User-Id': CONFIG.userId },
+      });
+      if (res.status === 404) return null;
+      if (!res.ok) throw new ApiError(res.status, '엽서를 확인하지 못했습니다');
+      return URL.createObjectURL(await res.blob());
     },
   };
 
@@ -1362,7 +1492,7 @@
   /* ═══════════════════════════════════════════════════════════════
      화면 전환
      ═══════════════════════════════════════════════════════════════ */
-  const STEP_LABEL = { ready: '사진 고르기', talk: '', writing: '정리 중', complete: '완성', closed: '종료', archive: '보관함' };
+  const STEP_LABEL = { ready: '사진 고르기', talk: '', writing: '정리 중', complete: '완성', closed: '종료', archive: '보관함', memoir: '자서전' };
 
   function show(name) {
     screens.forEach(s => s.classList.toggle('active', s.dataset.screen === name));
@@ -2146,6 +2276,261 @@
     arSort = b.dataset.sort;
     arDraw();
   }));
+
+  /* ═══════════════════════════════════════════════════════════════
+     자서전 만들기 — 업무지시서 04 v1.1 · 연결 규격 C1 v1.1
+
+       선택(3~5장) → 생성 중 → 결과 / 자료 부족 / 실패 → 선택으로 돌아가기
+
+     **이번 범위는 「제목과 본문을 읽을 수 있다」까지다.** 저장 · 목록 · 다시
+     만들기 · 원문 보기는 넣지 않는다. 새로고침하면 결과는 사라진다.
+
+     「생성 중」 은 화면이 응답을 기다리는 상태일 뿐이다. 서버의 status 는
+     ready · insufficient_material 둘이고, 네트워크 · HTTP 오류와 모양이 틀린
+     응답은 따로 「실패」 로 본다 — 자료 부족으로 숨기지 않는다.
+
+     고를 엽서 = 엽서가 있는 회차다. GET /api/sessions 로 회차를 받고, 회차마다
+     GET /postcard 를 물어 404 면 뺀다. 받은 엽서 그림은 그대로 썸네일이 된다.
+     ═══════════════════════════════════════════════════════════════ */
+  const MM_VIEWS = ['load', 'pick', 'none', 'loadfail', 'wait', 'result', 'short', 'fail'];
+  // 실패 안내는 HTTP 상태로 고른다 (C1 v1.1). 서버의 detail 은 화면에 내지 않는다 —
+  // 문자열이 아니거나 내부 사정이 섞일 수 있다.
+  const MM_FAIL = {
+    400: '선택한 엽서를 확인해 주세요. 3~5장을 고를 수 있어요.',
+    404: '선택한 엽서를 찾을 수 없어요. 목록에서 다시 골라 주세요.',
+    422: '선택한 엽서의 이야기 자료를 불러오지 못했어요.',
+    502: '자서전을 만드는 중 문제가 생겼어요. 엽서 선택 화면으로 돌아가 주세요.',
+    504: '정해진 시간 안에 자서전을 받지 못했어요. 엽서 선택 화면으로 돌아가 주세요.',
+    other: '자서전을 만드는 중 문제가 생겼어요. 엽서 선택 화면으로 돌아가 주세요.',
+  };
+  // 예시 응답 — 업무지시서 4절의 합성 자료 A. **실제 생성 결과가 아니다.**
+  const MM_SAMPLE = {
+    status: 'ready',
+    title: '세 가지 기억',
+    body: [
+      '1979년, 광주 인쇄소에서 첫 월급을 받았습니다.',
+      '그 돈으로 어머니께 빨간 목도리를 사 드려 참 뿌듯했습니다.',
+      '1985년쯤 동생과 기차를 타고 전주에 다녀왔습니다.',
+      '기차를 처음 탄 건 동생이었습니다.',
+      '1996년에는 초등학교에 입학한 딸을 학교에 데려다줬습니다.',
+      '노란 가방을 메고 교실에 들어가는 딸을 보니 마음이 뭉클했습니다.',
+    ].join('\n'),
+    sources: [],
+    to_confirm: [],
+  };
+
+  let mmRows = [];            // 엽서가 있는 회차. thumb 는 받아 둔 엽서 그림 주소(blob:)다
+  let mmPicked = [];          // 고른 회차 ID, 고른 순서대로. 중복은 들어가지 않는다
+  let mmView = 'load';
+  let mmReq = 0;              // 요청 번호 — 화면을 떠났거나 다시 고른 뒤 늦게 온 응답을 버린다
+
+  /** 지금 예시 응답으로 도는가. 주소의 ?memoirMock= 이 설정보다 먼저다. */
+  function mmMock() {
+    const q = new URLSearchParams(location.search).get('memoirMock');
+    return q !== null ? q : (CONFIG.memoir.mock || '');
+  }
+
+  function mmShow(view) {
+    mmView = view;
+    MM_VIEWS.forEach(k => { $(`[data-mm="${k}"]`).hidden = (k !== view); });
+    $('#mmSample').hidden = !mmMock();
+    const main = $('#mmMain'), back = $('#mmBack');
+    const after = view === 'result' || view === 'short' || view === 'fail';
+    main.hidden = view === 'none';
+    main.textContent = view === 'loadfail' ? '다시 불러오기'
+                     : view === 'wait' ? '자서전을 쓰는 중이에요'
+                     : after ? '엽서 선택으로 돌아가기'
+                     : '자서전 만들기';
+    main.disabled = view === 'load' || view === 'wait';
+    back.hidden = view === 'wait' || after;
+    if (view === 'pick') mmSync();
+    window.scrollTo(0, 0);
+  }
+
+  /** 고른 개수에 따라 안내 · 체크 · 버튼을 맞춘다. */
+  function mmSync() {
+    const n = mmPicked.length, { min, max } = CONFIG.memoir;
+    $$('#mmList .piece').forEach(b => {
+      const i = mmPicked.indexOf(b.dataset.id);
+      b.setAttribute('aria-pressed', String(i >= 0));
+      b.querySelector('.pick-mark').textContent = i >= 0 ? String(i + 1) : '';
+    });
+    $('#mmGuide').textContent = n === 0 ? `엽서 ${min}~${max}장을 골라 주세요.`
+      : n < min ? `${n}장 골랐어요. ${min}~${max}장을 골라 주세요.`
+      : `${n}장 골랐어요. 자서전을 만들 수 있어요.`;
+    if (mmView === 'pick') $('#mmMain').disabled = n < min || n > max;
+  }
+
+  function mmToggle(id) {
+    if (mmView !== 'pick') return;                    // 생성 중에는 선택을 바꾸지 않는다
+    const i = mmPicked.indexOf(id);
+    if (i >= 0) mmPicked.splice(i, 1);
+    else if (mmPicked.length >= CONFIG.memoir.max) {
+      toast(`최대 ${CONFIG.memoir.max}장까지 선택할 수 있어요.`);
+      return;
+    } else mmPicked.push(id);
+    mmSync();
+  }
+
+  /** 카드는 보관함과 같은 모양이다. 제목은 글자로만 넣는다. */
+  function mmDraw() {
+    const list = $('#mmList');
+    list.replaceChildren();
+    mmRows.forEach(s => {
+      const b = document.createElement('button');
+      b.className = 'piece';
+      b.dataset.id = s.session_id;
+      b.setAttribute('aria-pressed', 'false');
+      const thumb = document.createElement('span');
+      thumb.className = 'thumb';
+      const img = document.createElement('img');
+      img.src = s.thumb; img.alt = '';
+      thumb.appendChild(img);
+      const text = document.createElement('span');
+      text.style.cssText = 'flex:1; min-width:0';
+      const ttl = document.createElement('span');
+      ttl.className = 'p-ttl'; ttl.textContent = arTitle(s);
+      const meta = document.createElement('span');
+      meta.className = 'p-meta';
+      const date = document.createElement('span');
+      date.className = 'ar-date'; date.textContent = arDate(s.created_at);
+      const era = document.createElement('span');
+      era.className = 'era'; era.textContent = `${s.fragment_count}조각`;
+      meta.append(date, era);
+      text.append(ttl, meta);
+      const mark = document.createElement('span');
+      mark.className = 'pick-mark'; mark.setAttribute('aria-hidden', 'true');
+      b.append(thumb, text, mark);
+      b.addEventListener('click', () => mmToggle(s.session_id));
+      list.appendChild(b);
+    });
+  }
+
+  function mmForget() {
+    mmRows.forEach(r => URL.revokeObjectURL(r.thumb));
+    mmRows = [];
+  }
+
+  async function openMemoir() {
+    const my = ++mmReq;
+    mmForget();
+    mmPicked = [];
+    show('memoir');
+    mmShow('load');
+    try {
+      const res = await api.sessions(CONFIG.memoir.listLimit);
+      const closed = ((res && res.sessions) || []).filter(s => s.closed_at);
+      // 회차마다 엽서가 있는지 묻는다. 404 는 「엽서 없음」 이라 빼고, 그 밖의 실패가
+      // 하나라도 있으면 목록 전체를 「불러오지 못했다」 로 본다 — 숨기면 엽서가 사라진 것처럼 보인다.
+      const got = await Promise.allSettled(closed.map(s => api.postcardThumb(s.session_id)));
+      const thumbs = got.map(g => (g.status === 'fulfilled' ? g.value : null));
+      const broke = got.find(g => g.status === 'rejected');
+      if (broke || my !== mmReq) {
+        thumbs.forEach(u => u && URL.revokeObjectURL(u));
+        if (broke) throw broke.reason;
+        return;
+      }
+      mmRows = closed.map((s, i) => Object.assign({}, s, { thumb: thumbs[i] })).filter(s => s.thumb);
+      if (!mmRows.length) { mmShow('none'); log('자서전', '고를 엽서 없음'); return; }
+      mmDraw();
+      mmShow('pick');
+      log('자서전', `고를 수 있는 엽서 ${mmRows.length}장`);
+    } catch (e) {
+      if (my !== mmReq) return;
+      mmShow('loadfail');
+      log('자서전', `목록 실패 · ${e.status || ''} ${e.message || e}`);
+    }
+  }
+
+  /** 서버 대신 예시 응답을 낸다. 실제 생성이 아니라는 표시는 화면 위에 따로 있다. */
+  async function mmFake(kind, signal) {
+    await new Promise((resolve, reject) => {
+      const t = setTimeout(resolve, CONFIG.memoir.mockDelayMs);
+      signal.addEventListener('abort', () => { clearTimeout(t); reject(new DOMException('', 'AbortError')); });
+      if (kind === 'timeout') clearTimeout(t);           // 시간 초과를 보려면 abort 까지 그냥 둔다
+    });
+    // 자료 부족은 받는 분기만 확인한다. 실제 판정 시험은 03 독립 실행 · 01 S5 의 몫이다 (v1.1).
+    if (kind === 'insufficient') {
+      return { status: 'insufficient_material', title: '', body: '', sources: [], to_confirm: [] };
+    }
+    if (/^\d{3}$/.test(kind)) {                      // 400 · 404 · 422 · 502 · 504 — call() 이 던지는 것과 같은 모양
+      throw new ApiError(Number(kind), '예시 detail — 화면에는 나오지 않아야 한다');
+    }
+    if (kind === 'invalid') return { status: 'ready', title: '', body: 3 };
+    return MM_SAMPLE;
+  }
+
+  /** 응답을 화면 상태로. 모양이 틀리면 원 JSON 을 쏟지 않고 실패로 접는다. */
+  function mmRead(res) {
+    if (res && res.status === 'insufficient_material') return { view: 'short' };
+    if (res && res.status === 'ready'
+        && typeof res.title === 'string' && res.title.trim()
+        && typeof res.body === 'string' && res.body.trim()) {
+      return { view: 'result', title: res.title.trim(), body: res.body };
+    }
+    log('자서전', `응답 모양이 규격과 다릅니다 · status=${res && res.status}`);
+    return { view: 'fail', why: MM_FAIL.other };
+  }
+
+  /** 실패 안내를 고른다. 서버의 message 나 예외 내용은 화면에 내지 않는다. */
+  function mmWhy(e) {
+    if (e && e.name === 'AbortError') return MM_FAIL[504];   // 화면 쪽 제한에 걸렸다
+    return MM_FAIL[e && e.status] || MM_FAIL.other;           // 응답 없음 · 파싱 실패 · 그 밖의 상태
+  }
+
+  function mmPaint(title, body) {
+    $('#mmTitle').textContent = title;
+    const box = $('#mmBody');
+    box.replaceChildren();
+    // 한 줄이 한 문장이다 (자서전.md). 회차 5개면 15~40문장까지 온다 — 자르지 않는다.
+    // 줄을 합치거나 고치지 않고, 빈 줄만 건너뛴다.
+    body.split('\n').forEach(line => {
+      if (!line.trim()) return;
+      const p = document.createElement('p');
+      p.textContent = line;
+      box.appendChild(p);
+    });
+    if (/^\s*#/m.test(body)) log('자서전', '본문에 「#」 줄이 있습니다 — 소제목은 규격 밖이라 글자 그대로 둡니다');
+  }
+
+  async function mmMake() {
+    const ids = [...new Set(mmPicked)];
+    const { min, max, timeoutMs } = CONFIG.memoir;
+    if (mmView !== 'pick' || ids.length < min || ids.length > max) return;
+    const my = ++mmReq;
+    mmShow('wait');                                  // 여기서 버튼과 선택이 잠긴다 — 두 번 눌러도 한 번만 간다
+    const kind = mmMock();
+    log('자서전', `요청 · ${ids.length}장${kind ? ` · 예시 응답(${kind})` : ''}`);
+
+    const ctl = new AbortController();
+    const timer = setTimeout(() => ctl.abort(), timeoutMs);
+    let out;
+    try {
+      const res = kind ? await mmFake(kind, ctl.signal) : await api.memoirPreview(ids, ctl.signal);
+      out = mmRead(res);
+    } catch (e) {
+      out = { view: 'fail', why: mmWhy(e) };
+      log('자서전', `실패 · ${e.name === 'AbortError' ? '화면 쪽 시간 초과' : `HTTP ${e.status || '응답 없음'}`}`);
+    } finally {
+      clearTimeout(timer);
+    }
+
+    if (my !== mmReq) { log('자서전', '늦게 온 응답을 버립니다'); return; }
+    if (out.view === 'result') mmPaint(out.title, out.body);
+    if (out.view === 'fail') $('#mmFailMsg').textContent = out.why;
+    mmShow(out.view);
+    log('자서전', out.view === 'result' ? `완성 · ${kind ? '예시 응답' : '실제 응답'}` : out.view);
+  }
+
+  $('#arMemoir').addEventListener('click', () => void openMemoir());
+  $('#mmMain').addEventListener('click', () => {
+    if (mmView === 'pick') { void mmMake(); return; }
+    if (mmView === 'loadfail') { void openMemoir(); return; }
+    // 결과 · 자료 부족 · 실패 → 고른 것을 그대로 둔 채 선택으로 돌아간다
+    mmReq++;
+    mmShow('pick');
+  });
+  $('#mmBack').addEventListener('click', () => { mmReq++; mmForget(); void openArchive(); });
 
   /* ═══════════════════════════════════════════════════════════════
      버튼
