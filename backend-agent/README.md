@@ -34,6 +34,7 @@ app/
     photostore.py         사진 바이트 저장 심 — pg / local (나중에 blob)
     photo_analyze.py      사진 분석 (Gemini VLM) → 단서 JSON
     postcard.py           엽서 — 카드 작성 (CardAgent v3) · 출처 검사 · Pillow 굽기
+    memoir.py             자서전 초안 — 회차 합치기 (전역 턴) · 한 번 쓰기 · 구조 검사 (실험)
     store.py              저장 (asyncpg). DB 가 없어도 회차는 돈다
     migrate.py            마이그레이션 적용 · 체크섬 · advisory lock
     conf.py               환경변수 읽기 (틀린 값을 조용히 0 으로 만들지 않는다)
@@ -44,6 +45,9 @@ tests/                    test_flow (전이 · 타이머 · 지연 · 빈 전사
 tools/replay.py           녹음 파일을 실제 회차처럼 흘려보낸다 (마이크 없이)
 tools/bench_audio.py      같은 녹음으로 전사·질문 경로(Azure+Gemini / Gemini 단독)를 잰다
 tools/try_photo.py        사진 한 장을 실제 Gemini 로 분석해 본다 (DB·서버 없이)
+tools/seed_sessions.py    자서전 시험 회차를 DB 에 넣고 엽서를 굽는다 (합성 자료 전용)
+tools/memoir_input.py     자서전 합치기 함수의 출력(모델 입력 · turn_map)을 파일로 뽑는다
+eval/                     자서전 시험용 합성 seed A · B. manifest(*.ids.json)는 git 에 안 올린다
 web/                      프론트 빌드본 (있으면 서빙. git 에는 올리지 않는다)
 run.ps1                   기동 — 배포용(터널 뒤)과 -Dev 두 가지
 deploy/                   cloudflared 설정 본
@@ -710,6 +714,109 @@ ERROR 로 남겨 나중에 셀 수 있게 한다.
 
 ---
 
+## 자서전 초안 (실험)
+
+엽서가 있는 회차 3~5개를 고르면 그 회차들의 말씀을 모아 짧은 초안 하나를 쓴다.
+**저장하지 않는다** — 응답으로만 나가고, 다시 보려면 다시 만든다. 무엇을 왜 그렇게
+하는지는 `app/session/memoir.py` 머리에 있다.
+
+```
+POST /api/memoirs/preview
+X-User-Id: dev-user
+
+{"session_ids": ["<회차 UUID>", "<회차 UUID>", "<회차 UUID>"]}
+```
+
+다 쓰거나 실패할 때까지 **기다리는 요청**이다. 모델은 한 번만 부르고 다시 쓰게 하지
+않는다. 응답은 `자서전.md` 의 다섯 열쇠 그대로다 — `status` · `title` · `body` ·
+`sources` · `to_confirm`. `body` 는 한 줄에 문장 하나, `sources[].turns` 는 **이 요청
+안에서 1부터 다시 매긴 턴 번호**다 (회차마다 턴이 1부터라 그대로는 겹친다).
+
+| 상태 | 뜻 | 화면에 가는 말 (`detail`) |
+|---|---|---|
+| 200 `ready` | 초안이 있다 | — |
+| 200 `insufficient_material` | 쓸 말씀이 없다. **실패가 아니다** | — |
+| 400 | 개수(3~5) · 중복 · UUID 아님 | 선택한 엽서를 확인해 주세요. 3~5장을 고를 수 있어요. |
+| 404 | 없는 회차 · 남의 회차 · 엽서 없는 회차 | 선택한 엽서를 찾을 수 없어요. 목록에서 다시 골라 주세요. |
+| 422 | 고른 회차의 원자료를 못 읽었다 | 선택한 엽서의 이야기 자료를 불러오지 못했어요. |
+| 502 | 모델 호출 실패 · 낸 구조가 어긋남 | 자서전을 만드는 중 문제가 생겼어요. 엽서 선택 화면으로 돌아가 주세요. |
+| 504 | 모델이 제시간에 답하지 않음 | 정해진 시간 안에 자서전을 받지 못했어요. 엽서 선택 화면으로 돌아가 주세요. |
+
+실패 본문은 `{"detail": "..."}` 하나다. 구조가 어긋난 응답은 **고쳐서 내보내지 않는다**
+— 빈 줄을 지우거나 출처 번호를 맞춰 주지 않고 502 다. 구조가 맞다고 내용이 맞는
+것은 아니다. 그건 따로 대조해야 한다.
+
+설정은 `.env` 의 `MEMOIR_*` 다섯 개다 (`.env.example`). 20초 · 2000토큰은 처음 잡은
+값이고 넉넉하다는 보장이 아니다.
+
+### 시험 회차 넣기 — 각자 자기 DB 에
+
+합성 대화 두 세트가 `eval/` 에 있다. **A**(5회차)는 평범한 이야기, **B**(3회차)는
+뒤 회차에서 앞 회차의 연도를 고치고 한 대목을 빼 달라고 하는 자료다. 한 인물의
+것이 아니므로 A 와 B 를 섞어 고르지 않는다.
+
+```powershell
+# backend-agent 에서. 서버가 같은 DB 로 떠 있어야 엽서를 굽는다 (.\run.ps1)
+python tools/seed_sessions.py --input eval/memoir_seed_A.json --manifest eval/memoir_seed_A.ids.json --api-base http://127.0.0.1:8010 --bake-postcards
+python tools/seed_sessions.py --input eval/memoir_seed_B.json --manifest eval/memoir_seed_B.ids.json --api-base http://127.0.0.1:8010 --bake-postcards
+```
+
+- **manifest(`*.ids.json`)가 가상 이름 → 실제 UUID 대응표다.** UUID 는 넣을 때마다
+  새로 생기므로 **넣은 DB 에서만 통한다.** 그래서 git 에 올리지 않는다. 남의
+  manifest 로는 404 가 난다 — 각자 돌려서 자기 것을 쓴다.
+- `session_ids` 는 manifest 에서 고른다. A 3회차는 `s-a · s-b · s-c`, A 5회차는
+  `s-a ~ s-e`, B 3회차는 `s-r1 ~ s-r3` 이다.
+- 엽서 굽기는 **모델을 부른다** (회차마다 한 번). `--bake-postcards` 를 빼면 회차와
+  턴만 넣는다.
+- 같은 manifest 로 다시 돌리면 넣은 회차와 구운 엽서는 그대로 쓰고 안 된 것만 한다.
+  지우는 기능은 없다 — 넣는 것은 새 회차뿐이고 있는 행은 건드리지 않는다.
+- **이 PC 의 DB 가 아니면 쓰지 않는다.** 함께 쓰는 DB 에 넣으면 모두의 회차 목록에
+  `[A]` · `[B]` 가 뜬다. 정말 넣을 때만 `--allow-remote` 를 붙인다. 서비스 DB 에는
+  넣지 않는다.
+
+합치기 함수가 실제로 만든 모델 입력과 대응표(`turn_map`)는 이렇게 뽑는다. 엽서를
+굽기 전에도 돈다.
+
+```powershell
+python tools/memoir_input.py --manifest eval/memoir_seed_A.ids.json --aliases s-a,s-b,s-c --out eval/memoir_input_A3.json
+```
+
+파일 안의 `input_alias` · `turn_map_alias` 는 UUID 만 가상 이름으로 바꾼 것이라,
+DB 가 달라도 글자 그대로 견줄 수 있다.
+
+### 실패를 일부러 내 보기
+
+`MEMOIR_FAIL_INJECT` 를 걸고 서버를 띄우면 정상 요청이 그 실패로 끝난다. 모델도 DB 도
+실제로 고장 내지 않는다. **요청으로는 고를 수 없다** — 서버 환경변수뿐이다.
+
+| 값 | 결과 |
+|---|---|
+| (비움) · `off` | 주입 없음 |
+| `source_material_unavailable` | 선택 · 사용자 검사를 지난 뒤 422 |
+| `generation_failed` | 합친 뒤 모델을 부르는 자리에서 502 |
+| `generation_timeout` | 같은 자리에서 504 (실제로 20초를 기다리지 않는다) |
+
+```powershell
+$env:MEMOIR_FAIL_INJECT = "generation_timeout"; .\run.ps1     # 걸고 띄운다
+Remove-Item Env:MEMOIR_FAIL_INJECT; .\run.ps1                 # 풀고 다시 띄운다
+```
+
+**시험이 끝나면 풀고 다시 띄운다.** 건 채로 두면 모든 자서전 요청이 실패한다.
+주입한 504 는 오류 경로를 본 것이지 모델이 실제로 20초를 넘긴 것이 아니다.
+
+### 재 본 것 (합성 자료 · 로컬)
+
+실제 모델로 45번 불러 44번이 `ready` 였다. 한 번은 모델이 `title` 이나 `body` 를
+문자열이 아닌 모양으로 내 502 였다 — 다시 부르지 않으므로 그대로 실패다. 응답은
+1~3초에 왔고 2000토큰에 걸려 잘린 적은 없다. B 세트는 10번 모두 고친 연도를 쓰고
+빼 달라는 대목을 뺐다.
+
+**이 숫자로 넉넉하다고 말할 수는 없다.** 합성 자료는 회차당 말씀이 1~3개뿐이다.
+11턴짜리 실제 회차를 섞어도 본문은 5~18줄이었는데, 그건 모델이 짧게 쓰기 때문이기도
+하다 — 회차당 3~8문장이라는 기준에는 못 미친다.
+
+---
+
 ## 남은 일
 
 **~~Day 5 — Gemini 연결.~~ 끝났다.** `app/session/question.py` 에 있다. 위의 「질문 생성」 절 참조.
@@ -729,6 +836,10 @@ ERROR 로 남겨 나중에 셀 수 있게 한다.
 **~~제미나이 오디오 직접 입력.~~ 재봤고, 안 바꿨다.** 위 「제미나이가 직접 들으면 어떤가」 참조. 감정이 실린 실제 대화가 쌓이면 C(오디오+전사 함께)를 다시 잰다.
 
 **요금제 티어 확인.** 위 「429 를 실제로 만났다」 참조. 실사용 전에 본다.
+
+**자서전 — 화면 연결.** 서버(`POST /api/memoirs/preview`)까지 됐다. 위 「자서전 초안」 참조.
+화면에서 엽서를 골라 읽는 것, 회차 목록에 엽서가 있는지 싣는 것(지금 `GET /api/sessions`
+에는 없다)이 남았다. 같은 인물의 긴 회차로 시간 · 분량을 다시 재는 것도 남았다.
 
 ---
 
