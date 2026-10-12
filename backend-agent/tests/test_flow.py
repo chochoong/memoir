@@ -594,6 +594,186 @@ def test_stt_hint():
     check("힌트가 없으면 필드도 없다", "phraseList" not in stt._definition(""))
 
 
+def test_resume():
+    """
+    질문이 나가기 전에 말씀이 이어진다 (controller._resume).
+
+    무음 3초로 확정된 뒤 T2 가 도는 동안 어르신이 다시 말씀을 시작하신다. 예전에는
+    그 소리가 버려지고 질문이 그 위로 나갔다. 이제는 확정을 물리고 같은 턴을 잇는다.
+    물리는 자리는 셋이다 — 전사 중 · 질문 생성 중 · 질문은 됐고 T2 만 남았을 때.
+    """
+    print("\n[12-2] 질문이 나가기 전에 이어진 말씀")
+
+    async def until_speaking(ctl):
+        for _ in range(200):
+            if ctl.machine.state is State.SPEAKING:
+                return
+            await asyncio.sleep(0.02)
+
+    def make(**kw):
+        ctl = SessionController(user_id="t", title="시험", pace="fast", tts_fn=_silent_tts, **kw)
+        ctl.timers.t1_seconds = 0.2
+        ctl.timers.t2_seconds = 0.6
+        return ctl
+
+    # 질문 생성 중에 이어진다. 조각은 이미 적혔다 — 거기에 잇는다.
+    async def run_mid_question():
+        calls = []
+
+        async def question(ctl):
+            calls.append(ctl.fragments[-1]["answer"])
+            ctl.state["asked_questions"] = ctl.state.get("asked_questions", []) + ["안 나간 질문"]
+            ctl.last_decision = {"action": f"판단 {len(calls)}"}
+            await asyncio.sleep(0.3)
+            return f"질문 {len(calls)}"
+
+        ctl = make(question_fn=question)
+        await ctl.start("씨앗")
+        opener = ctl.snapshot()["next_question"]
+        asked0 = list(ctl.state.get("asked_questions", []))
+        await ctl.tts_done()
+        await ctl.speech("감옥에 가서 한 5년 썩었나?")
+        await asyncio.sleep(0.3)              # T1 격발 · 조각 저장 · 질문 생성 중
+        mid = ctl.snapshot()
+        await ctl.speech("나오니까 세상이 참 달라졌더라고.")
+        back = ctl.snapshot()
+        undone = (list(ctl.state.get("asked_questions", [])), ctl.last_decision)
+        await until_speaking(ctl)
+        return ctl, calls, opener, asked0, mid, back, undone
+
+    ctl, calls, opener, asked0, mid, back, undone = asyncio.run(run_mid_question())
+    check("확정된 뒤에도 화면에 「이어 받을 수 있다」고 알린다",
+          mid["state"] == "PROCESSING" and mid["resumable"] is True, f"{mid['state']} {mid.get('resumable')}")
+    check("이어진 말씀을 튕기지 않고 다시 듣는다",
+          back["state"] == "LISTENING" and back["resumable"] is False, back["state"])
+    check("턴을 소모하지 않는다", back["turn"] == 0 and ctl.machine.turn == 1,
+          f"물린 직후 {back['turn']} · 끝난 뒤 {ctl.machine.turn}")
+    check("화면의 질문은 답하던 그 질문으로 돌아간다", back["next_question"] == opener, str(back["next_question"]))
+    check("안 나간 질문이 남긴 판단 기록을 되돌린다",
+          undone[0] == asked0 and (undone[1] or {}).get("action") != "판단 1", str(undone))
+    check("한 말씀이 한 조각으로 이어진다",
+          len(ctl.fragments) == 2
+          and ctl.fragments[-1]["answer"] == "감옥에 가서 한 5년 썩었나? 나오니까 세상이 참 달라졌더라고.",
+          f"조각 {len(ctl.fragments)}개 · {ctl.fragments[-1]['answer']!r}")
+    check("질문은 이어진 말씀 전체를 보고 다시 만든다",
+          len(calls) == 2 and "달라졌더라고" in calls[-1] and ctl.snapshot()["next_question"] == "질문 2",
+          f"{calls} → {ctl.snapshot()['next_question']}")
+    check("조각의 질문 칸은 답하던 질문 그대로다", ctl.fragments[-1]["question"] == opener)
+
+    # 질문은 이미 됐고 T2 만 남았다. 그 질문은 버린다.
+    async def run_after_question():
+        made = []
+
+        async def question(ctl):
+            made.append(ctl.fragments[-1]["answer"])
+            return f"질문 {len(made)}"
+
+        ctl = make(question_fn=question)
+        await ctl.start("씨앗")
+        await ctl.tts_done()
+        await ctl.speech("감보다는 우리 애들이")
+        await asyncio.sleep(0.4)              # T1 0.2 · 질문 즉시 · T2 는 0.8 에 끝난다
+        ready = ctl.machine.question_ready and ctl.machine.state is State.PROCESSING
+        await ctl.speech("더 좋아했지.")
+        await until_speaking(ctl)
+        return ctl, made, ready
+
+    ctl, made, ready = asyncio.run(run_after_question())
+    check("질문이 준비된 뒤 T2 안에서도 물린다", ready and len(made) == 2, f"ready={ready} · 질문 {len(made)}번")
+    check("버린 질문은 나가지 않는다", ctl.snapshot()["next_question"] == "질문 2"
+          and ctl.fragments[-1]["answer"] == "감보다는 우리 애들이 더 좋아했지.",
+          f"{ctl.snapshot()['next_question']} · {ctl.fragments[-1]['answer']!r}")
+    check("지연 기록은 나간 질문 하나뿐이다", len(ctl.latencies) == 1, f"{len(ctl.latencies)}건")
+
+    # 전사 중에 이어진다. 적은 조각이 없다 — 앞뒤 소리를 한 번에 전사한다.
+    async def run_mid_stt():
+        heard = []
+
+        async def stt(audio, mime, hint):
+            heard.append(len(audio))
+            await asyncio.sleep(0.4)
+            return f"전사 {len(heard)}"
+
+        async def question(ctl):
+            return "다음 질문"
+
+        ctl = make(stt_fn=stt, question_fn=question)
+        await ctl.start("씨앗")
+        await ctl.tts_done()
+        await ctl.audio_chunk(bytes(640), "audio/pcm;rate=16000")
+        await asyncio.sleep(0.35)             # T1 격발 · 전사 도중
+        mid = ctl.machine.state
+        await ctl.audio_chunk(bytes(640), "audio/pcm;rate=16000")
+        frags = len(ctl.fragments)
+        await until_speaking(ctl)
+        return ctl, heard, mid, frags
+
+    ctl, heard, mid, frags = asyncio.run(run_mid_stt())
+    check("전사 도중에 온 소리도 받는다", mid is State.PROCESSING and frags == 1, f"{mid.value} · 조각 {frags}")
+    check("앞뒤 소리를 한 번에 전사한다", len(heard) == 2 and heard[1] >= heard[0] + 640, str(heard))
+    check("물린 전사는 조각을 남기지 않는다",
+          len(ctl.fragments) == 2 and ctl.fragments[-1]["answer"] == "전사 2" and ctl.machine.turn == 1,
+          f"조각 {len(ctl.fragments)}개 · {ctl.fragments[-1]['answer']!r} · 턴 {ctl.machine.turn}")
+
+    # 이어진 소리가 말이 아니었다 (기침). 앞서 적은 말씀으로 질문이 나가야 한다.
+    async def run_cough():
+        said = iter(["바닷가가 떠올라.", ""])
+
+        async def stt(audio, mime, hint):
+            return next(said)
+
+        async def question(ctl):
+            await asyncio.sleep(0.2)
+            return "어떤 바닷가였나요?"
+
+        ctl = make(stt_fn=stt, question_fn=question)
+        await ctl.start("씨앗")
+        await ctl.tts_done()
+        await ctl.audio_chunk(bytes(640), "audio/pcm;rate=16000")
+        await asyncio.sleep(0.3)
+        await ctl.audio_chunk(bytes(640), "audio/pcm;rate=16000")
+        await until_speaking(ctl)
+        return ctl
+
+    ctl = asyncio.run(run_cough())
+    check("이은 소리가 말이 아니어도 회차가 멈추지 않는다", ctl.machine.state is State.SPEAKING,
+          f"state={ctl.machine.state.value} — LISTENING 이면 말씀은 적혔는데 질문이 안 나온 것이다")
+    check("앞서 적은 말씀은 그대로다",
+          len(ctl.fragments) == 2 and ctl.fragments[-1]["answer"] == "바닷가가 떠올라.",
+          f"{ctl.fragments[-1]['answer']!r}")
+
+    # 「다 말했어요」로 확정한 턴은 물리지 않는다. 낭독이 시작된 뒤도 그렇다.
+    async def run_done():
+        async def question(ctl):
+            await asyncio.sleep(0.4)
+            return "다음 질문"
+
+        ctl = make(question_fn=question)
+        await ctl.start("씨앗")
+        await ctl.tts_done()
+        await ctl.speech("다 했어.")
+        await ctl.done_button()
+        snap = ctl.snapshot()
+        try:
+            await ctl.speech("아 그리고")
+            pushed = False
+        except TransitionError:
+            pushed = True
+        await until_speaking(ctl)
+        try:
+            await ctl.speech("낭독 중의 소리")
+            late = False
+        except TransitionError:
+            late = True
+        return ctl, snap, pushed, late
+
+    ctl, snap, pushed, late = asyncio.run(run_done())
+    check("「다 말했어요」 뒤에는 이어 받지 않는다",
+          snap["state"] == "PROCESSING" and snap["resumable"] is False and pushed,
+          f"{snap['state']} resumable={snap['resumable']} 튕김={pushed}")
+    check("낭독이 시작된 뒤의 소리는 예전처럼 튕긴다", late and ctl.fragments[-1]["answer"] == "다 했어.")
+
+
 def test_all_checks_passed():
     """
     pytest 로 돌릴 때의 안전판.
@@ -619,6 +799,7 @@ def main() -> int:
     test_tts()
     test_done_button_race()
     test_abort_during_confirm()
+    test_resume()
     test_stt_env()
     test_stt_dump()
     test_stt_hint()

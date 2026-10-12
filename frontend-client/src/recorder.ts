@@ -49,6 +49,10 @@ const FRAME = 4096          // ScriptProcessor 한 묶음. 48kHz 에서 85ms
 const PREROLL_MS = 300      // 판정이 열리기 전 말머리. 없으면 「어」가 잘린다
 const CLOSE_MS = 600        // 이만큼 조용하면 한 구간을 닫는다 (T1 3초와는 다른 층이다)
 const FLUSH_MS = 1000       // 말이 길어도 1초마다 올린다 — T1 이 계속 리셋되어야 한다
+// 말머리만은 빨리 올린다. 서버는 무음 3초로 말씀을 확정한 뒤에도 질문이 나가기
+// 전까지는 이어진 말씀을 받아 확정을 물리는데, 그 창이 T2(3초)뿐이다. 첫 조각을
+// 1초 뒤에 올리면 「어…」 하고 다시 시작하신 말이 창을 넘겨 질문과 겹친다.
+const FIRST_FLUSH_MS = 300
 const FLOOR_MIN = 0.004     // 절대 바닥. 완전한 무음실에서 바닥이 0 으로 수렴하는 것을 막는다
 const OPEN_MULT = 3.5       // 봉우리를 아직 못 봤을 때 쓰는 배수 (예전 고정값)
 const CLOSE_MULT = 2.0      // 이력. OPEN_MULT 와의 비(0.57)만 의미가 있다
@@ -166,6 +170,7 @@ export async function startRecorder(opts: RecorderOpts): Promise<Recorder> {
   let voiced = false
   let belowMs = 0
   let sinceFlush = 0
+  let headSent = false        // 이 구간의 말머리를 올렸나 (FIRST_FLUSH_MS)
   let pending: Float32Array[] = []
   let preroll: Float32Array[] = []
   let prerollMs = 0
@@ -240,6 +245,7 @@ export async function startRecorder(opts: RecorderOpts): Promise<Recorder> {
         voiced = true
         belowMs = 0
         sinceFlush = 0
+        headSent = false
         pending = preroll        // 말머리를 함께 보낸다
         preroll = []
         prerollMs = 0
@@ -251,7 +257,8 @@ export async function startRecorder(opts: RecorderOpts): Promise<Recorder> {
       if (belowMs >= CLOSE_MS) {
         voiced = false
         flush()                  // 꼬리 침묵까지 붙여 보낸다 — 끝음이 잘리지 않는다
-      } else if (sinceFlush >= FLUSH_MS) {
+      } else if (sinceFlush >= (headSent ? FLUSH_MS : FIRST_FLUSH_MS)) {
+        headSent = true
         flush()
       }
     }

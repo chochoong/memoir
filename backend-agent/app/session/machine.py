@@ -42,6 +42,7 @@ class Event(str, Enum):
     T2_EXPIRED = "t2_expired"          # 다음 말 대기 종료
     QUESTION_READY = "question_ready"  # 다음 질문 생성 완료
     EMPTY_TRANSCRIPT = "empty"         # 전사가 비었다 → 턴 미소모
+    RESUME = "resume"                  # 질문이 나가기 전에 말씀이 이어졌다 → 턴 미소모
     FINISH = "finish"                  # AI 판단(또는 턴 제한을 둔 회차에서 최대 턴 도달)
     ABORT = "abort"                    # 사용자 중단
 
@@ -107,8 +108,10 @@ class Machine:
                 return self._to(State.PROCESSING, event)
 
         if before is State.PROCESSING:
-            if event is Event.EMPTY_TRANSCRIPT:
-                self.turn -= 1                                    # 턴 미소모 (FR-AD-312)
+            if event in (Event.EMPTY_TRANSCRIPT, Event.RESUME):
+                # 턴 미소모 (FR-AD-312). RESUME 은 「다 말씀하신 줄 알았는데 아니었다」다 —
+                # 확정을 물리고 같은 턴을 이어 듣는다 (controller._resume).
+                self.turn -= 1
                 return self._to(State.LISTENING, event)
             if event is Event.FINISH:
                 return self._to(State.CLOSED, event)
@@ -134,6 +137,6 @@ _ALLOWED: dict[State, tuple[Event, ...]] = {
     State.SPEAKING: (Event.TTS_DONE, Event.ABORT),
     State.LISTENING: (Event.SPEECH_RECEIVED, Event.T1_EXPIRED, Event.DONE_BUTTON, Event.ABORT),
     State.PROCESSING: (Event.QUESTION_READY, Event.T2_EXPIRED, Event.EMPTY_TRANSCRIPT,
-                       Event.FINISH, Event.ABORT),
+                       Event.RESUME, Event.FINISH, Event.ABORT),
     State.CLOSED: (),
 }

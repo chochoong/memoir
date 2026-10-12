@@ -223,11 +223,16 @@ export default function App() {
 
   const id = snap?.session_id
   const listening = snap?.state === 'LISTENING'
+  // 무음 3초로 말씀이 확정된 뒤에도 질문이 나가기 전까지는 듣는다. 다음 말을
+  // 고르느라 쉬신 것이면 이어 하신 말씀이 올라가 서버가 확정을 물린다. 여기서
+  // 마이크를 닫으면 그 말씀은 버려지고 질문이 그 위로 나온다 — 말을 끊는 것으로 들린다.
+  // 「다 말했어요」로 확정한 턴은 서버가 resumable 을 내리지 않는다.
+  const hearing = listening || (snap?.state === 'PROCESSING' && !!snap.resumable)
 
   // 콜백은 오디오 스레드에서 불린다. 거기서 snap 을 읽으면 켤 때의 값에 붙박이므로
   // ref 로 흘려 넣는다.
   sessionRef.current = id ?? null
-  listeningRef.current = listening
+  listeningRef.current = hearing
 
   const toggleMic = useCallback(async () => {
     setMicErr(null)
@@ -301,7 +306,7 @@ export default function App() {
   // 듣는 동안에만 마이크 판정을 켠다. 낭독 중에 켜 두면 스피커 소리가 마이크로
   // 되돌아와, 수음이 열리는 순간 그 꼬리가 어르신의 첫마디인 양 올라간다.
   // 켜는 쪽은 finishReading 이 한발 먼저 한다. 여기서는 끄는 때를 맞춘다.
-  useEffect(() => { rec_.current?.setActive(listening) }, [listening, mic])
+  useEffect(() => { rec_.current?.setActive(hearing) }, [hearing, mic])
   useEffect(() => { if (snap?.state !== 'SPEAKING') armed.current = null }, [snap?.state])
 
   // 낭독이 끝났다고 알리고, **답을 기다리지 않고 바로 듣기 시작한다.**
@@ -466,14 +471,14 @@ export default function App() {
           {mic && (
             <div className="mic">
               <div className="level" aria-hidden="true">
-                <i className={level.voiced && listening ? 'on' : ''}
+                <i className={level.voiced && hearing ? 'on' : ''}
                    style={{ width: `${Math.min(100, level.rms * 400)}%` }} />
                 {/* 문턱 눈금. 막대가 이 선을 넘어야 소리가 올라간다 —
                     어르신 목소리가 선에 얼마나 못 미치는지가 여기서 보인다. */}
                 <b style={{ left: `${Math.min(100, level.open * 400)}%` }} />
               </div>
               <span className="meta">
-                {!listening ? '대기' : level.voiced ? '말씀 중' : '조용함'}
+                {!hearing ? '대기' : level.voiced ? '말씀 중' : '조용함'}
                 {' · '}올린 소리 {(snap.audio_bytes / 32000).toFixed(1)}초
               </span>
               {/* 자동 보정이 도는지 보는 창. auto 가 꺼져 있으면 아직 목소리를

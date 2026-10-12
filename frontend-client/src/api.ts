@@ -16,6 +16,9 @@ export interface Snapshot {
   max_turn: number        // 0 = 제한 없음. 끝은 AI 의 close 판단이 정한다
   turns_left: number      // 제한이 없으면 -1
   question_ready: boolean
+  // 정리하는 중(PROCESSING)인데 말씀이 이어지면 받아 준다. 참이면 마이크를 닫지 않는다.
+  // 없으면 예전 서버다 — 거짓으로 읽는다.
+  resumable?: boolean
   t2_expired: boolean
   fragments: Fragment[]
   next_question: string | null

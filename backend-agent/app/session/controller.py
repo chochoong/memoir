@@ -15,6 +15,7 @@
 from __future__ import annotations
 
 import asyncio
+import copy
 import logging
 import time
 import uuid
@@ -219,6 +220,16 @@ class SessionController:
     _next_question: str | None = None
     _question_audio: bytes = b""
     _speaking: asyncio.Task | None = None
+    # 이어 듣기 (_resume). 넷 다 「지금 도는 확정」에 딸린 값이다.
+    #   _resumable  무음으로 확정된 턴인가. 「다 말했어요」로 확정한 턴은 물리지 않는다
+    #   _epoch      확정을 물릴 때마다 오른다. 물린 확정이 깨어나 제 일을 잇지 않게 한다
+    #   _turn_frag  이번 확정이 적은 조각. 물리면 다음 말씀을 여기에 잇는다 (_extend)
+    #   _undo       질문을 만들기 직전의 판단 기록. 안 나간 질문이 남긴 것을 되돌린다
+    _resumable: bool = False
+    _epoch: int = 0
+    _turn_frag: int | None = None
+    _extend: int | None = None
+    _undo: tuple | None = None
 
     def __post_init__(self) -> None:
         self.machine = Machine(max_turn=self.max_turn)
@@ -236,6 +247,9 @@ class SessionController:
             "max_turn": self.machine.max_turn,
             "turns_left": self.machine.turns_left,
             "question_ready": self.machine.question_ready,
+            # 참이면 화면이 마이크를 닫지 않는다 — 질문이 나가기 전에 말씀이 이어지면
+            # 그 소리를 올려 확정을 물린다 (_resume).
+            "resumable": self.machine.state is State.PROCESSING and self._resumable,
             "t2_expired": self.machine.t2_expired,
             "fragments": self.fragments,
             "next_question": self._next_question,
@@ -441,6 +455,7 @@ class SessionController:
         올 때마다 T1 을 리셋한다.
         """
         self.touch()
+        self._resume()
         self.machine.fire(Event.SPEECH_RECEIVED)
         self._buffer = (self._buffer + " " + text).strip()
         self._empty_streak = 0
@@ -459,6 +474,7 @@ class SessionController:
         둘이 어긋날 때 원인을 찾을 수 없다.
         """
         self.touch()
+        self._resume()
         self.machine.fire(Event.SPEECH_RECEIVED)
         self._empty_streak = 0
         if sum(len(c) for c in self._audio) + len(data) > MAX_AUDIO_BYTES:
@@ -505,6 +521,8 @@ class SessionController:
             # 질문이 아직 안 왔으면 t2_expired 만 서고 PROCESSING 에 머문다.
             # 그 뒤 질문이 도착하는 순간 넘어간다 — 건너뛴 것은 기다림이지
             # 질문이 아니다.
+            # 누르셨으면 다 말씀하신 것이다. 이 뒤의 소리로 확정을 물리지 않는다.
+            self._resumable = False
             self.timers.cancel_t2()
             await self._t2_fired()
             return self.snapshot()
@@ -512,6 +530,45 @@ class SessionController:
         self.timers.cancel_t1()
         await self._confirm(Event.DONE_BUTTON, skip_t2=True)
         return self.snapshot()
+
+    def _resume(self) -> None:
+        """
+        질문이 나가기 전에 말씀이 이어졌다. **확정을 물리고 같은 턴을 이어 듣는다.**
+
+        무음 3초(T1)는 「다 말씀하셨다」의 짐작이다. 다음 말을 고르느라 3초를 넘기신
+        것이면 짐작이 틀린 것인데, 예전에는 그 뒤 T2 동안 마이크가 닫혀 있어 이어
+        하신 말씀은 버려지고 질문이 그 위로 나갔다 — 말을 끊는 것으로 들린다.
+
+        PROCESSING 에서 소리가 오면 여기서 되돌린다.
+
+            T2 · 질문 생성 · 낭독 합성   전부 취소한다. 안 나간 질문은 없던 일이다
+            판단 기록                    질문을 만들며 바뀐 것을 되돌린다 (_undo)
+            턴                           소모하지 않는다 (machine RESUME)
+            이미 적은 조각               지우지 않는다. 다음 확정이 그 뒤에 잇는다 (_extend)
+
+        전사가 아직 안 끝났으면 적은 조각이 없다. 그때는 오디오 버퍼가 그대로라
+        앞뒤 말씀이 한 번에 전사된다. 도는 중이던 확정은 호출한 쪽의 reset_t1 이
+        태스크째로 끊고, 끊기지 않은 것은 _epoch 를 보고 스스로 물러난다.
+
+        「다 말했어요」로 확정한 턴과 낭독이 시작된 뒤(SPEAKING)는 물리지 않는다.
+        """
+        if self.machine.state is not State.PROCESSING or not self._resumable:
+            return
+        self.machine.fire(Event.RESUME)                # PROCESSING → LISTENING (턴 -1)
+        self._resumable = False
+        self._epoch += 1
+        self.timers.cancel_t2()
+        for task in (self._pending, self._speaking):
+            if task and not task.done():
+                task.cancel()
+        if self._undo:
+            self.state, self.last_decision, self.decided_idx, self._next_question = self._undo
+            self._undo = None
+        if self._turn_frag is not None:
+            self._extend = self._turn_frag
+        log.info("말씀이 이어졌다 — 확정을 물리고 턴 %d 를 이어 듣는다%s",
+                 self.machine.turn + 1,
+                 "" if self._extend is None else f" (조각 {self._extend} 에 잇는다)")
 
     async def abort(self) -> dict:
         """사용자 중단."""
@@ -649,6 +706,12 @@ class SessionController:
         # 적어 지연 숫자가 망가진다. fire 는 동기라 시각은 사실상 같다.
         self.marks = Marks(confirmed_at=time.perf_counter())
 
+        # 이어 듣기 (_resume). 이 확정이 물리면 epoch 가 달라진다.
+        epoch = self._epoch
+        self._resumable = not skip_t2
+        self._turn_frag = None
+        self._undo = None
+
         if skip_t2:
             self.machine.t2_expired = True             # 버튼은 T2 를 건너뛴다
         else:
@@ -660,25 +723,41 @@ class SessionController:
         # **기다리는 사이 회차가 닫혔을 수 있다.** 「다 말했어요」의 확정은 요청
         # 안에서 돌아서 release() 가 끊지 못한다. 전사한 말씀은 아래에서 저장하고,
         # 전이·질문 생성은 하지 않는다 — 닫힌 회차에 쓰는 LLM·TTS 비용은 아무도 듣지 않는다.
+        if epoch != self._epoch:
+            return                                     # 물린 확정이다. 버퍼는 그대로 둔다
         if not text and self._closed():
             return
-        if not text:                                   # FR-AD-312 턴 미소모
+
+        # 물린 확정이 이미 적어 둔 조각이 있으면 거기에 잇는다. 새 조각을 내면 한
+        # 말씀이 두 턴으로 쪼개지고, 그 사이에 나간 적 없는 질문이 끼어 보인다.
+        ext = self._extend
+        if ext is not None and not (self.fragments and self.fragments[-1]["idx"] == ext):
+            ext = None
+        if not text and ext is None:                   # FR-AD-312 턴 미소모
             self.timers.cancel_t2()
             self.machine.fire(Event.EMPTY_TRANSCRIPT)
             self._after_empty()
             return
 
-        self.fragments.append({
-            "idx": len(self.fragments),
-            "question": self._next_question,
-            "answer": text,
-        })
+        self._extend = None
+        if ext is None:
+            self.fragments.append({
+                "idx": len(self.fragments),
+                "question": self._next_question,
+                "answer": text,
+            })
+        elif text:
+            self.fragments[-1]["answer"] = f"{self.fragments[-1]['answer']} {text}"
+        # 이을 말이 비었으면(기침 · 잡음) 앞서 적은 말씀 그대로 질문으로 간다.
+        # 빈 전사로 돌리면 말씀은 적혀 있는데 질문이 영영 안 나온다.
+        self._turn_frag = self.fragments[-1]["idx"]
         self._buffer = ""
         self._audio.clear()
         # 지연 숫자를 기다리지 않고 바로 내린다. 어르신의 말을 잃지 않는 게 먼저다.
+        # 이은 조각도 같은 줄로 덮어쓴다 (save_turn 은 idx 로 upsert 한다).
         await store.save_turn(self, self.fragments[-1])
         self.marks.saved_at = time.perf_counter()
-        if self._closed():
+        if self._closed() or epoch != self._epoch:
             return
 
         cap = self.turn_cap()
@@ -699,6 +778,10 @@ class SessionController:
                 await self._finish("turn_cap")
             return
 
+        # 질문을 만들면 판단 기록이 바뀐다 (question.py 가 state 에 합친다). 그 질문이
+        # 나가기 전에 말씀이 이어지면 없던 일로 돌려야 한다.
+        self._undo = (copy.deepcopy(self.state), self.last_decision, self.decided_idx,
+                      self._next_question)
         self._pending = asyncio.create_task(self._make_question())
 
     def _closed(self) -> bool:
