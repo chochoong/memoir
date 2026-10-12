@@ -1,0 +1,134 @@
+{
+  "schema_version": "memoir-seed-v1.1",
+  "set_id": "A",
+  "user_id": "dev-user",
+  "sessions": [
+    {
+      "alias": "s-a",
+      "title": "[A] 첫 월급",
+      "recorded_order": 1,
+      "seed": {
+        "question": null,
+        "answer": ""
+      },
+      "turns": [
+        {
+          "idx": 1,
+          "question": "",
+          "answer": "1979년에 광주 인쇄소에서 첫 월급을 받았어요.",
+          "facts_found": [
+            "광주 인쇄소 첫 월급"
+          ],
+          "facts_retracted": []
+        },
+        {
+          "idx": 2,
+          "question": "",
+          "answer": "그 돈으로 어머니께 빨간 목도리를 사 드려 참 뿌듯했어요.",
+          "facts_found": [
+            "어머니께 빨간 목도리"
+          ],
+          "facts_retracted": []
+        }
+      ]
+    },
+    {
+      "alias": "s-b",
+      "title": "[A] 전주 나들이",
+      "recorded_order": 2,
+      "seed": {
+        "question": null,
+        "answer": ""
+      },
+      "turns": [
+        {
+          "idx": 1,
+          "question": "",
+          "answer": "1985년쯤 동생과 기차를 타고 전주로 놀러 갔어요.",
+          "facts_found": [
+            "동생과 전주 여행"
+          ],
+          "facts_retracted": []
+        },
+        {
+          "idx": 2,
+          "question": "",
+          "answer": "기차를 처음 탄 건 동생이에요. 저는 전에도 타 봤어요.",
+          "facts_found": [
+            "동생의 첫 기차"
+          ],
+          "facts_retracted": []
+        }
+      ]
+    },
+    {
+      "alias": "s-c",
+      "title": "[A] 딸 입학",
+      "recorded_order": 3,
+      "seed": {
+        "question": null,
+        "answer": ""
+      },
+      "turns": [
+        {
+          "idx": 1,
+          "question": "",
+          "answer": "1996년에 딸이 초등학교에 입학해서 제가 데려다줬어요.",
+          "facts_found": [
+            "딸 초등학교 입학"
+          ],
+          "facts_retracted": []
+        },
+        {
+          "idx": 2,
+          "question": "",
+          "answer": "노란 가방을 메고 교실에 들어가는 딸을 보니 마음이 뭉클했어요.",
+          "facts_found": [
+            "노란 가방"
+          ],
+          "facts_retracted": []
+        }
+      ]
+    },
+    {
+      "alias": "s-d",
+      "title": "[A] 도서관 봉사",
+      "recorded_order": 4,
+      "seed": {
+        "question": null,
+        "answer": ""
+      },
+      "turns": [
+        {
+          "idx": 1,
+          "question": "",
+          "answer": "2005년에는 동네 도서관에서 책 정리 봉사를 했어요.",
+          "facts_found": [
+            "동네 도서관 책 정리 봉사"
+          ],
+          "facts_retracted": []
+        }
+      ]
+    },
+    {
+      "alias": "s-e",
+      "title": "[A] 베란다 화분",
+      "recorded_order": 5,
+      "seed": {
+        "question": null,
+        "answer": ""
+      },
+      "turns": [
+        {
+          "idx": 1,
+          "question": "",
+          "answer": "2010년에 집 베란다에서 화분을 키우기 시작했어요.",
+          "facts_found": [
+            "베란다 화분 키우기 시작"
+          ],
+          "facts_retracted": []
+        }
+      ]
+    }
+  ]
+}

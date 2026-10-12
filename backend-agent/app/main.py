@@ -15,6 +15,7 @@
 from __future__ import annotations
 
 import asyncio
+import json
 import logging
 import os
 import re
@@ -30,7 +31,7 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
 from app.session import controller as sc
-from app.session import limits, photo, photostore, postcard, prompt, store, stt, tts
+from app.session import limits, memoir, photo, photostore, postcard, prompt, store, stt, tts
 from app.session.conf import env_flag, env_int, env_str
 from app.session.machine import TransitionError
 from app.session.question import gemini_question, warmup
@@ -700,6 +701,50 @@ def _postcard_url(session_id: str, rec: dict) -> str:
     묻지도 않고 옛 엽서를 보여 준다. 다시 구운 뒤에는 주소 자체가 달라야 한다.
     """
     return f"/api/sessions/{session_id}/postcard?v={postcard.version(rec['storage_key'])}"
+
+
+# ---------------------------------------------------------------- 자서전
+#
+# 엽서가 있는 회차 3~5개를 골라 초안 하나를 받는다. 저장하지 않는다 — 다시 보려면
+# 다시 만든다. 무엇을 하는지는 memoir.py 머리에 있다.
+
+# 화면이 그대로 보여 주는 말이다 (해요체). 안쪽 사정은 로그에만 남긴다.
+_MEMOIR_SAYS = {
+    400: "선택한 엽서를 확인해 주세요. 3~5장을 고를 수 있어요.",
+    404: "선택한 엽서를 찾을 수 없어요. 목록에서 다시 골라 주세요.",
+    422: "선택한 엽서의 이야기 자료를 불러오지 못했어요.",
+    502: "자서전을 만드는 중 문제가 생겼어요. 엽서 선택 화면으로 돌아가 주세요.",
+    504: "정해진 시간 안에 자서전을 받지 못했어요. 엽서 선택 화면으로 돌아가 주세요.",
+}
+_MEMOIR_STATUS = (
+    (memoir.BadSelection, 400), (memoir.NotFound, 404), (memoir.SourceUnavailable, 422),
+    (memoir.GenerationTimeout, 504), (memoir.GenerationFailed, 502),
+)
+
+
+@app.post("/api/memoirs/preview")
+async def memoir_preview(request: Request):
+    """
+    고른 회차로 자서전 초안을 쓴다. **기다리는 요청이다** — 다 쓰거나 실패해야 답이 간다.
+
+    본문은 `{"session_ids": [...]}` 뿐이다. 누구의 요청인지는 X-User-Id 로 받는다
+    (uid). 본문을 pydantic 으로 받지 않는 것은 모양이 틀렸을 때 FastAPI 가 422 를
+    내기 때문이다 — 여기서 422 는 「자료를 못 읽었다」는 다른 뜻이다.
+
+    자료 부족은 200 의 insufficient_material 이고 실패가 아니다. 실패는 상태 코드와
+    `{"detail": 안내}` 로만 나간다. 둘을 서로 바꿔 내보내지 않는다.
+    """
+    try:
+        body = json.loads(await _body_capped(request, 16 * 1024) or b"null")
+    except ValueError:
+        body = None
+    ids = body.get("session_ids") if isinstance(body, dict) else None
+    try:
+        return await memoir.preview(ids, uid(request))
+    except memoir.MemoirError as e:
+        code = next(c for kind, c in _MEMOIR_STATUS if isinstance(e, kind))
+        log.warning("자서전 %d %s — %s", code, type(e).__name__, str(e)[:200])
+        raise HTTPException(code, _MEMOIR_SAYS[code]) from e
 
 
 # ---------------------------------------------------------------- 보조
