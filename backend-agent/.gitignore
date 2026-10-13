@@ -6,3 +6,5 @@ web/
 tools/recordings/
 logs/
 stt_dump/
+backup/
+.env.supabase

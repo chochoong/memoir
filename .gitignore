@@ -2,12 +2,18 @@
 .env
 .env.*
 !.env.example
+!.env.supabase.example
 
 # Python
 __pycache__/
 *.py[cod]
 .venv/
 venv/
+
+# 자서전 시험 — 각자 DB 에서 나오는 파일. UUID 가 넣은 DB 에서만 통한다
+backend-agent/eval/*.ids.json
+backend-agent/eval/memoir_input_*.json
+backend-agent/eval/memoir_output_*.json
 
 # Node
 node_modules/
