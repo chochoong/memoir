@@ -54,7 +54,9 @@ MIN_SESSIONS, MAX_SESSIONS = 3, 5
 DEFAULT_TEXT_MODEL = "gemini-3.5-flash-lite"
 DEFAULT_TEMPERATURE = 0.3
 DEFAULT_MIME = "application/json"
-DEFAULT_MAX_OUTPUT_TOKENS = 2000
+# 지시서의 처음 값은 2000 이었다. 자서전.md v1.3 부터 글이 길어져(40문장이면 1700~1800
+# 토큰쯤) 올렸다. 걸리면 JSON 이 잘려 502 다. README 「재 본 것」.
+DEFAULT_MAX_OUTPUT_TOKENS = 3000
 DEFAULT_TEXT_TIMEOUT = 20.0
 
 KEYS = ("status", "title", "body", "sources", "to_confirm")
