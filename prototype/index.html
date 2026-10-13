@@ -144,7 +144,7 @@
       border: 3px solid var(--accent); border-radius: 0;
       opacity: 0; transition: opacity .35s;
     }
-    .app[data-state="LISTENING"] .edge { opacity: calc(.28 + var(--v) * .6); }
+    .app.hearing .edge { opacity: calc(.28 + var(--v) * .6); }
     @media (min-width: 520px) { .edge { border-radius: 30px; inset: 24px calc(50% - 215px) calc(94px + env(safe-area-inset-bottom)); } }
 
     /* 목소리 크기 막대 — 「지금 내 말이 들어가고 있다」를 눈으로 */
@@ -157,7 +157,12 @@
       background: linear-gradient(90deg, #e2a58c, var(--accent));
       width: calc(6% + var(--v) * 94%); transition: width .1s ease-out;
     }
-    .app[data-state="LISTENING"] .meter { opacity: 1; }
+    /* 막대 · 테 · 빛은 서버 상태가 아니라 「마이크가 지금 소리를 받는가」(.hearing)를 따른다.
+       이어 듣기가 열린 정리 중에도 마이크는 받는다 — 예전에는 그때 막대가 사라졌다.
+       마이크가 닫힌 정리 중(무음 3초 · 잡음 뒤 확정)에는 사라지는 대신 흐리게 남긴다.
+       통째로 꺼졌다 켜지면 어르신께는 녹음이 끊긴 것처럼 보였다. */
+    .app.hearing .meter { opacity: 1; }
+    .app[data-state="PROCESSING"]:not(.hearing) .meter { opacity: .35; }
     .meter-note { margin-top: 8px; font-size: .82rem; color: var(--muted); height: 1.2em; transition: color .2s; }
     .app.voiced .meter-note { color: var(--accent-dark); font-weight: 700; }
 
@@ -167,7 +172,7 @@
       background: radial-gradient(circle, rgba(217,111,78,.22) 0%, rgba(217,111,78,0) 65%);
       opacity: 0; transform: scale(.9); transition: opacity .4s, transform .25s;
     }
-    .app[data-state="LISTENING"] .halo { opacity: calc(.55 + var(--v) * .45); transform: scale(calc(1 + var(--v) * .12)); }
+    .app.hearing .halo { opacity: calc(.55 + var(--v) * .45); transform: scale(calc(1 + var(--v) * .12)); }
     /* 대기 중에는 캐릭터가 한 걸음 물러난다 */
     .app[data-state="SPEAKING"] .friend-wrap,
     .app[data-state="PROCESSING"] .friend-wrap { transform: scale(.94); }
@@ -633,7 +638,7 @@
   const CONFIG = {
     // 화면 아래와 개발용 패널에 그대로 찍힌다. 「고친 게 반영이 안 된 것 같다」는
     // 대부분 예전 파일이 열려 있는 경우라서, 눈으로 확인할 자리를 만들어 둔다.
-    version: 'v0.18 · 2026-10-13 (자서전 실제 서버 연결)',
+    version: 'v0.19 · 2026-10-13 (녹음 막대가 정리 중에 사라지지 않게)',
 
     // 이 화면을 백엔드가 직접 서빙하면(web/ 폴더) 빈 문자열 그대로 둔다.
     // 다른 포트에서 열어 시험할 때만 'http://127.0.0.1:8010' 처럼 채운다.
@@ -1768,6 +1773,7 @@
 
     // 화면 전체의 색·테·빛이 이 한 줄을 따라간다 (CSS 의 .app[data-state=…])
     $('#app').dataset.state = held ? 'HELD' : s.state;
+    $('#app').classList.toggle('hearing', !held && isHearing());
     $('#app').classList.toggle('paused', held);
     $('#friend').classList.toggle('resting', held || s.state === 'PROCESSING');
 
@@ -1895,6 +1901,7 @@
     stopPolling();
     stopVisualLoop();
     $('#app').dataset.state = 'CLOSED';    // 녹음 중 표시(붉은 테·막대)를 끈다
+    $('#app').classList.remove('hearing');
     speaker.stop();
     if (recorder) { recorder.stop(); recorder = null; $('#devMic').textContent = 'off'; }
 
@@ -2108,7 +2115,7 @@
     const friend = $('#friend'), app = $('#app'), note = $('#meterNote');
     let smooth = 0, wasVoiced = null;
     const loop = () => {
-      const on = isListening() && !held;
+      const on = isHearing() && !held;              // 마이크가 받는 동안 (이어 듣기 포함)
       const target = on ? Math.min(1, level * 5.5) : 0;
       smooth += (target - smooth) * 0.22;
       document.documentElement.style.setProperty('--v', smooth.toFixed(3));
@@ -2152,6 +2159,8 @@
     let i = 0;
     sessionId = null;
     snap = { state: 'LISTENING', turn: 0, max_turn: 0, fragments: [], next_question: qs[0], session_id: '' };
+    $('#app').dataset.state = 'LISTENING';
+    $('#app').classList.add('hearing');      // 비상 화면에서도 막대가 보이게
     show('talk');
     startVisualLoop();
     $('#listenState').textContent = '듣고 있어요';
