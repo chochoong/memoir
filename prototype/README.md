@@ -133,7 +133,7 @@ API 이름과 경로는 `frontend-client/src/api.ts` 와 같습니다. 녹음 �
 | `POST /api/sessions` 의 `photo_id` | 그 사진의 단서로 **여는 말**을 지음 |
 | `GET /record` · `POST/GET /postcard` | 엽서 받기 · 굽게 하기 · 그림 내려받기 |
 | `GET /api/sessions` · `GET /record` | 지난 이야기 목록 · 지난 엽서 다시 보기 |
-| `POST /api/memoirs/preview` | 자서전 초안 — **아직 서버에 없다.** 지금은 예시 응답 (아래 「자서전 만들기」) |
+| `POST /api/memoirs/preview` | 자서전 초안 (아래 「자서전 만들기」) |
 
 ## 지난 이야기 (보관함)
 
@@ -151,12 +151,36 @@ API 이름과 경로는 `frontend-client/src/api.ts` 와 같습니다. 녹음 �
 - 고를 엽서: `GET /api/sessions` 로 회차를 받고, 회차마다 `GET /postcard` 를 물어 엽서가 있는 것만
   (404 는 빼고, 그 밖의 실패는 「불러오지 못했다」). 썸네일은 그 엽서 그림이다.
 - 보내는 값: `POST /api/memoirs/preview` 에 `{"session_ids": [회차 UUID 3~5개]}`.
-- **서버 API 가 아직 없어서 기본이 예시 응답이다** (`memoir.mock: 'ready'`). 화면 위에
-  「예시 응답 모드」가 뜬다. 서버가 붙으면 `memoir.mock` 을 `''` 로 바꾼다.
-- 다른 상태 보기: 주소 뒤에 `?memoirMock=400` · `404` · `422` · `502` · `504` · `invalid` ·
-  `timeout` · `insufficient`. `?memoirMock=` (빈 값)은 실제 서버를 부른다.
+- **실제 서버를 부른다** (v0.18 부터, main `66acce1` 의 `backend-agent/app/session/memoir.py`).
+  기다리는 요청이라 몇 초 걸리고, 그동안 「자서전 초안을 쓰고 있어요」가 뜬다.
+- 실패 안내는 HTTP 상태로 고른다. 문구는 서버와 같다.
 
-자세한 규칙과 확인한 것은 NOTES.md 「v0.15」.
+  | 상태 | 화면 안내 |
+  |---|---|
+  | 400 | 선택한 엽서를 확인해 주세요. 3~5장을 고를 수 있어요. |
+  | 404 | 선택한 엽서를 찾을 수 없어요. 목록에서 다시 골라 주세요. |
+  | 422 | 선택한 엽서의 이야기 자료를 불러오지 못했어요. |
+  | 502 · 응답 없음 · 그 밖 | 자서전을 만드는 중 문제가 생겼어요. 엽서 선택 화면으로 돌아가 주세요. |
+  | 504 · 화면 쪽 60초 초과 | 정해진 시간 안에 자서전을 받지 못했어요. 엽서 선택 화면으로 돌아가 주세요. |
+
+- **서버 없이 화면만 볼 때**는 주소 뒤에 `?memoirMock=ready` 를 붙인다 (`400` · `404` · `422` ·
+  `502` · `504` · `invalid` · `timeout` · `insufficient` 도 된다). 이때는 화면 위에 「예시 응답
+  모드」가 뜬다. 늘 예시로 돌리려면 `CONFIG.memoir.mock` 에 그 값을 넣는다.
+
+**시험 회차 넣기** — 엽서가 있는 회차가 3개 이상 있어야 고를 수 있다. 합성 자료를 넣는
+도구가 백엔드에 있다 (`backend-agent/README.md` 「자서전 초안 · 시험 회차 넣기」). 서버를 켠 채로
+`backend-agent` 에서:
+
+```powershell
+python tools/seed_sessions.py --input eval/memoir_seed_A.json --manifest eval/memoir_seed_A.ids.json --api-base http://127.0.0.1:8010 --bake-postcards
+```
+
+A 세트는 `[A]` 로 시작하는 회차 5개다. **A 와 B 를 섞어 고르지 않는다** — 다른 인물의 자료다.
+엽서를 구울 때 모델을 부르므로 Gemini 키가 필요하다. **이 PC 의 DB 에만 넣는다.**
+
+서버 쪽 실패를 일부러 내 보려면 서버를 `MEMOIR_FAIL_INJECT` 를 걸고 띄운다
+(`source_material_unavailable` → 422 · `generation_timeout` → 504 · `generation_failed` → 502).
+**끝나면 풀고 다시 띄운다.**
 
 ## 사진을 보고 먼저 물어보기 (연결됨)
 
@@ -201,7 +225,7 @@ API 이름과 경로는 `frontend-client/src/api.ts` 와 같습니다. 녹음 �
 | `ui.showDoneButton` | `false` | `true` 면 「다 말했어요」를 화면에 내보냅니다 |
 | `ui.filenameAscii` | `true` | `false` 면 내려받는 파일 이름에 한글 제목을 씁니다 |
 | `archive.timeoutMs` | `15000` | 지난 이야기 목록을 기다리는 상한(ms) |
-| `memoir.mock` | `'ready'` | 자서전 예시 응답. 서버 API 가 생기면 `''` 로 바꿉니다 |
+| `memoir.mock` | `''` | `''` 면 실제 서버. 서버 없이 볼 때만 `'ready'` 등 예시 응답을 넣습니다 |
 | `memoir.listLimit` | `20` | 고를 엽서를 찾을 회차 수 (서버 상한 100) |
 
 ## 알아둘 것
