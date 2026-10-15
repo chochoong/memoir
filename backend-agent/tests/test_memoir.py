@@ -235,6 +235,12 @@ def test_merge():
           "광주 인쇄소" in text and "광주 인쇄소" not in memoir._prompt())
     check("시스템 지시는 자서전.md 그대로다",
           memoir._prompt() == memoir.PROMPT.read_text(encoding="utf-8").strip())
+    # 분량은 자서전.md 만 정한다. 자료 메시지에 남으면 프롬프트를 고쳐도 옛 기준이 같이 간다.
+    head = text.split("\n\n", 1)[0]
+    check("자료 메시지에 분량 지시가 없다",
+          not any(w in head for w in ("3~8", "문장을 기준", "회차 하나에")), head[-80:])
+    check("자료 메시지에 턴 설명과 소제목 금지는 남아 있다",
+          "utterances.turn" in head and "소제목" in head)
 
 
 # ---------------------------------------------------------------- 고르기 · 응답 검사
