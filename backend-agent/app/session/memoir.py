@@ -222,8 +222,9 @@ def _input(data: dict) -> str:
     """
     자료 메시지. 원문은 시스템 지시에 박지 않고 여기에만 싣는다.
 
-    자서전.md 는 회차 하나를 받던 때의 글이라 sessions · session_id 를 모른다.
-    여러 회차 규격(C1)과 회차별 분량은 여기서 알려 준다.
+    자서전.md(v1.3~)가 여러 회차 입력(sessions · session_id · 전역 턴)과 분량 기준을
+    직접 담는다. 여기서는 이 입력이 어떤 모양인지만 짧게 알리고 **분량은 말하지
+    않는다** — 두 곳에서 말하면 프롬프트를 고쳐도 옛 기준이 되살아난다.
     """
     return (
         "[자료]\n"
@@ -235,8 +236,7 @@ def _input(data: dict) -> str:
         "회차다. elder 가 사용자 원문, asked 는 AI 질문이다.\n"
         "shared_state.facts_found 의 turn 과 출력 sources · to_confirm 의 turns 는 모두 이 "
         "utterances.turn 번호다. 없는 번호를 만들지 않는다.\n"
-        "분량은 회차 하나에 3~8문장을 기준으로 하되 근거가 적으면 짧게 쓴다. 소제목을 "
-        "달지 않는다.\n\n"
+        "소제목을 달지 않는다.\n\n"
         + json.dumps(data, ensure_ascii=False, indent=1)
     )
 
