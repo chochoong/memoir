@@ -560,6 +560,41 @@ def test_checked():
     check("지침 블록의 울타리(~~~)는 싣지 않는다", "~~~" not in p)
 
 
+def test_list():
+    """목록은 has_postcard 를 싣고, ?has_postcard=1 이면 엽서 있는 회차만 준다."""
+    print("\n[8] 목록에서 엽서 있는 회차 거르기")
+    from fastapi.testclient import TestClient
+
+    from app.main import app
+
+    rows = [{"session_id": "a", "has_postcard": True}, {"session_id": "b", "has_postcard": False}]
+    got: list[tuple] = []
+    real = store.list_sessions
+
+    async def fake_list(user_id, limit=20, has_postcard=False):
+        got.append((user_id, limit, has_postcard))
+        return [r for r in rows if r["has_postcard"]] if has_postcard else rows
+
+    store.list_sessions = fake_list
+    try:
+        with _Env(AZURE_SPEECH_KEY=""), NoDb(), TestClient(app) as c:
+            kim = {"X-User-Id": "kim"}
+            r = c.get("/api/sessions", headers=kim)
+            check("옵션이 없으면 예전처럼 전부 · 회차마다 has_postcard",
+                  r.status_code == 200 and r.json()["sessions"] == rows and got[-1] == ("kim", 20, False),
+                  f"{r.status_code} {got[-1:]}")
+            r = c.get("/api/sessions?has_postcard=1&limit=50", headers=kim)
+            check("has_postcard=1 이면 엽서 있는 회차만",
+                  r.status_code == 200 and [s["session_id"] for s in r.json()["sessions"]] == ["a"]
+                  and got[-1] == ("kim", 50, True), f"{r.status_code} {got[-1:]}")
+    finally:
+        store.list_sessions = real
+
+    sql = Path(store.__file__).read_text(encoding="utf-8")
+    check("거르는 것은 DB 다 — limit 안에서 거르면 다시 밀린다",
+          "AND p.session_id IS NOT NULL" in sql)
+
+
 def test_all_checks_passed():
     """pytest 안전판 — test_flow.py 의 같은 함수 주석 참조."""
     assert not FAIL, "실패: " + ", ".join(FAIL)
@@ -574,6 +609,7 @@ def main() -> int:
     test_material()
     test_checked()
     test_closing()
+    test_list()
     print(f"\n{'=' * 52}\n통과 {len(PASS)} · 실패 {len(FAIL)}")
     if FAIL:
         print("실패:", ", ".join(FAIL))

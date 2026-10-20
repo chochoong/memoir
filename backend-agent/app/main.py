@@ -494,15 +494,18 @@ async def latency(session_id: str):
 
 
 @app.get("/api/sessions")
-async def list_sessions(limit: int = 20, x_user_id: str = Header(default="dev-user")):
+async def list_sessions(limit: int = 20, has_postcard: bool = False,
+                        x_user_id: str = Header(default="dev-user")):
     """
-    지난 회차 목록. 최근 순.
+    지난 회차 목록. 최근 순. 회차마다 has_postcard 를 싣는다.
+
+    `?has_postcard=1` 이면 엽서가 있는 회차만 준다 — 자서전에 고를 회차다.
 
     DB 를 못 읽으면 **빈 목록이 아니라 503 이다.** 빈 목록을 주면 화면에
     「기록이 없습니다」가 뜨고, 그건 어르신에게 조각이 사라졌다는 말이 된다.
     없는 것과 못 읽은 것은 다른 사건이라 화면도 다르게 말해야 한다.
     """
-    return {"sessions": await _read(store.list_sessions(x_user_id, _limit(limit)))}
+    return {"sessions": await _read(store.list_sessions(x_user_id, _limit(limit), has_postcard))}
 
 
 @app.get("/api/sessions/{session_id}/record")

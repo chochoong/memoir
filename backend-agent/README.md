@@ -692,7 +692,7 @@ ERROR 로 남겨 나중에 셀 수 있게 한다.
 |---|---|---|
 | `GET /api/sessions/{id}` | 메모리의 SessionController | **사라진다** (404) |
 | `GET /api/sessions/{id}/record` | DB | 남는다 |
-| `GET /api/sessions?limit=` | DB. 최근 순 목록 | 남는다 |
+| `GET /api/sessions?limit=&has_postcard=` | DB. 최근 순 목록 · 회차마다 `has_postcard`. `has_postcard=1` 이면 엽서 있는 회차만 | 남는다 |
 
 **일부러 합치지 않았다.** 재시작 뒤에 조각을 *보는* 것과 회차를 *이어서 하는* 것은
 전혀 다른 일이다. 이어 하려면 상태 머신과 타이머까지 되살려야 하는데, 서버가 내려간
@@ -856,8 +856,8 @@ Remove-Item Env:MEMOIR_FAIL_INJECT; .\run.ps1                 # 풀고 다시 �
 **요금제 티어 확인.** 위 「429 를 실제로 만났다」 참조. 실사용 전에 본다.
 
 **자서전 — 화면 연결.** 서버(`POST /api/memoirs/preview`)까지 됐다. 위 「자서전 초안」 참조.
-화면에서 엽서를 골라 읽는 것, 회차 목록에 엽서가 있는지 싣는 것(지금 `GET /api/sessions`
-에는 없다)이 남았다. 같은 인물의 긴 회차로 시간 · 분량을 다시 재는 것도 남았다.
+화면에서 엽서를 골라 읽는 것이 남았다. 회차 목록에는 엽서가 있는지 싣는다
+(`has_postcard`, `?has_postcard=1` 로 거르기). 같은 인물의 긴 회차로 시간 · 분량을 다시 재는 것도 남았다.
 
 ---
 
