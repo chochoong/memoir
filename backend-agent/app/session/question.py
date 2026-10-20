@@ -194,28 +194,54 @@ def _heard(answer: str) -> str:
     return _TRAILING_Q.sub("", answer.rstrip()) or answer
 
 
+THEMES = {"family": "가족", "self": "나", "hobby": "취미"}
+
+
+def _start_material(ctl: "SessionController") -> str:
+    """
+    가족이 정한 질문 방향 (C1 시작 자료). 없으면 빈 문자열이다.
+
+    **대화 기록과 따로 싣는다.** 예전에는 씨앗(0번 조각)을 「어르신:」 으로 대화
+    맨 앞에 얹었다. 가족이 적은 글이 어르신의 말씀 행세를 했고, 모델은 그것을
+    확인된 경험으로 읽었다. 여기는 매 턴 통째로 실리므로 대화 창이 잘려도
+    주제가 남는다.
+
+    받지 않은 것은 적지 않는다 — 테마가 없으면 테마 줄이 없다. 「모름」이라고
+    적으면 모델이 그 자리를 추측으로 채우려 든다.
+    """
+    lines = []
+    theme = THEMES.get(getattr(ctl, "theme", None) or "")
+    topic = (getattr(ctl, "topic", "") or "").strip()
+    note = shared_state.seed(ctl)
+    if theme:
+        lines.append(f"테마: {theme}")
+    if topic:
+        lines.append(f"주제: {topic}")
+    if note and note != topic:
+        lines.append(f"가족이 적은 설명: {note}")
+    if not lines:
+        return ""
+    return ("[시작 자료 — 가족이 정한 질문 방향입니다. 사용자의 말이 아닙니다]\n"
+            + "\n".join(lines))
+
+
 def _transcript(ctl: "SessionController") -> str:
     """
-    지금까지의 조각을 프롬프트에 넣을 형태로. 0번은 씨앗이라 질문이 없다.
+    지금까지의 조각을 프롬프트에 넣을 형태로.
 
-    빈 answer 는 넣지 않는다. 씨앗을 비워 두고 회차를 열면 (프론트 기본값이
-    비어 있다) 0번 조각의 answer 가 빈 문자열인데, 그대로 넣으면 프롬프트 맨
-    위에 내용 없는 「어르신:」 한 줄이 얹힌다. 1번부터는 빈 전사가 턴을 소모하지
-    않으므로 (controller._confirm) answer 가 비는 일이 없다.
+    **0번 조각(씨앗)은 넣지 않는다.** 가족이 적은 글이라 어르신의 말씀이 아니다 —
+    _start_material 이 따로 싣는다. 빈 전사는 턴을 소모하지 않으므로
+    (controller._confirm) 1번부터는 answer 가 비는 일이 없다.
 
-    **최근 WINDOW 턴만 넣는다** (위 DEFAULT_WINDOW 참조). 씨앗은 회차의 주제라
-    창 밖으로 밀려나도 맨 앞에 남긴다. 잘린 자리는 말없이 넘기지 않고 한 줄로
-    알린다 — 모델이 「앞에 더 있었다」를 알아야 없는 맥락을 지어내지 않는다.
+    **최근 WINDOW 턴만 넣는다** (위 DEFAULT_WINDOW 참조). 잘린 자리는 말없이
+    넘기지 않고 한 줄로 알린다 — 모델이 「앞에 더 있었다」를 알아야 없는 맥락을
+    지어내지 않는다.
     """
-    frs = ctl.fragments
+    rest = ctl.fragments[1:]
     window = _window()
-    head, rest = frs[:1], frs[1:]
     cut = len(rest) - window if window and len(rest) > window else 0
 
     out = []
-    for f in head:
-        if f["answer"]:
-            out.append(f"어르신: {_heard(f['answer'])}")
     if cut:
         out.append(f"(앞의 {cut}턴은 줄였습니다)")
     for f in rest[cut:]:
@@ -268,9 +294,11 @@ async def gemini_question(ctl: "SessionController") -> str | None:
         automatic_function_calling=types.AutomaticFunctionCallingConfig(disable=True),
     )
 
-    # 공유 상태를 문서가 정한 자리에 얹고 그 아래 대화를 붙인다.
+    # 공유 상태를 문서가 정한 자리에 얹고, 시작 자료를 따로 둔 뒤 대화를 붙인다.
+    material = _start_material(ctl)
     contents = (f"{promptlib.load().render_state(shared_state.for_interview(ctl))}\n\n"
-                f"[지금까지의 대화]\n{_transcript(ctl)}")
+                + (f"{material}\n\n" if material else "")
+                + f"[지금까지의 대화]\n{_transcript(ctl)}")
 
     try:
         res = await asyncio.wait_for(
@@ -291,6 +319,16 @@ async def gemini_question(ctl: "SessionController") -> str | None:
 
     status = str(data.get("topic_status") or "active").strip().lower()
     mode = str(data.get("conversation_mode") or "normal").strip().lower()
+
+    # **감각은 기록에 「없음」으로 맞춘다** (인터뷰_v2.md — 새 응답은 항상 없음).
+    # 모델이 감각을 적어 왔으면 오감 질문을 했다는 뜻이라 숨기지 않고 남긴다 —
+    # 로그와 turn.decision 의 sense_used_raw. 상태에는 들이지 않는다: 들이면
+    # last_sense_used 가 다시 차서 다음 턴 입력에 실린다.
+    raw_sense = str(data.get("sense_used") or "").strip()
+    if raw_sense and raw_sense != shared_state.NO_SENSE:
+        log.warning("오감 금지 위반 — sense_used=%r · 질문 %r",
+                    raw_sense, data.get("question"))
+    data = {**data, "sense_used": shared_state.NO_SENSE}
 
     # §1 이 새로 정한 두 필드. **아는 사유만 받는다** — 모델이 제 말로 지어낸
     # 사유를 그대로 session.closed_reason 에 적으면 나중에 회차 목록을 사유로
@@ -319,7 +357,12 @@ async def gemini_question(ctl: "SessionController") -> str | None:
     # 턴이 모자라다고 또 여쭙는 것은 문서 §0 의 우선순위 1번(「힘든 기억에 대한
     # 중단 규칙」)을 정면으로 어기는 일이다. 하한은 모델의 성급함을 막는 장치지
     # 어르신의 뜻을 막는 장치가 아니다.
+    #
+    # **user_request 도 같다.** 「그만할래요」를 하한이 막으면 회차가 안 끝날 뿐
+    # 아니라 고정 질문이 대신 나간다. 하한이 막을 것은 모델이 스스로 고른
+    # 마무리(info_complete · 사유 없음)뿐이다.
     overruled = (status == "closed" and mode != "sensitive"
+                 and reason != "user_request"
                  and ctl.machine.turn < _min_turn())
     effective = "active" if overruled else status
 
@@ -348,6 +391,8 @@ async def gemini_question(ctl: "SessionController") -> str | None:
         "end_reason": reason or None,
         "closing_hint": hint or None,
     }
+    if raw_sense and raw_sense != shared_state.NO_SENSE:
+        ctl.last_decision["sense_used_raw"] = raw_sense
     if overruled:
         ctl.last_decision["overruled"] = "closed"
 

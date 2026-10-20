@@ -22,13 +22,14 @@ import re
 import sys
 from contextlib import asynccontextmanager
 from pathlib import Path
+from typing import Literal
 
 from dotenv import load_dotenv
 from fastapi import FastAPI, Header, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, Response
 from fastapi.staticfiles import StaticFiles
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from app.session import controller as sc
 from app.session import limits, memoir, photo, photostore, postcard, prompt, store, stt, tts
@@ -235,7 +236,13 @@ async def mirror_uid(request: Request, call_next):
 
 class StartReq(BaseModel):
     title: str
-    seed: str
+    # 가족이 적은 설명. **어르신의 말씀이 아니다** — 0번 조각에 남지만 대화 기록에
+    # 「어르신:」으로 실리지 않고 [시작 자료]로 따로 간다 (question._start_material).
+    seed: str = ""
+    # 시작 자료 (C1). 가족이 고른 테마와 구체 주제 하나. 둘 다 없어도 연다 —
+    # 지금 화면은 seed 만 보낸다. 모르는 테마·너무 긴 주제는 422 로 돌려보낸다.
+    theme: Literal["family", "self", "hobby"] | None = None
+    topic: str = Field("", max_length=100)
     pace: str = "normal"          # fast(3초) / normal(5초) / slow(7초)
     # 0 = 제한 없음. 대화가 어디서 끝날지는 AI 의 close 판단이 정한다.
     # 양을 미리 묶고 싶은 쪽(시험 도구 등)이 값을 준다.
@@ -340,8 +347,8 @@ async def create_session(req: StartReq, request: Request,
 
     ctl = sc.put(sc.SessionController(
         user_id=x_user_id, title=req.title, pace=req.pace, max_turn=req.max_turn,
-        photo_id=req.photo_id, question_fn=gemini_question,
-        closed_fn=postcard.auto))
+        photo_id=req.photo_id, theme=req.theme, topic=req.topic.strip(),
+        question_fn=gemini_question, closed_fn=postcard.auto))
     await ctl.start(req.seed)
     return ctl.snapshot()
 
