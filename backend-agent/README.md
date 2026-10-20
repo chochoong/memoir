@@ -33,8 +33,9 @@ app/
     photo.py              사진 검증 · 변환 (HEIC→JPEG · EXIF · 1024px)
     photostore.py         사진 바이트 저장 심 — pg / local (나중에 blob)
     photo_analyze.py      사진 분석 (Gemini VLM) → 단서 JSON
-    postcard.py           엽서 — 카드 작성 (CardAgent v3) · 출처 검사 · Pillow 굽기
+    postcard.py           엽서 — 카드 작성 (엽서.md v2.0) · 출처 검사 · Pillow 굽기. 닫혀도 자동으로 굽지 않는다
     memoir.py             자서전 초안 — 회차 합치기 (전역 턴) · 한 번 쓰기 · 구조 검사 (실험)
+    roledoc.py            엽서.md · 자서전.md 에서 실행할 절(§2 · §5 · 역할 · §7-4 · §8-2)만 잇는다
     store.py              저장 (asyncpg). DB 가 없어도 회차는 돈다
     migrate.py            마이그레이션 적용 · 체크섬 · advisory lock
     conf.py               환경변수 읽기 (틀린 값을 조용히 0 으로 만들지 않는다)
@@ -728,8 +729,8 @@ X-User-Id: dev-user
 ```
 
 다 쓰거나 실패할 때까지 **기다리는 요청**이다. 모델은 한 번만 부르고 다시 쓰게 하지
-않는다. 응답은 `자서전.md` 의 다섯 열쇠 그대로다 — `status` · `title` · `body` ·
-`sources` · `to_confirm`. `body` 는 한 줄에 문장 하나, `sources[].turns` 는 **이 요청
+않는다. 모델은 `자서전.md` §8-2 의 일곱 열쇠로 답하고, 응답은 그중 다섯이다 — `status` ·
+`title` · `body` · `sources` · `to_confirm`. `missing_context` · `coverage_notes` 는 로그에만 남는다. `body` 는 한 줄에 문장 하나, `sources[].turns` 는 **이 요청
 안에서 1부터 다시 매긴 턴 번호**다 (회차마다 턴이 1부터라 그대로는 겹친다).
 
 | 상태 | 뜻 | 화면에 가는 말 (`detail`) |
@@ -739,6 +740,7 @@ X-User-Id: dev-user
 | 400 | 개수(3~5) · 중복 · UUID 아님 | 선택한 엽서를 확인해 주세요. 3~5장을 고를 수 있어요. |
 | 404 | 없는 회차 · 남의 회차 · 엽서 없는 회차 | 선택한 엽서를 찾을 수 없어요. 목록에서 다시 골라 주세요. |
 | 422 | 고른 회차의 원자료를 못 읽었다 | 선택한 엽서의 이야기 자료를 불러오지 못했어요. |
+| 503 | 모델이 `needs_confirmation` · `needs_context` 로 답함. 초안을 내보내지 않고 다시 묻지도 않는다 | 지금은 자서전을 만들 수 없어요. 엽서 선택 화면으로 돌아가 주세요. |
 | 502 | 모델 호출 실패 · 낸 구조가 어긋남 | 자서전을 만드는 중 문제가 생겼어요. 엽서 선택 화면으로 돌아가 주세요. |
 | 504 | 모델이 제시간에 답하지 않음 | 정해진 시간 안에 자서전을 받지 못했어요. 엽서 선택 화면으로 돌아가 주세요. |
 

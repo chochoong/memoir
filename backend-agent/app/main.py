@@ -348,7 +348,7 @@ async def create_session(req: StartReq, request: Request,
     ctl = sc.put(sc.SessionController(
         user_id=x_user_id, title=req.title, pace=req.pace, max_turn=req.max_turn,
         photo_id=req.photo_id, theme=req.theme, topic=req.topic.strip(),
-        question_fn=gemini_question, closed_fn=postcard.auto))
+        question_fn=gemini_question, closed_fn=postcard.on_closed))
     await ctl.start(req.seed)
     return ctl.snapshot()
 
@@ -721,11 +721,12 @@ _MEMOIR_SAYS = {
     404: "선택한 엽서를 찾을 수 없어요. 목록에서 다시 골라 주세요.",
     422: "선택한 엽서의 이야기 자료를 불러오지 못했어요.",
     502: "자서전을 만드는 중 문제가 생겼어요. 엽서 선택 화면으로 돌아가 주세요.",
+    503: "지금은 자서전을 만들 수 없어요. 엽서 선택 화면으로 돌아가 주세요.",
     504: "정해진 시간 안에 자서전을 받지 못했어요. 엽서 선택 화면으로 돌아가 주세요.",
 }
 _MEMOIR_STATUS = (
     (memoir.BadSelection, 400), (memoir.NotFound, 404), (memoir.SourceUnavailable, 422),
-    (memoir.GenerationTimeout, 504), (memoir.GenerationFailed, 502),
+    (memoir.GenerationTimeout, 504), (memoir.GenerationFailed, 502), (memoir.NotFinal, 503),
 )
 
 

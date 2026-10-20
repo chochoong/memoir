@@ -7,7 +7,8 @@
     합치기    merge             전역 턴 · turn_map
     쓰기      write             자서전.md + 자료                  → GenerationFailed (502)
                                                                    GenerationTimeout (504)
-    검사      check             5개 키 · 본문 줄마다 출처 하나    → GenerationFailed (502)
+    검사      check             7개 키 · 본문 줄마다 출처 하나    → GenerationFailed (502)
+                                확인 필요 · 자료 누락              → NotFinal (503)
 
 **저장하지 않는다.** 초안은 응답으로만 나간다. 자서전 표도, 작업 ID 도 없다.
 
@@ -40,7 +41,7 @@ import uuid
 from functools import lru_cache
 from pathlib import Path
 
-from . import postcard, store
+from . import postcard, roledoc, store
 from .conf import env_float, env_int, env_str
 from .question import _client
 
@@ -59,8 +60,12 @@ DEFAULT_MIME = "application/json"
 DEFAULT_MAX_OUTPUT_TOKENS = 3000
 DEFAULT_TEXT_TIMEOUT = 20.0
 
-KEYS = ("status", "title", "body", "sources", "to_confirm")
+# 자서전.md §8-2 — 작성 공통 7키. 화면에는 앞의 다섯 개만 나간다 (preview).
+KEYS = ("status", "title", "body", "sources", "to_confirm",
+        "missing_context", "coverage_notes")
+SHOWN = KEYS[:5]
 READY, INSUFFICIENT = "ready", "insufficient_material"
+NOT_FINAL = ("needs_confirmation", "needs_context")
 
 # MEMOIR_FAIL_INJECT — 시험 서버에서만 켠다. 요청으로는 고를 수 없다.
 INJECT_SOURCE = "source_material_unavailable"
@@ -91,6 +96,20 @@ class GenerationFailed(MemoirError):
 
 class GenerationTimeout(MemoirError):
     """모델이 제시간에 답하지 않았다. 504."""
+
+
+class NotFinal(MemoirError):
+    """
+    모델이 needs_confirmation · needs_context 로 답했다. 503 — 초안을 내보내지 않는다.
+
+    화면에는 같은 503 이지만 status 와 사유(to_confirm · missing_context)는 여기
+    남는다. needs_confirmation 이어도 다시 묻지 않는다.
+    """
+
+    def __init__(self, status: str, reasons: list):
+        super().__init__(f"{status} — {json.dumps(reasons, ensure_ascii=False)[:200]}")
+        self.status = status
+        self.reasons = reasons
 
 
 def inject() -> str:
@@ -211,11 +230,11 @@ def merge(records: list[dict]) -> tuple[dict, list[dict]]:
 
 @lru_cache(maxsize=1)
 def _prompt() -> str:
-    """자서전.md 를 통째로 시스템 지시로 쓴다. 고치지 않는다."""
+    """자서전.md 에서 실행할 절만 잇는다 (roledoc). 자서전 역할 절은 §5-2."""
     try:
-        return PROMPT.read_text(encoding="utf-8").strip()
-    except OSError as e:
-        raise GenerationFailed(f"자서전 프롬프트를 읽지 못했다: {PROMPT.name}") from e
+        return roledoc.assemble(PROMPT.read_text(encoding="utf-8"), "5-2")
+    except (OSError, ValueError) as e:
+        raise GenerationFailed(f"자서전 프롬프트를 읽지 못했다: {PROMPT.name} ({e})") from e
 
 
 def _input(data: dict) -> str:
@@ -236,7 +255,11 @@ def _input(data: dict) -> str:
         "회차다. elder 가 사용자 원문, asked 는 AI 질문이다.\n"
         "shared_state.facts_found 의 turn 과 출력 sources · to_confirm 의 turns 는 모두 이 "
         "utterances.turn 번호다. 없는 번호를 만들지 않는다.\n"
-        "소제목을 달지 않는다.\n\n"
+        "소제목을 달지 않는다.\n"
+        "전달된 회차가 쓸 수 있는 기록 전부다. 다른 회차나 추가 기록을 요구하지 않는다.\n"
+        "승인 버전 값은 전달하지 않는다 — 버전을 비교하지 않는다. 원문이 빠졌거나 서로 "
+        "어긋날 때만 needs_context 다.\n"
+        "length_config 는 없다 — 문서의 기본 분량을 쓴다.\n\n"
         + json.dumps(data, ensure_ascii=False, indent=1)
     )
 
@@ -331,6 +354,9 @@ def check(out, turns: set[int]) -> dict:
         raise bad(f"title({type(title).__name__}) · body({type(body).__name__}) 가 문자열이 아니다")
     if not isinstance(sources, list) or not isinstance(to_confirm, list):
         raise bad("sources · to_confirm 이 목록이 아니다")
+    for k in ("missing_context", "coverage_notes"):
+        if not isinstance(out[k], list) or not all(isinstance(x, str) for x in out[k]):
+            raise bad(f"{k} 가 문자열 목록이 아니다")
 
     for c in to_confirm:
         if (not isinstance(c, dict) or not isinstance(c.get("issue"), str)
@@ -363,6 +389,9 @@ def check(out, turns: set[int]) -> dict:
             seen.append(i)
         if sorted(seen) != list(range(len(lines))):
             raise bad(f"본문 {len(lines)}줄에 출처 번호 {sorted(seen)}")
+    elif status in NOT_FINAL:
+        raise NotFinal(status, out["to_confirm" if status == "needs_confirmation"
+                                   else "missing_context"])
     else:
         raise bad(f"status={status!r}")
 
@@ -374,8 +403,9 @@ def check(out, turns: set[int]) -> dict:
 
 async def preview(session_ids, user_id: str) -> dict:
     """
-    고른 회차로 초안 하나. 돌려주는 것은 5개 키뿐이다 — turn_map 은 이 요청 안에서
-    출처를 따져 보는 데만 쓰고 화면에 내보내지 않는다.
+    고른 회차로 초안 하나. 돌려주는 것은 5개 키뿐이다 (SHOWN) — turn_map 은 이 요청
+    안에서 출처를 따져 보는 데만 쓰고 화면에 내보내지 않는다. missing_context ·
+    coverage_notes 는 로그에만 남긴다.
 
     로그에는 회차 ID 와 개수만 남긴다. 원문은 남기지 않는다.
     """
@@ -387,7 +417,7 @@ async def preview(session_ids, user_id: str) -> dict:
              len(ids), ",".join(s[:8] for s in ids), len(turns),
              env_str("MEMOIR_TEXT_MODEL", DEFAULT_TEXT_MODEL))
     out = check(await write(data), turns)
-    log.info("자서전 응답 — %s · 본문 %d줄 · 확인 %d건",
+    log.info("자서전 응답 — %s · 본문 %d줄 · 확인 %d건 · 범위 메모 %s",
              out["status"], len(out["body"].split("\n")) if out["body"] else 0,
-             len(out["to_confirm"]))
-    return out
+             len(out["to_confirm"]), out["coverage_notes"])
+    return {k: out[k] for k in SHOWN}

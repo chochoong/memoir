@@ -8,7 +8,9 @@
 
     [1] 사진은 자르지 않고, 글은 글꼴로 얹는다
     [5] 자료는 DB 기록에서 다시 세운다  사실은 그 말씀의 턴에 붙는다
+    [4] 닫혀도 굽지 않는다              수정 반영 · 무수정 확인 뒤 「엽서 만들기」로만
     [6] 틀린 출처는 버리고 문장은 둔다  v3 「본문 출처」 · 로그만 남긴다
+    [6] 굽는 것은 ready 뿐이다          엽서.md §8-2 의 상태값
     [7] 마지막 말씀의 판단도 남긴다    턴 행이 없어 회차 행에 둔다
     [3] 다시 구우면 옛 바이트를 지운다  회차당 한 장이 저장소에서도 한 장이다
     [3] 행을 못 넣으면 바이트를 되돌린다 photo.save 와 같은 규칙이다
@@ -310,8 +312,8 @@ def test_routes():
 
 
 def test_auto():
-    """회차가 닫히면 엽서를 굽는다. 떠난 회차 · 힘든 기억은 굽지 않는다."""
-    print("\n[4] 닫히면 자동으로 굽는다")
+    """회차가 닫히면 closed_fn 이 불린다. 서버의 closed_fn(on_closed)은 엽서를 굽지 않는다."""
+    print("\n[4] 닫혀도 굽지 않는다")
     from app.session.controller import SessionController
 
     async def run():
@@ -364,29 +366,19 @@ def test_auto():
 
     async def fake_make(sid, uid):
         made.append(sid)
-        if sid == "boom":
-            raise RuntimeError("터졌다")
-        if sid == "down":
-            raise store.StoreUnavailable("DB 없음")
         return {}
 
     postcard.make = fake_make
     try:
-        for reason in ("expired", "sensitive"):
-            asyncio.run(postcard.auto("skip-" + reason, "u", reason))
-        asyncio.run(postcard.auto("ok", "u", "finish"))
-        err = None
-        try:
-            asyncio.run(postcard.auto("boom", "u", "abort"))
-            asyncio.run(postcard.auto("down", "u", "info_complete"))
-        except Exception as e:                                   # noqa: BLE001
-            err = f"{type(e).__name__}: {e}"
+        for reason in ("abort", "user_request", "info_complete", "max_turn", "expired", "sensitive"):
+            asyncio.run(postcard.on_closed("s-" + reason, "u", reason))
     finally:
         postcard.make = real
-    check("떠난 회차 · 힘든 기억은 굽지 않는다",
-          not any(s.startswith("skip-") for s in made), str(made))
-    check("그 밖의 사유는 굽는다", "ok" in made, str(made))
-    check("굽다 실패해도 예외가 새지 않는다", err is None, err or "")
+    check("어떤 사유로 닫혀도 굽지 않는다", made == [], str(made))
+
+    import app.main as main
+    check("서버는 on_closed 를 건다 — 마지막 말씀의 판단은 그대로 남긴다",
+          "closed_fn=postcard.on_closed" in Path(main.__file__).read_text(encoding="utf-8"))
 
 
 def test_material():
@@ -488,23 +480,29 @@ def test_closing():
           saved == [{"facts_found": ["말씀 1"]}] and asked[-1] == 1, f"{asked} {saved}")
 
 
+def _out(**kv) -> dict:
+    """엽서.md §8-2 의 8키 응답. 기본은 ready."""
+    out = {"status": "ready", "title": "", "body": "", "sources": [], "to_confirm": [],
+           "missing_context": [], "coverage_notes": [], "caption": ""}
+    out.update(kv)
+    return out
+
+
 def test_checked():
     print("\n[6] 출처 검사 — 문장은 그대로, 틀린 출처만 버린다")
-    card = postcard.parse({
-        "status": "completed", "title": "부산 환갑",
-        "body": "부산에서 환갑 잔치를 했어요.\n온 식구가 모였어요.\n참 좋았어요.",
-        "caption": "", "changed_fields": [], "confirmation_questions": [],
-        "sources": [{"sentence": 0, "turns": [2]}, {"sentence": 1, "turns": [9]},
-                    {"sentence": 2, "turns": [1, 2]}],
-    })
+    card = postcard.parse(_out(
+        title="부산 환갑",
+        body="부산에서 환갑 잔치를 했어요.\n온 식구가 모였어요.\n참 좋았어요.",
+        sources=[{"sentence": 0, "turns": [2]}, {"sentence": 1, "turns": [9]},
+                 {"sentence": 2, "turns": [1, 2]}],
+    ))
     check("본문은 줄바꿈으로 나눈다", len(card.sentences) == 3, str(card.sentences))
     out = postcard.checked(card, {1, 2})
     check("없는 턴을 가리키는 문장도 남긴다", out.sentences == card.sentences, str(out.sentences))
     check("그 출처만 버린다", out.sources == [
         {"sentence": 0, "turns": [2]}, {"sentence": 2, "turns": [1, 2]}], str(out.sources))
 
-    one = postcard.parse({"status": "completed", "title": "", "caption": "",
-                          "body": "환갑이었어요. 부산이었어요.", "sources": []})
+    one = postcard.parse(_out(body="환갑이었어요. 부산이었어요."))
     check("한 줄로 오면 마침표에서 나눈다", len(one.sentences) == 2, str(one.sentences))
     check("근거가 하나도 없어도 굽는다", postcard.checked(one, {1}).sentences == one.sentences)
     try:
@@ -512,13 +510,39 @@ def test_checked():
         check("본문이 비면 409 쪽 오류", False, "구웠다")
     except postcard.PostcardNotReady:
         check("본문이 비면 409 쪽 오류", True)
+
+    print("\n[6] 굽는 것은 ready 뿐이다")
     try:
-        postcard.parse({"status": "needs_confirmation", "confirmation_questions": ["?"]})
-        check("자동 생성에서 확인 요청은 503 쪽 오류", False, "통과했다")
-    except postcard.PostcardUnavailable:
-        check("자동 생성에서 확인 요청은 503 쪽 오류", True)
+        postcard.parse(_out(status="insufficient_material", coverage_notes=["말씀이 없음"]))
+        check("자료 부족은 409 쪽 · 실패와 다른 오류", False, "통과했다")
+    except postcard.PostcardInsufficient:
+        check("자료 부족은 409 쪽 · 실패와 다른 오류", True)
+    for status, key in (("needs_confirmation", "to_confirm"), ("needs_context", "missing_context")):
+        reasons = [{"issue": "누구의 일인지", "turns": [2]}] if key == "to_confirm" else ["원문 없음"]
+        try:
+            postcard.parse(_out(status=status, **{key: reasons}))
+            got = None
+        except postcard.PostcardNotFinal as e:
+            got = e
+        check(f"{status} — 503 쪽 오류 · 상태와 사유를 구분해 들고 간다",
+              isinstance(got, postcard.PostcardUnavailable) and got.status == status
+              and got.reasons == reasons, repr(got))
+    for status in ("completed", ""):
+        try:
+            postcard.parse(_out(status=status))
+            check(f"모르는 status {status!r} 는 503 쪽 오류", False, "통과했다")
+        except postcard.PostcardNotFinal:
+            check(f"모르는 status {status!r} 는 503 쪽 오류", False, "확인 필요로 읽었다")
+        except postcard.PostcardUnavailable:
+            check(f"모르는 status {status!r} 는 503 쪽 오류", True)
+
     p = postcard._prompt()
-    check("프롬프트는 문서의 코드 블록 안이다", p.startswith("당신은 사용자 기억을") and "```" not in p, p[:20])
+    check("프롬프트는 엽서.md 의 실행 절이다 (§2 · §5 · §5-1 · §7-4 · §8-2)",
+          p.startswith("당신은 한국어 인생기록 서비스") and "사진 속 기억을 담은" in p
+          and "엽서는 위 7개 키에 caption" in p and "문자 수는 NFC" in p, p[:30])
+    check("설계 설명 · 표 · 팝업 문구 · 다른 역할 절은 싣지 않는다",
+          not any(w in p for w in ("## 0.", "역할 6개", "| 항목 |", "중단 팝업", "승인된 여러 회차의")))
+    check("지침 블록의 울타리(~~~)는 싣지 않는다", "~~~" not in p)
 
 
 def test_all_checks_passed():
