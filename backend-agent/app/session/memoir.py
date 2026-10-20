@@ -47,7 +47,7 @@ from .question import _client
 
 log = logging.getLogger("memoir")
 
-PROMPT = Path(__file__).resolve().parents[2] / "첨부프롬프트_md" / "자서전.md"
+PROMPT = Path(__file__).resolve().parents[2] / "첨부프롬프트_md" / "자서전_v2.md"
 
 MIN_SESSIONS, MAX_SESSIONS = 3, 5
 

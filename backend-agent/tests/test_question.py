@@ -437,7 +437,7 @@ def test_prompt():
     check("출력 형식이 §1 의 필드를 빠뜨리지 않는다",
           "closing_hint" in sysmsg and "end_reason" in sysmsg,
           "「반드시 아래 형식으로만」이라고 적으면서 빠뜨리면 모델이 안 적는다")
-    check("프롬프트를 첨부프롬프트_md/ 에서 읽는다", promptlib.DOC.name == "인터뷰_v2.md",
+    check("프롬프트를 첨부프롬프트_md/ 에서 읽는다", promptlib.DOC.name == "인터뷰_v3.md",
           promptlib.DOC.name)
 
 

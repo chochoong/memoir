@@ -234,12 +234,12 @@ def test_merge():
     check("원문은 자료 메시지에만 있고 시스템 지시에는 없다",
           "광주 인쇄소" in text and "광주 인쇄소" not in memoir._prompt())
     p = memoir._prompt()
-    check("시스템 지시는 자서전.md 의 실행 절이다 (§2 · §5 · §5-2 · §7-4 · §8-2)",
-          p.startswith("당신은 한국어 인생기록 서비스") and "승인된 여러 회차의" in p
-          and "자서전은 위 7개 키" in p and "문자 수는 NFC" in p, p[:30])
-    check("설계 설명 · 표 · 팝업 문구 · 다른 역할 절은 싣지 않는다",
-          not any(w in p for w in ("## 0.", "역할 6개", "| 항목 |", "중단 팝업", "사진 속 기억을 담은")))
-    check("지침 블록의 울타리(~~~)는 싣지 않는다", "~~~" not in p)
+    check("시스템 지시는 자서전_v2.md 의 실행 절이다 (§2 · §5 · §5-2 · §7-4 · §8-2)",
+          memoir.PROMPT.name == "자서전_v2.md"
+          and p.startswith("당신은 한국어 인생기록 서비스") and "전달된 같은 화자의 회차만" in p
+          and "자서전은 위 7개 키" in p and "회차당 3~8문장" in p and "상태 우선순위" in p, p[:30])
+    check("다른 역할 절은 싣지 않는다", "사진 속 기억을 담은" not in p)
+    check("울타리 줄(``` · ~~~)은 싣지 않는다", "~~~" not in p and "```" not in p)
     # 분량은 자서전.md 만 정한다. 자료 메시지에 남으면 프롬프트를 고쳐도 옛 기준이 같이 간다.
     head = text.split("\n\n", 1)[0]
     check("자료 메시지에 분량 지시가 없다",

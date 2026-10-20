@@ -4,8 +4,8 @@
     DB 기록 ─→ 자료 묶기 ─→ 카드 작성 (Gemini 글, CardAgent v3) ─→ 검사 ─→ 굽기 (Pillow) ─→ 저장
                사실·발화·사진분석   title · body · caption · sources     출처    회차 사진 + 글
 
-**프롬프트는 `첨부프롬프트_md/엽서.md` 다.** 팀 문서의 한 절을 그대로 둔
-파일이라, 코드는 그 안의 ``` 블록만 읽는다. 새 판이 오면 파일만 바꾸면 된다.
+**프롬프트는 `첨부프롬프트_md/엽서_v2.md` 다.** 실행할 절(§2 · §5 · §5-1 · §7-4 ·
+§8-2)만 담긴 문서를 roledoc 이 잇는다. 새 판이 오면 파일만 바꾸면 된다.
 
 **그림은 그리지 않는다.** 회차를 연 사진이 있으면 그 사진을 얹고, 없으면 종이
 바탕에 글만 얹는다. v3 는 「사진 속 인물 · 촬영 시점을 추측하지 않는다」를
@@ -53,7 +53,7 @@ from .shared import _facts
 
 log = logging.getLogger("postcard")
 
-PROMPT = Path(__file__).resolve().parents[2] / "첨부프롬프트_md" / "엽서.md"
+PROMPT = Path(__file__).resolve().parents[2] / "첨부프롬프트_md" / "엽서_v2.md"
 
 # 엽서.md §8-2 — 작성 공통 7키에 caption.
 KEYS = ("status", "title", "body", "sources", "to_confirm",
