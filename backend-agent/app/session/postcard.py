@@ -100,7 +100,16 @@ class PostcardError(RuntimeError):
 
 
 class PostcardNotReady(PostcardError):
-    """회차가 엽서를 만들 상태가 아니다. 라우트가 409 로 바꾼다."""
+    """
+    회차가 엽서를 만들 상태가 아니다. 라우트가 409 로 바꾼다.
+
+    409 는 원인이 넷이라 화면이 code 로 가른다 — not_closed · no_answers · busy ·
+    insufficient_material(자서전과 같은 이름).
+    """
+
+    def __init__(self, message: str, code: str):
+        super().__init__(message)
+        self.code = code
 
 
 class PostcardUnavailable(PostcardError):
@@ -109,6 +118,9 @@ class PostcardUnavailable(PostcardError):
 
 class PostcardInsufficient(PostcardNotReady):
     """모델이 insufficient_material 로 답했다 — 쓸 원문이 없다. 409. 실패가 아니다."""
+
+    def __init__(self):
+        super().__init__("엽서에 담을 만큼 확실한 말씀이 없습니다", INSUFFICIENT)
 
 
 class PostcardNotFinal(PostcardUnavailable):
@@ -163,14 +175,14 @@ async def make(session_id: str, user_id: str) -> dict:
     if rec is None or rec["user_id"] != user_id:
         raise LookupError(session_id)
     if not rec["closed_at"]:
-        raise PostcardNotReady("회차를 마친 뒤에 엽서를 만들 수 있습니다")
+        raise PostcardNotReady("회차를 마친 뒤에 엽서를 만들 수 있습니다", "not_closed")
 
     said = [f for f in rec["fragments"] if f["idx"] > 0 and f["answer"].strip()]
     if not said:
-        raise PostcardNotReady("남은 말씀이 없어 엽서를 만들 수 없습니다")
+        raise PostcardNotReady("남은 말씀이 없어 엽서를 만들 수 없습니다", "no_answers")
 
     if session_id in _busy:
-        raise PostcardNotReady("엽서를 만드는 중입니다. 잠시 기다려 주세요")
+        raise PostcardNotReady("엽서를 만드는 중입니다. 잠시 기다려 주세요", "busy")
     _busy.add(session_id)
     try:
         return await _make(rec, said)
@@ -439,7 +451,7 @@ def parse(out) -> Card:
     status = _text(out.get("status"))
     if status == INSUFFICIENT:
         log.info("엽서 글 — 자료 부족 %s", out.get("coverage_notes"))
-        raise PostcardInsufficient("엽서에 담을 만큼 확실한 말씀이 없습니다")
+        raise PostcardInsufficient()
     if status in NOT_FINAL:
         reasons = out.get("to_confirm" if status == "needs_confirmation" else "missing_context")
         log.error("엽서 글이 최종본이 아니다 (status=%s) %s", status, reasons)
@@ -463,7 +475,7 @@ def checked(card: Card, turns: set[int]) -> Card:
     본문이 비었으면 엽서를 굽지 않는다.
     """
     if not card.sentences:
-        raise PostcardNotReady("엽서에 담을 만큼 확실한 말씀이 없습니다")
+        raise PostcardInsufficient()
 
     by: dict[int, list[int]] = {}
     for s in card.sources:

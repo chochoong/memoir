@@ -165,6 +165,7 @@ class _Fake:
         }
         self.card: dict | None = None
         self.fail = False
+        self.insufficient = False
         self.writes = 0
         self.gate: asyncio.Event | None = None
 
@@ -194,6 +195,8 @@ class _Fake:
         async def write(data):
             if self.gate:
                 await self.gate.wait()
+            if self.insufficient:
+                raise postcard.PostcardInsufficient()
             self.writes += 1
             return postcard.Card(title="완행열차", sentences=[f"완행열차를 탔지 {self.writes}."],
                                  caption="", sources=[{"sentence": 0, "turns": [1]}])
@@ -228,18 +231,30 @@ def test_routes():
 
             fake.session["closed_at"] = None
             r = c.post(url, headers=kim)
-            check("안 끝난 회차는 409", r.status_code == 409, f"{r.status_code} {r.text[:80]}")
+            check("안 끝난 회차는 409 · code not_closed",
+                  r.status_code == 409 and r.json().get("code") == "not_closed",
+                  f"{r.status_code} {r.text[:80]}")
+            check("409 본문에 detail 은 그대로 있다", bool(r.json().get("detail")), r.text[:80])
             fake.session["closed_at"] = "2026-09-24T10:10:00+09:00"
 
             frs = fake.session["fragments"]
             fake.session["fragments"] = frs[:1]
             r = c.post(url, headers=kim)
-            check("말씀이 없으면 409", r.status_code == 409, f"{r.status_code} {r.text[:80]}")
+            check("말씀이 없으면 409 · code no_answers",
+                  r.status_code == 409 and r.json().get("code") == "no_answers",
+                  f"{r.status_code} {r.text[:80]}")
             fake.session["fragments"] = frs
 
             r = c.post(url, headers={"X-User-Id": "park"})
             check("남의 회차는 404", r.status_code == 404, str(r.status_code))
             check("거절한 뒤에는 모델을 안 불렀다", fake.writes == 0, f"{fake.writes}번")
+
+            fake.insufficient = True
+            r = c.post(url, headers=kim)
+            check("자료 부족은 409 · code insufficient_material · 저장 안 함",
+                  r.status_code == 409 and r.json().get("code") == "insufficient_material"
+                  and fake.card is None, f"{r.status_code} {r.text[:80]}")
+            fake.insufficient = False
 
             r = c.post(url, headers=kim)
             check("구우면 200", r.status_code == 200, r.text[:160])
@@ -290,8 +305,8 @@ def test_routes():
             try:
                 await postcard.make(SID, "kim")
                 check("굽는 중에 또 누르면 409 쪽 오류", False, "두 번 썼다")
-            except postcard.PostcardNotReady:
-                check("굽는 중에 또 누르면 409 쪽 오류", True)
+            except postcard.PostcardNotReady as e:
+                check("굽는 중에 또 누르면 409 쪽 오류 · code busy", e.code == "busy", e.code)
             fake.gate.set()
             await a
             fake.gate = None
@@ -508,8 +523,8 @@ def test_checked():
     try:
         postcard.checked(postcard.Card(title="", sentences=[], caption="", sources=[]), {1})
         check("본문이 비면 409 쪽 오류", False, "구웠다")
-    except postcard.PostcardNotReady:
-        check("본문이 비면 409 쪽 오류", True)
+    except postcard.PostcardInsufficient as e:
+        check("본문이 비면 409 쪽 오류 · 자료 부족과 같은 code", e.code == "insufficient_material")
 
     print("\n[6] 굽는 것은 ready 뿐이다")
     try:

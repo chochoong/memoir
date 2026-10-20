@@ -27,7 +27,7 @@ from typing import Literal
 from dotenv import load_dotenv
 from fastapi import FastAPI, Header, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse, Response
+from fastapi.responses import FileResponse, JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
@@ -650,14 +650,15 @@ async def make_postcard(session_id: str, request: Request):
     화면은 그동안 「그리는 중」을 띄우면 된다.
 
     409 는 어르신이 다른 것을 하면 되는 경우(회차가 안 끝났다 · 말씀이 없다 ·
-    이미 굽는 중), 503 은 서버 쪽 사정이다. 화면이 둘을 다르게 말해야 한다.
+    이미 굽는 중 · 담을 말씀이 부족하다), 503 은 서버 쪽 사정이다. 화면이 둘을
+    다르게 말해야 한다. 409 의 네 원인은 본문의 code 로 가른다.
     """
     try:
         rec = await postcard.make(session_id, uid(request))
     except LookupError as e:
         raise HTTPException(404, "회차를 찾을 수 없습니다") from e
     except postcard.PostcardNotReady as e:
-        raise HTTPException(409, str(e)) from e
+        return JSONResponse({"detail": str(e), "code": e.code}, status_code=409)
     except postcard.PostcardUnavailable as e:
         raise HTTPException(503, str(e)) from e
     except store.StoreUnavailable as e:
