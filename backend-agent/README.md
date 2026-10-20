@@ -25,7 +25,7 @@ app/
     timers.py             T1 / T2 + 격발 오차 계측
     controller.py         FSM + 타이머 + 저장을 묶는 곳
     shared.py             공유 상태 — 모델은 읽기만, 쓰는 것은 여기 (사실 병합 · 요약)
-    prompt.py             인터뷰 프롬프트 로더 (첨부프롬프트_md/인터뷰.md)
+    prompt.py             인터뷰 프롬프트 로더 (첨부프롬프트_md/인터뷰_v2.md)
     question.py           다음 질문 생성 (Gemini). 실패해도 회차를 끊지 않는다
     audio.py              브라우저 PCM 조각 → 전사기에 넘길 한 덩어리 (WAV)
     stt.py                전사 (Azure). 실패해도 회차를 끊지 않는다

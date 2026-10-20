@@ -1,5 +1,5 @@
 """
-프롬프트 로더 — 첨부프롬프트_md/인터뷰.md
+프롬프트 로더 — 첨부프롬프트_md/인터뷰_v2.md
 
 **프롬프트를 .py 안에 복붙하지 않는다.** 그 파일이 살아 있는 스펙이고 팀에서
 고친다. 여기에 한 벌 더 두면 두 벌이 갈라지고, 갈라진 것을 아무도 못 알아챈다.
@@ -49,7 +49,7 @@ from pathlib import Path
 log = logging.getLogger("prompt")
 
 # app/session/prompt.py → backend-agent/
-DOC = Path(__file__).resolve().parents[2] / "첨부프롬프트_md" / "인터뷰.md"
+DOC = Path(__file__).resolve().parents[2] / "첨부프롬프트_md" / "인터뷰_v2.md"
 
 COMMON = "0"            # 공통 지시어
 INTERVIEW = "1"         # 인터뷰 에이전트
