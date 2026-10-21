@@ -105,6 +105,7 @@
     }
     /* 고정된 버튼에 내용이 가리지 않도록 아래 여백을 넉넉히 둔다 */
     .screen[data-screen="complete"] { padding-bottom: calc(168px + env(safe-area-inset-bottom)); }
+    .screen[data-screen="cardfail"] { padding-bottom: calc(230px + env(safe-area-inset-bottom)); }
     /* 시작 화면은 「지난 이야기」가 붙어 버튼이 둘이다 — 그만큼 더 비운다 */
     .screen[data-screen="ready"] { padding-bottom: calc(168px + env(safe-area-inset-bottom)); }
     .btn { width: 100%; min-height: 64px; border: 0; border-radius: 20px; padding: 16px 20px; font-weight: 700; font-size: 1.06rem; transition: transform .16s, background .16s, opacity .16s; }
@@ -113,7 +114,7 @@
     .btn-primary { background: var(--ink); color: #fff; box-shadow: 0 10px 24px rgba(23,55,74,.18); }
     .btn-primary:hover { background: #0f2938; }
     .btn-ghost { background: none; border: 0; color: var(--muted); font-size: .95rem; font-weight: 600; padding: 14px; width: 100%; min-height: 64px; }
-    .btn-ghost[hidden] { display: none; }
+    .btn-ghost[hidden], .btn[hidden] { display: none; }
 
     /* ── 대화 화면: 듣는 친구 ──────────────────────── */
     .talk-screen { align-items: center; justify-content: center; text-align: center; padding-bottom: calc(158px + env(safe-area-inset-bottom)); }
@@ -305,6 +306,8 @@
     .era { font-size: .88rem; font-weight: 700; padding: 4px 10px; border-radius: 999px;
            background: #e7eef0; color: #3d5a68; }
     .era.none { background: #fbeede; color: #a0741e; }
+    .era.pc { background: #e8f1ec; color: var(--success); }
+    .era.nopc { background: #eeeeee; color: #666; }
 
     /* 「하나도 없다」와 「못 읽었다」는 다른 사건이다 (백엔드 list_sessions 주석) */
     .blank { text-align: center; padding: 56px 10px 24px; }
@@ -339,6 +342,73 @@
     .mm-body p { font-family: "Gowun Batang", serif; font-size: 1.2rem; line-height: 1.9;
                  margin: 0 0 10px; word-break: keep-all; overflow-wrap: anywhere; white-space: pre-wrap; }
 
+    /* ── 1차 인터뷰 흐름 (업무지시서 03) ──────────────────── */
+    /* 준비 — 테마 · 구체 주제 · 보조 사진. 예전 흐름(?flow=postcard)에서는 숨긴다 */
+    .prep[hidden], .photo-label[hidden], .compose[hidden], .talk-topic[hidden], .mode-tabs[hidden], .rv-prep[hidden] { display: none; }
+    .prep { margin: 4px 0 0; }
+    .prep h1 { margin: 6px 0 16px; }
+    .prep-k { display: block; font-weight: 700; font-size: 1.02rem; margin: 0 0 10px; }
+    .prep .tabs { margin-bottom: 20px; }
+    .topic {
+      width: 100%; min-height: 60px; border-radius: 18px; border: 2px solid var(--line);
+      background: #fff; color: var(--ink); padding: 14px 16px; font-size: 1.08rem;
+    }
+    .topic:focus { outline: none; border-color: var(--ink); }
+    .prep-note { color: var(--muted); font-size: .92rem; line-height: 1.5; margin: 8px 0 0; }
+    .photo-label { margin: 20px 0 0; }
+    .flow-interview .ready-copy h1, .flow-interview .ready-copy .lead { display: none; }
+    .flow-interview .ready-copy { margin-top: 12px; }
+    .flow-interview .photo-card { margin-top: 10px; max-height: min(30dvh, 220px); }
+    /* 사진은 「고른 것」 과 「올린 것」 이 다르다 — 글로 따로 알린다 */
+    .photo-state { font-size: .92rem; line-height: 1.5; margin: 10px 0 0; color: var(--muted); }
+    .photo-state.ok { color: var(--success); font-weight: 700; }
+    .photo-state.bad { color: #a4432b; font-weight: 700; }
+    .flow-interview .screen[data-screen="ready"] { padding-bottom: calc(176px + env(safe-area-inset-bottom)); }
+
+    /* 대화 — 고른 테마 · 주제를 위에 작게 */
+    .talk-topic { margin: 0 0 6px; font-size: .92rem; font-weight: 700; color: var(--muted);
+                  word-break: keep-all; overflow-wrap: anywhere; }
+    .flow-interview .talk-screen { padding-bottom: calc(176px + env(safe-area-inset-bottom)); }
+    .mode-tabs { margin: 0 0 10px; }
+    .mode-tabs .tab { min-height: 56px; }
+    .mode-tabs .tab[disabled] { opacity: .45; }
+    /* 키보드로 쓰는 동안 — 녹음 표시(막대 · 테 · 빛)를 끄고 캐릭터를 줄여 입력칸 자리를 만든다 */
+    .app.kb .meter, .app.kb .meter-note { display: none; }
+    /* 위에서부터 쌓고, 아래 버튼(말로/글로 · 마치기)은 고정하지 않고 입력칸 **아래에** 놓는다.
+       고정해 두면 작은 휴대전화(높이 667px)에서 「보내기」 가 그 밑에 깔렸고, 화면 키보드가
+       올라오면 입력칸까지 가렸다. 마치기는 내려서 누르면 된다. */
+    .app.kb .talk-screen { justify-content: flex-start; padding-bottom: calc(24px + env(safe-area-inset-bottom)); }
+    .app.kb .talk-screen .dock { position: static; transform: none; width: 100%; padding: 18px 0 0; background: none; }
+    .app.kb .friend-wrap { width: min(110px, 30vw); margin: 0 auto; }
+    .app.kb .question { font-size: clamp(1.2rem, 5.6vw, 1.5rem); min-height: 0; }
+    .app.kb .question-sub:empty { display: none; }
+    .app[data-state="TYPING"] .status { background: #e8f1ec; color: var(--success); }
+    .app[data-state="TYPING"] .status-dot { background: var(--success); }
+    .compose { width: 100%; margin: 12px 0 0; text-align: left; }
+    .compose textarea {
+      width: 100%; min-height: 96px; resize: vertical; border-radius: 18px; border: 2px solid var(--line);
+      background: #fff; color: var(--ink); padding: 14px 16px; font: inherit; font-size: 1.1rem; line-height: 1.6;
+    }
+    .compose textarea:focus { outline: none; border-color: var(--ink); }
+    .compose-note { min-height: 1.4em; margin: 8px 2px 10px; color: var(--muted); font-size: .92rem; line-height: 1.5; }
+
+    /* 내용 확인 — 읽기만 한다. 질문과 답을 다른 모양으로 */
+    .screen[data-screen="review"] { padding-bottom: calc(168px + env(safe-area-inset-bottom)); }
+    .rv-prep { background: var(--soft); border-radius: 22px; padding: 16px 20px; margin: 4px 0 18px; }
+    .rv-prep dl { margin: 0; display: grid; grid-template-columns: auto 1fr; gap: 6px 14px; }
+    .rv-prep dt { color: var(--muted); font-weight: 700; font-size: .95rem; }
+    .rv-prep dd { margin: 0; font-size: 1.05rem; font-weight: 700; word-break: keep-all; overflow-wrap: anywhere; }
+    .rv-list { list-style: none; margin: 0; padding: 0; }
+    .rv-item { margin: 0 0 18px; }
+    .rv-q, .rv-a { margin: 0; padding: 14px 16px; border-radius: 18px; line-height: 1.65;
+                   word-break: keep-all; overflow-wrap: anywhere; white-space: pre-wrap; }
+    .rv-q { background: #eef3f4; color: #2b5568; font-size: 1rem; margin-right: 28px; }
+    .rv-a { background: #fff; border: 1px solid var(--line); font-size: 1.1rem; margin: 8px 0 0 28px; }
+    .rv-who { display: block; font-size: .8rem; font-weight: 700; letter-spacing: .02em; margin: 0 0 4px; opacity: .75; }
+    .rv-warn { background: #fbeede; color: #a0741e; border-radius: 14px; padding: 10px 14px;
+               font-size: .95rem; font-weight: 600; margin: 0 0 14px; }
+    .rv-warn[hidden] { display: none; }
+
     /* ── 개발용 패널 (시연 중에는 닫아 둔다) ────────── */
     /* 화면 아래쪽 큰 버튼을 절대 가리지 않도록 위쪽에 둔다 */
     .dev-toggle { position: fixed; z-index: 40; right: 8px; top: max(10px, env(safe-area-inset-top)); width: 28px; height: 28px; border-radius: 50%; border: 1px solid var(--line); background: rgba(255,255,255,.8); color: var(--muted); font-size: .8rem; line-height: 1; opacity: .5; }
@@ -353,6 +423,303 @@
     .dev pre { margin: 8px 0 0; max-height: 108px; overflow: auto; white-space: pre-wrap; color: #9fb6c0; }
 
     @media (min-width: 520px) { body { padding: 24px 0; } .app { min-height: calc(100dvh - 48px); border-radius: 30px; } main, .screen { min-height: calc(100dvh - 120px); } }
+    /* ── 책장 넘김 시안 (CONFIG.ui.bookFlip · 기본 꺼짐) ─────────────
+       화면이 바뀔 때만 넘긴다. 떠나는 화면을 한 장 복제해 왼쪽 모서리를 축으로 넘겨
+       치우고(앞으로), 돌아갈 때는 새 화면이 왼쪽에서 덮어 온다(뒤로).
+       대화 ↔ 정리 중(녹음 화면끼리)은 넘기지 않는다. */
+    .app.book main { position: relative; perspective: 1800px; }
+    .flip-page {
+      position: absolute !important; inset: 0 auto auto 0; width: 100%; z-index: 6;
+      background: var(--paper); pointer-events: none;
+      transform-origin: left center; backface-visibility: hidden; animation: none !important;
+      box-shadow: 0 0 0 rgba(0,0,0,0);
+    }
+    .flip-page .dock { display: none; }               /* 고정 버튼은 복제 안에서 자리를 못 잡는다 */
+    .flip-page.go { animation: flip-away var(--flip-ms, 550ms) cubic-bezier(.45,.05,.35,1) forwards !important; }
+    .screen.flip-in {
+      transform-origin: left center; backface-visibility: hidden; position: relative; z-index: 7;
+      background-color: var(--paper);                 /* 비치면 밑에 깔린 옛 화면 글자가 겹쳐 보인다 */
+      animation: flip-back var(--flip-ms, 550ms) cubic-bezier(.45,.05,.35,1) both !important;
+    }
+    /* 넘기는 동안 종이 그림자 — 넘어가는 쪽이 어두워진다 */
+    @keyframes flip-away {
+      0%   { transform: rotateY(0);       box-shadow: 0 0 0 rgba(23,55,74,0); filter: brightness(1); }
+      60%  {                             box-shadow: 18px 0 40px rgba(23,55,74,.22); filter: brightness(.92); }
+      100% { transform: rotateY(-178deg); box-shadow: 0 0 0 rgba(23,55,74,0); filter: brightness(.85); }
+    }
+    @keyframes flip-back {
+      0%   { transform: rotateY(-178deg); filter: brightness(.85); }
+      100% { transform: rotateY(0);       filter: brightness(1); }
+    }
+    .app.flipping main { pointer-events: none; }       /* 넘기는 동안 연타를 받지 않는다 */
+    /* 넘기는 동안 밑에 드러나는 새 쪽은 처음부터 또렷하게 — 흐릿하게 떠오르면 종이 같지 않다 */
+    .app.flipping .screen:not(.flip-in) { animation: none; }
+    /* 책등 — 왼쪽 가장자리에 접힌 그림자 한 줄 */
+    .app.book .screen:not(.talk-screen):not(.center-screen) {
+      background-image: linear-gradient(to right, rgba(23,55,74,.07), rgba(23,55,74,0) 18px);
+    }
+
+    /* ── 3차 로그인 · 링크 (3-C1 초안) ─────────────────────── */
+    .acct[hidden] { display: none; }
+    .acct { display: flex; align-items: center; gap: 8px; font-size: .85rem; color: var(--muted); font-weight: 600; }
+    .acct button { border: 1px solid var(--line); background: #fff; border-radius: 999px; padding: 6px 10px; font-weight: 700; color: var(--ink); }
+    .topbar:has(.acct:not([hidden])) .step { display: none; }
+    .login-box { margin: auto 0; padding: 24px 0; }
+    .gsi-btn { min-height: 64px; margin: 22px 0 8px; }
+    .login-msg { min-height: 1.5em; color: #a4432b; font-weight: 600; line-height: 1.5; margin: 6px 0 0; }
+    .login-msg.note { color: var(--muted); font-weight: 500; }
+    .link-view { margin: auto 0; text-align: center; padding: 12px 0 24px; }
+    .link-view h1 { margin: 6px 0 12px; }
+    .link-view .lead { margin: 0 auto 18px; max-width: 30ch; }
+    .link-view .fe03-acct { display: inline-block; font-size: 1.05rem; padding: 10px 16px; margin: 0 0 14px; }
+    .link-view .btn { margin: 8px 0 0; }
+    .link-view .fe03-friend { width: 150px; }
+    .link-photo { display: block; width: min(280px, 72vw); max-height: 240px; object-fit: contain; margin: 0 auto 12px; border-radius: 18px; border: 1px solid var(--line); background: var(--soft); }
+    .app.link-mode .topbar .step { visibility: hidden; }
+    .btn-line[hidden] { display: none; }
+    .screen[data-screen="linkout"] { padding-bottom: calc(240px + env(safe-area-inset-bottom)); }
+    .lo-box { border: 2px dashed var(--line); border-radius: 16px; padding: 14px 16px; margin: 6px 0 10px; background: #fff;
+              font-size: 1rem; line-height: 1.5; word-break: break-all; -webkit-user-select: all; user-select: all; }
+    .lo-box.off { color: var(--muted); -webkit-user-select: none; user-select: none; background: var(--soft); }
+    .screen[data-screen="links"] { padding-bottom: calc(168px + env(safe-area-inset-bottom)); }
+    .lk-list[hidden], .lk-list button[hidden] { display: none; }
+    .lk-list { list-style: none; margin: 0; padding: 0; }
+    .lk-item { border: 1px solid var(--line); border-radius: 18px; padding: 14px 16px; margin: 0 0 12px; background: #fff; }
+    .lk-item b { display: block; font-family: "Gowun Batang", serif; font-size: 1.2rem; margin: 0 0 6px; word-break: keep-all; overflow-wrap: anywhere; }
+    .lk-meta { display: flex; flex-wrap: wrap; gap: 6px 10px; align-items: center; font-size: .88rem; color: var(--muted); }
+    .lk-st { font-weight: 700; padding: 3px 9px; border-radius: 999px; background: #eef3f4; color: #2b5568; }
+    .lk-st.ready { background: #e8f1ec; color: var(--success); }
+    .lk-st.in_progress { background: #fdece6; color: #a4422d; }
+    .lk-st.revoked, .lk-st.expired, .lk-st.interrupted { background: #eeeeee; color: #666; }
+    .lk-btns { display: flex; flex-wrap: wrap; gap: 8px; margin: 10px 0 0; }
+    .lk-btns button { min-height: 44px; padding: 8px 14px; border-radius: 12px; border: 2px solid var(--ink); background: #fff; color: var(--ink); font-weight: 700; }
+    .app.authed .flow-interview .screen[data-screen="ready"], .app.authed.flow-interview .screen[data-screen="ready"] { padding-bottom: calc(240px + env(safe-area-inset-bottom)); }
+
+    /* ── 개발 시안 (2~7차 FE-01~06) ─────────────────────────── */
+    .screen[data-screen="lab"] { padding-bottom: calc(120px + env(safe-area-inset-bottom)); background-color: var(--paper); }
+    .lab-panel[hidden], .fe01-edit[hidden] { display: none; }
+    .lab-warn { background: #fbeede; color: #8a5f12; border-radius: 14px; padding: 10px 14px; font-size: .92rem; font-weight: 600; line-height: 1.5; margin: 0 0 14px; }
+    .lab-warn.small { font-size: .86rem; }
+    .lab-tabs { display: flex; flex-wrap: wrap; gap: 8px; margin: 0 0 18px; }
+    .lab-tabs button { border: 2px solid var(--line); background: #fff; color: var(--muted); border-radius: 999px; padding: 9px 14px; font-weight: 700; font-size: .92rem; }
+    .lab-tabs button[aria-selected="true"] { border-color: var(--ink); color: var(--ink); }
+    .lab-h { font-family: "Gowun Batang", serif; font-size: 1.5rem; margin: 6px 0 8px; }
+    .lab-h small, .lab-h3 small { font-family: Pretendard, sans-serif; font-size: .8rem; color: var(--muted); font-weight: 700; margin-left: 6px; }
+    .lab-h3 { font-size: 1.05rem; margin: 18px 0 8px; }
+    .lab-note { color: var(--muted); line-height: 1.6; margin: 0 0 14px; }
+    .lab-dev { color: #8b7f68; font-size: .84rem; line-height: 1.5; margin: 14px 0 0; border-top: 1px dashed var(--line); padding-top: 10px; }
+    .lab-ctl { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 14px; margin: 12px 0 0; padding: 10px 12px; border-radius: 12px;
+               background: #f1f4f5; color: var(--muted); font-size: .88rem; }
+    .lab-ctl select { font: inherit; padding: 4px 6px; border-radius: 8px; border: 1px solid var(--line); background: #fff; }
+    .lab-btn { min-height: 48px; padding: 10px 16px; border-radius: 14px; border: 2px solid var(--ink); background: var(--ink); color: #fff; font-weight: 700; font-size: .98rem; }
+    .lab-btn.ghost { background: #fff; color: var(--ink); }
+    .lab-btn[disabled] { opacity: .4; }
+    .lab-badge { display: inline-block; font-size: .78rem; font-weight: 700; padding: 3px 9px; border-radius: 999px; background: #fbeede; color: #8a5f12; margin: 0 0 8px; }
+
+    /* FE-01 */
+    .fe01-bar { position: sticky; top: 0; z-index: 3; background: var(--paper); border: 1px solid var(--line); border-radius: 16px; padding: 12px; margin: 0 0 14px; }
+    .fe01-sel { margin: 0 0 8px; font-size: .95rem; line-height: 1.5; word-break: keep-all; overflow-wrap: anywhere; white-space: pre-wrap; }
+    .fe01-btns, .fe01-edit { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+    .fe01-edit { margin-top: 10px; }
+    .fe01-edit label { font-weight: 700; font-size: .92rem; }
+    .fe01-edit input { flex: 1 1 160px; min-height: 48px; border-radius: 12px; border: 2px solid var(--ink); padding: 8px 12px; font: inherit; font-size: 1.05rem; }
+    .fe01-a { -webkit-user-select: text; user-select: text; cursor: text; }
+    .fe01-q { -webkit-user-select: none; user-select: none; }
+    .fe01-a.changed { border-color: var(--accent); }
+    .fe01-orig { margin: 6px 0 0 28px; color: var(--muted); font-size: .88rem; line-height: 1.5; white-space: pre-wrap; word-break: keep-all; overflow-wrap: anywhere; }
+    .fe01-empty { color: var(--muted); font-style: italic; }
+    .fe01-log { margin: 0; padding-left: 20px; color: var(--muted); font-size: .92rem; line-height: 1.6; }
+    .fe01-log li { white-space: pre-wrap; word-break: keep-all; overflow-wrap: anywhere; }
+
+    /* FE-02 */
+    .fe02-pick .tab[aria-checked="true"] { border-color: var(--ink); color: var(--ink); background: #fff; }
+    .fe02-desc { color: var(--muted); margin: 0 0 12px; }
+    .fe02-go { margin: 0 0 14px; }
+    .fe02-state { display: grid; grid-template-columns: auto 1fr; gap: 6px 14px; margin: 0 0 10px; background: var(--soft); border-radius: 14px; padding: 12px 16px; }
+    .fe02-state dt { color: var(--muted); font-weight: 700; } .fe02-state dd { margin: 0; font-weight: 700; }
+    .fe02-msg { min-height: 1.4em; margin: 0 0 10px; color: #a4432b; font-weight: 600; }
+    .fe02-msg.ok { color: var(--success); }
+    .fe02-text { border: 1px solid var(--line); border-radius: 16px; padding: 14px 16px; background: #fff; }
+    .fe02-text p { font-family: "Gowun Batang", serif; font-size: 1.1rem; line-height: 1.85; margin: 0 0 8px; white-space: pre-wrap; word-break: keep-all; overflow-wrap: anywhere; }
+    .fe02-text.busy { opacity: .55; }
+
+    /* FE-03 */
+    .fe03-grid { display: grid; gap: 18px; }
+    .fe03-view { border: 1px solid var(--line); border-radius: 18px; padding: 18px; background: #fff; min-height: 220px; }
+    .fe03-view.elder { background: var(--paper); }
+    .fe03-view h4 { font-family: "Gowun Batang", serif; font-size: 1.3rem; margin: 0 0 10px; line-height: 1.4; word-break: keep-all; }
+    .fe03-view p { margin: 0 0 12px; line-height: 1.6; color: var(--muted); word-break: keep-all; }
+    .fe03-view .btn, .fe03-view .btn-line { margin: 6px 0 0; }
+    .fe03-acct { font-size: .9rem; font-weight: 700; color: var(--ink); background: var(--soft); border-radius: 10px; padding: 8px 12px; margin: 0 0 12px; }
+    .fe03-link { border: 2px dashed var(--line); border-radius: 14px; padding: 12px; margin: 10px 0; color: var(--muted); font-size: .92rem; line-height: 1.5; }
+    .fe03-state { display: inline-block; font-size: .82rem; font-weight: 700; padding: 3px 9px; border-radius: 999px; background: #e7eef2; color: #2b5568; margin: 0 0 8px; }
+    .fe03-friend { width: 120px; margin: 0 auto 8px; display: block; }
+
+    /* FE-04 */
+    .fe04-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 14px; }
+    .fe04-card { border: 1px solid var(--line); border-radius: 16px; overflow: hidden; background: #fff; }
+    .fe04-img { position: relative; aspect-ratio: 4 / 3; background: var(--soft); display: grid; place-items: center; text-align: center; color: var(--muted); font-size: .92rem; padding: 8px; }
+    .fe04-img img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
+    .fe04-img.dim img { opacity: .45; filter: grayscale(.4); }
+    .fe04-img .over { position: relative; z-index: 1; background: rgba(255,253,248,.92); border-radius: 10px; padding: 6px 10px; font-weight: 700; color: var(--ink); }
+    .fe04-src { position: absolute; z-index: 1; left: 8px; top: 8px; font-size: .76rem; font-weight: 700; padding: 3px 8px; border-radius: 999px; }
+    .fe04-src.photo { background: #e7eef2; color: #2b5568; }
+    .fe04-src.drawn { background: #f4e6f7; color: #6b3a7a; }
+    .fe04-body { padding: 10px 12px 12px; font-size: .9rem; line-height: 1.5; }
+    .fe04-body b { display: block; margin: 0 0 4px; }
+    .fe04-id { color: var(--muted); font-size: .8rem; }
+    .fe04-id.mismatch { color: #a4432b; font-weight: 700; }
+
+    /* FE-05 */
+    .fe05-how { color: var(--muted); font-size: .92rem; margin: 0 0 10px; }
+    .fe05-item { border: 1px solid var(--line); border-radius: 16px; padding: 12px 14px; margin: 0 0 10px; background: #fff; }
+    .fe05-item b { display: block; font-family: "Gowun Batang", serif; font-size: 1.2rem; margin: 0 0 6px; }
+    .fe05-dates { display: flex; flex-wrap: wrap; gap: 6px 12px; font-size: .88rem; }
+    .fe05-dates span { padding: 2px 8px; border-radius: 999px; background: #eef3f4; color: #2b5568; }
+    .fe05-dates span.event { background: #fbeede; color: #8a5f12; }
+    .fe05-dates span.unknown { background: #eee; color: #666; }
+    .fe05-group { font-weight: 700; color: var(--muted); margin: 16px 0 8px; font-size: .95rem; }
+
+    /* FE-06 */
+    .fe06-check { font-size: .9rem; font-weight: 700; color: var(--success); margin: 0 0 10px; }
+    .fe06-check.bad { color: #a4432b; }
+    .fe06-grid { display: grid; gap: 18px; }
+    .fe06-phone { width: 100%; max-width: 360px; border: 10px solid #20343f; border-radius: 30px; background: var(--paper); height: 560px; overflow-y: auto; }
+    .fe06-pc { border: 1px solid var(--line); border-radius: 14px; background: var(--paper); max-height: 560px; overflow-y: auto; }
+    .fe06-read { padding: 18px; }
+    .fe06-pc .fe06-read { padding: 28px 40px; max-width: 680px; margin: 0 auto; }
+    .fe06-read h4 { font-family: "Gowun Batang", serif; font-size: 1.5rem; line-height: 1.35; margin: 0 0 14px; word-break: keep-all; overflow-wrap: anywhere; }
+    .fe06-read h5 { font-size: 1.05rem; margin: 18px 0 8px; color: var(--accent-dark); }
+    .fe06-read p { font-family: "Gowun Batang", serif; font-size: 1.08rem; line-height: 1.9; margin: 0 0 10px; word-break: keep-all; overflow-wrap: anywhere; white-space: pre-wrap; }
+    .fe06-pc .fe06-read p { font-size: 1.15rem; }
+    .fe06-read .blank { padding: 30px 6px; }
+
+    @media (min-width: 760px) {
+      .app.web .fe03-grid, .app.web .fe06-grid { grid-template-columns: minmax(0, 1fr) minmax(0, 1.4fr); }
+      .app.web .fe03-grid { grid-template-columns: 1fr 1fr; }
+    }
+
+    /* ── 웹 화면 (녹음 화면을 뺀 나머지) ───────────────────
+       녹음 화면(대화 · 정리 중)은 위의 앱 모양 그대로 둔다. 그 밖의 화면은 넓은 화면에서
+       페이지처럼 펼친다 — 아래 버튼은 고정하지 않고 내용 끝에 가로로 놓는다.
+       휴대전화 폭에서는 이 블록이 아무 일도 하지 않는다. (CONFIG.ui.webLayout) */
+    @media (min-width: 760px) {
+      .app.web { width: min(calc(100% - 48px), 1040px); }
+      .app.web .topbar { padding: 0 40px; height: 76px; border-bottom: 1px solid var(--line); }
+      .app.web .brand { font-size: 1.3rem; }
+      .app.web .step { font-size: .95rem; }
+      .app.web main, .app.web .screen { min-height: 0; }
+      .app.web .screen { padding: 36px 48px 48px; }
+      .app.web .screen[data-screen] { padding-bottom: 48px; }
+      .app.web h1 { font-size: 2.4rem; }
+      .app.web .dock {
+        position: static; transform: none; width: auto; background: none;
+        padding: 28px 0 0; display: flex; flex-wrap: wrap; align-items: center; gap: 8px 16px; text-align: left;
+      }
+      .app.web .dock .btn, .app.web .dock .btn-line { width: auto; min-width: 240px; margin: 0; }
+      .app.web .dock .btn-ghost { width: auto; min-height: 56px; padding: 14px 18px; }
+
+      /* 준비 — 왼쪽 테마 · 주제 · 시작, 오른쪽 보조 사진 */
+      .app.web.flow-interview .screen[data-screen="ready"].active {
+        display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); column-gap: 56px; align-content: start;
+      }
+      .app.web.flow-interview [data-screen="ready"] .prep { grid-column: 1; grid-row: 1 / span 4; margin: 0; }
+      .app.web.flow-interview [data-screen="ready"] .photo-label { grid-column: 2; grid-row: 1; margin: 0 0 10px; align-self: end; }
+      .app.web.flow-interview [data-screen="ready"] .photo-card { grid-column: 2; grid-row: 2; margin: 0; max-height: 340px; }
+      .app.web.flow-interview [data-screen="ready"] .photo-state { grid-column: 2; grid-row: 3; }
+      .app.web.flow-interview [data-screen="ready"] .ready-copy { grid-column: 2; grid-row: 4; margin: 0; }
+      .app.web.flow-interview [data-screen="ready"] .error { grid-column: 1; }
+      .app.web.flow-interview [data-screen="ready"] .dock { grid-column: 1; grid-row: 5; }
+      .app.web.flow-interview .prep h1 { margin-top: 0; }
+      /* 예전 흐름의 시작 화면은 가운데 한 줄로 */
+      .app.web:not(.flow-interview) [data-screen="ready"] { max-width: 640px; margin: 0 auto; }
+
+      /* 내용 확인 · 자서전 글 — 읽기 좋은 폭 */
+      .app.web [data-screen="review"] > *, .app.web [data-screen="memoir"] [data-mm="result"] { max-width: 760px; }
+      .app.web .rv-q { margin-right: 120px; }
+      .app.web .rv-a { margin-left: 120px; }
+
+      /* 지난 이야기 · 자서전 고르기 — 카드를 두 줄로 */
+      .app.web #arList, .app.web #mmList, .app.web [data-id="arList"], .app.web [data-id="mmList"] { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; }
+      .app.web #arList .piece, .app.web #mmList .piece, .app.web .sf-page .piece { margin: 0; }
+      .app.web [data-screen="archive"] .sum, .app.web #arMemoir, .app.web [data-screen="archive"] .tabs { max-width: 520px; }
+
+      /* 엽서 — 가운데 한 장 */
+      .app.web [data-screen="complete"] { align-items: center; }
+      .app.web [data-screen="complete"] .postcard { max-width: 520px; }
+      .app.web [data-screen="complete"] .dock { justify-content: center; }
+
+      .app.web .toast { bottom: 40px; }
+
+      /* ── 책 두 쪽 펼침 (CONFIG.ui.bookFlip 을 켰을 때만) ─────────────
+         가운데 접힘을 사이에 두고 왼쪽 쪽 · 오른쪽 쪽으로 나눈다.
+         왼쪽 = 제목 · 안내 · 버튼, 오른쪽 = 목록 · 본문. 글이 접힘을 건너가지 않게
+         두 쪽 사이를 넉넉히(96px) 비운다. */
+      .app.book.web main {
+        background:
+          linear-gradient(to right, transparent calc(50% - 1px), rgba(23,55,74,.12) 50%, transparent calc(50% + 1px)),
+          linear-gradient(to right, transparent calc(50% - 46px), rgba(23,55,74,.07) 50%, transparent calc(50% + 46px));
+      }
+      .app.book.web .screen { background-image: none; }
+      /* 책은 위에서 아래까지 한 권 — 접힘이 바닥까지 닿게 본문을 끝까지 늘린다 */
+      .app.book.web { display: flex; flex-direction: column; }
+      .app.book.web main { flex: 1; position: relative; display: flex; flex-direction: column; }
+      .app.book.web .screen.active { flex: 1; }
+      .app.book.web .screen.active:not(.center-screen) { min-height: 620px; }
+      .app.book.web [data-screen="review"].active,
+      .app.book.web [data-screen="archive"].active,
+      .app.book.web [data-screen="memoir"].active,
+      .app.book.web [data-screen="complete"].active {
+        display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); column-gap: 96px;
+        grid-template-rows: repeat(9, auto) 1fr; align-content: stretch; align-items: start;
+      }
+      .app.book.web.flow-interview .screen[data-screen="ready"].active { column-gap: 96px; }
+      /* 왼쪽 쪽 */
+      .app.book.web [data-screen="review"] > :not([data-rv]),
+      .app.book.web [data-screen="archive"] > :not([data-ar]),
+      .app.book.web [data-screen="archive"] [data-ar="list"] > :not(#arList):not([data-id="arList"]),
+      .app.book.web [data-screen="memoir"] > :not([data-mm]),
+      .app.book.web [data-screen="memoir"] [data-mm="pick"] > .mm-guide,
+      .app.book.web [data-screen="complete"] > :not(.postcard) { grid-column: 1; max-width: none; }
+      /* 오른쪽 쪽 — 위에서부터 한 쪽을 다 쓴다 */
+      .app.book.web [data-screen="review"] > [data-rv],
+      .app.book.web [data-screen="archive"] > [data-ar]:not([data-ar="list"]),
+      .app.book.web [data-screen="archive"] #arList, .app.book.web [data-screen="archive"] [data-id="arList"],
+      .app.book.web [data-screen="memoir"] > [data-mm]:not([data-mm="pick"]),
+      .app.book.web [data-screen="memoir"] #mmList, .app.book.web [data-screen="memoir"] [data-id="mmList"],
+      .app.book.web [data-screen="complete"] > .postcard { grid-column: 2; grid-row: 1 / span 10; max-width: none; margin-top: 0; }
+      /* 목록을 감싼 상자는 풀어서 안의 것들이 두 쪽에 나뉘어 앉게 한다 (숨겨진 때는 그대로 숨김) */
+      .app.book.web [data-ar="list"]:not([hidden]), .app.book.web [data-mm="pick"]:not([hidden]) { display: contents; }
+      .app.book.web #arList, .app.book.web #mmList,
+      .app.book.web [data-id="arList"], .app.book.web [data-id="mmList"] { grid-template-columns: minmax(0, 1fr); }
+      .app.book.web [data-screen="archive"] .sum, .app.book.web #arMemoir, .app.book.web [data-screen="archive"] .tabs { max-width: none; }
+      .app.book.web .rv-q { margin-right: 36px; }
+      .app.book.web .rv-a { margin-left: 36px; }
+      .app.book.web [data-screen="complete"] { align-items: start; }
+      .app.book.web [data-screen="complete"] .dock { justify-content: flex-start; }
+
+      /* 넘기는 장 — 오른쪽 쪽이 가운데 접힘을 축으로 왼쪽으로 넘어간다 (뒤로는 반대) */
+      .sf { position: absolute; top: 0; left: 0; right: 0; z-index: 6; pointer-events: none; perspective: 2600px; }
+      .sf-half, .sf-leaf { position: absolute; top: 0; height: 100%; width: 50%; }
+      .sf-left { left: 0; } .sf-right { left: 50%; }
+      .sf-half, .sf-face { overflow: hidden; background: var(--paper); }
+      .sf-leaf { transform-style: preserve-3d; }
+      .sf-leaf.sf-right { transform-origin: left center;  animation: sf-fwd  var(--sf-ms, 750ms) cubic-bezier(.45,.05,.3,1) forwards; }
+      .sf-leaf.sf-left  { transform-origin: right center; animation: sf-back var(--sf-ms, 750ms) cubic-bezier(.45,.05,.3,1) forwards; }
+      .sf-face { position: absolute; inset: 0; backface-visibility: hidden; -webkit-backface-visibility: hidden; }
+      .sf-face.sf-back { transform: rotateY(180deg); }
+      .sf .sf-page { position: absolute !important; top: 0; width: 200%; min-height: 100%; margin: 0; animation: none !important; }
+      .sf-show-l .sf-page { left: 0; }
+      .sf-show-r .sf-page { left: -100%; }
+      /* 접힘 쪽 그림자 · 넘어가는 장의 음영 */
+      .sf-half.sf-left, .sf-face.sf-show-l { box-shadow: inset -40px 0 40px -40px rgba(23,55,74,.25); }
+      .sf-half.sf-right, .sf-face.sf-show-r { box-shadow: inset 40px 0 40px -40px rgba(23,55,74,.25); }
+      .sf-face::after { content: ""; position: absolute; inset: 0; pointer-events: none;
+                        background: rgba(23,55,74,.18); opacity: 0; animation: sf-shade var(--sf-ms, 750ms) ease-in-out forwards; }
+      @keyframes sf-fwd  { from { transform: rotateY(0); } to { transform: rotateY(-180deg); } }
+      @keyframes sf-back { from { transform: rotateY(0); } to { transform: rotateY(180deg); } }
+      @keyframes sf-shade { 0% { opacity: 0; } 50% { opacity: 1; } 100% { opacity: 0; } }
+    }
     @media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation-duration: .01ms !important; animation-iteration-count: 1 !important; } }
   </style>
 </head>
@@ -362,11 +729,76 @@
     <div class="banner" id="banner" role="alert"><span id="bannerText"></span><button id="bannerBtn" hidden></button></div>
     <!-- 화면 공통 안내. 예전에는 대화 화면 안에 있어서 보관함 · 자서전에서는 안 보였다 -->
     <div class="toast" id="toast" role="status"></div>
-    <header class="topbar"><div class="brand">내말싸미</div><div class="step" id="stepLabel">사진 고르기</div></header>
+    <header class="topbar"><div class="brand">내말싸미</div><div class="step" id="stepLabel">사진 고르기</div>
+      <!-- 로그인 모드에서만: 누구로 들어와 있는가 · 로그아웃 (3-C1) -->
+      <div class="acct" id="acct" hidden><span id="acctName"></span><button id="logoutBtn" type="button">로그아웃</button></div>
+    </header>
     <main>
 
       <!-- ── 시작 전 ───────────────────────────────── -->
+      <!-- 자녀 로그인 (3-C1 §4 초안 · auth.mode 'session' 일 때만) -->
+      <section class="screen" data-screen="login">
+        <div class="login-box">
+          <h1>부모님의 이야기를<br />함께 모아요.</h1>
+          <p class="lead">이야기를 관리하려면 먼저 로그인해 주세요.</p>
+          <span class="mm-sample" id="loginMock" hidden>모의 로그인 — 실제 구글 계정을 쓰지 않습니다</span>
+          <div class="gsi-btn" id="gsiBtn"></div>
+          <p class="login-msg" id="loginMsg" role="status" aria-live="polite"></p>
+        </div>
+      </section>
+
+      <!-- 첫 로그인에 화자가 없을 때 — 이름 하나만 받는다 (3-C1 §3). 상세 프로필은 받지 않는다 -->
+      <section class="screen" data-screen="elder">
+        <h1>누구의 이야기를<br />남길까요?</h1>
+        <label class="prep-k" for="elderName">부르는 이름</label>
+        <input class="topic" id="elderName" type="text" maxlength="30" autocomplete="off" placeholder="예: 어머니, 김순자 님" />
+        <p class="prep-note" id="elderMsg" role="status" aria-live="polite"></p>
+        <div class="dock"><button class="btn btn-primary" id="elderSave" disabled>다음</button></div>
+      </section>
+
+      <!-- 어르신 링크로 연 첫 화면 (3-C1 §5). 다른 기록 · 수정 · 생성 메뉴는 두지 않는다 -->
+      <section class="screen" data-screen="link">
+        <span class="mm-sample" id="linkMock" hidden>모의 링크 — 서버에 보내지 않습니다</span>
+        <div class="link-view" id="linkView"></div>
+      </section>
+
+      <!-- 자녀 — 발급한 링크 (토큰은 이 화면에서 한 번만 보인다) -->
+      <section class="screen" data-screen="linkout">
+        <h1>어르신께 보낼 링크</h1>
+        <p class="fe03-acct" id="loTopic"></p>
+        <div class="lo-box" id="loBox"></div>
+        <p class="prep-note" id="loMsg" role="status" aria-live="polite"></p>
+        <div class="dock">
+          <button class="btn btn-primary" id="loCopy">링크 복사</button>
+          <button class="btn-line" id="loRevoke">링크 취소</button>
+          <button class="btn-ghost" id="loBack">처음으로</button>
+        </div>
+      </section>
+
+      <!-- 자녀 — 보낸 링크 (GET /api/links). 토큰은 다시 볼 수 없다 — 상태 · 취소 · 다시 만들기만 -->
+      <section class="screen" data-screen="links">
+        <h1>보낸 링크</h1>
+        <div data-lk="load"><div class="skel"></div><div class="skel"></div></div>
+        <ol class="lk-list" data-lk="list" id="lkList" hidden></ol>
+        <div data-lk="empty" hidden><div class="blank"><div class="blank-face" aria-hidden="true">&#128233;</div><h2>아직 보낸 링크가<br />없어요.</h2><p>준비 화면에서 「어르신께 링크로 보내기」 를 눌러 보세요.</p></div></div>
+        <div data-lk="error" hidden><div class="blank"><div class="blank-face" aria-hidden="true">&#128246;</div><h2>링크 목록을<br />불러오지 못했어요.</h2><p>보낸 링크는 그대로 있어요. 잠시 뒤 다시 불러와 주세요.</p></div></div>
+        <p class="prep-note" id="lkMsg" role="status" aria-live="polite"></p>
+        <div class="dock">
+          <button class="btn btn-primary" id="lkMain">처음으로</button>
+        </div>
+      </section>
+
       <section class="screen active" data-screen="ready">
+        <!-- 인터뷰 준비 (업무지시서 03 UI-02). 예전 흐름(?flow=postcard)에서는 숨는다 -->
+        <div class="prep" id="prep" hidden>
+          <h1>어떤 이야기를<br />나눌까요?</h1>
+          <span class="prep-k" id="themeLabel">테마</span>
+          <div class="tabs" id="themeTabs" role="group" aria-labelledby="themeLabel"></div>
+          <label class="prep-k" for="topicInput">구체 주제</label>
+          <input class="topic" id="topicInput" type="text" autocomplete="off" placeholder="예: 첫 직장, 결혼식 날, 사진 찍기" />
+          <p class="prep-note" id="prepNote">테마를 고르고 주제를 적어 주세요.</p>
+        </div>
+        <span class="prep-k photo-label" id="photoLabel" hidden>보조 사진 <span style="font-weight:600;color:var(--muted)">(없어도 시작할 수 있어요)</span></span>
         <button class="photo-card" id="photoCard" type="button" aria-label="오늘의 사진 고르기">
           <span class="backdrop" id="photoBackdrop" aria-hidden="true" hidden></span>
           <img id="photoPreview" alt="" hidden />
@@ -383,6 +815,7 @@
             오늘의 사진 넣기
           </span>
         </button>
+        <p class="photo-state" id="photoState" hidden></p>
 
         <div class="ready-copy">
           <h1>사진 한 장,<br />그리고 목소리.</h1>
@@ -393,7 +826,10 @@
         <input type="file" id="photoInput" accept="image/*" hidden />
         <div class="dock">
           <button class="btn btn-primary" id="startBtn">녹음 시작</button>
+          <!-- 로그인 모드에서만: 다른 기기(어르신)에게 링크로 보낸다 (3-C1 · POST /api/links) -->
+          <button class="btn-line" id="linkOutBtn" hidden disabled>어르신께 링크로 보내기</button>
           <button class="btn-ghost" id="archiveBtn">지난 이야기</button>
+          <button class="btn-ghost" id="linksBtn" hidden>보낸 링크</button>
         </div>
       </section>
 
@@ -403,6 +839,7 @@
           <span class="status-dot" aria-hidden="true"></span>
           <span class="listen-state" id="listenState">준비하고 있어요</span>
         </div>
+        <p class="talk-topic" id="talkTopic" hidden></p>
 
         <div class="friend-wrap" id="friend">
           <span class="halo" aria-hidden="true"></span>
@@ -437,7 +874,19 @@
         <div class="meter" aria-hidden="true"><i id="meterFill"></i></div>
         <p class="meter-note" id="meterNote"></p>
 
+        <!-- 키보드로 답하기 (UI-03 · UI-04). 같은 질문 · 같은 회차에 들어간다 -->
+        <div class="compose" id="compose" hidden>
+          <label class="prep-k" for="composeText">글로 답하기</label>
+          <textarea id="composeText" rows="3" placeholder="여기에 써 주세요"></textarea>
+          <p class="compose-note" id="composeNote" role="status" aria-live="polite"></p>
+          <button class="btn btn-primary" id="composeSend" disabled>보내기</button>
+        </div>
+
         <div class="dock">
+          <div class="tabs mode-tabs" id="modeTabs" role="group" aria-label="답하는 방법" hidden>
+            <button class="tab" id="modeVoice" aria-pressed="true">말로 하기</button>
+            <button class="tab" id="modeKeyboard" aria-pressed="false">글로 쓰기</button>
+          </div>
           <button class="btn btn-primary" id="holdBtn">일시정지</button>
           <button class="btn-ghost" id="abortBtn">녹음 정지 · 엽서 만들기</button>
           <button class="btn-ghost" id="doneBtn" hidden>다 말했어요</button>
@@ -491,6 +940,21 @@
         <div class="dock">
           <button class="btn btn-primary" id="saveBtn">엽서 저장</button>
           <button class="btn-ghost" id="exitBtn">마치기</button>
+        </div>
+      </section>
+
+      <!-- 엽서를 못 받았을 때 (예전 흐름). 실패를 임시 엽서로 덮지 않는다 -->
+      <section class="screen" data-screen="cardfail">
+        <div class="blank">
+          <div class="blank-face" id="cfFace" aria-hidden="true">&#9888;&#65039;</div>
+          <h2 id="cfTitle">엽서를<br />만들지 못했어요.</h2>
+          <p id="cfLead"></p>
+          <span class="why" id="cfWhy"></span>
+        </div>
+        <div class="dock">
+          <button class="btn btn-primary" id="cfRetry">다시 만들기</button>
+          <button class="btn-ghost" id="cfArchive">지난 이야기 보기</button>
+          <button class="btn-ghost" id="cfExit">마치기</button>
         </div>
       </section>
 
@@ -613,6 +1077,171 @@
           <button class="btn-ghost" id="mmBack">지난 이야기로 돌아가기</button>
         </div>
       </section>
+
+      <!-- 내용 확인 — 업무지시서 03 UI-07. 읽기만 한다. 고치기 · 문체 · 엽서 버튼은 이번 범위가 아니다 -->
+      <section class="screen" data-screen="review">
+        <h1>나눈 이야기</h1>
+        <span class="mm-sample" id="rvSample" hidden>예시 화면 — 서버에 저장된 내용이 아닙니다</span>
+
+        <!-- 준비 정보. 시작할 때 고른 값이라 답변과 섞지 않는다 -->
+        <div class="rv-prep" id="rvPrep" hidden>
+          <dl><dt>테마</dt><dd id="rvTheme"></dd><dt>주제</dt><dd id="rvTopic"></dd></dl>
+        </div>
+
+        <div data-rv="load">
+          <p class="mm-guide">마지막 말씀까지 받아 오는 중이에요.</p>
+          <div class="skel"></div><div class="skel"></div>
+        </div>
+
+        <div data-rv="list" hidden>
+          <p class="rv-warn" id="rvWarn" hidden>마지막 답변이 아직 저장되지 않았을 수 있어요. 잠시 뒤 「다시 불러오기」를 눌러 주세요.</p>
+          <ol class="rv-list" id="rvList"></ol>
+        </div>
+
+        <!-- 실제로 답이 없다 — 「못 불러왔다」 와 반드시 구분한다 -->
+        <div data-rv="empty" hidden>
+          <div class="blank">
+            <div class="blank-face" aria-hidden="true">&#127793;</div>
+            <h2>이번 인터뷰에는<br />남은 답변이 없어요.</h2>
+            <p>답하시기 전에 마쳤거나,<br />말씀이 들어오지 않았어요.</p>
+          </div>
+        </div>
+
+        <div data-rv="error" hidden>
+          <div class="blank">
+            <div class="blank-face" aria-hidden="true">&#128246;</div>
+            <h2>내용을 불러오지<br />못했어요.</h2>
+            <p>나눈 이야기는 지워지지 않았어요.<br />잠시 뒤 다시 불러와 주세요.</p>
+            <span class="why" id="rvWhy">연결이 잠깐 끊겼어요</span>
+          </div>
+        </div>
+
+        <div class="dock">
+          <button class="btn btn-primary" id="rvMain">처음으로</button>
+          <button class="btn-ghost" id="rvRetry" hidden>다시 불러오기</button>
+        </div>
+      </section>
+
+      <!-- 개발 시안 — 2~7차 통합 업무지시서 v1.1 의 「혼자 준비할 수 있는 일」(A · FE-01~06).
+           합성 자료로만 돈다. 서버에 보내거나 저장하지 않는다. 주소 뒤 ?lab=1 또는 개발용 패널(⚙)에서 연다 -->
+      <section class="screen" data-screen="lab">
+        <h1>개발 시안</h1>
+        <p class="lab-warn">합성 자료로 만든 화면 시안입니다. 서버에 보내거나 저장하지 않습니다.<br />2~7차 통합 업무지시서 v1.1 — 혼자 준비하는 일(A · FE-01~06)</p>
+        <div class="lab-tabs" id="labTabs" role="tablist" aria-label="시안 고르기"></div>
+
+        <!-- FE-01 부분 수정 · 삭제 · 취소 -->
+        <section class="lab-panel" data-lab="fe01" hidden>
+          <h2 class="lab-h">부분 수정 · 삭제 · 취소 <small>FE-01</small></h2>
+          <p class="lab-note">답변에서 고칠 곳을 <b>끌어서 고른 뒤</b> 「고치기」 나 「지우기」 를 누르세요. 질문은 고칠 수 없습니다.
+            바뀐 내용은 <b>이 화면에서만</b> 보이고 원문은 그대로입니다.</p>
+          <div class="fe01-bar" id="fe01Bar">
+            <p class="fe01-sel" id="fe01Sel">고를 곳을 끌어서 선택해 주세요.</p>
+            <div class="fe01-btns">
+              <button class="lab-btn" id="fe01Edit" disabled>고치기</button>
+              <button class="lab-btn" id="fe01Del" disabled>지우기</button>
+              <button class="lab-btn ghost" id="fe01Undo" disabled>마지막 수정 취소</button>
+              <button class="lab-btn ghost" id="fe01Reset" disabled>모두 되돌리기</button>
+            </div>
+            <div class="fe01-edit" id="fe01EditBox" hidden>
+              <label for="fe01Input">바꿀 말</label>
+              <input id="fe01Input" type="text" autocomplete="off" />
+              <button class="lab-btn" id="fe01Apply">바꾸기</button>
+              <button class="lab-btn ghost" id="fe01Cancel">그만두기</button>
+            </div>
+          </div>
+          <ol class="rv-list" id="fe01List"></ol>
+          <h3 class="lab-h3">바뀐 곳 <small id="fe01Count">0건 · 저장되지 않음</small></h3>
+          <ol class="fe01-log" id="fe01Log"></ol>
+          <p class="lab-dev">위치 단위: 글자 칸(UTF-16) — 임시. 서버에 보낼 범위 단위 · 원문 버전은 FE-07 에서 맞춥니다.</p>
+        </section>
+
+        <!-- FE-02 문체 선택과 결과 상태 -->
+        <section class="lab-panel" data-lab="fe02" hidden>
+          <h2 class="lab-h">문체 선택 <small>FE-02</small></h2>
+          <p class="lab-note">문체를 고른 뒤 「이 문체로 만들기」 를 누르세요. <b>고르기만 해서는 글이 바뀌지 않습니다.</b></p>
+          <div class="tabs fe02-pick" id="fe02Pick" role="radiogroup" aria-label="문체"></div>
+          <p class="fe02-desc" id="fe02Desc"></p>
+          <button class="btn btn-primary fe02-go" id="fe02Go">이 문체로 만들기</button>
+          <dl class="fe02-state">
+            <dt>고른 문체</dt><dd id="fe02Sel"></dd>
+            <dt>만드는 중</dt><dd id="fe02Req"></dd>
+            <dt>지금 보이는 글</dt><dd id="fe02Shown"></dd>
+          </dl>
+          <p class="fe02-msg" id="fe02Msg" role="status" aria-live="polite"></p>
+          <article class="fe02-text"><span class="lab-badge">모의 결과 · 사람이 쓴 예시</span><div id="fe02Text"></div></article>
+          <div class="lab-ctl">
+            <span>시험용 —</span>
+            <label>응답 <select id="fe02Speed"><option value="800">빠름 (0.8초)</option><option value="3000">느림 (3초)</option></select></label>
+            <label>결과 <select id="fe02Result"><option value="ok">성공</option><option value="fail">실패</option></select></label>
+          </div>
+          <p class="lab-dev">문체 설명은 초안입니다 (대원 님 DW-03 문구가 오면 바꿉니다). 내부 선택값 · 결과 식별은 FE-08 에서 맞춥니다.</p>
+        </section>
+
+        <!-- FE-03 로그인 · 링크 · 어르신 화면 -->
+        <section class="lab-panel" data-lab="fe03" hidden>
+          <h2 class="lab-h">로그인 · 링크 · 어르신 화면 <small>FE-03</small></h2>
+          <p class="lab-note">화면 구조와 상태 전환만 보여 주는 모의입니다. <b>실제 로그인 · 링크 발급 · 복사 · 메시지 전송은 하지 않습니다.</b></p>
+          <div class="fe03-grid">
+            <div class="fe03-col">
+              <h3 class="lab-h3">자녀 화면</h3>
+              <div class="fe03-view" id="fe03Child"></div>
+              <div class="lab-ctl"><span>시험용 —</span>
+                <label>로그인 결과 <select id="fe03Login"><option value="ok">성공</option><option value="cancel">취소 (popup 닫음)</option><option value="invalid_token">401 invalid_token</option><option value="expired_token">401 expired_token</option></select></label>
+              </div>
+            </div>
+            <div class="fe03-col">
+              <h3 class="lab-h3">어르신 화면 (링크를 받은 쪽)</h3>
+              <div class="fe03-view elder" id="fe03Elder"></div>
+              <div class="lab-ctl"><span>시험용 —</span>
+                <label>상태 (3-C1 §5-3) <select id="fe03ElderState"><option value="ready">ready 시작 전</option><option value="in_progress">in_progress 같은 기기</option><option value="in_progress_elsewhere">409 다른 기기</option><option value="interrupted">interrupted 끊김</option><option value="expired">410 expired</option><option value="revoked">410 revoked</option><option value="invalid_link">404 invalid_link</option></select></label>
+              </div>
+            </div>
+          </div>
+          <p class="lab-dev">링크 유효 시간 · 다시 쓰기 · 재접속은 정해지지 않은 정책이라 지어내지 않았습니다 (FE-09). 문구는 대원 님 DW-04 가 오면 바꿉니다.</p>
+        </section>
+
+        <!-- FE-04 사진 · 생성 그림 표시 상태 -->
+        <section class="lab-panel" data-lab="fe04" hidden>
+          <h2 class="lab-h">사진 · 그림 표시 상태 <small>FE-04</small></h2>
+          <p class="lab-note">같은 글에 붙는 그림 자리를 상태별로 나란히 놓았습니다. <b>직접 올린 사진</b>과 <b>AI 가 그린 그림</b>을 다른 표시로 구분합니다.</p>
+          <div class="fe04-grid" id="fe04Grid"></div>
+          <p class="lab-dev">그림은 모두 이 화면이 그린 합성 예시이며 실제 생성 결과가 아닙니다. 「사진 없음」 과 「사진 조회 실패」 를 합치지 않습니다. 명칭은 충 · 다애 님과 FE-10 에서 맞춥니다.</p>
+        </section>
+
+        <!-- FE-05 작성일 · 사건 시점 목록 -->
+        <section class="lab-panel" data-lab="fe05" hidden>
+          <h2 class="lab-h">기록한 순 · 일어난 순 목록 <small>FE-05</small></h2>
+          <p class="lab-warn small">임시 정렬입니다 — 시점 모름의 위치 · 대략 시점 · 같은 시점의 순서는 아직 정하지 않았습니다 (FE-11).</p>
+          <div class="tabs" id="fe05Sort" role="group" aria-label="정렬">
+            <button class="tab" data-sort="written" aria-pressed="true">기록한 순</button>
+            <button class="tab" data-sort="event" aria-pressed="false">일어난 순</button>
+          </div>
+          <p class="fe05-how" id="fe05How"></p>
+          <div id="fe05Body"></div>
+          <div class="lab-ctl"><span>시험용 —</span>
+            <label>상태 <select id="fe05State"><option value="list">목록</option><option value="load">불러오는 중</option><option value="empty">빈 목록</option><option value="error">읽기 실패</option></select></label>
+          </div>
+        </section>
+
+        <!-- FE-06 같은 본문의 휴대전화 · PC 읽기 -->
+        <section class="lab-panel" data-lab="fe06" hidden>
+          <h2 class="lab-h">같은 글 — 휴대전화 · PC 보기 <small>FE-06</small></h2>
+          <p class="lab-note">한 가지 합성 자서전 글을 두 화면에 똑같이 놓았습니다. 화면이 글을 줄이거나 다시 쓰지 않습니다.</p>
+          <p class="fe06-check" id="fe06Check"></p>
+          <div class="fe06-grid">
+            <div><h3 class="lab-h3">휴대전화</h3><div class="fe06-phone"><div class="fe06-read" id="fe06Phone"></div></div></div>
+            <div><h3 class="lab-h3">PC</h3><div class="fe06-pc"><div class="fe06-read" id="fe06Pc"></div></div></div>
+          </div>
+          <div class="lab-ctl"><span>시험용 —</span>
+            <label>상태 <select id="fe06State"><option value="ok">정상</option><option value="short">짧은 글</option><option value="wait">만드는 중</option><option value="lack">자료 부족</option><option value="fail">실패</option><option value="old">이전 결과</option></select></label>
+          </div>
+          <p class="lab-dev">화면 안의 임시 모양(제목 · 소제목 · 문단)이며 API 형식이 아닙니다. 본문 · 문단 · 출처 형식은 FE-12 에서 맞춥니다.</p>
+        </section>
+
+        <div class="dock">
+          <button class="btn btn-primary" id="labBack">처음으로</button>
+        </div>
+      </section>
     </main>
   </div>
 
@@ -625,6 +1254,7 @@
       <button id="devSend">전송</button>
       <button id="devDone" title="다음 질문으로 즉시 넘어가기 (POST /done)">다 말했어요</button>
     </div>
+    <div class="row"><button id="devLab" title="2~7차 혼자 준비하는 일(FE-01~06) 화면 시안">개발 시안 열기</button></div>
     <pre id="devLog"></pre>
   </div>
 
@@ -638,13 +1268,13 @@
   const CONFIG = {
     // 화면 아래와 개발용 패널에 그대로 찍힌다. 「고친 게 반영이 안 된 것 같다」는
     // 대부분 예전 파일이 열려 있는 경우라서, 눈으로 확인할 자리를 만들어 둔다.
-    version: 'v0.19 · 2026-10-13 (녹음 막대가 정리 중에 사라지지 않게)',
+    version: 'v0.31 · 2026-10-21 (보낸 링크 목록 — 상태별 취소 · 다시 만들기)',
 
     // 이 화면을 백엔드가 직접 서빙하면(web/ 폴더) 빈 문자열 그대로 둔다.
     // 다른 포트에서 열어 시험할 때만 'http://127.0.0.1:8010' 처럼 채운다.
     // (그때는 백엔드 .env 의 ALLOWED_ORIGINS 에 이 화면 주소를 넣어야 한다)
     apiBase: '',
-    userId: 'dev-user',          // 구글 로그인이 붙으면 교체 (백엔드 X-User-Id)
+    userId: 'dev-user',          // auth.mode 'dev' 에서만 보낸다 (백엔드 X-User-Id). 'session' 에서는 보내지 않는다
 
     session: {
       title: '',                 // 비우면 날짜로 자동 생성
@@ -656,6 +1286,36 @@
       // 끄면 말을 마치자마자 누른 말씀이 엽서에서 빠진다 (confirmLastSpeech 주석 참조).
       confirmBeforeStop: true,
       confirmWaitMs: 12000,      // 그 확정을 기다리는 상한
+    },
+
+    // ── 1차 인터뷰 흐름 (업무지시서 03 v1.0) ─────────────────────
+    //   테마 · 구체 주제 · 보조 사진 → 음성 / 키보드 → 「인터뷰 마치기」 → 나눈 이야기 읽기
+    // 이 흐름에서는 엽서를 만들지 않는다 — 엽서 요청 · 임시 정리(polish)를 부르지 않는다.
+    // 엽서 기능은 지우지 않았다. flow 를 'postcard' 로 두거나 주소 뒤에 ?flow=postcard 를
+    // 붙이면 예전 흐름(녹음 → 엽서)으로 돈다.
+    interview: {
+      flow: 'interview',         // 'interview' (1차 기본) | 'postcard' (예전 흐름)
+      themes: ['가족', '나', '취미'],
+      // 서버 C1 §1 의 theme 값 (feature/theme-interview 8e55163). 모르는 값은 422.
+      themeCodes: { '가족': 'family', '나': 'self', '취미': 'hobby' },
+      // C1 §1 의 theme · topic 칸에도 싣는다. 이 칸이 없는 예전 서버는 모르는 칸을 그냥 버리므로
+      // 켜 둬도 안전하다 (StartReq 에 extra 금지가 없음을 확인).
+      sendC1: true,
+      topicMax: 60,
+      // 테마 이름 · 주제를 **서버가 돌려주는 칸**에도 싣는다 — 「나눈 이야기」 가 서버 값을 읽어 보여 주는 자리다.
+      // C1 §1 의 theme · topic 은 아직 DB 에 저장되지 않아 /record 로 돌아오지 않는다 (SV-06 에서 정함).
+      // 그래서 테마 이름은 title, 주제는 seed(0번 조각) 에도 함께 싣는다. 서버는 seed 가 topic 과 같으면 한 번만 쓴다.
+      // SV-06 에서 /record 가 theme · topic 을 주기 시작하면 여기를 { theme: 'theme', topic: 'topic' } 로 바꾼다.
+      startKeys: { theme: 'title', topic: 'seed' },
+      keyboard: true,            // 마이크 옆 「글로 쓰기」. 마이크를 못 쓰면 글로만 진행한다
+      // 앞서 말씀하신 소리가 서버에 남아 있으면(audio_bytes) 그 말씀이 먼저 확정될
+      // 때까지 글을 보내지 않는다 — 지금 서버는 한 턴에 소리가 있으면 글을 버린다
+      // (controller._transcribe). 이 시간이 지나도 안 비면 「말로 하기」로 안내한다.
+      voiceDrainMs: 9000,
+      // 내용 확인. 마지막 답변이 DB 에 닿기 전일 수 있어 몇 번 다시 읽는다.
+      recordTimeoutMs: 15000,
+      recordWaitMs: 8000,
+      recordRetryMs: 1000,
     },
 
     // ── 보관함 ────────────────────────────────────────────────────
@@ -685,13 +1345,14 @@
       idsField: 'session_ids',
       min: 3,
       max: 5,
-      // 고를 엽서를 찾을 회차 수. 시험 세트가 이 범위를 벗어나면 늘린다 (서버 상한 100).
+      // 고를 엽서 수 (서버 상한 100). 서버에 「엽서 있는 회차만」(?has_postcard=1) 을 달라고 하므로
+      // 최근 회차에 엽서 없는 회차가 많아도 밀려나지 않는다. (v0.26 에서 잠깐 100 으로 늘렸다가 되돌림)
       listLimit: 20,
       // 화면 쪽 안전장치일 뿐이다. 모델 호출 제한(서버 MEMOIR_TEXT_TIMEOUT, 지금 20초)을
       // 넘기면 서버가 504 로 먼저 답한다. 연결이 걸려 버렸을 때만 여기서 접는다.
       timeoutMs: 60000,
       // '' 이면 실제 서버를 부른다 (기본). 서버 없이 화면만 볼 때 예시 응답을 고른다:
-      //   ready · 400 · 404 · 422 · 502 · 504 · invalid · timeout · insufficient
+      //   ready · 400 · 404 · 422 · 502 · 503 · 504 · invalid · timeout · insufficient
       // 주소 뒤에 ?memoirMock=ready 처럼 붙여도 된다. 예시일 때는 화면 위에 「예시 응답 모드」가 뜬다.
       mock: '',
       mockDelayMs: 1500,
@@ -718,7 +1379,9 @@
     // 백엔드 main.py 의 make_postcard 에 연결되어 있다.
     //   POST /api/sessions/{id}/postcard → { url, title, text, caption, width, height, bytes }
     // 기다리는 요청이라 수 초 걸린다. 그동안 화면은 「정리 중」에 머문다.
-    // 실패하면(키 없음·글꼴 없음·회차가 짧음) 화면 안의 임시 정리로 자동으로 내려간다.
+    // 실패하면 **안내 화면**을 띄운다 — 자료가 부족하면 「엽서를 만들 만큼 이야기가 모이지 않았어요」,
+    // 그 밖의 실패(키 · 글꼴 · 시간 초과 · AI 답 이상)는 「엽서를 만들지 못했어요」 + 다시 만들기.
+    // 예전에는 화면 안의 임시 정리(polish)로 만든 엽서를 대신 보여 줘서, 실패가 사용자에게 보이지 않았다.
     card: {
       server: true,              // false 로 두면 언제나 임시 정리만 쓴다
       path: '/sessions/{id}/postcard',
@@ -727,6 +1390,9 @@
       pollMs: 1500,              // /record 를 다시 보는 간격
       retryMs: 8000,             // 기다리는 동안 다시 구워 보게 하는 간격
       useServerImage: true,      // 저장할 때 서버가 구운 그림을 쓴다 (없으면 화면에서 그린다)
+      // 서버 엽서가 실패했을 때 예전처럼 화면 안의 임시 정리 엽서로 대신할까. 기본은 끔 —
+      // 실패를 엽서처럼 꾸미지 않는다. 서버 없이 보는 비상 화면(offlineDemo)은 이 값과 상관없이 임시 정리다.
+      localFallback: false,
     },
 
     // ── 화면 문구·버튼 ────────────────────────────────────────────
@@ -737,6 +1403,8 @@
         pause:   '일시정지',
         resume:  '이어서 말하기',
         stop:    '녹음 정지 · 엽서 만들기',
+        end:     '인터뷰 마치기',          // 1차 흐름의 정지 버튼
+        begin:   '이 기기에서 시작',       // 1차 흐름의 시작 버튼
         reading: '읽어 드리는 중…',
         skip:    '소리 없이 넘어가기',
         done:    '다 말했어요',
@@ -751,11 +1419,40 @@
       // 말을 마치고 3초 기다리면 저절로 넘어가므로 어르신께는 버튼이 하나 더
       // 있는 셈이 된다. 개발용 패널에는 항상 있다.
       showDoneButton: false,
+      // 녹음 화면(대화 · 정리 중)만 앱 모양으로 두고, 준비 · 내용 확인 · 지난 이야기 · 자서전 ·
+      // 엽서는 넓은 웹 화면으로 그린다 (PC 처럼 폭이 760px 이상일 때). false 면 전부 앱 모양.
+      webLayout: true,
+      // 책장 넘김 시안. 화면이 바뀔 때만 책장이 넘어간다 (대화 중 버튼 · 녹음 화면끼리는 넘기지 않음).
+      // 기본은 꺼 둔다 — 업무지시서 03 에서 「전체 UI 재디자인」 은 1차 제외라 팀 합의 전 시안이다.
+      // 파일을 고치지 않고 보려면 주소 뒤에 ?book=1 (끄기 ?book=0). 기기의 「동작 줄이기」 가 켜져 있으면 넘기지 않는다.
+      bookFlip: false,
+      bookFlipMs: 550,           // 휴대전화 — 한 쪽 넘김
+      bookSpreadMs: 750,         // PC (폭 760px 이상) — 두 쪽 펼침에서 한 장 넘김
       // 엽서 내려받기 형식. png = 이미지 한 장 (지금 지원)
       download: 'png',
       // 내려받는 파일 이름을 영문으로. false 면 한글 제목을 파일명에 쓴다
       // (환경에 따라 이름이 깨지거나 버려질 수 있다)
       filenameAscii: true,
+    },
+
+    // ── 3차 인증 · 인터뷰 링크 (3-C1 초안 · develop cd65dfa) ──────────
+    // **서버 코드는 아직 없다.** 기본값은 지금처럼 dev-user 헤더로 돈다. 규격 모양대로 미리 만들어 두고
+    // 주소 뒤 값으로 켜서 본다: ?auth=session · ?authMock=ok · ?linkMock=ready (README 「3차 인증 · 링크」)
+    auth: {
+      // 'dev'     = 지금처럼 X-User-Id: dev-user 헤더 (서버에 인증이 붙기 전)
+      // 'session' = 구글 로그인 → 서버가 msid 쿠키를 준다. 화면은 X-User-Id 를 보내지 않는다
+      mode: 'dev',
+      // Google Cloud 웹 클라이언트 ID (비밀값 아님). 비어 있으면 로그인 버튼 자리에 「준비 중」 이 뜬다
+      googleClientId: '',
+      // 모의 로그인 (서버 없이): '' | ok | new(화자 없음) | cancel | invalid_token | expired_token
+      mock: '',
+      // 화자 만들기 — POST {name} → 201 {elder_id, name} (최충 답변 2026-10-21). 부를 때마다 새 화자가 생긴다
+      elderPath: '/elders',
+    },
+    link: {
+      path: '/i',                // 어르신 링크 주소 https://<고정 주소>/i#<토큰>
+      // 모의 링크 (서버 없이): '' | ready · in_progress · elsewhere · ended · interrupted · expired · revoked · invalid
+      mock: '',
     },
 
     pollMs: 300,                 // 서버 상태를 물어보는 주기 (frontend-client 와 동일)
@@ -766,6 +1463,36 @@
      공통
      ═══════════════════════════════════════════════════════════════ */
   const $ = (q) => document.querySelector(q);
+
+  /* ── 3차 인증 · 링크 — 지금 어느 모드로 도는가 (3-C1 초안) ── */
+  const QS = new URLSearchParams(location.search);
+  const AUTH = {
+    mode: QS.get('auth') || CONFIG.auth.mode,           // dev | session
+    mock: QS.get('authMock') ?? CONFIG.auth.mock,
+    user: null, elders: [],
+  };
+  if (AUTH.mock && AUTH.mode === 'dev') AUTH.mode = 'session';   // 모의 로그인은 로그인 모드에서만 뜻이 있다
+  // 어르신 링크 https://<주소>/i#<토큰>. 토큰은 # 뒤라 서버로 가지 않는다 — 화면이 읽어 헤더로만 보낸다.
+  // **토큰은 기록(⚙) · 로그 · 화면 어디에도 찍지 않는다.**
+  const LINK = { on: false, token: '', mock: QS.get('linkMock') ?? CONFIG.link.mock, preview: null };
+  (() => {
+    const atPath = location.pathname.replace(/\/+$/, '') === CONFIG.link.path;
+    if (!atPath && !LINK.mock) return;
+    LINK.on = true;
+    const h = location.hash.replace(/^#/, '');
+    if (h) {
+      LINK.token = h;
+      // 주소창의 # 부분을 지운다 — 화면 공유 · 캡처로 토큰이 새지 않게
+      try { history.replaceState(null, '', location.pathname + location.search); } catch (_) {}
+    }
+  })();
+  /** 요청마다 붙일 신원. 링크 요청(/i/*)은 링크 토큰만, 그 밖은 dev 모드일 때만 X-User-Id. */
+  function idHeaders(path) {
+    if (path.startsWith('/i/')) return LINK.token ? { 'X-Interview-Token': LINK.token } : {};
+    return AUTH.mode === 'dev' ? { 'X-User-Id': CONFIG.userId } : {};
+  }
+  // 진행 요청의 주소. 링크로 연 인터뷰는 /api/i/session/... (주소에 session_id 가 없다 — 3-C1 §5-2)
+  const sp = (id) => LINK.on ? '/i/session' : `/sessions/${id}`;
   const screens = [...document.querySelectorAll('.screen')];
   const logLines = [];
 
@@ -811,16 +1538,22 @@
     const res = await fetch(`${CONFIG.apiBase}/api${path}`, Object.assign({}, init, {
       // 서버가 신원 쿠키(uid)를 심어 준다. <img src="/api/photos/..."> 가 그 쿠키로 사진을 받는다.
       credentials: 'include',
-      headers: Object.assign({
-        'Content-Type': 'application/json',
-        'X-User-Id': CONFIG.userId,
-      }, init && init.headers),
+      headers: Object.assign({ 'Content-Type': 'application/json' }, idHeaders(path), init && init.headers),
     }));
     if (!res.ok) {
       const body = await res.json().catch(() => ({ detail: res.statusText }));
-      throw new ApiError(res.status, body.detail || '요청에 실패했습니다',
-                         Number(res.headers.get('Retry-After')) || 0);
+      // detail 은 보통 문자열이다. 서버가 {code, message} 로 주기 시작해도 읽히게 둔다 —
+      // 엽서의 「자료 부족」 과 「굽는 중」 을 문구가 아니라 code 로 가르려고 요청해 두었다 (P2-SV-01)
+      const d = body.detail;
+      const err = new ApiError(res.status,
+        (typeof d === 'string' ? d : d && d.message) || '요청에 실패했습니다',
+        Number(res.headers.get('Retry-After')) || 0);
+      err.code = String(body.code || (d && typeof d === 'object' && d.code) || '');
+      // 로그인 모드에서 자녀 경로가 401 이면 로그인 화면으로 (3-C1 — 「다른 API 도 401 이면 로그인으로」)
+      if (res.status === 401 && AUTH.mode === 'session' && !path.startsWith('/auth/') && !path.startsWith('/i/')) authLost(err.code);
+      throw err;
     }
+    if (res.status === 204) return null;          // 로그아웃 등 본문 없는 성공
     return res.json();
   }
 
@@ -830,33 +1563,58 @@
     // POST /api/sessions  →  StartReq(title, seed, pace, max_turn, photo_id?)
     start: (body) => call('/sessions', { method: 'POST', body: JSON.stringify(body) }),
 
-    get: (id) => call(`/sessions/${id}`),
+    get: (id) => call(sp(id)),
 
-    ttsDone: (id) => call(`/sessions/${id}/tts-done`, { method: 'POST' }),
+    ttsDone: (id) => call(`${sp(id)}/tts-done`, { method: 'POST' }),
 
     // 마이크 없이 흐름을 돌려볼 때 쓰는 텍스트 경로 (SpeechReq.text)
-    speech: (id, text) => call(`/sessions/${id}/speech`, { method: 'POST', body: JSON.stringify({ text }) }),
+    speech: (id, text) => call(`${sp(id)}/speech`, { method: 'POST', body: JSON.stringify({ text }) }),
 
     // 오디오는 JSON 으로 감싸지 않는다. 본문은 바이트 그대로, mime 은 Content-Type.
-    audio: (id, pcm, mime) => call(`/sessions/${id}/speech/audio`, {
+    audio: (id, pcm, mime) => call(`${sp(id)}/speech/audio`, {
       method: 'POST', body: pcm, headers: { 'Content-Type': mime },
     }),
 
     // 소리가 없으면 204 → null. 오류가 아니다. 화면은 글자만 띄우면 된다.
     questionAudio: async (id) => {
-      const res = await fetch(`${CONFIG.apiBase}/api/sessions/${id}/question/audio`,
-                              { headers: { 'X-User-Id': CONFIG.userId } });
+      const path = `${sp(id)}/question/audio`;
+      const res = await fetch(`${CONFIG.apiBase}/api${path}`, { credentials: 'include', headers: idHeaders(path) });
       if (res.status === 204) return null;
       if (!res.ok) throw new ApiError(res.status, '소리를 받지 못했습니다');
       const blob = await res.blob();
       return blob.size ? blob : null;
     },
 
-    done: (id) => call(`/sessions/${id}/done`, { method: 'POST' }),
-    abort: (id) => call(`/sessions/${id}/abort`, { method: 'POST' }),
+    done: (id) => call(`${sp(id)}/done`, { method: 'POST' }),
+    abort: (id) => call(`${sp(id)}/abort`, { method: 'POST' }),
+
+    // ── 3차 — 자녀 로그인 (3-C1 §4 초안). 오류는 { detail, code } — 화면은 code 로 가른다
+    authGoogle: (credential) => AUTH.mock ? authFake('google')
+      : call('/auth/google', { method: 'POST', body: JSON.stringify({ credential }) }),
+    authMe: () => AUTH.mock ? authFake('me') : call('/auth/me'),
+    authLogout: () => AUTH.mock ? authFake('logout') : call('/auth/logout', { method: 'POST' }),
+    // POST /api/elders {name} → 201 {elder_id, name}
+    elderCreate: (name) => AUTH.mock ? authFake('elder', name)
+      : call(CONFIG.auth.elderPath, { method: 'POST', body: JSON.stringify({ name }) }),
+    // ── 3차 — 어르신 링크 (3-C1 §5). 헤더 X-Interview-Token 은 call() 이 붙인다
+    linkPreview: () => LINK.mock ? linkFake('preview') : call('/i/preview'),
+    linkStart: () => LINK.mock ? linkFake('start') : call('/i/start', { method: 'POST' }),
+    linkTranscript: () => LINK.mock ? linkFake('transcript') : call('/i/transcript'),
+    // ── 3차 — 자녀가 링크를 발급 · 회수 · 재발급 (feature/theme-interview 40551ea)
+    //    발급 201 {link_id, elder_id, title, theme, topic, state, session_id, created_at, expires_at, token, url}
+    //    **token · url 은 발급 응답에만 한 번 온다** (서버 표에는 해시만). 재발급 409 already_started
+    linkCreate: (body) => AUTH.mock ? linkOutFake('create', body) : call('/links', { method: 'POST', body: JSON.stringify(body) }),
+    linkRevoke: (id) => AUTH.mock ? linkOutFake('revoke') : call(`/links/${encodeURIComponent(id)}/revoke`, { method: 'POST' }),
+    linkReissue: (id) => AUTH.mock ? linkOutFake('reissue') : call(`/links/${encodeURIComponent(id)}/reissue`, { method: 'POST' }),
+    // 보낸 링크 — 최근 순 · 기본 20 · ?limit= 최대 100 · ?elder_id= 로 화자별. 토큰은 없다
+    linkList: (limit, elderId) => AUTH.mock ? linkOutFake('list')
+      : call(`/links?limit=${limit || 20}${elderId ? `&elder_id=${encodeURIComponent(elderId)}` : ''}`),
 
     // 지난 회차 목록. 빈 목록(없음)과 503(못 읽음)은 다른 사건이다.
-    sessions: (limit, signal) => call(`/sessions?limit=${limit || CONFIG.archive.limit}`, signal ? { signal } : undefined),
+    // ?has_postcard=1 이면 엽서 있는 회차만, DB 에서 걸러 최근 순으로 (feature/theme-interview e1efd0d).
+    // 회차마다 has_postcard(true/false) 도 실린다. 이 옵션을 모르는 예전 서버는 그냥 전부 준다.
+    sessions: (limit, signal, opts) => call(`/sessions?limit=${limit || CONFIG.archive.limit}${opts && opts.hasPostcard ? '&has_postcard=1' : ''}`,
+                                           signal ? { signal } : undefined),
 
     // ── 사진 (main.py upload_photo · get_photo) ──
     // 본문은 바이트 그대로. 형식은 서버가 앞머리 바이트로 가린다 (HEIC 도 받는다).
@@ -873,11 +1631,11 @@
     // 굽기를 시작하고 끝날 때까지 기다린다. 409=아직/굽는 중, 503=서버 사정.
     card: (id) => call(CONFIG.card.path.replace('{id}', id), { method: CONFIG.card.method }),
     // DB 에 저장된 회차. 서버가 저절로 구운 엽서를 여기서 되찾는다.
-    record: (id) => call(`/sessions/${id}/record`),
+    record: (id, signal) => call(`/sessions/${id}/record`, signal ? { signal } : undefined),
     // 서버가 구운 엽서 그림. <img> 로는 헤더를 못 보내므로 fetch 로 받는다.
     postcardImage: async (url) => {
       const res = await fetch(`${CONFIG.apiBase}${url}`, {
-        credentials: 'include', headers: { 'X-User-Id': CONFIG.userId },
+        credentials: 'include', headers: idHeaders('/sessions'),
       });
       if (!res.ok) throw new ApiError(res.status, '엽서 그림을 받지 못했습니다');
       return res.blob();
@@ -886,7 +1644,7 @@
     // ── 자서전 초안 (C1 v1.1) ──
     // 다른 API 와 같은 call() 을 쓴다. 실패는 HTTP 상태 + {"detail": …} 로 온다.
     // 화면 안내는 상태로만 고르고 detail 은 화면에 내지 않는다 (mmWhy).
-    // 사용자 ID 는 본문이 아니라 call() 이 붙이는 X-User-Id 헤더로 간다.
+    // 사용자 신원은 본문이 아니라 call() 이 붙인다 (dev 모드 X-User-Id · 로그인 모드 msid 쿠키).
     memoirPreview: (ids, signal) => call(CONFIG.memoir.path, {
       method: 'POST', signal,
       body: JSON.stringify({ [CONFIG.memoir.idsField]: ids }),
@@ -897,7 +1655,7 @@
     // 그 밖의 실패(502 · 503 · 연결 끊김)는 던진다 — 「엽서 없음」 으로 숨기지 않는다.
     postcardThumb: async (sessionId) => {
       const res = await fetch(`${CONFIG.apiBase}/api/sessions/${sessionId}/postcard`, {
-        credentials: 'include', headers: { 'X-User-Id': CONFIG.userId },
+        credentials: 'include', headers: idHeaders('/sessions'),
       });
       if (res.status === 404) return null;
       if (!res.ok) throw new ApiError(res.status, '엽서를 확인하지 못했습니다');
@@ -1146,6 +1904,7 @@
     e.target.value = '';
     if (!file) return;
     Object.assign(photo, { file, dataUrl: '', photo_id: null, url: '', status: 'picked' });
+    renderPhotoState();
     const reader = new FileReader();
     reader.onload = () => {
       const probe = new Image();
@@ -1236,15 +1995,19 @@
     if (changed()) return null;
     if (!payload) {
       log('사진', `${CONFIG.photo.maxUploadMB}MB 를 넘고 줄일 수도 없어 올리지 않습니다`);
+      photo.status = 'failed';
+      renderPhotoState();
       return null;
     }
     photo.status = 'uploading';
+    renderPhotoState();
     try {
       const res = await api.uploadPhoto(payload.bytes, payload.mime, sessionId);
       if (changed()) { log('사진', '그 사이 다른 사진을 골라 앞 사진의 결과를 버립니다'); return null; }
       photo.photo_id = res.photo_id;
       photo.url = res.url ? `${CONFIG.apiBase}${res.url}` : api.photoUrl(res.photo_id);
       photo.status = 'stored';
+      renderPhotoState();
       if (!photo.ratio && res.width && res.height) applyPhotoRatio(res.width, res.height);
       log('사진', `저장됨 · ${res.photo_id.slice(0, 8)} · ${res.width}×${res.height} · ${(res.bytes / 1024).toFixed(0)}KB`);
       // 미리보기를 못 만들었던 사진이면 서버가 만든 JPEG 로 채운다
@@ -1259,6 +2022,7 @@
     } catch (e) {
       if (changed()) return null;
       photo.status = 'failed';
+      renderPhotoState();
       // 서버가 이유별로 다른 코드를 준다. 어르신께는 알리지 않고 기록만 남긴다 —
       // 엽서에는 화면 안의 사진이 그대로 들어간다.
       const why =
@@ -1269,6 +2033,25 @@
       log('사진', `업로드 실패 · ${e.status || ''} ${why}`);
       return null;
     }
+  }
+
+  /**
+   * 사진이 어디까지 갔는지 글로 알린다 (UI-02). 「골랐다」 와 「올렸다」 는 다르다 —
+   * 올리기 전이나 실패한 사진을 준비 완료처럼 보이지 않게 한다. 1차 흐름에서만 보인다.
+   */
+  function renderPhotoState() {
+    const el = $('#photoState');
+    if (!NEW_FLOW || !el) return;
+    const st = photo.file ? photo.status : 'none';
+    const [cls, text] =
+        st === 'none'      ? ['', '사진 없이도 시작할 수 있어요.']
+      : !CONFIG.photo.upload ? ['', '고른 사진은 이 화면에서만 보여요. 서버에는 올리지 않아요.']
+      : st === 'picked'    ? ['', '사진을 골랐어요. 아직 올리기 전이에요.']
+      : st === 'uploading' ? ['', '사진을 올리는 중이에요…']
+      : st === 'stored'    ? ['ok', '사진을 올렸어요.']
+      :                      ['bad', '사진을 올리지 못했어요. 사진 없이 시작해요 (다른 사진을 골라도 돼요).'];
+    el.className = 'photo-state' + (cls ? ' ' + cls : '');
+    el.textContent = text;
   }
 
   /** 엽서·화면에 쓸 사진 주소. 화면 안의 것이 있으면 그것을, 없으면 서버 것을. */
@@ -1422,7 +2205,9 @@
   }
 
   /**
-   * 서버에게 엽서 글을 받아 온다. 못 받으면 null 을 돌려주고 화면은 임시 정리로 내려간다.
+   * 서버에게 엽서 글을 받아 온다. 못 받으면 **실패 이유**({ fail: 'lack' | 'error', status, why })를 돌려준다.
+   *   lack   자료 부족 — 다시 눌러도 같다 (서버 409 중 「굽는 중」 이 아닌 것, 또는 code=insufficient_material)
+   *   error  그 밖의 실패 — 다시 만들어 볼 수 있다 (503 · 502 · 404 · 연결 끊김 · 시간 초과 · 빈 응답)
    *
    * 회차가 닫히면 **서버가 저절로 한 번 굽는다**(postcard.auto). 그래서 우리가 POST 를
    * 보내는 순간 이미 굽는 중일 수 있고, 그때 서버는 409 로 답한다. 실패가 아니라
@@ -1438,6 +2223,20 @@
     }
   }
 
+  // 엽서 409 는 원인이 넷이고 본문의 code 로 가른다 (2-C1 §2 · feature/theme-interview 2d7ece0).
+  //   busy                   같은 회차를 굽는 중 — 기다린다
+  //   insufficient_material  담을 만큼 확실한 말씀이 없다 — 자료 부족 (다시 눌러도 같다)
+  //   no_answers             남은 말씀이 없다 — 자료 부족과 같은 안내
+  //   not_closed             회차가 아직 안 끝났다 — 닫히는 중일 수 있어 「다시 만들기」 를 둔다
+  // code 가 없는 예전 서버에서는 문구로 가린다.
+  const CARD_LACK = new Set(['insufficient_material', 'no_answers']);
+  const cardWaiting = (e) => e.code === 'busy'
+    || (!e.code && e.status === 409 && /기다|만드는 중|굽는 중/.test(String(e.message || '')));
+  const cardFail = (e) => ({
+    fail: (CARD_LACK.has(e.code) || (!e.code && e.status === 409 && !cardWaiting(e))) ? 'lack' : 'error',
+    status: e.status || 0, code: e.code || '', why: String(e.message || ''),
+  });
+
   async function serverCard(sessionId) {
     // 1) 이미 구워져 있나. 회차가 닫히면 서버가 저절로 한 번 굽는다(postcard.auto).
     const already = await recordCard(sessionId);
@@ -1448,20 +2247,18 @@
     try {
       const made = shapeServerCard(await api.card(sessionId));
       if (made) { log('엽서', '서버가 엽서를 구웠습니다'); return made; }
-      return null;
+      return { fail: 'error', status: 200, why: '빈 엽서가 왔습니다' };
     } catch (e) {
       const code = e.status || 0, why = String(e.message || '');
       // 409 하나에 뜻이 두 가지 섞여 있다.
       //   기다리면 되는 것 — 「엽서를 만드는 중입니다. 잠시 기다려 주세요」
       //   기다려도 안 되는 것 — 회차가 안 끝났다 · 남은 말씀이 없다 · 확실한 말씀이 없다
-      // 서버가 둘을 구분해 주지 않아 문구로 가린다. 잘못 갈라져도 임시 정리로
-      // 내려갈 뿐이라 화면이 멈추지는 않는다. (백엔드에 코드 분리를 요청해 두었다)
-      const waiting = code === 409 && /기다|만드는 중|굽는 중/.test(why);
-      if (!waiting) {
-        // 503 = 키·글꼴·시간 초과 같은 서버 사정, 404 = 회차를 못 찾음.
-        // 기다려도 달라지지 않으므로 **곧바로** 임시 정리로 내려간다.
+      // 서버가 둘을 구분해 주지 않아 문구로 가린다 (cardWaiting). code 를 주면 그것을 쓴다.
+      if (!cardWaiting(e)) {
+        // 503 = 키·글꼴·시간 초과 같은 서버 사정, 404 = 회차를 못 찾음, 409 = 자료 부족.
+        // 기다려도 달라지지 않으므로 **곧바로** 안내 화면으로 간다.
         log('엽서', `서버 엽서 실패 · ${code || ''} ${why}`);
-        return null;
+        return cardFail(e);
       }
       log('엽서', `서버가 굽는 중입니다 — 기다립니다 (${why})`);
     }
@@ -1479,33 +2276,34 @@
       await new Promise(r => setTimeout(r, CONFIG.card.pollMs));
       const got = await recordCard(sessionId);
       if (got) { log('엽서', '서버가 구운 엽서를 받았습니다'); return got; }
-      if (got === undefined) break;     // 기록을 못 읽는다 — 더 기다릴 것이 없다
+      if (got === undefined) return { fail: 'error', status: 0, why: '기록을 읽지 못했습니다' };   // 더 기다릴 것이 없다
       if (Date.now() < nextRetry) continue;
       nextRetry = Date.now() + CONFIG.card.retryMs;
       try {
         const made = shapeServerCard(await api.card(sessionId));
         if (made) { log('엽서', '서버가 엽서를 구웠습니다'); return made; }
-        return null;
+        return { fail: 'error', status: 200, why: '빈 엽서가 왔습니다' };
       } catch (e) {
-        const why = String(e.message || '');
-        if (!(e.status === 409 && /기다|만드는 중|굽는 중/.test(why))) {
-          log('엽서', `서버 엽서 실패 · ${e.status || ''} ${why}`);
-          return null;                  // 기다려도 안 되는 이유가 왔다 — 곧바로 내려간다
+        if (!cardWaiting(e)) {
+          log('엽서', `서버 엽서 실패 · ${e.status || ''} ${e.message || ''}`);
+          return cardFail(e);           // 기다려도 안 되는 이유가 왔다 — 곧바로 안내로
         }
       }
     }
     log('엽서', '서버 엽서를 기다리다 시간이 지났습니다');
-    return null;
+    return { fail: 'error', status: 0, why: 'timeout' };
   }
 
   async function composePostcard(sessionId, fragments) {
     if (CONFIG.card.server && sessionId) {
       const card = await serverCard(sessionId);
-      if (card) {
+      if (!card.fail) {
         log('엽서', `서버가 쓴 글을 받았습니다 (${card.body.length}자${card.url ? ' · 그림 있음' : ''})`);
         return card;
       }
-      log('엽서', '임시 정리로 내려갑니다');
+      // 실패를 엽서처럼 꾸미지 않는다 — 안내 화면으로 (CONFIG.card.localFallback 을 켜면 예전처럼 임시 정리)
+      if (!CONFIG.card.localFallback) return card;
+      log('엽서', '임시 정리로 내려갑니다 (card.localFallback)');
     }
     // 0번 조각은 씨앗 문장이라 뺀다. 1번부터가 어르신의 말씀이다.
     // **이어 붙이지 않고 답변 목록 그대로 넘긴다** — polish 가 말씀의 경계를
@@ -1517,15 +2315,131 @@
   /* ═══════════════════════════════════════════════════════════════
      화면 전환
      ═══════════════════════════════════════════════════════════════ */
-  const STEP_LABEL = { ready: '사진 고르기', talk: '', writing: '정리 중', complete: '완성', closed: '종료', archive: '보관함', memoir: '자서전' };
+  const STEP_LABEL = { ready: '사진 고르기', talk: '', writing: '정리 중', complete: '완성', closed: '종료', cardfail: '엽서', archive: '보관함', memoir: '자서전', review: '내용 확인', lab: '개발 시안', login: '로그인', elder: '시작 준비', link: '이야기 링크', linkout: '링크 보내기', links: '보낸 링크' };
+
+  /**
+   * 녹음 화면(대화 · 정리 중)은 휴대전화 앱 모양 그대로, 나머지는 넓은 웹 화면으로 그린다.
+   * 넓은 화면(760px 이상)에서만 차이가 난다 — 휴대전화에서는 어느 화면이든 같은 폭이다.
+   * 실제 모양은 CSS 의 `.app.web` 이 정한다.
+   */
+  const APP_SCREENS = new Set(['talk', 'writing']);
+
+  /* ── 책장 넘김 시안 (CONFIG.ui.bookFlip) ── */
+  const BOOK = (() => {
+    const q = new URLSearchParams(location.search).get('book');
+    return q !== null ? q === '1' : CONFIG.ui.bookFlip;
+  })();
+  // 앞으로 / 뒤로를 가르는 차례. 번호가 작아지면 뒤로 넘긴다 (예: 지난 이야기 → 준비).
+  const BOOK_ORDER = { login: -2, elder: -1, link: 0, ready: 0, linkout: 1, links: 1, talk: 1, writing: 2, review: 3, complete: 3, cardfail: 3, closed: 4, archive: 5, memoir: 6, lab: 7 };
+  let flipTimer = null;
+
+  // PC 폭이면 두 쪽 펼침으로 넘긴다. 녹음 화면(앱 모양)이 끼면 책이 아니므로 넘기지 않는다.
+  const spreadMode = () => CONFIG.ui.webLayout && !!window.matchMedia && matchMedia('(min-width: 760px)').matches;
+  const reducedMotion = () => !!window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+  /** 화면 한 장을 겉모습만 복제한다. 입력한 값은 복제되지 않아 옮겨 적고, id 는 data-id 로 바꾼다. */
+  function pageClone(el) {
+    const c = el.cloneNode(true);
+    const sel = 'input:not([type="file"]), textarea';
+    const src = el.querySelectorAll(sel), dst = c.querySelectorAll(sel);
+    src.forEach((x, i) => { if (dst[i]) dst[i].value = x.value; });
+    c.querySelectorAll('[id]').forEach(e => { e.dataset.id = e.id; e.removeAttribute('id'); });
+    c.setAttribute('aria-hidden', 'true');
+    c.inert = true;
+    c.classList.add('sf-page');
+    c.classList.remove('flip-in');
+    return c;
+  }
+
+  /**
+   * 두 쪽 펼침에서 한 장을 넘긴다 (PC).
+   *   앞으로   왼쪽 쪽은 옛 화면 그대로 두고, 오른쪽 장(앞면 = 옛 오른쪽, 뒷면 = 새 왼쪽)이
+   *            가운데를 축으로 왼쪽으로 넘어간다. 그 밑에서 새 오른쪽 쪽이 드러난다.
+   *   뒤로     거울처럼 — 왼쪽 장이 오른쪽으로 넘어온다.
+   * 진짜 화면은 이미 바뀌어 있다. 넘기는 장은 복제본이라 눌리지 않는다.
+   */
+  function spreadFlip(oldPage, oldH, to, back) {
+    const main = document.querySelector('main'), app = $('#app');
+    const now = screens.find(x => x.dataset.screen === to);
+    main.querySelectorAll('.sf, .flip-page').forEach(e => e.remove());
+    const newPage = pageClone(now);
+    const dup = (p) => { const c = p.cloneNode(true); const sel = 'input:not([type="file"]), textarea';
+      const a = p.querySelectorAll(sel), b = c.querySelectorAll(sel); a.forEach((x, i) => { if (b[i]) b[i].value = x.value; }); return c; };
+    const box = (cls, page) => { const d = document.createElement('div'); d.className = cls; if (page) d.append(page); return d; };
+
+    const sf = box('sf');
+    sf.style.height = `${Math.max(oldH, now.offsetHeight)}px`;
+    sf.style.setProperty('--sf-ms', `${CONFIG.ui.bookSpreadMs}ms`);
+    const near = back ? 'r' : 'l';            // 넘기는 동안 그대로 있는 쪽
+    const far = back ? 'l' : 'r';             // 넘어가는 장이 있던 쪽
+    sf.append(box(`sf-half sf-${near === 'l' ? 'left' : 'right'} sf-show-${near}`, oldPage));
+    const leaf = box(`sf-leaf sf-${far === 'l' ? 'left' : 'right'}`);
+    leaf.append(box(`sf-face sf-front sf-show-${far}`, dup(oldPage)));
+    leaf.append(box(`sf-face sf-back sf-show-${near}`, newPage));
+    sf.append(leaf);
+    main.append(sf);
+    app.classList.add('flipping');
+    clearTimeout(flipTimer);
+    flipTimer = setTimeout(() => { sf.remove(); app.classList.remove('flipping'); }, CONFIG.ui.bookSpreadMs + 80);
+  }
+
+  /** 떠나는 화면을 한 장 복제해 넘긴다. 진짜 화면은 곧바로 바뀌어 있다 — 연출은 겉모습뿐이다. */
+  function pageFlip(from, to) {
+    if (!BOOK || !from || from.dataset.screen === to) return;
+    if (APP_SCREENS.has(from.dataset.screen) && APP_SCREENS.has(to)) return;   // 녹음 화면끼리는 넘기지 않는다
+    if (reducedMotion()) return;
+    const back = (BOOK_ORDER[to] ?? 0) < (BOOK_ORDER[from.dataset.screen] ?? 0);
+    const main = from.parentElement, app = $('#app');
+    // 앞 장이 아직 넘어가는 중이면 치운다
+    main.querySelectorAll('.flip-page').forEach(e => e.remove());
+    screens.forEach(x => x.classList.remove('flip-in'));
+    const page = from.cloneNode(true);
+    page.querySelectorAll('[id]').forEach(e => e.removeAttribute('id'));   // 같은 id 가 두 개 생기지 않게
+    page.removeAttribute('id');
+    page.setAttribute('aria-hidden', 'true');
+    page.classList.add('flip-page');
+    page.style.setProperty('--flip-ms', `${CONFIG.ui.bookFlipMs}ms`);
+    page.style.height = `${from.offsetHeight}px`;
+    main.append(page);
+    app.classList.add('flipping');
+    if (back) {
+      // 뒤로 — 복제한 옛 화면은 깔아 두고, 새 화면이 왼쪽에서 덮어 온다
+      page.style.zIndex = 5;
+      const next = screens.find(x => x.dataset.screen === to);
+      next.style.setProperty('--flip-ms', `${CONFIG.ui.bookFlipMs}ms`);
+      next.classList.add('flip-in');
+    } else {
+      requestAnimationFrame(() => page.classList.add('go'));
+    }
+    clearTimeout(flipTimer);
+    flipTimer = setTimeout(() => {
+      page.remove();
+      screens.forEach(x => x.classList.remove('flip-in'));
+      app.classList.remove('flipping');
+    }, CONFIG.ui.bookFlipMs + 60);
+  }
+  function syncLayout(name) {
+    $('#app').classList.toggle('web', CONFIG.ui.webLayout && !APP_SCREENS.has(name));
+  }
 
   function show(name) {
     // 다른 화면으로 넘어가면 앞 화면의 오류 안내를 걷는다. 예전에는 「엽서를 저장하지
     // 못했습니다」가 「마치기」 뒤 끝 화면까지 따라왔다.
     const was = screens.find(s => s.classList.contains('active'));
     if (!was || was.dataset.screen !== name) clearBanner();
+    // 책장 넘김 (CONFIG.ui.bookFlip). PC 는 두 쪽 펼침 — 녹음 화면이 끼면 넘기지 않는다. 휴대전화는 한 쪽 넘김.
+    let spread = null;
+    if (BOOK && was && was.dataset.screen !== name && !reducedMotion()) {
+      if (!spreadMode()) pageFlip(was, name);
+      else if (!APP_SCREENS.has(was.dataset.screen) && !APP_SCREENS.has(name)) {
+        spread = { page: pageClone(was), h: was.offsetHeight,
+                   back: (BOOK_ORDER[name] ?? 0) < (BOOK_ORDER[was.dataset.screen] ?? 0) };
+      }
+    }
     screens.forEach(s => s.classList.toggle('active', s.dataset.screen === name));
     $('#stepLabel').textContent = STEP_LABEL[name] || '';
+    syncLayout(name);
+    if (spread) spreadFlip(spread.page, spread.h, name, spread.back);
     $('#app').classList.toggle('quiet', name === 'talk' || name === 'writing');
     // 어두운 바탕은 끝 화면에만 건다. 「마치기」에서 한 번 걸고 두면 거기서 연
     // 보관함까지 어두워져, 시작 화면에서 연 보관함과 색이 달라진다.
@@ -1566,10 +2480,27 @@
   function isHearing() { return isListening() || !!(snap && snap.state === 'PROCESSING' && snap.resumable); }
   let resumeSent = false;     // 정리 중에 말씀을 올렸다 — 곧 오는 PROCESSING → LISTENING 은 이어 듣기다
 
+  // ── 1차 인터뷰 흐름 (업무지시서 03) ──
+  // 주소의 ?flow= 가 설정보다 먼저다. 'postcard' 일 때만 예전 흐름(녹음 → 엽서)이다.
+  const NEW_FLOW = (new URLSearchParams(location.search).get('flow') || CONFIG.interview.flow) !== 'postcard';
+  let inputMode = 'voice';    // voice | switching | keyboard. 키보드도 같은 회차 · 같은 질문에 들어간다
+  let micOk = false;          // 마이크를 얻었나. 못 얻으면 글로만 이야기한다
+  let sending = false;        // 글을 보내는 중 — 두 번 눌러도 한 번만 간다
+  let awaitingReply = false;  // 글을 보냈고 다음 질문을 기다린다
+  let drainSince = 0;         // 키보드로 바꾼 뒤 서버에 남은 소리가 비기를 기다리기 시작한 시각
+  const prepInfo = { theme: '', topic: '' };   // 준비 화면에서 고른 값
+
+  // 마이크가 지금 소리를 받아야 하나. 키보드로 쓰는 동안에는 닫는다 — 열어 두면
+  // 주변 소리가 T1 을 리셋하고, 그 소리 때문에 서버가 글을 버린다 (controller._transcribe).
+  function micOpen() { return isHearing() && !held && inputMode === 'voice'; }
+
   async function beginInterview() {
     const err = $('#micError');
     err.classList.remove('show');
     clearBanner();
+    // 1차 흐름은 테마와 주제가 있어야 연다. 버튼도 그전엔 눌리지 않는다 (renderPrep).
+    // 링크로 연 인터뷰는 자녀가 이미 정해 두었다 (미리보기에서 받은 값).
+    if (NEW_FLOW && !LINK.on && !(prepInfo.theme && prepInfo.topic)) { renderPrep(); return; }
     $('#startBtn').disabled = true;
 
     // 브라우저 자동재생 차단은 사용자 동작 안에서만 풀 수 있다. 지금이 그 자리다.
@@ -1580,7 +2511,7 @@
       recorder = await startRecorder({
         onLevel: (l) => { level = l.rms; },
         onChunk: (pcm) => {
-          if (!sessionId || !isHearing()) return;     // 낭독 중 · 이어 듣지 않는 정리 중 소리는 버린다
+          if (!sessionId || !micOpen()) return;       // 낭독 중 · 이어 듣지 않는 정리 중 · 키보드 중 소리는 버린다
           // **줄 서 있는 동안 상태가 바뀔 수 있다.** 말이 끝났다고 판단되면(T1) 서버는
           // 곧바로 「정리 중」으로 넘어가는데, 그 직전에 큐에 들어간 조각이 뒤늦게
           // 올라가면 서버가 「PROCESSING 상태에서 speech 는 정의되지 않았다」로 거절한다.
@@ -1596,16 +2527,25 @@
         },
       });
       $('#devMic').textContent = 'on';
+      micOk = true;
+      inputMode = 'voice';
       log('마이크', '켰습니다');
     } catch (e) {
       const name = (e && e.name) || '';
-      err.textContent =
-        name === 'NotAllowedError' ? '마이크 사용을 허용해 주세요 (주소창의 자물쇠 → 마이크)'
-        : name === 'NotFoundError' ? '마이크를 찾지 못했습니다'
-        : (e.message || String(e));
-      err.classList.add('show');
-      $('#startBtn').disabled = false;
-      return;
+      log('마이크', `못 켰습니다 · ${name} ${e.message || e}`);
+      micOk = false;
+      // 1차 흐름은 마이크가 없어도 글로 이야기할 수 있다 (UI-08 권한 거절 → 키보드)
+      if (NEW_FLOW && CONFIG.interview.keyboard) {
+        inputMode = 'keyboard';
+      } else {
+        err.textContent =
+          name === 'NotAllowedError' ? '마이크 사용을 허용해 주세요 (주소창의 자물쇠 → 마이크)'
+          : name === 'NotFoundError' ? '마이크를 찾지 못했습니다'
+          : (e.message || String(e));
+        err.classList.add('show');
+        $('#startBtn').disabled = false;
+        return;
+      }
     }
 
     // 2) 회차 열기 — StartReq 의 필드 이름 그대로 보낸다
@@ -1619,6 +2559,18 @@
       pace: CONFIG.session.pace,
       max_turn: CONFIG.session.max_turn,
     };
+    // 1차 흐름 — 고른 테마 · 주제를 싣는다. 어느 키에 싣는지는 CONFIG.interview.startKeys (C1 전 임시)
+    if (NEW_FLOW) {
+      const k = CONFIG.interview.startKeys;
+      body[k.theme] = prepInfo.theme;
+      body[k.topic] = prepInfo.topic;
+      // C1 §1 — 서버가 질문을 만들 때 읽는 칸 (테마는 영문 코드)
+      if (CONFIG.interview.sendC1) {
+        body.theme = CONFIG.interview.themeCodes[prepInfo.theme];
+        body.topic = prepInfo.topic;
+      }
+      log('준비', `테마 ${prepInfo.theme}(${body.theme || '-'}) · 주제 「${prepInfo.topic}」`);
+    }
 
     // 2-1) 사진을 골랐다면 그 번호(photo_id)를 함께 보낸다.
     //
@@ -1642,12 +2594,19 @@
     }
 
     try {
-      const s = await api.start(body);
-      sessionId = s.session_id;
+      // 링크면 POST /api/i/start — 여러 번 눌러도 같은 회차가 온다 (3-C1 §5-2). 회차는 링크가 정한다
+      const s = LINK.on ? await api.linkStart() : await api.start(body);
+      if (LINK.on && s && s.mock) { linkMockStarted(); return; }
+      sessionId = s.session_id || 'link';     // 링크 진행 주소에는 session_id 가 없다 — 화면 안 표시용
+      if (LINK.on) log('링크', '시작했습니다');
       log('회차', `${sessionId.slice(0, 8)} 열림`);
       $('#devSession').textContent = sessionId.slice(0, 8);
       startVisualLoop();
       show('talk');
+      if (NEW_FLOW) {
+        $('#talkTopic').textContent = `${prepInfo.theme} · ${prepInfo.topic}`;
+        $('#talkTopic').hidden = false;
+      }
       applySnapshot(s);
       startPolling();
       // 3) 고를 때 올리는 데 실패했다면 여기서 한 번 더 시도한다. 기다리지 않는다.
@@ -1656,6 +2615,8 @@
     } catch (e) {
       $('#startBtn').disabled = false;
       if (recorder) { recorder.stop(); recorder = null; $('#devMic').textContent = 'off'; }
+      micOk = false; inputMode = 'voice';
+      if (LINK.on) { linkFailed(e); return; }
       show('ready');                      // 사진 분석 화면에 머물러 있지 않게 되돌린다
       log('회차', `열기 실패 · ${e.status || ''} ${e.message || e}`);
       // 서버가 이유별로 다른 코드를 준다 (main.py create_session). 화면도 다르게 말한다.
@@ -1665,6 +2626,9 @@
         banner(`${e.message}${wait}`);
       } else if (e.status === 503) {
         banner('지금은 이야기를 시작할 수 없어요. 잠시 뒤에 다시 시도해 주세요.');
+      } else if (e.status === 422) {
+        // C1 §1 — 모르는 테마 · 너무 긴 주제. detail 은 배열이라 그대로 띄우지 않는다
+        banner('입력을 확인해 주세요. 테마를 다시 고르거나 주제를 짧게 적어 주세요.');
       } else {
         banner(
           `서버에 연결하지 못했습니다 (${e.message || e}). 백엔드가 떠 있는지 확인해 주세요.`,
@@ -1684,7 +2648,7 @@
         // 기다려도 돌아오지 않으니, 지금까지 받은 이야기로 엽서를 만든다.
         if (e.status === 404) {
           log('회차', '서버에서 회차가 사라졌습니다 — 받은 이야기로 마무리합니다');
-          void finishSession();
+          void finishSession('gone');
         }
         // 그 밖의 실패는 한 번 놓친 것뿐이다. 다음 주기에 다시 묻는다.
       } finally {
@@ -1722,7 +2686,7 @@
     }
 
     // 마이크 판정은 듣는 동안에만 (이어 듣기가 열린 정리 중 포함). 일시정지 중에는 꺼 둔다.
-    if (recorder) recorder.setActive(isHearing() && !held);
+    if (recorder) recorder.setActive(micOpen());
 
     $('#friend').classList.toggle('speaking', s.state === 'SPEAKING' && !held);
 
@@ -1735,9 +2699,14 @@
       resumeSent = false;
       log('이어 듣기', '말씀이 이어져 질문을 미루고 다시 듣습니다');
     } else if (prev && prev.state === 'PROCESSING' && s.state === 'LISTENING'
-        && s.fragments.length === prev.fragments.length) {
+        && s.fragments.length === prev.fragments.length && inputMode === 'voice') {
+      // 키보드로 쓰는 동안에는 띄우지 않는다. 낭독 3초 뒤 서버가 빈 확정을 한 번 하는데
+      // (T1), 글을 쓰고 계신 분께 「말씀이 안 들어왔다」 고 할 일이 아니다.
       toast('말씀이 들어오지 않았어요. 다시 듣고 있습니다.');
     }
+    // 글을 보내고 기다리던 답 — 새 질문을 읽기 시작했거나, 빈 확정으로 듣기로 돌아왔다
+    if (s.state === 'SPEAKING' || s.state === 'CLOSED'
+        || (prev && prev.state === 'PROCESSING' && s.state === 'LISTENING')) awaitingReply = false;
 
     renderControls(s);
 
@@ -1772,15 +2741,20 @@
     const pauseOn = CONFIG.ui.showPauseButton;
 
     // 화면 전체의 색·테·빛이 이 한 줄을 따라간다 (CSS 의 .app[data-state=…])
-    $('#app').dataset.state = held ? 'HELD' : s.state;
-    $('#app').classList.toggle('hearing', !held && isHearing());
+    // 키보드로 쓰는 동안의 듣기(LISTENING)는 녹음이 아니다 — 붉은 「녹음 중」 대신 TYPING 으로 칠한다.
+    const kb = NEW_FLOW && inputMode !== 'voice';
+    $('#app').dataset.state = held ? 'HELD' : (kb && listening) ? 'TYPING' : s.state;
+    $('#app').classList.toggle('kb', kb);
+    $('#app').classList.toggle('hearing', micOpen());
+    renderCompose(s);
     $('#app').classList.toggle('paused', held);
     $('#friend').classList.toggle('resting', held || s.state === 'PROCESSING');
 
     // 일시정지를 쓰지 않을 때는 「녹음 정지」가 큰 버튼 자리를 차지한다.
     hold.hidden = !pauseOn;
-    stop.className = pauseOn ? 'btn-ghost' : 'btn btn-primary';
-    stop.textContent = L.stop;
+    // 1차 흐름에서는 「보내기」 가 큰 버튼이라 마치기는 테두리 버튼으로 둔다
+    stop.className = NEW_FLOW ? 'btn-line' : pauseOn ? 'btn-ghost' : 'btn btn-primary';
+    stop.textContent = NEW_FLOW ? L.end : L.stop;
 
     // 소리를 못 틀었을 때의 안내와 버튼도 여기서 정한다. readQuestion 이 한 번 써 두면
     // 0.3초 뒤 폴링이 「잠시만 기다려 주세요」로 덮어써서, 어르신은 무엇을 눌러야 할지 몰랐다.
@@ -1792,6 +2766,10 @@
       if (s.state === 'SPEAKING') {
         $('#listenState').textContent = '읽어 드릴게요';
         $('#questionSub').textContent = speakingSub;
+      } else if (kb) {
+        // 「녹음 중」 이라고 하지 않는다 — 마이크는 닫혀 있다
+        $('#listenState').textContent = awaitingReply ? '잘 받았어요' : '글로 써 주세요';
+        $('#questionSub').textContent = awaitingReply ? '다음 이야기를 고르고 있어요.' : '';
       } else if (listening) {
         $('#listenState').textContent = '녹음 중이에요';
         $('#questionSub').textContent = '천천히, 편하게 말해도 괜찮아요.';
@@ -1862,6 +2840,132 @@
       .catch(() => {});
   }
 
+  /* ── 키보드로 답하기 (업무지시서 03 UI-03 · UI-04) ──────────────
+     지금 서버로 되는 만큼만 한다. 서버는 손대지 않았다.
+       · 보내기 = POST /speech {text} → POST /done (바로 확정). /speech 는 원래 있던
+         텍스트 경로이고, done 이 실패해도 3초 뒤 저절로 확정된다(T1).
+       · 쓰는 동안에는 아무것도 보내지 않는다. 서버는 낭독 3초 뒤 빈 확정을 한 번 하고
+         다시 듣기로 돌아와 그대로 기다린다 — 질문이 저절로 넘어가지 않는다.
+       · 서버에 앞서 말씀하신 소리가 남아 있으면(audio_bytes > 0) 글을 보내지 않는다.
+         지금 서버는 한 턴에 소리가 있으면 글을 버린다 (controller._transcribe).
+         그 말씀이 먼저 확정되고, 글은 다음 질문부터 보낼 수 있다.
+       · 보내지 않은 글은 버리지 않는다. 말로 바꿔도 입력칸에 남아 있다.
+     「서버가 타이머를 멈춰 주는 키보드 모드」 · 요청 번호로 중복 막기는 C1 에서 정한다. */
+  const sleep = (ms) => new Promise(r => setTimeout(r, ms));
+
+  function renderCompose(s) {
+    if (!NEW_FLOW) return;
+    $('#modeTabs').hidden = !CONFIG.interview.keyboard || !sessionId;
+    const kb = inputMode !== 'voice';
+    $('#modeVoice').setAttribute('aria-pressed', String(!kb));
+    $('#modeKeyboard').setAttribute('aria-pressed', String(kb));
+    $('#modeVoice').disabled = !micOk || inputMode === 'switching' || sending;
+    $('#modeKeyboard').disabled = inputMode === 'switching';
+    $('#compose').hidden = !kb;
+    if (!kb) return;
+
+    const box = $('#composeText'), btn = $('#composeSend');
+    const text = box.value.trim();
+    // 앞서 말씀하신 소리가 서버에 아직 있다 — 그 말씀이 먼저 확정되어야 한다
+    const leftover = s.state === 'LISTENING' && s.audio_bytes > 0;
+    if (!leftover) drainSince = 0;
+    else if (!drainSince) drainSince = Date.now();
+    const stuck = leftover && Date.now() - drainSince > CONFIG.interview.voiceDrainMs;
+
+    box.readOnly = sending;
+    let msg = '';
+    if (inputMode === 'switching') msg = '말씀하신 소리를 마저 보내고 있어요…';
+    else if (sending) msg = '보내는 중이에요…';
+    else if (s.state === 'SPEAKING') msg = '질문을 다 읽은 뒤에 보낼 수 있어요. 미리 써 두셔도 돼요.';
+    else if (s.state === 'PROCESSING') msg = '이야기를 정리하고 있어요. 미리 써 두셔도 돼요.';
+    else if (stuck) msg = '앞서 하신 말씀이 남아 있어 글을 보낼 수 없어요. 「말로 하기」로 이어서 말씀해 주세요.';
+    else if (leftover) msg = '앞서 하신 말씀을 먼저 정리하고 있어요. 다음 질문부터 글로 보낼 수 있어요.';
+    else if (!micOk) msg = '마이크를 쓸 수 없어 글로 이야기를 나눠요.';
+    $('#composeNote').textContent = msg;
+    btn.disabled = !(inputMode === 'keyboard' && s.state === 'LISTENING' && !leftover && !sending && text);
+  }
+
+  /** 조건이 맞을 때까지 서버 상태를 다시 묻는다. 맞으면 true. */
+  async function waitFor(id, pred, ms) {
+    const until = Date.now() + ms;
+    while (Date.now() < until) {
+      try {
+        const s = await api.get(id);
+        applySnapshot(s);
+        if (pred(s)) return true;
+      } catch (e) {
+        if (e.status === 404) return false;
+      }
+      await sleep(300);
+    }
+    return false;
+  }
+
+  async function toKeyboard() {
+    if (!NEW_FLOW || inputMode !== 'voice' || stopping || closing || !sessionId) return;
+    log('입력', '키보드로 바꿉니다');
+    // 모아 둔 말 끝을 **먼저** 올린다. 모드를 먼저 바꾸면 micOpen() 이 닫혀 그 끝이
+    // 버려지고, setActive(false) 를 먼저 부르면 모아 둔 것이 지워진다.
+    if (recorder) recorder.flushNow();
+    inputMode = 'switching';
+    if (recorder) recorder.setActive(false);
+    if (snap) renderControls(snap);
+    await uploadQueue.catch(() => {});
+    try { applySnapshot(await api.get(sessionId)); } catch (_) {}
+    if (stopping || closing) return;
+    inputMode = 'keyboard';
+    if (snap) renderControls(snap);
+    $('#composeText').focus();
+  }
+
+  function toVoice() {
+    if (!NEW_FLOW || inputMode !== 'keyboard' || !micOk || sending) return;
+    inputMode = 'voice';
+    log('입력', '말로 바꿉니다');
+    if ($('#composeText').value.trim()) toast('써 두신 글은 그대로 남아 있어요. 「글로 쓰기」를 누르면 다시 보여요.');
+    if (snap) { if (recorder) recorder.setActive(micOpen()); renderControls(snap); }
+  }
+
+  async function sendText() {
+    const box = $('#composeText');
+    const text = box.value.trim();
+    if (sending || !text || !sessionId || inputMode !== 'keyboard' || stopping || closing) return;
+    if (!snap || snap.state !== 'LISTENING' || snap.audio_bytes > 0) return;
+    sending = true;
+    renderControls(snap);
+    const id = sessionId, before = snap.fragments.length;
+    try {
+      let s;
+      try {
+        s = await api.speech(id, text);
+      } catch (e) {
+        if (e.status !== 409) throw e;
+        // 서버가 잠깐 정리 중이었다(빈 확정). 409 는 받지 않았다는 뜻이라 듣기로 돌아오면 한 번만 다시 보낸다.
+        if (!await waitFor(id, x => x.state === 'LISTENING', 5000)) throw e;
+        s = await api.speech(id, text);
+      }
+      // 서버에 닿았다. 입력칸을 비운다 — 다시 눌러 같은 글이 두 번 들어가지 않게.
+      box.value = '';
+      awaitingReply = true;
+      applySnapshot(s);
+      log('글', text);
+      // 바로 확정한다. 실패해도 글은 서버에 있고 3초 뒤 저절로 확정된다(T1).
+      try { applySnapshot(await api.done(id)); }
+      catch (e) { log('글', `done 실패 · ${e.status || ''} ${e.message || e} — 3초 뒤 저절로 확정됩니다`); }
+    } catch (e) {
+      log('글', `보내기 실패 · ${e.status || ''} ${e.message || e}`);
+      // 연결이 끊겨 답을 못 받았으면 서버에 닿았는지 모른다. 닿았다면 3초 뒤 조각이 생긴다 —
+      // 그걸 보고 판단해야 다시 눌러 같은 글이 두 번 들어가지 않는다.
+      const got = !e.status && await waitFor(id, x => x.fragments.length > before
+        && String(x.fragments[x.fragments.length - 1].answer || '').includes(text), 4500);
+      if (got) { box.value = ''; log('글', '서버에 닿아 있었습니다'); }
+      else toast('글을 보내지 못했어요. 다시 「보내기」를 눌러 주세요.');
+    } finally {
+      sending = false;
+      if (snap) renderControls(snap);
+    }
+  }
+
   /**
    * 질문 mp3 를 받아 틀고, 다 읽으면 tts-done 을 올린다.
    * 낭독이 끝나는 시각은 서버가 알 수 없다 — 끝까지 튼 쪽이 화면이라 여기서 알린다.
@@ -1892,8 +2996,12 @@
     }
   }
 
-  /** 회차가 닫혔다 → 엽서 한 장으로 만든다. */
-  async function finishSession() {
+  /**
+   * 회차가 닫혔다 → 엽서 한 장으로 만든다.
+   * 1차 흐름에서는 엽서를 만들지 않고 나눈 이야기를 읽는 화면으로 간다 (UI-05 · UI-06).
+   * why = 'gone' 은 폴링이 404 를 받은 것이다 — 정상 종료로 꾸미지 않고 그렇게 알린다.
+   */
+  async function finishSession(why) {
     if (closing) return;
     closing = true;
     held = false;
@@ -1904,6 +3012,14 @@
     $('#app').classList.remove('hearing');
     speaker.stop();
     if (recorder) { recorder.stop(); recorder = null; $('#devMic').textContent = 'off'; }
+
+    // 1차 흐름 — 엽서 요청(POST /postcard) · 임시 정리(polish)를 부르지 않는다
+    if (NEW_FLOW) {
+      $('#app').classList.remove('kb');
+      log('회차', '마쳤습니다 — 나눈 이야기를 불러옵니다 (엽서는 만들지 않습니다)');
+      void openReview(sessionId, why);
+      return;
+    }
 
     show('writing');
     $('#writingTitle').innerHTML = '이야기를<br />옮겨 적는 중이에요.';
@@ -1920,10 +3036,55 @@
 
     const fragments = (snap && snap.fragments) || [];
     piece = await composePostcard(sessionId, fragments);
+    if (piece.fail) { showCardFail(piece); return; }
     renderPostcard(piece);
     show('complete');
     log('엽서', `완성 (${piece.source})`);
   }
+
+  /**
+   * 엽서를 못 받았을 때의 안내 (예전 흐름). 실패를 임시 엽서로 덮지 않는다.
+   *   자료 부족   다시 눌러도 같으니 「다시 만들기」 를 내지 않는다
+   *   그 밖       「다시 만들기」 — 서버에 한 번 더 굽게 한다 (읽기 · 요청만, 회차는 건드리지 않음)
+   * 서버의 detail 은 그대로 띄우지 않는다. 상태코드로 문구를 고르고 detail 은 기록에만 남긴다.
+   */
+  let cfBusy = false;
+  function showCardFail(f) {
+    piece = null;
+    const lack = f.fail === 'lack';
+    $('#cfFace').textContent = lack ? '\u{1F4DD}' : '\u26A0\uFE0F';
+    $('#cfTitle').innerHTML = lack ? '엽서를 만들 만큼<br />이야기가 모이지 않았어요.' : '엽서를<br />만들지 못했어요.';
+    $('#cfLead').textContent = lack
+      ? '조금 더 이야기를 들려주시면 엽서로 만들 수 있어요. 나눈 이야기는 지워지지 않았어요.'
+      : '나눈 이야기는 저장되어 있어요. 잠시 뒤 다시 만들어 주세요.';
+    $('#cfWhy').textContent = f.code === 'no_answers' ? '남은 말씀이 없어요'
+      : lack ? '자료 부족'
+      : f.code === 'not_closed' ? '인터뷰를 정리하는 중이에요'
+      : f.why === 'timeout' ? '서버가 정해진 시간 안에 답하지 않았어요'
+      : f.status === 503 ? '서버가 지금 엽서를 만들 수 없어요'
+      : f.status === 502 ? '엽서 글을 읽지 못했어요'
+      : f.status === 404 ? '이 회차를 찾지 못했어요'
+      : f.status ? `서버가 ${f.status} 로 답했어요` : '연결이 잠깐 끊겼어요';
+    $('#cfRetry').hidden = lack || !sessionId;
+    show('cardfail');
+    log('엽서', `안내 — ${lack ? '자료 부족' : '만들지 못함'} · ${f.status || ''} ${f.why}`);
+  }
+  $('#cfRetry').addEventListener('click', async () => {
+    if (cfBusy || !sessionId) return;
+    cfBusy = true;
+    show('writing');
+    $('#writingTitle').innerHTML = '엽서를 다시<br />만들고 있어요.';
+    $('#writingLead').textContent = '조금만 기다려 주세요.';
+    try {
+      piece = await composePostcard(sessionId, (snap && snap.fragments) || []);
+      if (piece.fail) { showCardFail(piece); return; }
+      renderPostcard(piece);
+      show('complete');
+      log('엽서', `다시 만들기 — 완성 (${piece.source})`);
+    } finally { cfBusy = false; }
+  });
+  $('#cfExit').addEventListener('click', () => { ended = true; show('closed'); });
+  $('#cfArchive').addEventListener('click', () => void openArchive());
 
   function renderPostcard(piece) {
     const card = $('#card'), frame = $('#cardFrame'), img = $('#cardPhoto');
@@ -2115,7 +3276,7 @@
     const friend = $('#friend'), app = $('#app'), note = $('#meterNote');
     let smooth = 0, wasVoiced = null;
     const loop = () => {
-      const on = isHearing() && !held;              // 마이크가 받는 동안 (이어 듣기 포함)
+      const on = micOpen();                         // 마이크가 받는 동안 (이어 듣기 포함 · 키보드 중 제외)
       const target = on ? Math.min(1, level * 5.5) : 0;
       smooth += (target - smooth) * 0.22;
       document.documentElement.style.setProperty('--v', smooth.toFixed(3));
@@ -2155,13 +3316,18 @@
   ];
   function offlineDemo() {
     log('비상', '서버 없이 화면 흐름만 보여줍니다');
-    const qs = ['오늘은 어떤 이야기를 들려주시겠어요?', '그때 어떤 소리가 들렸는지 기억나세요?', '그 자리에 누가 함께 계셨어요?'];
+    // 오감 질문은 하지 않는다 (업무지시서 03 §3). 답 속의 소리 이야기는 어르신이 스스로 하신 말이라 둔다.
+    const qs = ['오늘은 어떤 이야기를 들려주시겠어요?', '그 자리에 누가 함께 계셨어요?', '그다음엔 어떻게 하셨어요?'];
     let i = 0;
     sessionId = null;
     snap = { state: 'LISTENING', turn: 0, max_turn: 0, fragments: [], next_question: qs[0], session_id: '' };
     $('#app').dataset.state = 'LISTENING';
     $('#app').classList.add('hearing');      // 비상 화면에서도 막대가 보이게
     show('talk');
+    if (NEW_FLOW) {
+      $('#talkTopic').textContent = `${prepInfo.theme || '테마'} · ${prepInfo.topic || '주제'} (서버 없이 보는 화면)`;
+      $('#talkTopic').hidden = false;
+    }
     startVisualLoop();
     $('#listenState').textContent = '듣고 있어요';
     $('#question').textContent = qs[0];
@@ -2181,6 +3347,131 @@
     $('#abortBtn').onclick = () => { snap.fragments = OFFLINE_ANSWERS.map((a, k) => ({ idx: k + 1, question: qs[k], answer: a })); void finishSession(); };
   }
 
+
+  /* ═══════════════════════════════════════════════════════════════
+     내용 확인 — 업무지시서 03 UI-07
+       · GET /api/sessions/{id}/record 를 읽기만 한다. 고치거나 요약하지 않는다.
+       · 0번 조각(seed)은 시작할 때 고른 주제다. 답변 목록에 넣지 않고 준비 정보로 보인다.
+       · 화면 상태가 넷이다 — 받아 오는 중 / 목록 / 실제로 빈 대화 / 못 읽음.
+         「못 읽었다」를 「대화 없음」으로 바꾸지 않는다.
+       · 마지막 답변이 DB 에 닿기 전일 수 있어, 화면이 알던 조각 수만큼 올 때까지
+         조금 다시 읽는다 (CONFIG.interview.recordWaitMs).
+     ═══════════════════════════════════════════════════════════════ */
+  let rvReq = 0;
+  let rvId = null, rvWhyClosed = '';
+  let rvFromArchive = false;       // 지난 이야기에서 열었다 — 아래 버튼이 「목록으로」 가 된다
+
+  function rvShow(which, stale) {
+    ['load', 'list', 'empty', 'error'].forEach(k => $(`[data-rv="${k}"]`).hidden = (k !== which));
+    $('#rvMain').textContent = which === 'error' ? '다시 불러오기' : rvFromArchive ? '목록으로' : '처음으로';
+    // 링크로 연 어르신 화면에는 앱으로 들어가는 버튼을 두지 않는다 (다시 불러오기만)
+    $('#rvMain').hidden = LINK.on && which !== 'error';
+    $('#rvRetry').hidden = !(which === 'empty' || (which === 'list' && stale));
+  }
+
+  function rvPaint(rec, stale) {
+    const frs = [...((rec && rec.fragments) || [])].sort((a, b) => a.idx - b.idx);
+    const seed = frs.find(f => f.idx === 0);
+    // 시작 값은 서버가 받은 그대로 보여준다 — 「고른 값 = 서버가 받은 값」 을 눈으로 확인하는 자리다
+    const k = CONFIG.interview.startKeys;
+    const read = (key) => key === 'seed' ? String((seed && seed.answer) || '') : String((rec && rec[key]) || '');
+    const theme = read(k.theme).trim(), topic = read(k.topic).trim();
+    $('#rvTheme').textContent = theme || '—';
+    $('#rvTopic').textContent = topic || '—';
+    $('#rvPrep').hidden = !(theme || topic);
+
+    const said = frs.filter(f => f.idx > 0 && String(f.answer || '').trim());
+    const warn = $('#rvWarn');
+    warn.textContent = rvWhyClosed === 'gone'
+      ? '서버에서 인터뷰가 먼저 정리되었어요. 저장된 내용까지만 보여 드려요.'
+      : '마지막 답변이 아직 저장되지 않았을 수 있어요. 잠시 뒤 「다시 불러오기」를 눌러 주세요.';
+    warn.hidden = !(stale || rvWhyClosed === 'gone');
+    if (!said.length) { rvShow('empty'); return; }
+
+    // 서버에서 온 글은 textContent 로만 넣는다 (arDraw 와 같은 이유)
+    const el = (tag, cls, text) => {
+      const e = document.createElement(tag);
+      if (cls) e.className = cls;
+      if (text != null) e.textContent = text;
+      return e;
+    };
+    const list = $('#rvList');
+    list.replaceChildren();
+    said.forEach(f => {
+      const li = el('li', 'rv-item');
+      const q = el('p', 'rv-q');
+      q.append(el('span', 'rv-who', '질문'), document.createTextNode(f.question || '(질문 없이 이어진 말씀)'));
+      const a = el('p', 'rv-a');
+      a.append(el('span', 'rv-who', '내 답'), document.createTextNode(f.answer));
+      li.append(q, a);
+      list.append(li);
+    });
+    rvShow('list', stale);
+  }
+
+  /**
+   * opts.fromArchive  지난 이야기에서 연다 — 방금 마친 회차가 아니라 기다릴 마지막 답이 없다
+   * opts.rec          이미 받아 둔 기록 (보관함이 엽서를 확인하며 읽은 것) — 다시 묻지 않는다
+   */
+  async function openReview(id, why, opts) {
+    const my = ++rvReq;
+    rvId = id; rvWhyClosed = why || '';
+    rvFromArchive = !!(opts && opts.fromArchive);
+    show('review');
+    rvShow('load');
+    $('#rvPrep').hidden = true;
+    $('#rvSample').hidden = !!id;
+    // 서버 없이 보는 화면(offlineDemo) — 예시라고 밝히고 화면이 가진 것을 그대로 보인다
+    if (!id) {
+      rvPaint({ title: prepInfo.theme, fragments: [{ idx: 0, question: null, answer: prepInfo.topic },
+        ...((snap && snap.fragments) || [])] }, false);
+      return;
+    }
+    if (opts && opts.rec) { rvPaint(opts.rec, false); return; }
+    if (LINK.on) { await linkReview(my); return; }
+    // 화면이 마지막으로 본 조각 번호. DB 가 여기까지 오면 마지막 답변까지 닿은 것이다.
+    // 다른 회차(지난 이야기에서 연 것)면 기다릴 것이 없다.
+    const mine = snap && snap.session_id === id ? snap.fragments || [] : [];
+    const expect = Math.max(0, ...mine.map(f => f.idx));
+    const until = Date.now() + CONFIG.interview.recordWaitMs;
+    for (;;) {
+      const ctl = new AbortController();
+      const timer = setTimeout(() => ctl.abort(), CONFIG.interview.recordTimeoutMs);
+      let rec;
+      try {
+        rec = await api.record(id, ctl.signal);
+      } catch (e) {
+        if (my !== rvReq) return;
+        $('#rvWhy').textContent = e.name === 'AbortError' ? '서버가 답하지 않아요'
+                                : e.status === 404 ? '이 인터뷰의 기록을 찾지 못했어요'
+                                : e.status === 503 ? '서버가 기록을 읽지 못했어요'
+                                : e.status ? `서버가 ${e.status} 로 답했어요`
+                                : '연결이 잠깐 끊겼어요';
+        rvShow('error');
+        log('내용', `불러오기 실패 · ${e.name === 'AbortError' ? '시간 초과' : `${e.status || ''} ${e.message || e}`}`);
+        return;
+      } finally {
+        clearTimeout(timer);
+      }
+      if (my !== rvReq) return;
+      const got = Math.max(0, ...((rec && rec.fragments) || []).map(f => f.idx));
+      if (got >= expect || Date.now() >= until) {
+        rvPaint(rec, got < expect);
+        log('내용', `조각 ${got}개${got < expect ? ` (화면은 ${expect}개를 봤습니다)` : ''}`);
+        return;
+      }
+      await sleep(CONFIG.interview.recordRetryMs);
+      if (my !== rvReq) return;
+    }
+  }
+
+  // 다시 불러오기는 읽기만 한다 — 엽서를 다시 만들거나 회차를 건드리지 않는다
+  $('#rvMain').addEventListener('click', () => {
+    if ($('[data-rv="error"]').hidden === false) { void openReview(rvId, rvWhyClosed, { fromArchive: rvFromArchive }); return; }
+    if (rvFromArchive) { rvReq++; show('archive'); return; }   // 목록은 받아 둔 그대로 다시 보인다
+    location.reload();                   // 새 인터뷰는 처음부터 (MVP 범위)
+  });
+  $('#rvRetry').addEventListener('click', () => void openReview(rvId, rvWhyClosed, { fromArchive: rvFromArchive }));
 
   /* ═══════════════════════════════════════════════════════════════
      보관함 — 지난 이야기
@@ -2251,6 +3542,9 @@
       const meta = el('span', 'p-meta');
       meta.append(el('span', 'ar-date', arDate(s.created_at)),
                   el('span', `era${n ? '' : ' none'}`, n ? `${n}조각` : '조각 없음'));
+      // 엽서 유무 (서버가 has_postcard 를 줄 때만). 없는 회차는 누르면 「나눈 이야기」 가 열린다
+      if (s.has_postcard === true) meta.append(el('span', 'era pc', '엽서 있음'));
+      else if (s.has_postcard === false) meta.append(el('span', 'era nopc', '아직 엽서 없음'));
       text.appendChild(meta);
       b.append(thumb, text);
       list.appendChild(b);
@@ -2303,7 +3597,13 @@
       // 그 사이 다른 카드를 눌렀거나 보관함을 떠났으면 갑자기 엽서 화면으로 넘어가지 않는다
       if (my !== arReq || !arOnScreen()) { log('보관함', '늦게 온 엽서 응답을 버립니다'); return; }
       const pc = rec && rec.postcard;
-      if (!pc || !(pc.text || pc.title)) { toast('아직 엽서가 만들어지지 않았어요'); return; }
+      // 엽서가 없으면 그 회차의 「나눈 이야기」 를 연다 (읽기 전용). 자동 엽서가 꺼진 뒤로는
+      // 새 회차가 다 이렇다 — 예전처럼 안내만 띄우면 막다른 길이 된다. 받은 기록을 그대로 쓴다.
+      if (!pc || !(pc.text || pc.title)) {
+        log('보관함', `엽서 없는 회차 — 나눈 이야기를 엽니다 · ${id.slice(0, 8)}`);
+        void openReview(id, '', { rec, fromArchive: true });
+        return;
+      }
       arPaint(pc, rec.photo_id ? api.photoUrl(rec.photo_id) : '', rec.created_at);
       arViewing = true;
       show('complete');
@@ -2397,6 +3697,8 @@
     404: '선택한 엽서를 찾을 수 없어요. 목록에서 다시 골라 주세요.',
     422: '선택한 엽서의 이야기 자료를 불러오지 못했어요.',
     502: '자서전을 만드는 중 문제가 생겼어요. 엽서 선택 화면으로 돌아가 주세요.',
+    // 모델이 「확인이 더 필요하다」(needs_confirmation · needs_context)고 답한 경우. 자서전 API 의 503 은 이것뿐이다 (2-C1 §2)
+    503: '지금은 자서전을 만들 수 없어요. 엽서 선택 화면으로 돌아가 주세요.',
     504: '정해진 시간 안에 자서전을 받지 못했어요. 엽서 선택 화면으로 돌아가 주세요.',
     other: '자서전을 만드는 중 문제가 생겼어요. 엽서 선택 화면으로 돌아가 주세요.',
   };
@@ -2515,8 +3817,10 @@
     show('memoir');
     mmShow('load');
     try {
-      const res = await api.sessions(CONFIG.memoir.listLimit);
-      const closed = ((res && res.sessions) || []).filter(s => s.closed_at);
+      const res = await api.sessions(CONFIG.memoir.listLimit, undefined, { hasPostcard: true });
+      // 새 서버는 엽서 있는 회차만 준다. 예전 서버는 전부 주므로 아래 「404 면 뺀다」 가 그대로 거른다.
+      // has_postcard 가 false 로 온 회차는 그림을 물어볼 것도 없이 뺀다.
+      const closed = ((res && res.sessions) || []).filter(s => s.closed_at && s.has_postcard !== false);
       // 회차마다 엽서가 있는지 묻는다. 404 는 「엽서 없음」 이라 빼고, 그 밖의 실패가
       // 하나라도 있으면 목록 전체를 「불러오지 못했다」 로 본다 — 숨기면 엽서가 사라진 것처럼 보인다.
       const got = await Promise.allSettled(closed.map(s => api.postcardThumb(s.session_id)));
@@ -2671,30 +3975,48 @@
    */
   async function confirmLastSpeech() {
     if (!CONFIG.session.confirmBeforeStop) return;
-    if (!snap || snap.state !== 'LISTENING') return;
+    if (!snap || (snap.state !== 'LISTENING' && snap.state !== 'PROCESSING')) return;
     show('writing');
     $('#writingTitle').innerHTML = '마지막 말씀을<br />받아 적는 중이에요.';
     $('#writingLead').textContent = '잠시만 기다려 주세요.';
+    const until = Date.now() + CONFIG.session.confirmWaitMs;
+    // 조각이 하나 늘었거나(저장됨) 정리 중을 벗어날 때까지 기다린다
+    const settle = async (n) => {
+      while (Date.now() < until) {
+        await sleep(300);
+        let s;
+        try { s = await api.get(sessionId); } catch (e) { return; }
+        snap = s;
+        if (s.state !== 'PROCESSING' || s.fragments.length > n) return;
+      }
+    };
+    // 무음 3초로 이미 확정되어 받아 적는 중이다(PROCESSING). 이때 닫으면 서버가 받아
+    // 적던 일을 끊어 그 말씀이 사라진다 (release 가 T1 태스크를 취소한다). 저장을 기다린다.
+    if (snap.state === 'PROCESSING') {
+      await settle(snap.fragments.length);
+      if (!snap || snap.state !== 'LISTENING') {
+        log('버튼', `마지막 말씀 저장을 기다렸습니다 · 조각 ${((snap && snap.fragments) || []).length}개`);
+        return;
+      }
+    }
+    const n = snap.fragments.length;
     try {
       snap = await api.done(sessionId);
     } catch (e) {
       log('버튼', `마지막 말씀 확정 실패 · ${e.message || e}`);
       return;
     }
-    const until = Date.now() + CONFIG.session.confirmWaitMs;
-    while (Date.now() < until) {
-      await new Promise(r => setTimeout(r, 300));
-      let s;
-      try { s = await api.get(sessionId); } catch (e) { break; }
-      snap = s;
-      if (s.state !== 'PROCESSING') break;     // 저장이 끝났다
-    }
+    await settle(n);
     log('버튼', `마지막 말씀 확정 · 조각 ${((snap && snap.fragments) || []).length}개`);
   }
 
   // 녹음 정지 — 회차를 닫고 엽서로 넘어간다
   $('#abortBtn').addEventListener('click', async () => {
     if (stopping) return;          // 두 번 눌러도 회차는 한 번만 닫는다
+    if (NEW_FLOW && sending) { toast('글을 보내는 중이에요. 잠시 뒤에 눌러 주세요.'); return; }
+    // 보내지 않은 글을 조용히 버리지 않는다 — 여쭙고 나서 마친다 (UI-04)
+    if (NEW_FLOW && $('#composeText').value.trim()
+        && !window.confirm('보내지 않은 글이 있어요.\n이 글은 보내지 않고 인터뷰를 마칠까요?')) return;
     held = false; clearInterval(holdTimer);
     stopping = true;
     if (recorder) { recorder.flushNow(); recorder.setActive(false); }
@@ -2730,6 +4052,916 @@
   $('#devDone').addEventListener('click', () => void pressDone());
 
 
+  /* ═══════════════════════════════════════════════════════════════
+     3차 — 자녀 로그인 · 화자 · 어르신 링크 (3-C1 초안 · develop cd65dfa)
+       · 서버 코드가 아직 없다. 규격 모양대로 만들어 두고, 기본(auth.mode 'dev')에서는 하나도 돌지 않는다.
+       · 로그인: Google Identity Services 버튼 · popup · JS 콜백 → POST /api/auth/google {credential}
+         → 서버가 msid 쿠키. 앱을 열 때 GET /api/auth/me. 다른 API 401 → 로그인 화면.
+       · 링크: /i#토큰 → 미리보기(상태만 · 몇 번 불러도 같음) → 「시작」 을 누를 때만 POST /api/i/start
+         → 진행은 /api/i/session/... → 끝나면 GET /api/i/transcript (읽기 전용)
+       · 토큰 · 구글 credential 은 기록(⚙) · 로그에 남기지 않는다.
+     ═══════════════════════════════════════════════════════════════ */
+  const THEME_LABEL = { family: '가족', self: '나', hobby: '취미' };
+  // 문구는 예시다 — 김대원 님과 맞춘다 (3-C1 §4 · §5-3)
+  const AUTH_SAYS = {
+    invalid_token: '로그인을 확인하지 못했어요. 다시 시도해 주세요.',
+    expired_token: '로그인 시간이 지났어요. 다시 로그인해 주세요.',
+    login_required: '',
+    session_expired: '오래 쉬셔서 로그아웃되었어요. 다시 로그인해 주세요.',
+    other: '지금은 로그인할 수 없어요. 잠시 뒤 다시 시도해 주세요.',
+  };
+  const LINK_SAYS = {
+    ready:       { h: '들려주실 이야기', p: '준비되시면 아래 버튼을 눌러 주세요. 누르면 마이크를 써도 되는지 여쭤봐요.', btn: '이야기 시작하기', topic: true, friend: true },
+    in_progress: { h: '이야기를 이어서 해요', p: '이 기기에서 하던 이야기가 남아 있어요.', btn: '이어서 하기', topic: true, friend: true },
+    in_progress_elsewhere: { h: '다른 곳에서 진행 중이에요', p: '처음 시작한 기기에서 이어서 해 주세요.' },
+    interrupted: { h: '연결이 끊겼어요', p: '링크를 보내 주신 분께 새 링크를 부탁해 주세요.' },
+    expired:     { h: '기간이 지난 링크예요', p: '링크를 보내 주신 분께 알려 주세요.' },
+    revoked:     { h: '더 이상 쓸 수 없는 링크예요', p: '링크를 보내 주신 분께 알려 주세요.' },
+    invalid_link:{ h: '링크를 다시 확인해 주세요', p: '받으신 링크가 끝까지 열렸는지 확인해 주세요.' },
+    neterr:      { h: '연결이 잠깐 끊겼어요', p: '잠시 뒤 다시 눌러 주세요.', btn: '다시 시도' },
+    mock_started:{ h: '(모의) 시작 요청까지 확인했어요', p: '실제 인터뷰는 서버가 준비되면 지금의 대화 화면으로 이어집니다.', friend: true },
+  };
+  // 상태 코드 → 화면 상태. 410 · 404 에는 주제 · 이름이 오지 않는다 (3-C1 §5-3)
+  const linkStateOf = (e) => (e.code && LINK_SAYS[e.code]) ? e.code
+    : e.status === 410 ? 'expired' : e.status === 404 ? 'invalid_link' : 'neterr';
+
+  /**
+   * 보조 사진 — 미리보기 · 시작 응답의 photo_url (값은 /api/i/photo, 없으면 null).
+   * 시작 전에는 링크 쿠키(mlink)가 아직 없어 <img> 로는 못 받는다 — 토큰 헤더를 실어 받아 화면 안 주소로 쓴다.
+   * 못 받아도 화면은 그대로 간다 (사진은 보조다).
+   */
+  let linkPhotoUrl = '';
+  async function linkPhoto(url) {
+    if (!url || linkPhotoUrl) return linkPhotoUrl;
+    try {
+      const path = url.replace(/^\/api/, '');
+      const res = await fetch(`${CONFIG.apiBase}${url}`, { credentials: 'include', headers: idHeaders(path) });
+      if (!res.ok) throw new ApiError(res.status, '사진을 받지 못했습니다');
+      linkPhotoUrl = URL.createObjectURL(await res.blob());
+    } catch (e) { log('링크', `보조 사진 못 받음 · ${e.status || ''}`); }
+    return linkPhotoUrl;
+  }
+
+  /** 링크 첫 화면 한 장. 개발 시안(FE-03)도 같은 함수로 그린다. */
+  function linkPaint(host, state, info, onBtn) {
+    const say = LINK_SAYS[state] || LINK_SAYS.neterr;
+    host.replaceChildren();
+    const el = (tag, cls, text) => { const x = document.createElement(tag); if (cls) x.className = cls; if (text != null) x.textContent = text; return x; };
+    // 사진이 있으면 캐릭터 대신 사진을 보여 준다 (시작 전 · 이어서 하기 화면만 — 410 · 404 에는 오지 않는다)
+    if (say.topic && info && info.photoSrc) {
+      const im = el('img', 'link-photo'); im.src = info.photoSrc; im.alt = '함께 보내 주신 사진';
+      host.append(im);
+    } else if (say.friend) {
+      const svg = document.querySelector('#friend .friend-svg');
+      if (svg) { const c = svg.cloneNode(true); c.querySelectorAll('[id]').forEach(n => n.removeAttribute('id')); c.classList.add('fe03-friend'); host.append(c); }
+    }
+    host.append(el('h1', '', say.h));
+    if (say.topic && info) {
+      const t = [THEME_LABEL[info.theme] || '', info.topic || ''].filter(Boolean).join(' · ');
+      if (t) host.append(el('p', 'fe03-acct', t));
+    }
+    host.append(el('p', 'lead', say.p));
+    if (say.btn && onBtn) {
+      const b = el('button', 'btn btn-primary', say.btn);
+      b.addEventListener('click', onBtn);
+      host.append(b);
+    }
+    host.dataset.state = state;
+  }
+
+  async function enterLink() {
+    $('#app').classList.add('link-mode');
+    $('#linkMock').hidden = !LINK.mock;
+    show('link');
+    const host = $('#linkView');
+    if (!LINK.token && !LINK.mock) { linkPaint(host, 'invalid_link'); log('링크', '토큰 없음'); return; }
+    let pv;
+    try { pv = await api.linkPreview(); }
+    catch (e) { linkPaint(host, linkStateOf(e), null, () => void enterLink()); log('링크', `미리보기 · ${e.status || ''} ${e.code || ''}`); return; }
+    LINK.preview = pv;
+    // 자녀가 정한 테마 · 주제 — 대화 화면 위에 같은 모양으로 띄운다
+    prepInfo.theme = THEME_LABEL[pv.theme] || ''; prepInfo.topic = pv.topic || '';
+    log('링크', `미리보기 · ${pv.state}`);
+    if (pv.state === 'ended') { void openReview('link', '', { link: true }); return; }
+    linkPaint(host, LINK_SAYS[pv.state] ? pv.state : 'neterr', pv, linkGo);
+    // 사진은 뒤따라 그린다 — 첫 화면을 사진 때문에 늦추지 않는다
+    if (pv.photo_url) {
+      const src = await linkPhoto(pv.photo_url);
+      if (src && $('#linkView').dataset.state === pv.state && document.querySelector('[data-screen="link"].active')) {
+        pv.photoSrc = src;
+        linkPaint(host, pv.state, pv, linkGo);
+      }
+    }
+  }
+  let linkBusy = false;
+  async function linkGo() {
+    if (linkBusy) return;                 // 연속 클릭 — 서버도 같은 회차를 돌려주지만 화면에서도 한 번만
+    linkBusy = true;
+    const b = $('#linkView .btn'); if (b) b.disabled = true;
+    try { await beginInterview(); } finally { linkBusy = false; if (b) b.disabled = false; }
+  }
+  function linkFailed(e) {
+    show('link');
+    const st = linkStateOf(e);
+    if (st === 'ended') { void openReview('link', '', { link: true }); return; }
+    linkPaint($('#linkView'), st, LINK.preview, st === 'neterr' ? linkGo : null);
+    log('링크', `시작 실패 · ${e.status || ''} ${e.code || ''}`);
+  }
+  function linkMockStarted() {
+    show('link');
+    linkPaint($('#linkView'), 'mock_started');
+    if (recorder) { recorder.stop(); recorder = null; $('#devMic').textContent = 'off'; }
+  }
+  /**
+   * 종료 뒤 읽기 전용 대화 — GET /api/i/transcript → {theme, topic, turns:[{question, answer}]} (최충 답변).
+   * 시작 자료(0번 조각)는 오지 않고, 답하지 않은 마지막 질문도 오지 않는다 (질문은 답과 함께만 저장됨).
+   * 회차가 CLOSED 가 되는 순간 ended 라 곧바로 200 이다. 409 not_ended 일 때만 잠깐 다시 읽고,
+   * 409 interrupted 는 기다려도 풀리지 않으니 다시 읽지 않는다.
+   */
+  async function linkReview(my) {
+    const until = Date.now() + CONFIG.interview.recordWaitMs;
+    for (;;) {
+      try {
+        const t = await api.linkTranscript();
+        if (my !== rvReq) return;
+        // rvPaint 는 record 모양을 읽으므로 맞춰 준다. 테마 · 주제는 0번 자리(준비 정보)로만 쓴다 — 답이 아니다
+        const rec = {
+          title: THEME_LABEL[t && t.theme] || '',
+          fragments: [{ idx: 0, question: null, answer: (t && t.topic) || '' },
+            ...(((t && t.turns) || []).map((x, i) => ({ idx: i + 1, question: x.question || null, answer: x.answer || '' })))],
+        };
+        rvPaint(rec, false);
+        return;
+      } catch (e) {
+        if (my !== rvReq) return;
+        if (e.code === 'not_ended' && Date.now() < until) { await sleep(CONFIG.interview.recordRetryMs); continue; }
+        if (e.code === 'interrupted' || e.status === 410 || e.status === 404) { show('link'); linkPaint($('#linkView'), linkStateOf(e)); return; }
+        $('#rvWhy').textContent = e.status ? `서버가 ${e.status} 로 답했어요` : '연결이 잠깐 끊겼어요';
+        rvShow('error');
+        return;
+      }
+    }
+  }
+
+  /* ── 로그인 ── */
+  function authNote(text, note) { const m = $('#loginMsg'); m.textContent = text || ''; m.classList.toggle('note', !!note); }
+  function setAccount(r) {
+    AUTH.user = (r && r.user) || null;
+    AUTH.elders = (r && r.elders) || [];
+    // user {user_id, name, email} · elders [{elder_id, name}] (최충 답변). elder_id 는 링크 발급에 쓴다.
+    // 이메일은 화면에 내지 않는다 — 이름이 비었을 때만 대신 쓴다
+    const u = AUTH.user || {}, e = AUTH.elders[0];
+    $('#acctName').textContent = [u.name || u.email || '로그인됨', e && e.name].filter(Boolean).join(' · ');
+    $('#acct').hidden = false;
+  }
+  function afterLogin() {
+    $('#app').classList.add('authed');
+    $('#linkOutBtn').hidden = !NEW_FLOW;          // 링크는 1차 흐름(테마 · 주제)에서만
+    $('#linksBtn').hidden = !NEW_FLOW;
+    if (!AUTH.elders.length) { show('elder'); $('#elderName').focus(); return; }
+    show('ready');
+  }
+  async function onCredential(credential) {
+    authNote('로그인하는 중이에요…', true);
+    try {
+      const r = await api.authGoogle(credential);
+      if (r && r.cancelled) { authNote(''); return; }      // 모의 「취소」 — 실제로는 서버에 오지 않는다
+      setAccount(r);
+      log('로그인', `됨 · 화자 ${AUTH.elders.length}명`);   // credential 은 남기지 않는다
+      afterLogin();
+    } catch (e) {
+      authNote(AUTH_SAYS[e.code] || AUTH_SAYS.other);
+      log('로그인', `실패 · ${e.status || ''} ${e.code || ''}`);
+    }
+  }
+  let gsiReady = false;
+  function gsiInit() {
+    const box = $('#gsiBtn');
+    $('#loginMock').hidden = !AUTH.mock;
+    if (AUTH.mock) {
+      box.replaceChildren();
+      const b = document.createElement('button');
+      b.className = 'btn btn-primary'; b.textContent = 'Google로 로그인 (모의)';
+      b.addEventListener('click', () => void onCredential('mock'));
+      box.append(b);
+      return;
+    }
+    // 버튼 자리에 적는다 — 아래 안내 줄(로그아웃됨 · 오류)을 덮지 않게
+    if (!CONFIG.auth.googleClientId) {
+      const n = document.createElement('p'); n.className = 'login-msg note';
+      n.textContent = '구글 로그인 준비 중이에요 (클라이언트 ID 필요 — CONFIG.auth.googleClientId).';
+      box.replaceChildren(n); return;
+    }
+    if (gsiReady) return;
+    const sc = document.createElement('script');
+    sc.src = 'https://accounts.google.com/gsi/client'; sc.async = true; sc.defer = true;
+    sc.onload = () => {
+      gsiReady = true;
+      window.google.accounts.id.initialize({
+        client_id: CONFIG.auth.googleClientId, ux_mode: 'popup',
+        callback: (r) => void onCredential(r && r.credential),
+      });
+      window.google.accounts.id.renderButton(box, { theme: 'outline', size: 'large', text: 'signin_with', shape: 'pill', locale: 'ko', width: 300 });
+    };
+    sc.onerror = () => authNote('구글 로그인 버튼을 불러오지 못했어요. 연결을 확인해 주세요.');
+    document.head.append(sc);
+  }
+  async function authBoot() {
+    show('login');
+    let flash = '';
+    try { flash = sessionStorage.getItem('authMsg') || ''; sessionStorage.removeItem('authMsg'); } catch (_) {}
+    try {
+      setAccount(await api.authMe());
+      afterLogin();
+    } catch (e) {
+      $('#acct').hidden = true;
+      if (e.status === 401) authNote(flash || AUTH_SAYS[e.code] || '', !!flash && flash.startsWith('로그아웃'));
+      else authNote(AUTH_SAYS.other);
+      gsiInit();
+    }
+  }
+  /**
+   * 로그인이 풀렸다 · 로그아웃했다. **화면 메모리를 통째로 비운다** — 다시 불러오기(reload)가 가장 확실하다.
+   * 목록 · 사진 · 엽서 · 나눈 이야기 · 받아 둔 그림 주소가 남지 않는다 (3-C1 「같이 맞출 것」 1).
+   */
+  let authLosing = false;
+  function authLost(code) {
+    if (authLosing) return;
+    authLosing = true;
+    try { sessionStorage.setItem('authMsg', AUTH_SAYS[code] || AUTH_SAYS.session_expired); } catch (_) {}
+    log('로그인', `풀림 · ${code || ''} — 화면을 비웁니다`);
+    location.reload();
+  }
+  $('#logoutBtn').addEventListener('click', async () => {
+    if (recorder || (sessionId && !closing)) {
+      if (!window.confirm('진행 중인 인터뷰가 있어요. 로그아웃할까요?')) return;
+    }
+    try { await api.authLogout(); } catch (_) {}
+    try { sessionStorage.setItem('authMsg', '로그아웃했어요.'); } catch (_) {}
+    location.reload();
+  });
+  $('#elderName').addEventListener('input', () => { $('#elderSave').disabled = !$('#elderName').value.trim(); });
+  $('#elderName').addEventListener('keydown', (e) => { if (e.key === 'Enter' && !e.isComposing && e.keyCode !== 229) { e.preventDefault(); $('#elderSave').click(); } });
+  // **부를 때마다 새 화자가 생긴다** — 연타 · Enter 반복 · 응답 기다리는 중의 재시도를 막는다.
+  // 한 번 만들어졌으면(elderMade) 다시 보내지 않는다. 실패했을 때만 다시 누를 수 있다.
+  let elderBusy = false, elderMade = false;
+  $('#elderSave').addEventListener('click', async () => {
+    const name = $('#elderName').value.trim();
+    if (!name || elderBusy || elderMade) return;
+    elderBusy = true;
+    $('#elderSave').disabled = true; $('#elderName').readOnly = true;
+    $('#elderMsg').textContent = '';
+    try {
+      const r = await api.elderCreate(name);        // 201 {elder_id, name}
+      elderMade = true;
+      setAccount({ user: AUTH.user, elders: [...AUTH.elders, { elder_id: r && r.elder_id, name: (r && r.name) || name }] });
+      log('화자', '만들었습니다');
+      show('ready');
+    } catch (e) {
+      // 422 — 비었거나 40자 넘음(FastAPI 검증, code 없음) · 띄어쓰기만 있음. 화면은 30자로 막아 둔다
+      $('#elderMsg').textContent = e.status === 422 ? '이름을 확인해 주세요. 띄어쓰기만으로는 저장할 수 없어요.'
+        : '저장하지 못했어요. 다시 눌러 주세요.';
+      $('#elderSave').disabled = false; $('#elderName').readOnly = false;
+    } finally {
+      elderBusy = false;
+    }
+  });
+
+  /* ── 자녀 — 어르신께 링크로 보내기 (POST /api/links) ──
+     준비 화면에서 고른 테마 · 주제 · 사진으로 링크를 만든다. 회차는 아직 열리지 않는다 — 받은 분이
+     「시작」 을 누를 때 열린다. **부를 때마다 새 링크다** — 연타를 막는다.
+     링크 주소(토큰)는 이 화면에서 한 번만 보이고 다시 볼 수 없다. 기록(⚙) · 로그에 남기지 않는다. */
+  const lo = { rec: null, url: '', state: '' };
+  let loBusy = false;
+  function loDraw() {
+    const box = $('#loBox'), off = lo.state !== 'issued';
+    box.classList.toggle('off', off);
+    box.textContent = lo.state === 'issued' ? (lo.url || '(모의) 주소 없음 — 실제 서버에서는 여기에 주소가 나와요')
+      : lo.state === 'revoked' ? '취소한 링크예요. 이 링크로는 더 열리지 않아요.'
+      : lo.state === 'started' ? '이미 시작한 인터뷰예요. 새 인터뷰는 처음 화면에서 새로 준비해 주세요.' : '';
+    $('#loCopy').hidden = off;
+    $('#loRevoke').hidden = lo.state === 'started';
+    $('#loRevoke').textContent = lo.state === 'revoked' ? '같은 준비로 다시 만들기' : '링크 취소';
+    $('#loRevoke').className = lo.state === 'revoked' ? 'btn btn-primary' : 'btn-line';
+  }
+  // 배포 때는 서버가 PUBLIC_ORIGIN 으로 완전한 주소(https://…/i#…)를 준다. / 로 시작할 때만 지금 주소를 붙인다
+  const absUrl = (u) => !u ? '' : u.startsWith('/') ? `${location.origin}${u}` : u;
+  async function linkOut() {
+    if (loBusy || !(prepInfo.theme && prepInfo.topic)) return;
+    const elder = AUTH.elders[0];
+    if (!elder || !elder.elder_id) { toast('화자를 먼저 정해 주세요.'); return; }
+    loBusy = true; renderPrep();
+    try {
+      // 사진이 올라가는 중이면 잠깐 기다린다 (회차 열기와 같은 규칙)
+      if (photo.file && CONFIG.photo.upload && !photo.photo_id && photoUpload) {
+        await Promise.race([photoUpload, sleep(CONFIG.photo.waitBeforeStartMs)]).catch(() => {});
+      }
+      const body = { elder_id: elder.elder_id, title: prepInfo.theme, seed: prepInfo.topic,
+                     theme: CONFIG.interview.themeCodes[prepInfo.theme], topic: prepInfo.topic };
+      if (photo.photo_id) body.photo_id = photo.photo_id;
+      const r = await api.linkCreate(body);
+      lo.rec = r; lo.url = absUrl(r && r.url); lo.state = 'issued';
+      $('#loTopic').textContent = `${prepInfo.theme} · ${prepInfo.topic}`;
+      $('#loMsg').textContent = '이 화면을 나가면 링크를 다시 볼 수 없어요. 잃어버리면 「링크 취소」 뒤 다시 만들 수 있어요.';
+      loDraw();
+      show('linkout');
+      log('링크', '발급했습니다');                     // 주소 · 토큰은 남기지 않는다
+    } catch (e) {
+      banner(e.status === 404 ? '화자나 사진을 찾을 수 없어요. 다시 골라 주세요.' : '링크를 만들지 못했어요. 잠시 뒤 다시 눌러 주세요.');
+      log('링크', `발급 실패 · ${e.status || ''} ${e.code || ''}`);
+    } finally { loBusy = false; renderPrep(); }
+  }
+  $('#linkOutBtn').addEventListener('click', () => void linkOut());
+  $('#loCopy').addEventListener('click', async () => {
+    if (lo.state !== 'issued' || !lo.url) return;
+    try { await navigator.clipboard.writeText(lo.url); $('#loMsg').textContent = '복사했어요. 문자나 메신저에 붙여 넣어 보내 주세요.'; }
+    catch (_) {
+      // 클립보드를 못 쓰는 환경 — 주소를 골라 두어 직접 복사하게 한다
+      const r = document.createRange(); r.selectNodeContents($('#loBox'));
+      const sel = getSelection(); sel.removeAllRanges(); sel.addRange(r);
+      $('#loMsg').textContent = '주소를 골라 두었어요. 길게 눌러 복사해 주세요.';
+    }
+  });
+  $('#loRevoke').addEventListener('click', async () => {
+    if (loBusy || !lo.rec) return;
+    loBusy = true; $('#loRevoke').disabled = true;
+    try {
+      if (lo.state === 'issued') {
+        if (!window.confirm('이 링크를 취소할까요? 진행 중이면 인터뷰가 멈춰요.')) return;
+        await api.linkRevoke(lo.rec.link_id);
+        lo.state = 'revoked'; lo.url = '';
+        $('#loMsg').textContent = '';
+        log('링크', '취소했습니다');
+      } else if (lo.state === 'revoked') {
+        const r = await api.linkReissue(lo.rec.link_id);
+        lo.rec = r; lo.url = absUrl(r && r.url); lo.state = 'issued';
+        $('#loMsg').textContent = '새 링크예요. 이전 링크는 더 열리지 않아요.';
+        log('링크', '다시 만들었습니다');
+      }
+    } catch (e) {
+      if (e.code === 'already_started') { lo.state = 'started'; $('#loMsg').textContent = ''; }
+      else $('#loMsg').textContent = '처리하지 못했어요. 다시 눌러 주세요.';
+      log('링크', `실패 · ${e.status || ''} ${e.code || ''}`);
+    } finally { loBusy = false; $('#loRevoke').disabled = false; loDraw(); }
+  });
+  $('#loBack').addEventListener('click', () => {
+    if (lo.state === 'issued' && !window.confirm('이 화면을 나가면 링크를 다시 볼 수 없어요. 나갈까요?')) return;
+    lo.url = '';                                       // 주소를 화면 메모리에서 지운다
+    show('ready');
+  });
+  /* ── 자녀 — 보낸 링크 (GET /api/links) ──
+     상태마다 할 수 있는 일이 다르다 (최충 답변 2026-10-21):
+       취소         ready · in_progress 만. 끝난 링크를 취소하면 어르신 쪽 읽기(transcript)까지 410 으로 막힌다
+       다시 만들기   시작 전 링크만 — ready · expired · 시작 전에 취소한 revoked (session_id 없음).
+                    시작한 링크는 409 already_started
+     토큰은 목록에 없다 (다시 볼 수 없다). 다시 만들면 새 주소를 발급 화면에서 한 번 보여 준다. */
+  const LK_STATE = { ready: '시작 전', in_progress: '진행 중', ended: '끝남', interrupted: '연결 끊김', expired: '기간 지남', revoked: '취소함' };
+  let lkReq = 0, lkRows = [], lkBusy = false;
+  const lkCanRevoke = (r) => r.state === 'ready' || r.state === 'in_progress';
+  const lkCanReissue = (r) => !r.session_id && (r.state === 'ready' || r.state === 'expired' || r.state === 'revoked');
+  const lkDate = (iso) => { const d = new Date(iso); return isNaN(d) ? '' : `${d.getMonth() + 1}월 ${d.getDate()}일`; };
+  function lkShow(which) {
+    ['load', 'list', 'empty', 'error'].forEach(k => $(`[data-lk="${k}"]`).hidden = (k !== which));
+    $('#lkMain').textContent = which === 'error' ? '다시 불러오기' : '처음으로';
+  }
+  function lkDraw() {
+    const list = $('#lkList'), el = (t, c, x) => { const e = document.createElement(t); if (c) e.className = c; if (x != null) e.textContent = x; return e; };
+    list.replaceChildren();
+    lkRows.forEach(r => {
+      const li = el('li', 'lk-item'); li.dataset.id = r.link_id;
+      li.append(el('b', '', [THEME_LABEL[r.theme] || r.title || '', r.topic].filter(Boolean).join(' · ') || '인터뷰'));
+      const meta = el('div', 'lk-meta');
+      meta.append(el('span', `lk-st ${r.state}`, LK_STATE[r.state] || r.state), el('span', '', `${lkDate(r.created_at)} 보냄`));
+      if (r.state === 'ready' && r.expires_at) meta.append(el('span', '', `${lkDate(r.expires_at)}까지 열 수 있어요`));
+      li.append(meta);
+      const btns = el('div', 'lk-btns');
+      if (lkCanRevoke(r)) { const b = el('button', '', '링크 취소'); b.dataset.act = 'revoke'; btns.append(b); }
+      if (lkCanReissue(r)) { const b = el('button', '', '다시 만들기'); b.dataset.act = 'reissue'; btns.append(b); }
+      if (btns.children.length) li.append(btns);
+      list.append(li);
+    });
+  }
+  async function openLinks() {
+    const my = ++lkReq;
+    show('links'); lkShow('load'); $('#lkMsg').textContent = '';
+    try {
+      const r = await api.linkList(20);
+      if (my !== lkReq) return;
+      lkRows = (r && r.links) || [];
+      if (!lkRows.length) { lkShow('empty'); return; }
+      lkDraw(); lkShow('list');
+      log('링크', `보낸 링크 ${lkRows.length}개`);
+    } catch (e) {
+      if (my !== lkReq) return;
+      lkShow('error');
+      log('링크', `목록 실패 · ${e.status || ''} ${e.code || ''}`);
+    }
+  }
+  $('#linksBtn').addEventListener('click', () => void openLinks());
+  $('#lkMain').addEventListener('click', () => {
+    if ($('[data-lk="error"]').hidden === false) { void openLinks(); return; }
+    lkReq++; show('ready');
+  });
+  $('#lkList').addEventListener('click', async (ev) => {
+    const b = ev.target.closest('button[data-act]');
+    if (!b || lkBusy) return;
+    const id = b.closest('.lk-item').dataset.id, row = lkRows.find(x => x.link_id === id);
+    if (!row) return;
+    if (b.dataset.act === 'revoke' && !window.confirm(row.state === 'in_progress'
+      ? '진행 중인 인터뷰가 멈춰요. 이 링크를 취소할까요?' : '이 링크를 취소할까요? 더 이상 열리지 않아요.')) return;
+    lkBusy = true; b.disabled = true;
+    try {
+      if (b.dataset.act === 'revoke') {
+        const r = await api.linkRevoke(id);
+        Object.assign(row, r || {}, { state: 'revoked' });
+        $('#lkMsg').textContent = '링크를 취소했어요.';
+        lkDraw();
+      } else {
+        const r = await api.linkReissue(id);
+        // 새 주소는 발급 화면에서 한 번만 보여 준다 (이전 링크는 서버가 자동 취소)
+        lo.rec = r; lo.url = absUrl(r && r.url); lo.state = 'issued';
+        $('#loTopic').textContent = [THEME_LABEL[r.theme] || '', r.topic].filter(Boolean).join(' · ');
+        $('#loMsg').textContent = '새 링크예요. 이전 링크는 더 열리지 않아요. 이 화면을 나가면 다시 볼 수 없어요.';
+        loDraw(); show('linkout');
+      }
+    } catch (e) {
+      $('#lkMsg').textContent = e.code === 'already_started' ? '이미 시작한 인터뷰라 다시 만들 수 없어요.' : '처리하지 못했어요. 다시 눌러 주세요.';
+      b.disabled = false;
+      log('링크', `실패 · ${e.status || ''} ${e.code || ''}`);
+    } finally { lkBusy = false; }
+  });
+
+  async function linkOutFake(kind, body) {
+    await sleep(300);
+    const base = { link_id: 'mock-l1', elder_id: 'mock-e1', state: 'ready', session_id: null, token: null, url: null };
+    if (kind === 'revoke') return Object.assign({}, base, { state: 'revoked' });
+    if (kind === 'list') {
+      const t = (d) => new Date(Date.now() - d * 864e5).toISOString(), until = new Date(Date.now() + 2 * 864e5).toISOString();
+      const row = (id, state, sid, theme, topic, d) => ({ link_id: id, elder_id: 'mock-e1', title: THEME_LABEL[theme], theme, topic, state, session_id: sid, created_at: t(d), expires_at: until });
+      return { links: [row('l1', 'ready', null, 'family', '첫 직장', 0), row('l2', 'in_progress', 's2', 'hobby', '사진 찍기', 0),
+        row('l3', 'ended', 's3', 'self', '어린 시절', 1), row('l4', 'revoked', null, 'family', '이사', 2), row('l5', 'expired', null, 'family', '결혼식', 5)] };
+    }
+    return Object.assign({}, base, body || {});
+  }
+
+  /* ── 모의 응답 (서버 없이 화면 흐름만) — 실제 계정 · 링크를 만들지 않는다 ── */
+  const mockLogged = { get: () => { try { return sessionStorage.getItem('mockLogin') || ''; } catch (_) { return ''; } },
+                       set: (v) => { try { v ? sessionStorage.setItem('mockLogin', v) : sessionStorage.removeItem('mockLogin'); } catch (_) {} } };
+  async function authFake(kind, arg) {
+    await sleep(300);
+    const err = (status, code) => { const e = new ApiError(status, '모의'); e.code = code; return e; };
+    const user = { user_id: 'mock-u1', name: '예시 자녀', email: 'child@example.com' };
+    if (kind === 'me') {
+      const v = mockLogged.get();
+      if (!v) throw err(401, 'login_required');
+      return { user, elders: v === 'new' ? [] : [{ elder_id: 'mock-e1', name: v === 'ok' ? '어머니' : v }] };
+    }
+    if (kind === 'logout') { mockLogged.set(''); return null; }
+    if (kind === 'elder') { mockLogged.set(arg); return { elder_id: 'mock-e1', name: arg }; }   // 201
+    // google
+    if (AUTH.mock === 'cancel') return { cancelled: true };
+    if (AUTH.mock === 'invalid_token' || AUTH.mock === 'expired_token') throw err(401, AUTH.mock);
+    mockLogged.set(AUTH.mock === 'new' ? 'new' : 'ok');
+    return { user, elders: AUTH.mock === 'new' ? [] : [{ elder_id: 'mock-e1', name: '어머니' }] };
+  }
+  async function linkFake(kind) {
+    await sleep(300);
+    const m = LINK.mock;
+    const err = (status, code) => { const e = new ApiError(status, '모의'); e.code = code; return e; };
+    const info = { theme: 'family', topic: '첫 직장' };
+    if (m === 'expired' || m === 'revoked') throw err(410, m);
+    if (m === 'invalid') throw err(404, 'invalid_link');
+    if (kind === 'preview') {
+      const state = m === 'elsewhere' ? 'in_progress' : m;
+      return Object.assign({ state }, info);
+    }
+    if (kind === 'start') {
+      if (m === 'elsewhere') throw err(409, 'in_progress_elsewhere');
+      if (m === 'ended' || m === 'interrupted') throw err(409, m);
+      return { mock: true };
+    }
+    // transcript
+    if (m !== 'ended') throw err(409, 'not_ended');
+    return Object.assign({ turns: [
+      { question: '오늘은 「첫 직장」 이야기를 나눠 볼까요?', answer: '광주 인쇄소에서 첫 월급을 받았어요.' },
+      { question: '그 돈으로 무엇을 하셨어요?', answer: '어머니께 빨간 목도리를 사 드렸어요.' },
+    ] }, info);
+  }
+
+  /* ═══════════════════════════════════════════════════════════════
+     개발 시안 — 2~7차 통합 업무지시서 v1.1 의 「혼자 준비할 수 있는 일」(A)
+       FE-01 부분 수정 · FE-02 문체 · FE-03 로그인/링크 · FE-04 사진/그림
+       FE-05 목록 정렬 · FE-06 같은 글의 휴대전화/PC 보기
+     · 전부 합성 자료다. 서버에 아무것도 보내지 않고 저장하지 않는다.
+     · 규격(B · FE-07~12)이 오면 여기 만든 화면에 모의/실제 응답을 붙인다.
+     · 열기: 주소 뒤 ?lab=1 (?lab=fe03 처럼 탭을 바로) 또는 개발용 패널(⚙) 「개발 시안 열기」
+     ═══════════════════════════════════════════════════════════════ */
+  const LAB_TABS = [
+    ['fe01', 'FE-01 부분 수정'], ['fe02', 'FE-02 문체'], ['fe03', 'FE-03 로그인·링크'],
+    ['fe04', 'FE-04 사진·그림'], ['fe05', 'FE-05 목록 정렬'], ['fe06', 'FE-06 읽기 화면'],
+  ];
+  const labDrawn = {};
+  const mk = (tag, cls, text) => {
+    const e = document.createElement(tag);
+    if (cls) e.className = cls;
+    if (text != null) e.textContent = text;
+    return e;
+  };
+
+  function openLab(tab) {
+    show('lab');
+    labSelect(LAB_TABS.some(t => t[0] === tab) ? tab : 'fe01');
+  }
+  function labSelect(tab) {
+    $$('#labTabs button').forEach(b => b.setAttribute('aria-selected', String(b.dataset.tab === tab)));
+    $$('.lab-panel').forEach(pn => pn.hidden = pn.dataset.lab !== tab);
+    if (!labDrawn[tab]) { labDrawn[tab] = true; ({ fe01: fe01Init, fe02: fe02Init, fe03: fe03Init, fe04: fe04Init, fe05: fe05Init, fe06: fe06Init })[tab](); }
+    log('시안', tab.toUpperCase());
+  }
+  LAB_TABS.forEach(([id, label]) => {
+    const b = mk('button', '', label);
+    b.dataset.tab = id; b.setAttribute('role', 'tab'); b.setAttribute('aria-selected', 'false');
+    b.addEventListener('click', () => labSelect(id));
+    $('#labTabs').append(b);
+  });
+  $('#labBack').addEventListener('click', () => show('ready'));
+  $('#devLab').addEventListener('click', () => { $('#dev').classList.remove('show'); openLab('fe01'); });
+
+  /* ── FE-01 부분 수정 · 삭제 · 취소 ──────────────────────────
+     원문은 건드리지 않는다. 바꾼 일(ops)만 쌓고, 화면 글은 원문에 ops 를 차례로 다시 입혀 만든다.
+     그래서 「취소」 는 마지막 op 를 빼는 것, 「모두 되돌리기」 는 ops 를 비우는 것이다.
+     고른 곳은 **글자 위치(start · end)** 로 잡는다 — 같은 말이 두 번 나와도 고른 쪽만 바뀐다. */
+  const FE01_SAMPLE = [
+    { idx: 1, q: '오늘은 어떤 이야기를 들려주시겠어요?', a: '시장에서 국수 가게를 했어요. 시장 입구 바로 옆이었어요 😊' },
+    { idx: 2, q: '그 가게는 언제 여셨어요?', a: '1975년 봄이었나\n아니 1976년 봄에 열었어요. 남편이랑 둘이서요.' },
+    { idx: 3, q: '손님은 많았어요?', a: '장날이면 줄이 길었어요. 장날이 제일 바빴죠 🍜🍜' },
+  ];
+  const fe01 = { ops: [], sel: null, editing: false };
+  const fe01Text = (idx) => {
+    let t = FE01_SAMPLE.find(f => f.idx === idx).a;
+    fe01.ops.filter(o => o.idx === idx).forEach(o => { t = t.slice(0, o.start) + o.after + t.slice(o.end); });
+    return t;
+  };
+  // 이모지처럼 두 칸짜리 글자의 한가운데에서 끊기지 않게 경계를 바깥으로 민다
+  const isHi = (c) => c >= 0xD800 && c <= 0xDBFF;
+  const isLo = (c) => c >= 0xDC00 && c <= 0xDFFF;
+  function fe01Snap(t, s, e) {
+    if (s > 0 && isLo(t.charCodeAt(s)) && isHi(t.charCodeAt(s - 1))) s -= 1;
+    if (e < t.length && isLo(t.charCodeAt(e)) && isHi(t.charCodeAt(e - 1))) e += 1;
+    return [s, e];
+  }
+  function fe01Draw() {
+    const list = $('#fe01List');
+    list.replaceChildren();
+    FE01_SAMPLE.forEach(f => {
+      const li = mk('li', 'rv-item');
+      const q = mk('p', 'rv-q fe01-q');
+      q.append(mk('span', 'rv-who', '질문'), document.createTextNode(f.q));
+      const now = fe01Text(f.idx), changed = now !== f.a;
+      const a = mk('p', 'rv-a' + (changed ? ' changed' : ''));
+      a.append(mk('span', 'rv-who', `내 답 ${f.idx}` + (changed ? ' · 이 화면에서 바뀜' : '')));
+      // 고르는 자리는 글자 하나짜리 노드 하나뿐이어야 위치 계산이 정확하다
+      const body = mk('span', 'fe01-a');
+      body.dataset.idx = f.idx;
+      if (now) body.append(document.createTextNode(now)); else body.append(mk('span', 'fe01-empty', '(모두 지움)'));
+      a.append(body);
+      li.append(q, a);
+      if (changed) li.append(mk('p', 'fe01-orig', `원문: ${f.a}`));
+      list.append(li);
+    });
+    const log_ = $('#fe01Log');
+    log_.replaceChildren();
+    fe01.ops.forEach(o => {
+      log_.append(mk('li', '', o.after
+        ? `${o.idx}번 답 ${o.start}~${o.end}: 「${o.before}」 → 「${o.after}」`
+        : `${o.idx}번 답 ${o.start}~${o.end}: 「${o.before}」 지움`));
+    });
+    $('#fe01Count').textContent = `${fe01.ops.length}건 · 저장되지 않음`;
+    $('#fe01Undo').disabled = $('#fe01Reset').disabled = !fe01.ops.length;
+  }
+  function fe01Bar() {
+    const s = fe01.sel;
+    $('#fe01Sel').textContent = s
+      ? `고른 곳: ${s.idx}번 답 「${s.text}」 (${s.start}~${s.end})`
+      : '고칠 곳을 끌어서 선택해 주세요.';
+    $('#fe01Edit').disabled = $('#fe01Del').disabled = !s || fe01.editing;
+  }
+  function fe01ReadSel() {
+    if ($('[data-lab="fe01"]').hidden || fe01.editing) return;
+    const sel = window.getSelection();
+    if (!sel || !sel.rangeCount) return;
+    const r = sel.getRangeAt(0);
+    const host = (n) => n && (n.nodeType === 3 ? n.parentElement : n).closest('.fe01-a');
+    const a = host(r.startContainer), b = host(r.endContainer);
+    if (sel.isCollapsed) { if (a) { fe01.sel = null; fe01Bar(); } return; }
+    if (!a || a !== b || !a.firstChild || a.firstChild.nodeType !== 3) {
+      // 질문이나 두 답에 걸친 선택은 받지 않는다 — 고칠 수 있는 건 답 하나 안의 한 구간뿐이다
+      if (a || b) { fe01.sel = null; fe01Bar(); $('#fe01Sel').textContent = '답 하나 안에서만 고를 수 있어요. 질문은 고칠 수 없어요.'; }
+      return;
+    }
+    const t = a.firstChild.data;
+    let [s, e] = fe01Snap(t, Math.min(r.startOffset, r.endOffset), Math.max(r.startOffset, r.endOffset));
+    if (s === e) return;
+    fe01.sel = { idx: Number(a.dataset.idx), start: s, end: e, text: t.slice(s, e) };
+    fe01Bar();
+  }
+  // 바꾼 뒤에도 그 자리를 다시 골라 둔다 — 이어서 고치거나 확인하기 쉽게 (포커스 유지)
+  function fe01Reselect(idx, start, end) {
+    const el = $(`.fe01-a[data-idx="${idx}"]`);
+    if (!el || !el.firstChild || el.firstChild.nodeType !== 3 || start === end) { fe01.sel = null; fe01Bar(); return; }
+    const r = document.createRange();
+    r.setStart(el.firstChild, start); r.setEnd(el.firstChild, end);
+    const sel = window.getSelection(); sel.removeAllRanges(); sel.addRange(r);
+    fe01.sel = { idx, start, end, text: el.firstChild.data.slice(start, end) };
+    fe01Bar();
+  }
+  function fe01Apply(after) {
+    const s = fe01.sel;
+    if (!s) return;
+    fe01.ops.push({ idx: s.idx, start: s.start, end: s.end, before: s.text, after });
+    fe01.editing = false; $('#fe01EditBox').hidden = true;
+    fe01Draw();
+    log('시안', `FE-01 ${after ? '고침' : '지움'} · ${s.idx}번 ${s.start}~${s.end}`);
+    fe01Reselect(s.idx, s.start, s.start + after.length);
+  }
+  function fe01Init() {
+    fe01Draw(); fe01Bar();
+    document.addEventListener('selectionchange', fe01ReadSel);
+    // 버튼을 눌러도 고른 곳이 풀리지 않게 (휴대전화에서 특히)
+    $$('#fe01Bar .lab-btn').forEach(b => b.addEventListener('mousedown', e => e.preventDefault()));
+    $('#fe01Edit').addEventListener('click', () => {
+      if (!fe01.sel) return;
+      fe01.editing = true;
+      $('#fe01EditBox').hidden = false;
+      const inp = $('#fe01Input'); inp.value = fe01.sel.text; inp.focus(); inp.select();
+      fe01Bar();
+    });
+    $('#fe01Del').addEventListener('click', () => fe01Apply(''));
+    $('#fe01Apply').addEventListener('click', () => fe01Apply($('#fe01Input').value));
+    $('#fe01Cancel').addEventListener('click', () => {
+      fe01.editing = false; $('#fe01EditBox').hidden = true;
+      if (fe01.sel) fe01Reselect(fe01.sel.idx, fe01.sel.start, fe01.sel.end); else fe01Bar();
+    });
+    // 한글 조합 중의 Enter 는 글자를 확정하는 키다 — 바꾸기로 받지 않는다
+    $('#fe01Input').addEventListener('keydown', (e) => {
+      if (e.key === 'Escape') { $('#fe01Cancel').click(); return; }
+      if (e.key !== 'Enter' || e.isComposing || e.keyCode === 229) return;
+      e.preventDefault(); $('#fe01Apply').click();
+    });
+    $('#fe01Undo').addEventListener('click', () => { fe01.ops.pop(); fe01.sel = null; fe01Draw(); fe01Bar(); });
+    $('#fe01Reset').addEventListener('click', () => { fe01.ops = []; fe01.sel = null; fe01Draw(); fe01Bar(); });
+  }
+
+  /* ── FE-02 문체 선택과 결과 상태 ──────────────────────────
+     세 가지를 따로 들고 있는다 — 고른 문체(sel) · 만드는 중인 문체(req) · 지금 보이는 글의 문체(shown).
+     라벨은 언제나 **보이는 글의 문체**를 따른다. 고르기만 해서는 바뀌지 않는다.
+     요청마다 번호를 붙여, 늦게 온 옛 응답이 새 결과를 덮지 않게 한다. */
+  const FE02_STYLES = [
+    { id: 'spoken', name: '구어체', desc: '말씀하신 그대로의 말투를 살려 옮겨요. (기본)' },
+    { id: 'novel', name: '소설체', desc: '이야기책처럼 장면을 이어 붙여 써요.' },
+    { id: 'cyworld', name: '싸이월드체', desc: '2000년대 미니홈피 글처럼 가볍고 짧게 써요.' },
+  ];
+  // 같은 내용을 사람이 문체별로 써 둔 예시 — 실제 변환 결과가 아니다
+  const FE02_TEXT = {
+    spoken: ['시장 입구 바로 옆에서 국수 가게를 했어요.', '1976년 봄에 남편이랑 둘이서 열었어요. 장날이면 줄이 길었어요.'],
+    novel: ['시장 입구 바로 옆, 작은 국수 가게에 김이 피어올랐다.', '1976년 봄, 그녀는 남편과 둘이서 가게 문을 열었다. 장날이면 손님 줄이 골목 끝까지 이어졌다.'],
+    cyworld: ['시장 입구 옆 국수 가게 ★', '76년 봄에 남편이랑 둘이 오픈~ 장날엔 줄이 끝이 없었다는..'],
+  };
+  const fe02 = { sel: 'spoken', req: null, shown: 'spoken', seq: 0 };
+  const fe02Name = (id) => (FE02_STYLES.find(x => x.id === id) || {}).name || '없음';
+  function fe02Draw() {
+    $$('#fe02Pick .tab').forEach(b => b.setAttribute('aria-checked', String(b.dataset.style === fe02.sel)));
+    $('#fe02Desc').textContent = FE02_STYLES.find(x => x.id === fe02.sel).desc;
+    $('#fe02Sel').textContent = fe02Name(fe02.sel);
+    $('#fe02Req').textContent = fe02.req ? `${fe02Name(fe02.req)} …` : '없음';
+    $('#fe02Shown').textContent = fe02Name(fe02.shown);
+    const box = $('#fe02Text');
+    box.replaceChildren(...FE02_TEXT[fe02.shown].map(t => mk('p', '', t)));
+    box.parentElement.classList.toggle('busy', !!fe02.req);
+    $('#fe02Go').disabled = fe02.req === fe02.sel || fe02.shown === fe02.sel && !fe02.req;
+  }
+  function fe02Go() {
+    const style = fe02.sel, my = ++fe02.seq;
+    fe02.req = style;
+    $('#fe02Msg').className = 'fe02-msg'; $('#fe02Msg').textContent = `${fe02Name(style)}로 바꾸는 중이에요. 지금 보이는 글은 그대로 둡니다.`;
+    fe02Draw();
+    const ms = Number($('#fe02Speed').value), ok = $('#fe02Result').value === 'ok';
+    setTimeout(() => {
+      if (my !== fe02.seq) { log('시안', `FE-02 늦게 온 ${fe02Name(style)} 응답을 버립니다`); return; }
+      fe02.req = null;
+      if (ok) {
+        fe02.shown = style;
+        $('#fe02Msg').className = 'fe02-msg ok'; $('#fe02Msg').textContent = `${fe02Name(style)} 글이 왔어요 (모의).`;
+      } else {
+        $('#fe02Msg').className = 'fe02-msg';
+        $('#fe02Msg').textContent = `${fe02Name(style)}로 바꾸지 못했어요. 지금 보이는 글은 ${fe02Name(fe02.shown)} 그대로예요.`;
+      }
+      fe02Draw();
+    }, ms);
+  }
+  function fe02Init() {
+    FE02_STYLES.forEach(st => {
+      const b = mk('button', 'tab', st.name);
+      b.dataset.style = st.id; b.setAttribute('role', 'radio'); b.setAttribute('aria-checked', 'false');
+      b.addEventListener('click', () => { fe02.sel = st.id; fe02Draw(); });
+      $('#fe02Pick').append(b);
+    });
+    $('#fe02Go').addEventListener('click', fe02Go);
+    fe02Draw();
+  }
+
+  /* ── FE-03 로그인 · 링크 · 어르신 화면 ─────────────────────
+     상태만 옮겨 다니는 모의다. 실제 로그인 · 링크 주소 · 클립보드 복사 · 메시지 전송은 없다.
+     어르신 화면은 링크를 열기만 해서는 마이크를 켜지 않는다. 다른 기록 · 수정 · 생성 메뉴도 두지 않는다. */
+  const fe03 = { child: 'out', note: '', link: 'none', elder: 'ready' };
+  const FE03_LINK = { none: '만들기 전', issuing: '만드는 중', issued: '만들어짐 (모의)', copied: '복사함 (모의)', blocked: '쓸 수 없음' };
+  function fe03Friend() {
+    const svg = document.querySelector('#friend .friend-svg');
+    if (!svg) return mk('span');
+    const c = svg.cloneNode(true);
+    c.querySelectorAll('[id]').forEach(e => e.removeAttribute('id'));
+    c.classList.add('fe03-friend');
+    return c;
+  }
+  function fe03Draw() {
+    const v = $('#fe03Child');
+    v.replaceChildren();
+    const btn = (cls, text, fn) => { const b = mk('button', cls, text); b.addEventListener('click', fn); return b; };
+    if (fe03.child === 'out' || fe03.child === 'busy') {
+      v.append(mk('h4', '', '내말싸미에 오신 걸 환영해요'), mk('p', '', '부모님의 이야기를 함께 모으려면 먼저 로그인해 주세요.'));
+      if (fe03.note) v.append(mk('p', 'fe02-msg', fe03.note));
+      const b = btn('btn btn-primary', fe03.child === 'busy' ? '로그인하는 중…' : 'Google로 로그인', () => {
+        fe03.child = 'busy'; fe03.note = ''; fe03Draw();
+        setTimeout(() => {
+          const r = $('#fe03Login').value;
+          fe03.child = r === 'ok' ? 'in' : 'out';
+          // 「취소」 는 서버에 오지 않는다 — 로그인 전 그대로 둔다 (3-C1 §4). 401 은 code 로 문구를 고른다
+          fe03.note = r === 'cancel' ? '' : r === 'ok' ? '' : AUTH_SAYS[r];
+          fe03Draw();
+        }, 700);
+      });
+      b.disabled = fe03.child === 'busy';
+      v.append(b);
+    } else {
+      v.append(mk('p', 'fe03-acct', '예시 계정 (모의 로그인) — 실제 계정이 아닙니다'));
+      v.append(mk('h4', '', '「가족 · 첫 직장」 이야기'));
+      v.append(mk('span', 'fe03-state', `링크: ${FE03_LINK[fe03.link]}`));
+      const box = mk('div', 'fe03-link');
+      box.textContent = fe03.link === 'none' ? '어르신께 보낼 링크를 만들 수 있어요.'
+        : fe03.link === 'issuing' ? '링크를 만드는 중이에요…'
+        : fe03.link === 'blocked' ? '이 링크는 지금 쓸 수 없어요.'
+        : '링크 자리 — 실제 주소는 서버가 준비되면 여기에 나와요. 토큰은 발급 때 한 번만 와서 다시 볼 수 없어요. (모의: 주소를 만들지 않았어요)';
+      v.append(box);
+      if (fe03.link === 'none') v.append(btn('btn btn-primary', '어르신께 보낼 링크 만들기', () => {
+        fe03.link = 'issuing'; fe03Draw(); setTimeout(() => { fe03.link = 'issued'; fe03Draw(); }, 700);
+      }));
+      if (fe03.link === 'issued' || fe03.link === 'copied') {
+        v.append(btn('btn btn-primary', fe03.link === 'copied' ? '복사함 (모의 — 실제로 복사하지 않았어요)' : '링크 복사', () => { fe03.link = 'copied'; fe03Draw(); }));
+        v.append(btn('btn-line', '링크 취소 (회수)', () => { fe03.link = 'blocked'; fe03Draw(); }));
+      }
+      if (fe03.link === 'blocked') v.append(btn('btn-line', '같은 준비로 다시 만들기 (이전 링크는 자동 취소)', () => { fe03.link = 'issuing'; fe03Draw(); setTimeout(() => { fe03.link = 'issued'; fe03Draw(); }, 700); }));
+      v.append(btn('btn-ghost', '이 기기에서 바로 시작 (지금의 인터뷰 화면)', () => toast('모의 — 실제로는 「인터뷰 준비」 화면으로 이어집니다.')));
+      v.append(btn('btn-ghost', '로그아웃', () => { fe03.child = 'out'; fe03.link = 'none'; fe03.note = '로그아웃했어요.'; fe03Draw(); }));
+    }
+
+    // 어르신 화면 — 실제 링크 화면과 같은 함수(linkPaint)로 그린다. 시작 버튼은 여기서는 아무 요청도 보내지 않는다
+    linkPaint($('#fe03Elder'), fe03.elder, { theme: 'family', topic: '첫 직장' },
+      () => toast('모의 — 실제로는 POST /api/i/start 뒤 지금의 대화 화면으로 이어집니다.'));
+  }
+  function fe03Init() {
+    $('#fe03ElderState').addEventListener('change', (e) => { fe03.elder = e.target.value; fe03Draw(); });
+    fe03Draw();
+  }
+
+  /* ── FE-04 사진 · 생성 그림 표시 상태 ──────────────────────
+     같은 글(#A12)에 붙는 그림 자리를 상태별로 한 장씩 그린다. 그림은 모두 이 화면이 만든 합성 예시다. */
+  const fe04Svg = (kind) => {
+    const photo = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 300"><rect width="400" height="300" fill="#cfd9dc"/><rect y="190" width="400" height="110" fill="#8a9b7e"/><rect x="150" y="110" width="110" height="90" fill="#b5835a"/><polygon points="140,112 205,60 270,112" fill="#7a4b33"/><rect x="190" y="150" width="30" height="50" fill="#5a3a28"/><text x="200" y="40" font-size="22" text-anchor="middle" fill="#2b5568">합성 예시 사진</text></svg>`;
+    const drawn = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 300"><rect width="400" height="300" fill="#fbefe0"/><circle cx="320" cy="70" r="34" fill="#f3b27a"/><path d="M60 230 Q200 120 340 230" stroke="#c2703f" stroke-width="10" fill="none"/><rect x="150" y="150" width="100" height="70" rx="10" fill="#e3a46b" stroke="#7a4b33" stroke-width="5"/><text x="200" y="40" font-size="22" text-anchor="middle" fill="#6b3a7a">합성 예시 그림</text></svg>`;
+    return 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(kind === 'photo' ? photo : drawn);
+  };
+  const FE04_CASES = [
+    { key: 'photo', title: '사진 있음', src: 'photo', img: 'photo', id: '글 #A12 v2 · 사진 P7' },
+    { key: 'none', title: '사진 없음', over: '사진 없이 쓴 글이에요', id: '글 #A12 v2 · 그림 없음' },
+    { key: 'readfail', title: '사진 읽기 실패', over: '사진을 불러오지 못했어요\n(사진이 없는 것과 달라요)', id: '글 #A12 v2 · 사진 P7 (읽지 못함)' },
+    { key: 'gen', title: '그림 그리는 중', over: '그림을 그리는 중이에요…', id: '글 #A12 v2 · 그림 만드는 중' },
+    { key: 'drawn', title: '생성 그림 있음', src: 'drawn', img: 'drawn', id: '글 #A12 v2 · 그림 G3 (글 v2로 만듦)' },
+    { key: 'genfail', title: '그림 생성 실패', over: '그림을 만들지 못했어요\n글은 그대로 있어요', id: '글 #A12 v2 · 그림 없음 (실패)' },
+    { key: 'regen', title: '새 그림으로 바꾸는 중', src: 'drawn', img: 'drawn', dim: true, over: '새 그림을 그리는 중\n지금 보이는 건 이전 그림', id: '글 #A12 v3 · 그림 G3 (글 v2로 만든 이전 그림)', mismatch: true },
+  ];
+  function fe04Init() {
+    const g = $('#fe04Grid');
+    FE04_CASES.forEach(c => {
+      const card = mk('div', 'fe04-card'); card.dataset.case = c.key;
+      const box = mk('div', 'fe04-img' + (c.dim ? ' dim' : ''));
+      if (c.img) { const im = mk('img'); im.alt = c.src === 'photo' ? '직접 올린 사진 (합성 예시)' : 'AI가 그린 그림 (합성 예시)'; im.src = fe04Svg(c.img); box.append(im); }
+      if (c.src) box.append(mk('span', 'fe04-src ' + (c.src === 'photo' ? 'photo' : 'drawn'), c.src === 'photo' ? '사진 · 직접 올림' : '그린 그림 · 실제 사진 아님'));
+      if (c.over) { const o = mk('span', 'over', c.over); o.style.whiteSpace = 'pre-line'; box.append(o); }
+      const body = mk('div', 'fe04-body');
+      body.append(mk('b', '', c.title), mk('span', 'fe04-id' + (c.mismatch ? ' mismatch' : ''), c.id));
+      card.append(box, body);
+      g.append(card);
+    });
+  }
+
+  /* ── FE-05 기록한 순 · 일어난 순 ─────────────────────────
+     「기록한 날」 과 「일어난 때」 는 다른 값이라 라벨을 따로 단다. 일어난 때를 모르는 이야기는 숨기지 않고
+     따로 묶어 끝에 둔다(임시). 서버가 주지 않은 연도를 화면이 지어내지 않는다 — 예시 값을 그대로 쓴다. */
+  const FE05_ROWS = [
+    { title: '국수 가게를 연 날', written: '2026-10-18', when: '1976년 봄', key: 1976.25 },
+    { title: '시집오던 날', written: '2026-10-20', when: '1968년', key: 1968 },
+    { title: '손녀가 태어난 무렵', written: '2026-10-12', when: '1990년대', key: 1990, approx: true },
+    { title: '어릴 적 살던 집', written: '2026-10-15', when: null },
+    { title: '첫 월급', written: '2026-10-19', when: '1979년', key: 1979 },
+  ];
+  const fe05 = { sort: 'written', state: 'list' };
+  const fe05Date = (iso) => iso.replace(/-/g, '. ');
+  function fe05Card(r) {
+    const d = mk('div', 'fe05-item');
+    const dates = mk('div', 'fe05-dates');
+    dates.append(mk('span', '', `기록한 날 ${fe05Date(r.written)}`));
+    dates.append(r.when ? mk('span', 'event', `일어난 때 ${r.when}${r.approx ? ' (대략)' : ''}`) : mk('span', 'unknown', '일어난 때 모름'));
+    d.append(mk('b', '', r.title), dates);
+    return d;
+  }
+  function fe05Draw() {
+    $$('#fe05Sort .tab').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.sort === fe05.sort)));
+    $('#fe05How').textContent = fe05.sort === 'written' ? '기록한 날이 최근인 것부터 (일어난 때와 상관없음)' : '일어난 때가 오래된 것부터 · 모르는 이야기는 맨 끝에 따로';
+    const body = $('#fe05Body');
+    body.replaceChildren();
+    if (fe05.state === 'load') { body.append(mk('div', 'skel'), mk('div', 'skel')); return; }
+    if (fe05.state === 'error') {
+      const b = mk('div', 'blank'); b.append(mk('h2', '', '목록을 불러오지 못했어요.'), mk('p', '', '이야기는 지워지지 않았어요. 잠시 뒤 다시 불러와 주세요.'));
+      body.append(b); return;
+    }
+    if (fe05.state === 'empty') {
+      const b = mk('div', 'blank'); b.append(mk('h2', '', '아직 모은 이야기가 없어요.')); body.append(b); return;
+    }
+    if (fe05.sort === 'written') {
+      [...FE05_ROWS].sort((a, b) => b.written.localeCompare(a.written)).forEach(r => body.append(fe05Card(r)));
+    } else {
+      // 같은 때는 기록한 날 순으로 (임시)
+      const known = FE05_ROWS.filter(r => r.when).sort((a, b) => a.key - b.key || a.written.localeCompare(b.written));
+      const unknown = FE05_ROWS.filter(r => !r.when);
+      known.forEach(r => body.append(fe05Card(r)));
+      if (unknown.length) { body.append(mk('p', 'fe05-group', `언제인지 모르는 이야기 (${unknown.length})`)); unknown.forEach(r => body.append(fe05Card(r))); }
+    }
+  }
+  function fe05Init() {
+    $$('#fe05Sort .tab').forEach(b => b.addEventListener('click', () => { fe05.sort = b.dataset.sort; fe05Draw(); }));
+    $('#fe05State').addEventListener('change', (e) => { fe05.state = e.target.value; fe05Draw(); });
+    fe05Draw();
+  }
+
+  /* ── FE-06 같은 글의 휴대전화 · PC 보기 ────────────────────
+     한 함수(fe06Paint)가 두 자리에 똑같이 그린다. 글은 textContent 로만 넣는다 —
+     태그처럼 보이는 글도 글자 그대로 보인다. 두 보기의 문단을 비교해 위에 결과를 적는다. */
+  const FE06_DOC = {
+    title: '국수 가게와 장날의 기억',
+    sections: [
+      { heading: '시장 입구의 작은 가게', paragraphs: [
+        '저는 1976년 봄에 남편이랑 둘이서 시장 입구 바로 옆에 국수 가게를 열었어요.',
+        '처음에는 1975년이었다고 말했는데, 다시 생각해 보니 1976년 봄이 맞아요.' ] },
+      { heading: '장날', paragraphs: [
+        '장날이면 줄이 길었어요. 장날이 제일 바빴죠. 국물이 모자라서 새벽 네 시에 일어나 멸치를 다시 우리고, 손님이 다 가고 나면 그릇을 씻느라 밤 열 시가 넘어서야 겨우 앉을 수 있었던 날도 많았는데, 그래도 그때가 제일 좋았던 것 같아요.',
+        '손님이 남긴 쪽지에 <b>맛있어요</b> 라고 적혀 있었어요.',
+        '가게간판이름은국수집이었고전화번호는없었어요아주오래전이니까요' ] },
+    ],
+  };
+  const FE06_SHORT = { title: '국수 가게', sections: [{ paragraphs: ['남편이랑 국수 가게를 했어요.'] }] };
+  function fe06Paint(host, state) {
+    host.replaceChildren();
+    const blank = (h, p) => { const b = mk('div', 'blank'); b.append(mk('h2', '', h)); if (p) b.append(mk('p', '', p)); host.append(b); };
+    if (state === 'wait') return blank('자서전을 쓰고 있어요.', '잠시 기다려 주세요.');
+    if (state === 'lack') return blank('자서전을 쓸 만큼 분명한 이야기가 부족해요.', '다른 엽서를 골라 주세요.');
+    if (state === 'fail') return blank('자서전을 만들지 못했어요.', '다시 만들어 주세요. 이전에 만든 글은 그대로 있어요.');
+    const doc = state === 'short' ? FE06_SHORT : FE06_DOC;
+    if (state === 'old') host.append(mk('p', 'lab-warn small', '지금 보이는 글은 이전에 만든 글이에요. 새 글은 아직 오지 않았어요.'));
+    host.append(mk('h4', '', doc.title));
+    doc.sections.forEach(sec => {
+      if (sec.heading) host.append(mk('h5', '', sec.heading));
+      sec.paragraphs.forEach(t => host.append(mk('p', '', t)));
+    });
+  }
+  function fe06Draw() {
+    const st = $('#fe06State').value;
+    fe06Paint($('#fe06Phone'), st); fe06Paint($('#fe06Pc'), st);
+    const txt = (q) => [...document.querySelectorAll(`${q} h4, ${q} h5, ${q} p`)].map(e => e.textContent);
+    const a = txt('#fe06Phone'), b = txt('#fe06Pc');
+    const same = a.length === b.length && a.every((t, i) => t === b[i]);
+    $('#fe06Check').className = 'fe06-check' + (same ? '' : ' bad');
+    $('#fe06Check').textContent = same ? `두 보기 같음 — 제목 · 소제목 · 문단 ${a.length}개, 순서와 글자 모두 일치` : '두 보기가 달라요 — 확인이 필요해요';
+  }
+  function fe06Init() {
+    $('#fe06State').addEventListener('change', fe06Draw);
+    fe06Draw();
+  }
+
+  // 처음 화면(준비)은 show() 를 거치지 않고 열려 있다 — 모양을 여기서 한 번 맞춘다
+  syncLayout('ready');
+  $('#app').classList.toggle('book', BOOK);
+  if (BOOK) log('책장', '넘김 시안을 켰습니다');
+
   // 버전을 화면과 기록 양쪽에 남긴다
   $('#version').textContent = CONFIG.version;
   log('버전', CONFIG.version);
@@ -2741,6 +4973,78 @@
   $('#abortBtn').textContent = CONFIG.ui.labels.stop;
   $('#holdBtn').textContent = CONFIG.ui.labels.pause;
   if (CONFIG.ui.download !== 'png') $('#saveBtn').hidden = true;
+
+  /* ── 1차 인터뷰 흐름 — 준비 화면 · 키보드 (업무지시서 03) ── */
+  function renderPrep() {
+    if (!NEW_FLOW) return;
+    const ok = !!(prepInfo.theme && prepInfo.topic);
+    // 시작 전에 고른 값을 한 줄로 읽어 준다
+    $('#prepNote').textContent = ok ? `「${prepInfo.theme}」 테마로 「${prepInfo.topic}」 이야기를 시작해요.`
+      : !prepInfo.theme ? '테마를 하나 골라 주세요.' : '이야기할 주제를 적어 주세요.';
+    if (!sessionId) $('#startBtn').disabled = !ok;
+    $('#linkOutBtn').disabled = !ok || loBusy;
+  }
+
+  if (NEW_FLOW) {
+    $('#app').classList.add('flow-interview');
+    $('#prep').hidden = false;
+    $('#photoLabel').hidden = false;
+    $('#photoState').hidden = false;
+    STEP_LABEL.ready = '인터뷰 준비';
+    $('#stepLabel').textContent = STEP_LABEL.ready;
+    $('#startBtn').textContent = CONFIG.ui.labels.begin;
+    $('#abortBtn').textContent = CONFIG.ui.labels.end;
+    // 사진 안내 문구도 엽서 이야기를 하지 않는다
+    $('#photoCard').setAttribute('aria-label', '보조 사진 고르기');
+    $('#photoHint').lastChild.textContent = ' 사진 넣기';
+
+    const tabs = $('#themeTabs');
+    CONFIG.interview.themes.forEach(t => {
+      const b = document.createElement('button');
+      b.type = 'button'; b.className = 'tab'; b.textContent = t;
+      b.setAttribute('aria-pressed', 'false');
+      b.addEventListener('click', () => {
+        prepInfo.theme = t;
+        [...tabs.children].forEach(x => x.setAttribute('aria-pressed', String(x === b)));
+        renderPrep();
+      });
+      tabs.append(b);
+    });
+    const topic = $('#topicInput');
+    topic.maxLength = CONFIG.interview.topicMax;
+    topic.addEventListener('input', () => { prepInfo.topic = topic.value.trim(); renderPrep(); });
+    // 한글 조합 중의 Enter 는 글자를 확정하는 키다 — 다른 동작으로 받지 않는다
+    topic.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter' && !e.isComposing && e.keyCode !== 229) { e.preventDefault(); topic.blur(); }
+    });
+    renderPrep();
+    renderPhotoState();
+
+    $('#modeKeyboard').addEventListener('click', () => void toKeyboard());
+    $('#modeVoice').addEventListener('click', toVoice);
+    const box = $('#composeText');
+    box.addEventListener('input', () => { if (snap) renderCompose(snap); });
+    // Enter = 보내기, Shift+Enter = 줄 바꿈. **한글 조합 중의 Enter 는 보내지 않는다** —
+    // 「안녕하세요」 의 마지막 글자를 확정하는 Enter 가 전송으로 읽히면 글이 잘려 나간다.
+    box.addEventListener('keydown', (e) => {
+      if (e.key !== 'Enter' || e.shiftKey) return;
+      if (e.isComposing || e.keyCode === 229) return;
+      e.preventDefault();
+      void sendText();
+    });
+    $('#composeSend').addEventListener('click', () => void sendText());
+  }
+
+  // 주소 뒤 ?lab=1 (또는 ?lab=fe03) — 개발 시안을 바로 연다. 준비 화면 꾸미기가 다 끝난 뒤라야
+  // 위쪽 단계 표시가 「인터뷰 준비」 로 덮이지 않는다
+  { const q = new URLSearchParams(location.search).get('lab'); if (q !== null && q !== '0') openLab(q.toLowerCase()); }
+
+  // 어디로 들어왔나 — 어르신 링크(/i#…) · 로그인 모드 · 지금처럼(dev). 개발 시안(?lab)이 열려 있으면 그대로 둔다
+  if (!document.querySelector('[data-screen="lab"].active')) {
+    if (LINK.on) void enterLink();
+    else if (AUTH.mode === 'session') void authBoot();
+  }
+  if (AUTH.mode !== 'dev' || LINK.on) log('모드', `${LINK.on ? '어르신 링크' : '로그인'}${AUTH.mock ? ` · 모의 로그인(${AUTH.mock})` : ''}${LINK.mock ? ` · 모의 링크(${LINK.mock})` : ''}`);
 
   // 서버가 살아 있는지 조용히 확인해 둔다 (CORS 설정이 맞는지도 여기서 드러난다)
   api.health()
