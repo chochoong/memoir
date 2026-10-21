@@ -216,6 +216,8 @@ class SessionController:
     # 어르신의 말씀이 아니라 질문 방향이다 — 대화 기록에 섞지 않는다.
     theme: str | None = None
     topic: str = ""
+    # 회차의 화자. 링크로 연 회차만 안다 (link.py) — 자녀가 바로 연 회차는 None.
+    elder_id: str | None = None
     question_fn: QuestionFn = fixed_questions
     stt_fn: SttFn = stt.azure_transcribe
     tts_fn: TtsFn = tts.synthesize

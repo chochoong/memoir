@@ -133,13 +133,13 @@ async def save_session(ctl: "SessionController") -> None:
             await con.execute(
                 """
                 INSERT INTO session (session_id, user_id, title, state, turn,
-                                     max_turn, t2_seconds, photo_id)
-                VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+                                     max_turn, t2_seconds, photo_id, elder_id)
+                VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
                 ON CONFLICT (session_id) DO NOTHING
                 """,
                 _sid(ctl), ctl.user_id, ctl.title, ctl.machine.state.value,
                 ctl.machine.turn, ctl.machine.max_turn,
-                Decimal(str(ctl.timers.t2_seconds)), _pid(ctl.photo_id))
+                Decimal(str(ctl.timers.t2_seconds)), _pid(ctl.photo_id), ctl.elder_id)
     except Exception as e:                                   # noqa: BLE001
         log.error("세션 저장 실패 (%s: %s)", type(e).__name__, str(e)[:120])
 
@@ -732,3 +732,105 @@ async def create_elder(user_id: str, display_name: str) -> dict:
                               user_id, elder_id)
     await _auth_write("화자 기록", run)
     return {"elder_id": elder_id, "display_name": display_name}
+
+
+# ---------------------------------------------------------------- 인터뷰 링크
+#
+# 표는 010 이 만들었다. 권한을 정하는 함수라 계정 함수와 같이 실패를 삼키지 않는다.
+
+# token_hash 는 읽지 않는다. device_hash 는 「시작한 기기인가」를 대조하는 데만 쓰고 내보내지 않는다.
+_LINK_COLS = """link_id, user_id, elder_id, title, seed, theme, topic, photo_id, session_id,
+                device_hash, created_at, expires_at, revoked_at, started_at, ended_at"""
+
+
+def _link_row(r: Any) -> dict:
+    d = dict(r)
+    for k in ("photo_id", "session_id"):
+        d[k] = str(d[k]) if d[k] else None
+    return d
+
+
+async def owns_elder(user_id: str, elder_id: str) -> bool:
+    async def run(con):
+        return await con.fetchval(
+            "SELECT 1 FROM user_elder WHERE user_id = $1 AND elder_id = $2", user_id, elder_id)
+    return bool(await _auth_write("화자 확인", run))
+
+
+async def create_link(rec: dict) -> None:
+    async def run(con):
+        await con.execute(
+            """
+            INSERT INTO interview_link (link_id, token_hash, user_id, elder_id, title, seed,
+                                        theme, topic, photo_id, expires_at)
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+            """,
+            rec["link_id"], rec["token_hash"], rec["user_id"], rec["elder_id"], rec["title"],
+            rec["seed"], rec["theme"], rec["topic"], _pid(rec["photo_id"]), rec["expires_at"])
+    await _auth_write("링크 기록", run)
+
+
+async def _load_link(what: str, where: str, value: str) -> dict | None:
+    async def run(con):
+        return await con.fetchrow(f"SELECT {_LINK_COLS} FROM interview_link WHERE {where} = $1",
+                                  value)
+    row = await _auth_write(what, run)
+    return _link_row(row) if row else None
+
+
+async def load_link_by_token(token_hash: str) -> dict | None:
+    return await _load_link("링크 읽기", "token_hash", token_hash)
+
+
+async def load_link_by_device(device_hash: str) -> dict | None:
+    return await _load_link("링크 읽기", "device_hash", device_hash)
+
+
+async def load_link(link_id: str) -> dict | None:
+    return await _load_link("링크 읽기", "link_id", link_id)
+
+
+async def list_links(user_id: str, elder_id: str | None, limit: int) -> list[dict]:
+    async def run(con):
+        return await con.fetch(
+            f"""
+            SELECT {_LINK_COLS} FROM interview_link
+             WHERE user_id = $1 AND ($2::text IS NULL OR elder_id = $2)
+             ORDER BY created_at DESC LIMIT $3
+            """,
+            user_id, elder_id, limit)
+    return [_link_row(r) for r in await _auth_write("링크 목록 읽기", run)]
+
+
+async def claim_link(link_id: str, session_id: str, device_hash: str) -> bool:
+    """
+    시작 전 링크에 회차를 묶는다. **한 번만 성공한다** — 두 번 눌러도, 두 기기에서
+    동시에 눌러도 조건부 UPDATE 하나라 회차는 하나다.
+    """
+    async def run(con):
+        return await con.fetchval(
+            """
+            UPDATE interview_link
+               SET session_id = $2, device_hash = $3, started_at = now()
+             WHERE link_id = $1 AND session_id IS NULL AND revoked_at IS NULL
+               AND expires_at > now()
+            RETURNING link_id
+            """,
+            link_id, uuid.UUID(session_id), device_hash)
+    return bool(await _auth_write("링크 시작 기록", run))
+
+
+async def end_link(session_id: str) -> None:
+    async def run(con):
+        await con.execute(
+            "UPDATE interview_link SET ended_at = now() WHERE session_id = $1 AND ended_at IS NULL",
+            uuid.UUID(session_id))
+    await _auth_write("링크 종료 기록", run)
+
+
+async def revoke_link(link_id: str) -> None:
+    async def run(con):
+        await con.execute(
+            "UPDATE interview_link SET revoked_at = now() WHERE link_id = $1 AND revoked_at IS NULL",
+            link_id)
+    await _auth_write("링크 회수 기록", run)

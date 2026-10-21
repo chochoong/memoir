@@ -6,6 +6,7 @@
 
 1주차 범위 — 오디오 없음. 텍스트로 전 흐름을 돌린다.
 신원은 구글 로그인 뒤 서버가 준 앱 세션 쿠키에서만 나온다 (session/auth.py).
+인터뷰 링크로 들어온 사람은 `/api/i/*` 만 쓴다 (session/link.py).
 
 화면은 frontend-client 저장소에 있다. 두 가지 방식으로 붙는다.
   개발     Vite 개발 서버(5173) → CORS 로 허용
@@ -19,6 +20,7 @@ import json
 import logging
 import os
 import sys
+import uuid
 from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Literal
@@ -26,14 +28,15 @@ from typing import Literal
 from dotenv import load_dotenv
 from fastapi import Depends, FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.encoders import jsonable_encoder
 from fastapi.responses import FileResponse, JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
 from app.session import controller as sc
-from app.session import auth, limits, memoir, photo, photostore, postcard, prompt, store, stt, tts
+from app.session import auth, limits, link, memoir, photo, photostore, postcard, prompt, store, stt, tts
 from app.session.conf import env_flag, env_int, env_str
-from app.session.machine import TransitionError
+from app.session.machine import State, TransitionError
 from app.session.question import gemini_question, warmup
 
 load_dotenv()
@@ -234,6 +237,16 @@ class ElderReq(BaseModel):
     name: str = Field(..., min_length=1, max_length=40)
 
 
+class LinkReq(BaseModel):
+    # 링크로 진행할 회차의 준비. StartReq 의 같은 이름 칸과 뜻이 같다.
+    elder_id: str = Field(..., max_length=64)
+    title: str = Field("", max_length=100)
+    seed: str = Field("", max_length=4000)
+    theme: Literal["family", "self", "hobby"] | None = None
+    topic: str = Field("", max_length=100)
+    photo_id: str | None = Field(None, max_length=64)
+
+
 # ---------------------------------------------------------------- API
 #
 # 모든 엔드포인트가 같은 snapshot 한 덩어리를 돌려준다. 프론트는 타입이 하나면 되고
@@ -381,6 +394,18 @@ async def create_session(req: StartReq, request: Request,
     한 코드로 뭉치면 화면이 이 셋을 구분할 수 없고, 어르신은 자기가 무엇을 해야
     하는지 알 수 없게 된다.
     """
+    _open_checks(request, who)
+
+    ctl = sc.put(sc.SessionController(
+        user_id=who, title=req.title, pace=req.pace, max_turn=req.max_turn,
+        photo_id=req.photo_id, theme=req.theme, topic=req.topic.strip(),
+        question_fn=gemini_question, closed_fn=postcard.on_closed))
+    await ctl.start(req.seed)
+    return ctl.snapshot()
+
+
+def _open_checks(request: Request, who: str) -> None:
+    """회차를 여는 두 입구(/api/sessions · /api/i/start)가 같은 상한을 지난다."""
     try:
         limits.take(limits.client_ip(request))
     except limits.Rejected as e:
@@ -396,13 +421,6 @@ async def create_session(req: StartReq, request: Request,
     if sc.user_live(who) >= limits.user_cap():
         raise HTTPException(
             429, "이미 진행 중인 회차가 있습니다. 그 회차를 마치거나 중단해 주세요")
-
-    ctl = sc.put(sc.SessionController(
-        user_id=who, title=req.title, pace=req.pace, max_turn=req.max_turn,
-        photo_id=req.photo_id, theme=req.theme, topic=req.topic.strip(),
-        question_fn=gemini_question, closed_fn=postcard.on_closed))
-    await ctl.start(req.seed)
-    return ctl.snapshot()
 
 
 @app.get("/api/sessions/{session_id}")
@@ -459,7 +477,10 @@ async def speech_audio(session_id: str, request: Request, who: str = Depends(aut
     말이 잘린 조각을 전사하면 정확도가 떨어진다. 발화가 확정되는 순간
     (controller._confirm) 모아서 한 번에 보낸다.
     """
-    ctl = _mine(session_id, who)
+    return await _chunk(_mine(session_id, who), request)
+
+
+async def _chunk(ctl: sc.SessionController, request: Request):
     data = await request.body()
     mime = request.headers.get("content-type") or "audio/webm"
     return await _guard(ctl.audio_chunk(data, mime))
@@ -478,7 +499,11 @@ async def question_audio(session_id: str, who: str = Depends(auth.current_user))
     합성 자체는 여기서 시작하지 않는다. 질문이 준비되는 순간(controller._speak)
     이미 걸려서 T2 안에서 돌고 있다. 여기는 받아 가는 자리일 뿐이다.
     """
-    audio = await _mine(session_id, who).question_audio()
+    return await _question_audio(_mine(session_id, who))
+
+
+async def _question_audio(ctl: sc.SessionController) -> Response:
+    audio = await ctl.question_audio()
     if not audio:
         return Response(status_code=204)
     return Response(content=audio, media_type="audio/mpeg",
@@ -658,6 +683,12 @@ async def get_photo(photo_id: str, request: Request, who: str = Depends(auth.cur
     rec = await _read(store.load_photo(photo_id))
     if rec is None or rec["user_id"] != who:
         raise HTTPException(404, "사진을 찾을 수 없습니다")
+    return await _photo_bytes(rec, request)
+
+
+async def _photo_bytes(rec: dict, request: Request) -> Response:
+    """사진 한 장을 내보낸다. **주인 검사는 부르는 쪽이 이미 했다.**"""
+    photo_id = rec["photo_id"]
     if rec["status"] != "stored":
         # 행은 있는데 아직 바이트가 없다. 지금 흐름에서는 생기지 않지만,
         # 「없다」와 섞어 404 로 답하면 나중에 두 단계 저장을 넣을 때 구분이
@@ -807,6 +838,248 @@ async def memoir_preview(request: Request, who: str = Depends(auth.current_user)
         code = next(c for kind, c in _MEMOIR_STATUS if isinstance(e, kind))
         log.warning("자서전 %d %s — %s", code, type(e).__name__, str(e)[:200])
         raise HTTPException(code, _MEMOIR_SAYS[code]) from e
+
+
+# ---------------------------------------------------------------- 인터뷰 링크 (자녀)
+#
+# 자녀가 회차를 준비해 링크를 받는다. 링크를 연 사람이 할 수 있는 일은 아래
+# `/api/i/*` 에 있다. 무엇이 무엇을 보는지는 link.py 머리에 있다.
+
+async def _my_link(link_id: str, who: str) -> dict:
+    rec = await link.read(store.load_link(link_id))
+    if rec is None or rec["user_id"] != who:
+        raise HTTPException(404, "링크를 찾을 수 없어요")
+    return rec
+
+
+def _issued(rec: dict, raw: str) -> dict:
+    """
+    발급 응답. **토큰 원문은 여기서 한 번만 나간다** — 표에는 해시만 있어 다시 보여
+    줄 수 없다. 잃어버리면 재발급한다.
+    """
+    return {**link.summary(rec), "token": raw, "url": f"{PUBLIC_ORIGIN}/i#{raw}"}
+
+
+@app.post("/api/links", status_code=201)
+async def create_link(req: LinkReq, who: str = Depends(auth.current_user)):
+    """
+    회차 준비 → 인터뷰 링크. 회차는 아직 열지 않는다 — 받은 사람이 「시작」을
+    누를 때 열린다. 그래서 링크를 몇 번 열어 봐도 아무것도 소모되지 않는다.
+
+    화자와 사진은 **이 자녀의 것이어야 한다.** 남의 것이면 404 다.
+    """
+    if not await link.read(store.owns_elder(who, req.elder_id)):
+        raise HTTPException(404, "화자를 찾을 수 없어요")
+    if req.photo_id:
+        rec = await _read(store.load_photo(req.photo_id))
+        if rec is None or rec["user_id"] != who:
+            raise HTTPException(404, "사진을 찾을 수 없어요")
+    topic = req.topic.strip()
+    rec, raw = await link.issue(who, {
+        "elder_id": req.elder_id, "title": req.title.strip() or topic or "인터뷰",
+        "seed": req.seed, "theme": req.theme, "topic": topic, "photo_id": req.photo_id})
+    return _issued(rec, raw)
+
+
+@app.get("/api/links")
+async def list_links(elder_id: str | None = None, limit: int = 20,
+                     who: str = Depends(auth.current_user)):
+    """내가 발급한 링크. 최근 순. 토큰은 싣지 않는다 (다시 보여 줄 수 없다)."""
+    rows = await link.read(store.list_links(who, elder_id, _limit(limit)))
+    return {"links": [link.summary(r) for r in rows]}
+
+
+@app.post("/api/links/{link_id}/revoke")
+async def revoke_link(link_id: str, who: str = Depends(auth.current_user)):
+    """
+    링크를 거둔다. 그 뒤로 링크의 모든 요청은 410 이다. 이미 거둔 링크도 200 이다.
+
+    **진행 중이면 회차를 중단한다** (D4 — 자녀가 회수할 수 있다). 거두었는데 회차가
+    계속 돌면 회수가 아니다. 이미 내려받은 소리 · 사진을 지운다고 약속하지는 않는다.
+    """
+    rec = await _my_link(link_id, who)
+    await link.read(store.revoke_link(link_id))
+    ctl = sc.get(rec["session_id"]) if rec["session_id"] else None
+    if ctl is not None and ctl.machine.state is not State.CLOSED:
+        await ctl.abort()
+    log.info("링크 회수 %s", link_id)
+    return link.summary({**rec, "revoked_at": rec["revoked_at"] or link.now()})
+
+
+@app.post("/api/links/{link_id}/reissue", status_code=201)
+async def reissue_link(link_id: str, who: str = Depends(auth.current_user)):
+    """
+    같은 준비로 새 링크. **이전 링크는 거둔다** (D4). 링크를 잃어버렸거나 기한이
+    지났을 때 쓴다.
+
+    시작한 링크는 다시 내지 않는다 (409 already_started) — 그 링크는 이미 회차 하나와
+    묶였다. 새 인터뷰는 새로 준비한다.
+    """
+    old = await _my_link(link_id, who)
+    if old["session_id"] is not None:
+        return JSONResponse({"detail": "이미 시작한 인터뷰의 링크예요", "code": "already_started"},
+                            status_code=409)
+    await link.read(store.revoke_link(link_id))
+    rec, raw = await link.issue(who, old)
+    return _issued(rec, raw)
+
+
+# ---------------------------------------------------------------- 인터뷰 링크 (받은 사람)
+#
+# **여기는 msid 를 읽지 않는다.** 링크 토큰(헤더)과 기기 쿠키(mlink)만 본다.
+# 본문의 session_id · user_id 도 받지 않는다 — 회차는 링크가 정한다.
+# 진행 라우트는 위 /api/sessions/{id}/... 와 같은 처리 함수를 부른다.
+
+def _token(request: Request) -> str | None:
+    return request.headers.get(link.HEADER)
+
+
+@app.get("/api/i/preview")
+async def link_preview(request: Request):
+    """
+    링크를 열었다. **아무것도 바꾸지 않는다** — 몇 번 열어도 같다.
+    회수 · 만료는 410, 모르는 링크는 404 이고 준비 내용을 싣지 않는다.
+    """
+    rec = await link.by_token(_token(request))
+    state = link.state_of(rec)
+    link.gone(state)
+    return link.view(rec, state)
+
+
+@app.post("/api/i/start")
+async def link_start(request: Request):
+    """
+    「시작」. 처음이면 회차를 열고 기기 쿠키를 준다. 응답은 진행 라우트와 같은
+    snapshot 에 state · theme · topic · photo_url 을 더한 것이다.
+
+    **한 링크는 한 회차다.** 같은 기기에서 다시 누르면 같은 회차를 돌려준다.
+    쿠키 없이 다시 오면 (다른 기기 · 동시에 두 번 누름) 409 in_progress_elsewhere —
+    회차가 둘 생기지 않는다 (link.starting · store.claim_link).
+
+    상한은 /api/sessions 와 같다 (_open_checks). 회차를 여는 입구가 하나 더 생긴 것뿐이다.
+    """
+    rec = await link.by_token(_token(request))
+    device = request.cookies.get(link.COOKIE)
+    async with link.starting(rec["link_id"]):
+        # 기다리는 동안 다른 요청이 시작했을 수 있다 — 잠근 뒤에 다시 읽는다.
+        rec = await link.by_token(_token(request))
+        state = link.state_of(rec)
+        link.gone(state)
+        if state in ("ended", "interrupted"):
+            raise link.stuck(state)
+        if state == "in_progress":
+            if not link.device_matches(device, rec["device_hash"]):
+                raise link.stuck("in_progress_elsewhere")
+            return {**sc.get(rec["session_id"]).snapshot(), **link.view(rec, state)}
+
+        _open_checks(request, rec["user_id"])
+        session_id = str(uuid.uuid4())
+        raw = await link.claim(rec, session_id)
+        if raw is None:
+            # 이 프로세스 밖에서 먼저 묶였다 (DB 의 조건부 UPDATE 가 막았다).
+            raise link.stuck("in_progress_elsewhere")
+        ctl = sc.put(sc.SessionController(
+            user_id=rec["user_id"], title=rec["title"], session_id=session_id,
+            photo_id=rec["photo_id"], theme=rec["theme"], topic=rec["topic"],
+            elder_id=rec["elder_id"], question_fn=gemini_question, closed_fn=link.on_closed))
+        await ctl.start(rec["seed"])
+    log.info("링크 %s → 회차 %s 시작", rec["link_id"], session_id[:8])
+    res = JSONResponse(jsonable_encoder({**ctl.snapshot(), **link.view(rec, "in_progress")}))
+    res.set_cookie(link.COOKIE, raw, max_age=link.DEVICE_HOURS * 3600, httponly=True,
+                   samesite="lax", path=link.COOKIE_PATH, secure=_secure(request))
+    return res
+
+
+async def _link_session(request: Request) -> sc.SessionController:
+    """
+    진행 라우트의 회차. 기기 쿠키 → 링크 → 메모리의 회차.
+
+    닫힌 회차도 메모리에 있는 동안은 돌려준다 — 화면이 마지막 상태(CLOSED)를 받아
+    가야 한다. 닫힌 회차에 말을 보내면 상태 머신이 409 로 끊는다.
+    **회수된 링크는 메모리에 회차가 있어도 410 이다.** 진행 중에는 기한을 보지 않는다 (D4).
+    """
+    rec = await link.by_device(request.cookies.get(link.COOKIE))
+    state = link.state_of(rec)
+    if state == "revoked":
+        link.gone(state)
+    ctl = sc.get(rec["session_id"]) if rec["session_id"] else None
+    if ctl is not None:
+        return ctl
+    link.gone(state)
+    raise link.stuck("ended" if state == "ended" else "interrupted")
+
+
+@app.get("/api/i/session")
+async def link_get(request: Request):
+    return (await _link_session(request)).snapshot()
+
+
+@app.post("/api/i/session/tts-done")
+async def link_tts_done(request: Request):
+    return await _guard((await _link_session(request)).tts_done())
+
+
+@app.post("/api/i/session/speech")
+async def link_speech(req: SpeechReq, request: Request):
+    return await _guard((await _link_session(request)).speech(req.text))
+
+
+@app.post("/api/i/session/speech/audio")
+async def link_speech_audio(request: Request):
+    return await _chunk(await _link_session(request), request)
+
+
+@app.get("/api/i/session/question/audio")
+async def link_question_audio(request: Request):
+    return await _question_audio(await _link_session(request))
+
+
+@app.post("/api/i/session/done")
+async def link_done(request: Request):
+    return await _guard((await _link_session(request)).done_button())
+
+
+@app.post("/api/i/session/abort")
+async def link_abort(request: Request):
+    return await _guard((await _link_session(request)).abort())
+
+
+@app.get("/api/i/photo")
+async def link_photo(request: Request):
+    """
+    링크에 지정된 보조 사진 한 장. 시작 전에는 토큰 헤더로 (화면이 받아 blob 으로
+    띄운다), 시작한 뒤에는 기기 쿠키로 (`<img src>`) 받는다. 다른 사진에는 닿지 않는다.
+    """
+    token = _token(request)
+    rec = await (link.by_token(token) if token
+                 else link.by_device(request.cookies.get(link.COOKIE)))
+    link.gone(link.state_of(rec))
+    if not rec["photo_id"]:
+        raise HTTPException(404, "사진을 찾을 수 없습니다")
+    pic = await _read(store.load_photo(rec["photo_id"]))
+    if pic is None or pic["user_id"] != rec["user_id"]:
+        raise HTTPException(404, "사진을 찾을 수 없습니다")
+    return await _photo_bytes(pic, request)
+
+
+@app.get("/api/i/transcript")
+async def link_transcript(request: Request):
+    """
+    끝난 인터뷰의 대화를 읽기 전용으로 (D6). 끝나기 전에는 409 not_ended.
+
+    **그때 하신 말씀 그대로다.** 회차의 질문과 답만 싣는다. 0번 조각(자녀가 적은
+    시작 자료) · 엽서 · 자서전 · 모델 판단 · 화자 · 발급자는 싣지 않는다.
+    답하지 않은 마지막 질문은 저장되지 않으므로 나오지 않는다.
+    """
+    rec = await link.by_token(_token(request))
+    state = link.state_of(rec)
+    link.gone(state)
+    if state != "ended":
+        raise link.stuck("not_ended")
+    saved = await _read(store.load_session(rec["session_id"]))
+    turns = [{"question": f["question"] or "", "answer": f["answer"]}
+             for f in (saved["fragments"] if saved else []) if f["idx"] > 0]
+    return {"theme": rec["theme"], "topic": rec["topic"], "turns": turns}
 
 
 # ---------------------------------------------------------------- 보조

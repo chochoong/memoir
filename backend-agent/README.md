@@ -734,6 +734,30 @@ ERROR 로 남겨 나중에 셀 수 있게 한다.
 - 시험: `python -m tests.test_auth` (모의 — 구글 서명 검증과 계정 표를 메모리로 바꿔 끼운다).
   다른 시험은 `tests/_auth.py` 로 헤더를 신원으로 꽂는다. **앱에는 그 길이 없다.**
 
+## 인터뷰 링크 (3-C1 §5 · P3-SV-04 · 05)
+
+자녀가 회차를 준비해 링크(`/i#토큰`)를 보내면, 받은 사람은 로그인 없이 **그 회차 하나만** 진행한다.
+구현은 `app/session/link.py`, 표는 `010_interview_link.sql` 이다.
+
+| 경로 | 누가 | 결과 |
+|---|---|---|
+| `POST /api/links` `{elder_id, theme, topic, seed, title, photo_id}` | 자녀 (`msid`) | 201 `{link_id, token, url, state, …}` — 토큰은 이때 한 번만 나간다 · 남의 화자 · 사진 404 |
+| `GET /api/links?elder_id=` | 자녀 | `{links:[…]}` (토큰 없음) |
+| `POST /api/links/{id}/revoke` | 자녀 | 200 — 진행 중이면 회차를 중단한다 |
+| `POST /api/links/{id}/reissue` | 자녀 | 201 새 토큰 · 이전 링크 회수 · 시작한 링크는 409 `already_started` |
+| `GET /api/i/preview` | 헤더 `X-Interview-Token` | `{state, theme, topic, photo_url}` — 아무것도 바꾸지 않는다 |
+| `POST /api/i/start` | 헤더 | snapshot + `{state, theme, topic, photo_url}` + `mlink` 쿠키 (Path=/api/i) |
+| `GET /api/i/session` · `POST …/tts-done` · `speech` · `speech/audio` · `done` · `abort` · `GET …/question/audio` | `mlink` 쿠키 | `/api/sessions/{id}/…` 와 같은 처리 |
+| `GET /api/i/photo` | 헤더 또는 `mlink` | 링크에 지정된 사진 한 장 |
+| `GET /api/i/transcript` | 헤더 | 끝난 뒤에만 `{theme, topic, turns:[{question, answer}]}` |
+
+- 오류는 `{"detail", "code"}` 다 — 404 `invalid_link` · 410 `expired` · `revoked` ·
+  409 `ended` · `interrupted` · `in_progress_elsewhere` · `not_ended` · 503 `link_unavailable`.
+- **권한을 합치지 않는다.** `/api/i/*` 는 `msid` 를 읽지 않고, 자녀 경로는 `mlink` 를 읽지 않는다.
+- 한 링크는 한 회차다. 같은 기기(`mlink`)에서 다시 시작하면 같은 회차, 다른 기기는 409.
+- 시작 전 유효 기간 `LINK_HOURS` 는 팀이 아직 정하지 않았다 (D4) — 기본 72시간은 임시값이다.
+- 시험: `python -m tests.test_link` (모의 — 링크 · 계정 표를 메모리로 바꿔 끼운다).
+
 ---
 
 ## 자서전 초안 (실험)
