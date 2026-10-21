@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import re
 import time
 import uuid
 from dataclasses import dataclass, field
@@ -102,6 +103,21 @@ OPENING = "오늘은 어떤 이야기를 들려주시겠어요?"
 # 내려온다 (아래 photo_opening · start 참조).
 OPENING_PHOTO = "사진 잘 받았습니다. 이 사진은 어떤 사진인가요?"
 
+# 가족이 고른 주제가 있으면 여는 말은 그 주제다. **사진 질문보다 앞선다** — 사진
+# 내용이 다르다고 고른 주제가 바뀌면 안 된다 (인터뷰_v3.md [질문 방향과 자료 구분]).
+# 「떠오르는 것이 있으면」은 그 경험이 있었다고 전제하지 않으려고 붙였다.
+OPENING_TOPIC = "오늘은 「{topic}」 이야기를 나눠 볼까요? 떠오르는 것이 있으면 편하게 들려주세요."
+
+# 감각을 떠올리게 하는 질문. 모델 밖에서 고른 문장(사진 질문 후보)에만 쓰는 거친
+# 체다. 뜻으로 가르는 일은 프롬프트가 하고, 여기는 놓친 것이 첫 마디로 나가지
+# 않게 막는다. 걸리면 고정 문장으로 돌아갈 뿐이라 잘못 걸려도 잃는 것이 적다.
+_SENSORY = re.compile(r"소리|냄새|향기|향이|맛[이은을]|촉감|감촉")
+
+
+def topic_opening(topic: str, photo: bool = False) -> str:
+    said = OPENING_TOPIC.format(topic=topic)
+    return f"사진 잘 받았습니다. {said}" if photo else said
+
 # 회차를 열 때 돌고 있는 사진 분석을 기다리는 한도(초). 분석은 1.6~3.9초이고
 # 올린 때부터 재므로, 3초면 올리자마자 누르셔도 대개 안에 든다.
 PHOTO_WAIT = env_float("PHOTO_OPEN_WAIT_SECONDS", 3.0)
@@ -134,18 +150,29 @@ def photo_opening(clues: dict | None) -> str:
     """
     qs = (clues or {}).get("questions")
     q = qs[0].strip() if isinstance(qs, list) and qs and isinstance(qs[0], str) else ""
-    if not q.endswith(("?", "？")) or len(q) > 100:
+    if not q.endswith(("?", "？")) or len(q) > 100 or _SENSORY.search(q):
         return OPENING_PHOTO
     return f"사진 잘 받았습니다. {q}"
 
 
 async def fixed_questions(ctl: "SessionController") -> str | None:
-    """Day 1~4 용 고정 문구. LLM 없이 흐름만 돌린다."""
+    """
+    고정 문구. 키가 없을 때와 모델이 실패했을 때 나간다 (question._fallback).
+
+    **감각을 묻지 않는다.** 첫 항목이 「어떤 소리가 들렸는지」였는데, 모델이
+    실패하거나 종료가 하한에 막히면 이것이 그대로 나갔다. 무엇을 들었는지
+    모르고 내는 말이라 어느 이야기에도 붙는 열린 질문만 둔다.
+
+    **어르신 말씀 뒤에만 나간다.** 시작할 때 나가는 말은 여는 말(OPENING · topic_opening)
+    이고, 이 목록은 턴 1(첫 답을 들은 뒤)부터 쓴다. 그래서 첫 항목도 들은 말씀을
+    이어 받는 말이다. 인터뷰_v3.md 개발 인계의 예비 질문(「이 주제로 어떤 이야기를
+    나누고 싶으세요?」)은 답이 아직 없을 때의 말이라 여기에 두지 않는다.
+    """
     await asyncio.sleep(0.2)                     # 호출 지연 흉내
     seq = [
-        "그때 어떤 소리가 들렸는지 기억나세요?",
-        "그 자리에 누가 함께 계셨어요?",
-        "그 이야기를 하시니 지금 어떤 마음이 드세요?",
+        "그 이야기를 조금 더 들려주시겠어요?",
+        "그 일은 어떻게 하게 되셨어요?",
+        "더 남기고 싶은 이야기가 있으세요?",
     ]
     i = ctl.machine.turn - 1
     return seq[i] if 0 <= i < len(seq) else None
@@ -187,6 +214,10 @@ class SessionController:
     max_turn: int = 0                             # 0 = 제한 없음 (machine.py 참조)
     # 회차를 연 사진. 배경에서 한 번만 분석해 state["photo_analyses"] 로 간다.
     photo_id: str | None = None
+    # 시작 자료 (C1). 가족이 고른 테마(family/self/hobby)와 구체 주제.
+    # 어르신의 말씀이 아니라 질문 방향이다 — 대화 기록에 섞지 않는다.
+    theme: str | None = None
+    topic: str = ""
     question_fn: QuestionFn = fixed_questions
     stt_fn: SttFn = stt.azure_transcribe
     tts_fn: TtsFn = tts.synthesize
@@ -312,6 +343,9 @@ class SessionController:
         if clues:
             self._apply_clues(clues)
             await store.save_photo_clues(self, clues)
+        if self.topic:
+            self._next_question = topic_opening(self.topic, photo=bool(self.photo_id))
+        elif clues:
             self._next_question = photo_opening(clues)
         else:
             self._next_question = OPENING_PHOTO if self.photo_id else OPENING
@@ -770,9 +804,9 @@ class SessionController:
 
         **지난 답변은 넣지 않는다.** 답변은 그 자체가 전사 결과라, 한 번 잘못
         들린 말(「지난 바다」→「친한 바다」)이 힌트가 되면 다음 턴부터 전사기를
-        그 오답 쪽으로 끌어당긴다. 사람이 적은 씨앗만 믿을 수 있는 글이다.
+        그 오답 쪽으로 끌어당긴다. 사람이 적은 주제와 씨앗만 믿을 수 있는 글이다.
         """
-        return shared_state.seed(self)
+        return " ".join(s for s in (self.topic, shared_state.seed(self)) if s)
 
     async def _make_question(self) -> None:
         before = self.last_decision

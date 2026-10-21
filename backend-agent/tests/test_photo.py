@@ -538,7 +538,7 @@ def test_clues():
         async def get(self, key):
             return b"\xff\xd8"
 
-    async def run(photo_id, *, owner="kim", clues=CLUES, stored=None):
+    async def run(photo_id, *, owner="kim", clues=CLUES, stored=None, topic=""):
         seen = {}
 
         async def load_photo(pid):
@@ -566,7 +566,7 @@ def test_clues():
         photostore.current = lambda: _Bytes()
         try:
             ctl = C.SessionController(user_id="kim", title="t",
-                                      photo_id=photo_id, tts_fn=silent)
+                                      photo_id=photo_id, tts_fn=silent, topic=topic)
             await ctl.start("씨앗")
             if ctl._clues:
                 await ctl._clues
@@ -614,6 +614,16 @@ def test_clues():
           ctl._next_question == "사진 잘 받았습니다. 이 사진은 어떤 날에 찍으신 건가요?",
           ctl._next_question)
     check("회차에도 그 단서를 적는다", seen.get("저장") == READY)
+
+    # 가족이 고른 주제가 있으면 사진 질문보다 앞선다. 단서는 그대로 붙는다.
+    ctl, seen = asyncio.run(run("p1", stored=READY, topic="가족과 함께 이사한 기억"))
+    check("주제가 있으면 여는 말은 주제다",
+          ctl._next_question == C.topic_opening("가족과 함께 이사한 기억", photo=True),
+          ctl._next_question)
+    check("주제가 있어도 사진 단서는 붙는다", ctl.state.get("photo_analyses") == [READY])
+    ctl, seen = asyncio.run(run(None, topic="처음 사진을 찍던 때"))
+    check("사진 없이도 여는 말은 주제다",
+          ctl._next_question == C.topic_opening("처음 사진을 찍던 때"), ctl._next_question)
 
     # 올리자마자 시작을 누른 경우 — 올릴 때 건 분석이 아직 돌고 있다.
     from app.session import photo
@@ -702,6 +712,11 @@ def test_photo_opening():
     check("첫 마디에 사진을 받았다는 말이 있다",
           op(["어떤 날인가요?"]).startswith("사진 잘 받았습니다"),
           "그게 없으면 사진이 안 닿은 것으로 보인다")
+    for q in ("그때 어떤 소리가 들렸나요?", "음식 냄새가 기억나세요?", "그 국수 맛은 어땠나요?"):
+        check(f"감각을 묻는 후보는 쓰지 않는다 — {q}", op([q]) == C.OPENING_PHOTO,
+              "오감 질문은 하지 않는다 (인터뷰_v3.md)")
+    check("감각 낱말이 없는 활동 질문은 그대로다",
+          op(["사진 찍기는 언제 시작하셨나요?"]) != C.OPENING_PHOTO)
 
 
 def test_all_checks_passed():

@@ -488,6 +488,25 @@ def test_route_limits():
                   f"{r.status_code} — 어르신 잘못이 아니라서 화면이 다르게 "
                   f"말해야 한다")
 
+        # 시작 자료 (C1) — 테마·주제는 선택이고, 받으면 회차까지 간다
+        sc._sessions.clear()
+        limits.reset()
+        r = c.post("/api/sessions", json={"title": "시험", "theme": "family",
+                                          "topic": "  가족과 함께 이사한 기억 "})
+        ctl = sc.get(r.json()["session_id"]) if r.status_code == 200 else None
+        check("테마·주제가 회차에 닿는다",
+              ctl is not None and ctl.theme == "family"
+              and ctl.topic == "가족과 함께 이사한 기억",
+              f"{r.status_code} {ctl and (ctl.theme, ctl.topic)}")
+        check("seed 없이도 연다", r.status_code == 200)
+        check("주제가 있으면 여는 말은 주제다",
+              "가족과 함께 이사한 기억" in (r.json().get("next_question") or ""),
+              str(r.json().get("next_question")))
+        bad = c.post("/api/sessions", json={"title": "시험", "theme": "travel"})
+        check("모르는 테마는 422", bad.status_code == 422, str(bad.status_code))
+        long = c.post("/api/sessions", json={"title": "시험", "topic": "가" * 101})
+        check("너무 긴 주제는 422", long.status_code == 422, str(long.status_code))
+
     sc._sessions.clear()
     limits.reset()
 

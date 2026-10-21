@@ -233,8 +233,19 @@ def test_merge():
     text = memoir._input(data)
     check("원문은 자료 메시지에만 있고 시스템 지시에는 없다",
           "광주 인쇄소" in text and "광주 인쇄소" not in memoir._prompt())
-    check("시스템 지시는 자서전.md 그대로다",
-          memoir._prompt() == memoir.PROMPT.read_text(encoding="utf-8").strip())
+    p = memoir._prompt()
+    check("시스템 지시는 자서전_v2.md 의 실행 절이다 (§2 · §5 · §5-2 · §7-4 · §8-2)",
+          memoir.PROMPT.name == "자서전_v2.md"
+          and p.startswith("당신은 한국어 인생기록 서비스") and "전달된 같은 화자의 회차만" in p
+          and "자서전은 위 7개 키" in p and "회차당 3~8문장" in p and "상태 우선순위" in p, p[:30])
+    check("다른 역할 절은 싣지 않는다", "사진 속 기억을 담은" not in p)
+    check("울타리 줄(``` · ~~~)은 싣지 않는다", "~~~" not in p and "```" not in p)
+    # 분량은 자서전.md 만 정한다. 자료 메시지에 남으면 프롬프트를 고쳐도 옛 기준이 같이 간다.
+    head = text.split("\n\n", 1)[0]
+    check("자료 메시지에 분량 지시가 없다",
+          not any(w in head for w in ("3~8", "문장을 기준", "회차 하나에")), head[-80:])
+    check("자료 메시지에 턴 설명과 소제목 금지는 남아 있다",
+          "utterances.turn" in head and "소제목" in head)
 
 
 # ---------------------------------------------------------------- 고르기 · 응답 검사
@@ -248,8 +259,15 @@ READY = {
     "sources": [{"sentence": 0, "turns": [1]}, {"sentence": 1, "turns": [1, 2]},
                 {"sentence": 2, "turns": [3]}],
     "to_confirm": [],
+    "missing_context": [],
+    "coverage_notes": [],
 }
-EMPTY = {"status": "insufficient_material", "title": "", "body": "", "sources": [], "to_confirm": []}
+EMPTY = {"status": "insufficient_material", "title": "", "body": "", "sources": [], "to_confirm": [],
+         "missing_context": [], "coverage_notes": []}
+
+
+def shown(out: dict) -> dict:
+    return {k: out[k] for k in memoir.SHOWN}
 TURNS = {1, 2, 3, 4, 5, 6}
 
 
@@ -277,6 +295,9 @@ BROKEN = {
     "모르는 status": _with(READY, status="completed"),
     "키가 하나 빠진 응답": {k: v for k, v in READY.items() if k != "to_confirm"},
     "키가 하나 더 있는 응답": _with(READY, chapters=[]),
+    "예전 5키 응답": {k: READY[k] for k in ("status", "title", "body", "sources", "to_confirm")},
+    "목록이 아닌 missing_context": _with(READY, missing_context="없음"),
+    "문자열이 아닌 coverage_notes": _with(READY, coverage_notes=[{"note": 1}]),
     "본문이 남은 자료 부족": _with(EMPTY, body="한 줄"),
     "객체가 아닌 응답": [READY],
 }
@@ -314,6 +335,17 @@ def test_check():
         except memoir.GenerationFailed:
             ok = True
         check(f"{name} — 고치지 않고 걸러 낸다", ok)
+
+    for status, key in (("needs_confirmation", "to_confirm"), ("needs_context", "missing_context")):
+        reasons = [{"issue": "누구의 일인지", "turns": [2]}] if key == "to_confirm" else ["2회차 원문 없음"]
+        try:
+            memoir.check(_with(EMPTY, status=status, **{key: reasons}), TURNS)
+            got = None
+        except memoir.NotFinal as e:
+            got = e
+        check(f"{status} — 초안으로 내보내지 않고 상태 · 사유를 들고 간다",
+              got is not None and got.status == status and got.reasons == reasons,
+              repr(got))
 
     long_body = "\n".join(f"문장 {i}." for i in range(12))
     long_out = _with(READY, body=long_body, sources=[{"sentence": i, "turns": [1]} for i in range(12)])
@@ -378,12 +410,13 @@ def test_routes():
                 return list(body) == ["detail"] and isinstance(body["detail"], str) and "요" in body["detail"]
 
             r = c.post(url, json=three, headers=me)
-            check("3개를 고르면 200 · 모델 응답 그대로", r.status_code == 200 and r.json() == READY,
+            check("3개를 고르면 200 · 모델 응답의 다섯 키", r.status_code == 200 and r.json() == shown(READY),
                   f"{r.status_code} {r.text[:80]}")
             check("모델은 한 번만 부른다", fake.writes == 1, str(fake.writes))
             check("모델에 간 입력은 합치기 결과다 (말씀 6개 · 회차 3개)",
                   len(fake.seen["utterances"]) == 6 and len(fake.seen["sessions"]) == 3)
-            check("응답에 turn_map 이 실리지 않는다", set(r.json()) == set(memoir.KEYS))
+            check("응답에 turn_map · missing_context · coverage_notes 가 실리지 않는다",
+                  set(r.json()) == set(memoir.SHOWN))
 
             r = c.post(url, json=fake.pick("s-a", "s-b", "s-c", "s-d", "s-e"), headers=me)
             check("5개를 고르면 말씀 8개가 전부 간다",
@@ -419,7 +452,7 @@ def test_routes():
 
             fake.out = copy.deepcopy(EMPTY)
             r = c.post(url, json=three, headers=me)
-            check("자료 부족은 200 · insufficient_material", r.status_code == 200 and r.json() == EMPTY,
+            check("자료 부족은 200 · insufficient_material", r.status_code == 200 and r.json() == shown(EMPTY),
                   f"{r.status_code} {r.text[:60]}")
 
             for name in ("없는 턴을 가리키는 출처", "sentence 번호가 겹치는 출처"):
@@ -429,6 +462,11 @@ def test_routes():
                       f"{r.status_code} {r.text[:60]}")
             check("실패 응답에 본문이나 원문이 새지 않는다",
                   "광주" not in r.text and "invalid_model_output" not in r.text)
+            for status in ("needs_confirmation", "needs_context"):
+                fake.out = _with(EMPTY, status=status)
+                r = c.post(url, json=three, headers=me)
+                check(f"{status} → 503 · detail", r.status_code == 503 and only_detail(r),
+                      f"{r.status_code} {r.text[:60]}")
             fake.out = copy.deepcopy(READY)
 
             fake.db_down = True
