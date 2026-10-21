@@ -359,8 +359,8 @@ def test_no_sense():
     got = [q for q in asked if q]
     check("고정 질문에 감각 질문이 없다", not any(C._SENSORY.search(q) for q in got), str(got))
     check("고정 질문이 끝나면 None 이다 — 키 없는 회차가 끝날 자리", asked[-1] is None)
-    check("첫 고정 질문은 주제를 연다 — 아직 들은 말씀이 없다",
-          asked[0] == "이 주제로 어떤 이야기를 나누고 싶으세요?", repr(asked[0]))
+    check("첫 고정 질문은 첫 답을 이어 받는다 — 어르신 말씀 뒤에 나간다",
+          asked[0] == "그 이야기를 조금 더 들려주시겠어요?", repr(asked[0]))
 
     # 실패한 턴의 대체 질문도 감각을 묻지 않는다
     frs = [{"idx": 0, "question": None, "answer": "씨앗"},
@@ -375,7 +375,7 @@ def test_no_sense():
     check("기록의 sense_used 는 없음이다", d.get("sense_used") == "없음", str(d))
     check("어긴 값은 따로 남긴다", d.get("sense_used_raw") == "청각", str(d))
     check("상태의 last_sense_used 는 차지 않는다", ctl.state["last_sense_used"] == "없음",
-          "차면 다음 턴 입력에 실린다 — 인터뷰_v2.md 는 그 값을 쓰지 말라고 했다")
+          "차면 다음 턴 입력에 실린다 — 인터뷰_v3.md 는 그 값을 쓰지 말라고 했다")
 
     ctl2 = _Ctl(turn=3, fragments=frs)
     _ask(ctl2, _answer(sense_used="없음"))
