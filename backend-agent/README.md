@@ -44,6 +44,7 @@ app/
 tests/                    test_flow (전이 · 타이머 · 지연 · 빈 전사 루프) · limits · photo
                           · photo_analyze · postcard · question. _nodb 는 실제 DB 에 안 붙게 한다
 tools/replay.py           녹음 파일을 실제 회차처럼 흘려보낸다 (마이크 없이)
+tools/dev_login.py        시험 도구용 로그인 쿠키를 DB 에 직접 만든다 (구글 없이)
 tools/bench_audio.py      같은 녹음으로 전사·질문 경로(Azure+Gemini / Gemini 단독)를 잰다
 tools/try_photo.py        사진 한 장을 실제 Gemini 로 분석해 본다 (DB·서버 없이)
 tools/seed_sessions.py    자서전 시험 회차를 DB 에 넣고 엽서를 굽는다 (합성 자료 전용)
@@ -383,7 +384,12 @@ whisper 는 세 번 모두 「마중을 나왔어」를 「마중 올라왔어�
 python tools/replay.py                      # tools/recordings/turn*.wav 로 3턴
 python tools/replay.py --base https://...   # 터널 너머의 서버로
 python tools/replay.py --no-realtime        # 기다리지 않고 몰아서
+python tools/replay.py --cookie <msid>      # 브라우저로 로그인한 쿠키로
 ```
+
+**신원은 `msid` 쿠키다.** `--cookie` 가 없으면 `tools/dev_login.py` 로 서버와 같은 DB 에
+계정 「replay」(provider `dev`)의 쿠키를 만든다 — 서버와 같은 `.env` 로 돌린다. 이 PC 의
+DB 가 아니면 `--allow-remote` 를 붙여야 쓴다. 터널 너머 서버의 DB 에 닿지 않으면 `--cookie` 를 준다.
 
 **녹음 파일은 저장소에 올리지 않는다** (`.gitignore`). 사람 목소리라 그렇고, 저마다
 자기 목소리로 받아 두는 편이 시험으로도 낫다. 16kHz 모노 wav 면 된다.
@@ -733,6 +739,9 @@ ERROR 로 남겨 나중에 셀 수 있게 한다.
 - 상태를 바꾸는 요청은 허용한 출처(`PUBLIC_ORIGIN` · `ALLOWED_ORIGINS` · 같은 출처)에서만 받는다 (403 `bad_origin`).
 - 시험: `python -m tests.test_auth` (모의 — 구글 서명 검증과 계정 표를 메모리로 바꿔 끼운다).
   다른 시험은 `tests/_auth.py` 로 헤더를 신원으로 꽂는다. **앱에는 그 길이 없다.**
+- 시험 도구는 `python tools/dev_login.py [--alias a --alias b]` 로 쿠키를 받는다. 로그인이 남기는
+  두 줄(app_user · login_session)을 DB 에 직접 쓰는 것이라 **DB 에 쓸 수 있는 사람만** 쓴다.
+  provider 가 `dev` 라 구글 계정과 섞이지 않고, 쿠키는 12시간 뒤 죽는다.
 
 ## 인터뷰 링크 (3-C1 §5 · P3-SV-04 · 05)
 
