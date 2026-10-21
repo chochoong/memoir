@@ -17,7 +17,7 @@ FSM 도 타이머도 이 파일의 존재를 모른다.
 
 3. **회차를 끝내는 문은 이제 여기 하나뿐이다.** 턴 상한(`max_turn`)을 0(제한 없음)
    으로 열어 둔 뒤로, 대화가 끝나는 자리는 종료 판단과 「중단」 버튼밖에 없다.
-   그래서 하한을 뒀다 — `MIN_TURN`(기본 3) 전에는 모델이 마무리를 골라도 따르지
+   그래서 하한을 뒀다 — `MIN_TURN`(기본 6) 전에는 모델이 마무리를 골라도 따르지
    않고 다시 여쭙는다. 상한은 없애고 하한만 남겼다.
 
    **문 이름은 `topic_status: "closed"` 하나다.** 예전에 쓰던 `action: "close"` 는
@@ -320,7 +320,7 @@ async def gemini_question(ctl: "SessionController") -> str | None:
     status = str(data.get("topic_status") or "active").strip().lower()
     mode = str(data.get("conversation_mode") or "normal").strip().lower()
 
-    # **감각은 기록에 「없음」으로 맞춘다** (인터뷰_v2.md — 새 응답은 항상 없음).
+    # **감각은 기록에 「없음」으로 맞춘다** (인터뷰_v3.md — 새 응답은 항상 없음).
     # 모델이 감각을 적어 왔으면 오감 질문을 했다는 뜻이라 숨기지 않고 남긴다 —
     # 로그와 turn.decision 의 sense_used_raw. 상태에는 들이지 않는다: 들이면
     # last_sense_used 가 다시 차서 다음 턴 입력에 실린다.
