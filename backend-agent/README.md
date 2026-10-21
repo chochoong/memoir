@@ -830,6 +830,13 @@ python tools/seed_sessions.py --input eval/memoir_seed_B.json --manifest eval/me
 - **이 PC 의 DB 가 아니면 쓰지 않는다.** 함께 쓰는 DB 에 넣으면 모두의 회차 목록에
   `[A]` · `[B]` 가 뜬다. 정말 넣을 때만 `--allow-remote` 를 붙인다. 서비스 DB 에는
   넣지 않는다.
+- **회차의 주인은 시험 계정이다** (`--account`, 기본 `seed`). 넣기 전에 `tools/dev_login.py` 로
+  그 계정을 만들고, 엽서도 그 계정의 쿠키로 굽는다. 화면 · curl 로 볼 때는
+  `python tools/dev_login.py --alias seed` 로 쿠키만 다시 받는다 (같은 이름 = 같은 계정).
+- **로그인 전에 만든 manifest(`app_user_id` 칸이 없는 것)는 쓰지 않는다.** 그 회차는 주인이
+  `dev-user` 라 로그인으로 볼 수 없다. 지우거나 고치지 않고, 새 manifest 경로로 다시 넣는다.
+- `--cross-check` 는 다른 시험 계정(`seed-other`)의 쿠키로 회차 · 엽서 · 자서전을 불러
+  **전부 404 인지** 본다 (3-C1 P3-SV-03). 하나라도 404 가 아니면 종료 코드 1 이다.
 
 합치기 함수가 실제로 만든 모델 입력과 대응표(`turn_map`)는 이렇게 뽑는다. 엽서를
 굽기 전에도 돈다.
