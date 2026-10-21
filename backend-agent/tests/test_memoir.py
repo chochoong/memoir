@@ -32,6 +32,7 @@ for _stream in (sys.stdout, sys.stderr):
         _stream.reconfigure(encoding="utf-8")
 
 from app.session import memoir, store                                     # noqa: E402
+from tests._auth import AsHeader                                          # noqa: E402
 from tests._nodb import NoDb                                              # noqa: E402
 from tools import seed_sessions as seed                                   # noqa: E402
 
@@ -401,7 +402,7 @@ def test_routes():
     url = "/api/memoirs/preview"
     me, other = {"X-User-Id": ME}, {"X-User-Id": OTHER}
 
-    with _Env(AZURE_SPEECH_KEY="", GEMINI_API_KEY="", MEMOIR_FAIL_INJECT="off"), _Fake() as fake, NoDb():
+    with _Env(AZURE_SPEECH_KEY="", GEMINI_API_KEY="", MEMOIR_FAIL_INJECT="off"), _Fake() as fake, NoDb(), AsHeader():
         with TestClient(app) as c:
             three = fake.pick("s-a", "s-b", "s-c")
 

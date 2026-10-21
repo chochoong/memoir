@@ -931,8 +931,7 @@ def user_live(user_id: str) -> int:
     """
     한 사용자가 지금 들고 있는 회차 수.
 
-    **이 값으로 막는 것은 보안이 아니다.** user_id 는 X-User-Id 를 그대로 믿는
-    값이라 바꿔 넣으면 통과한다 (limits.py 참조). 로그인이 붙으면 실효를 가진다.
+    user_id 는 로그인한 자녀다 (auth.current_user). 상한의 뜻은 limits.py 에 있다.
     """
     return sum(1 for c in live_sessions() if c.user_id == user_id)
 

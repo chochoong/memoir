@@ -28,6 +28,7 @@ from app.session import controller as sc                                 # noqa:
 from app.session import limits, store                                    # noqa: E402
 from app.session.controller import SessionController                     # noqa: E402
 from app.session.machine import Event, State                             # noqa: E402
+from tests._auth import AsHeader                                          # noqa: E402
 from tests._nodb import NoDb                                              # noqa: E402
 
 PASS, FAIL = [], []
@@ -443,11 +444,8 @@ def test_route_limits():
     """
     라우트에서 실제로 막히는지. 여기만 앱을 띄운다.
 
-    **[10] 의 첫 검사가 이 파일에서 가장 중요하다.** main.py 의 ANON_USER 조건은
-    한 줄짜리라 「로그인 붙으면 어차피 지울 것」으로 보이기 쉽다. 먼저 지우면
-    프론트가 모두에게 dev-user 를 보내는 동안 「사용자당 3회차」가 「서버 전체
-    3회차」가 되고, 네 번째 어르신은 열지도 않은 회차 때문에 막힌다. 그 실패는
-    화면에 「이미 진행 중인 회차가 있습니다」로 나타나 원인을 가린다.
+    로그인 전에는 회차를 열지 못한다. 예전에는 모두가 dev-user 로 들어와서
+    사용자별 상한을 끌 수밖에 없었다 — 이제 신원이 갈리므로 모두에게 건다.
     """
     print("\n[10] 라우트 — 실제 응답 코드")
 
@@ -460,18 +458,16 @@ def test_route_limits():
     body = {"title": "시험", "seed": "씨앗 한 줄", "pace": "fast"}
 
     with _Env(GEMINI_API_KEY="", AZURE_SPEECH_KEY="",
-              CREATE_MAX_PER_WINDOW=99, USER_LIVE_MAX=1), NoDb(), TestClient(app) as c:
-        anon = [c.post("/api/sessions", json=body).status_code for _ in range(4)]
-        check("로그인 전에는 사용자별 상한이 아무도 막지 않는다",
-              anon == [200] * 4, f"{anon} — 막으면 네 번째 어르신이 열지도 않은 "
-                                 f"회차 때문에 막힌다 (main.py ANON_USER)")
+              CREATE_MAX_PER_WINDOW=99, USER_LIVE_MAX=1), NoDb(), AsHeader(), TestClient(app) as c:
+        anon = [c.post("/api/sessions", json=body).status_code for _ in range(2)]
+        check("로그인 전에는 회차를 열지 못한다", anon == [401] * 2, f"{anon}")
+        check("거절한 요청은 회차를 만들지 않았다", not sc._sessions, f"{len(sc._sessions)}개")
 
-        # user_id 는 ASCII 로 둔다. HTTP 헤더는 한글을 실을 수 없다 —
-        # 구글 로그인이 주는 sub 도 ASCII 다.
         real = [c.post("/api/sessions", json=body,
                        headers={"X-User-Id": "real-user"}).status_code
                 for _ in range(2)]
-        check("신원이 실제로 갈리면 상한이 산다", real == [200, 429], f"{real}")
+        check("사용자별 상한이 산다", real == [200, 429], f"{real}")
+        c.headers["X-User-Id"] = "kim"
 
         limits.reset()
         with _Env(CREATE_MAX_PER_WINDOW=1):

@@ -323,8 +323,7 @@ async def list_sessions(user_id: str, limit: int = 20, has_postcard: bool = Fals
     """
     지난 회차 목록. 최근 순. 조각 개수와 엽서가 있는지를 같이 싣는다.
 
-    user_id 로 거른다. 지금은 X-User-Id 헤더를 그대로 믿으므로 막아 주지는
-    못하지만, 로그인이 붙으면 이 조건이 그대로 실효를 가진다.
+    user_id 로 거른다 — 로그인한 자녀의 것만 나간다.
 
     has_postcard 면 엽서가 있는 회차만 준다. 엽서는 이제 손으로만 굽기 때문에
     최근 회차 대부분에 엽서가 없다 — 거르지 않으면 자서전에 고를 회차가 목록
@@ -630,3 +629,106 @@ async def load_postcard(session_id: str) -> dict | None:
         log.error("엽서 읽기 실패 %s (%s: %s)", session_id, type(e).__name__, str(e)[:120])
         raise StoreUnavailable("엽서를 읽지 못했습니다") from e
     return _postcard_row(row) if row else None
+
+
+# ---------------------------------------------------------------- 계정 · 로그인
+#
+# 표는 003 이 만들었다 (app_user · elder · user_elder · login_session). 신원을
+# 정하는 함수라 위의 쓰기 함수들과 달리 **실패를 삼키지 않는다** — 로그인을
+# 기록하지 못했으면 로그인시키지 않는다.
+
+async def _auth_write(what: str, fn):
+    pool_ = _need_pool()
+    try:
+        async with pool_.acquire() as con:
+            return await fn(con)
+    except Exception as e:                                   # noqa: BLE001
+        log.error("%s 실패 (%s: %s)", what, type(e).__name__, str(e)[:120])
+        raise StoreUnavailable(f"{what}에 실패했습니다") from e
+
+
+async def upsert_user(provider: str, subject: str, email: str | None, name: str | None) -> str:
+    """
+    제공자 계정 → 우리 user_id. 처음이면 만든다.
+
+    찾는 열쇠는 (provider, subject) 다. 이메일은 바뀔 수 있어 열쇠로 쓰지 않고,
+    들어올 때마다 표시용으로만 갱신한다.
+    """
+    async def run(con):
+        return await con.fetchval(
+            """
+            INSERT INTO app_user (user_id, provider, subject, email, name, last_login)
+            VALUES ($1, $2, $3, $4, $5, now())
+            ON CONFLICT (provider, subject) DO UPDATE
+               SET email = EXCLUDED.email, name = EXCLUDED.name, last_login = now()
+            RETURNING user_id
+            """,
+            f"u_{uuid.uuid4().hex}", provider, subject, email, name)
+    return await _auth_write("계정 기록", run)
+
+
+async def open_login(sid_hash: str, user_id: str, expires_at) -> None:
+    async def run(con):
+        await con.execute(
+            """
+            INSERT INTO login_session (sid, user_id, kind, expires_at, last_seen_at)
+            VALUES ($1, $2, 'web', $3, now())
+            """,
+            sid_hash, user_id, expires_at)
+    await _auth_write("로그인 기록", run)
+
+
+async def load_login(sid_hash: str) -> dict | None:
+    """자녀 로그인 한 줄. 만료 · 회수 판단은 부르는 쪽(auth)이 한다."""
+    async def run(con):
+        return await con.fetchrow(
+            """
+            SELECT l.user_id, l.created_at, l.expires_at, l.last_seen_at, l.revoked_at,
+                   u.name, u.email
+              FROM login_session l JOIN app_user u ON u.user_id = l.user_id
+             WHERE l.sid = $1 AND l.kind = 'web'
+            """,
+            sid_hash)
+    row = await _auth_write("로그인 읽기", run)
+    return dict(row) if row else None
+
+
+async def touch_login(sid_hash: str) -> None:
+    async def run(con):
+        await con.execute("UPDATE login_session SET last_seen_at = now() WHERE sid = $1", sid_hash)
+    await _auth_write("로그인 갱신", run)
+
+
+async def revoke_login(sid_hash: str) -> None:
+    async def run(con):
+        await con.execute(
+            "UPDATE login_session SET revoked_at = now() WHERE sid = $1 AND revoked_at IS NULL",
+            sid_hash)
+    await _auth_write("로그아웃 기록", run)
+
+
+async def list_elders(user_id: str) -> list[dict]:
+    async def run(con):
+        return await con.fetch(
+            """
+            SELECT e.elder_id, e.display_name
+              FROM user_elder ue JOIN elder e ON e.elder_id = ue.elder_id
+             WHERE ue.user_id = $1
+             ORDER BY ue.created_at
+            """,
+            user_id)
+    return [dict(r) for r in await _auth_write("화자 목록 읽기", run)]
+
+
+async def create_elder(user_id: str, display_name: str) -> dict:
+    """화자 하나와 「이 자녀가 관리한다」 한 줄을 같이 만든다. 이름으로 기존 화자를 찾지 않는다."""
+    elder_id = f"e_{uuid.uuid4().hex}"
+
+    async def run(con):
+        async with con.transaction():
+            await con.execute("INSERT INTO elder (elder_id, display_name) VALUES ($1, $2)",
+                              elder_id, display_name)
+            await con.execute("INSERT INTO user_elder (user_id, elder_id) VALUES ($1, $2)",
+                              user_id, elder_id)
+    await _auth_write("화자 기록", run)
+    return {"elder_id": elder_id, "display_name": display_name}

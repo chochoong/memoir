@@ -35,6 +35,7 @@ for _stream in (sys.stdout, sys.stderr):
 from PIL import Image                                                    # noqa: E402
 
 from app.session import photostore, postcard, store                      # noqa: E402
+from tests._auth import AsHeader                                          # noqa: E402
 from tests._nodb import NoDb                                              # noqa: E402
 
 PASS, FAIL = [], []
@@ -224,7 +225,7 @@ def test_routes():
 
     shutil.rmtree(TMP, ignore_errors=True)
     kim = {"X-User-Id": "kim"}
-    with _Env(AZURE_SPEECH_KEY="", PHOTO_STORE="local", PHOTO_DIR=str(TMP)), _Fake() as fake, NoDb():
+    with _Env(AZURE_SPEECH_KEY="", PHOTO_STORE="local", PHOTO_DIR=str(TMP)), _Fake() as fake, NoDb(), AsHeader():
         photostore.reset()
         with TestClient(app) as c:
             url = f"/api/sessions/{SID}/postcard"
@@ -265,10 +266,12 @@ def test_routes():
             check("엽서 크기", (first.get("width"), first.get("height")) == (1500, 1000))
             check("저장소에 한 장", len(_blobs()) == 1, f"{len(_blobs())}장")
 
-            got = c.get(first.get("url", url))
-            check("쿠키만으로 받는다", got.status_code == 200
+            bare = c.get(first.get("url", url))
+            check("신원 없이 오면 401", bare.status_code == 401, str(bare.status_code))
+            got = c.get(first.get("url", url), headers=kim)
+            check("주인은 받는다", got.status_code == 200
                   and got.headers.get("content-type", "").startswith("image/jpeg"),
-                  f"{got.status_code} — <img src> 는 헤더를 못 싣는다")
+                  f"{got.status_code}")
             check("받은 바이트가 저장한 바이트", len(got.content) == first.get("bytes"))
             etag = got.headers.get("etag")
             again = c.get(url, headers={**kim, "If-None-Match": etag})
@@ -577,7 +580,7 @@ def test_list():
 
     store.list_sessions = fake_list
     try:
-        with _Env(AZURE_SPEECH_KEY=""), NoDb(), TestClient(app) as c:
+        with _Env(AZURE_SPEECH_KEY=""), NoDb(), AsHeader(), TestClient(app) as c:
             kim = {"X-User-Id": "kim"}
             r = c.get("/api/sessions", headers=kim)
             check("옵션이 없으면 예전처럼 전부 · 회차마다 has_postcard",

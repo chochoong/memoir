@@ -700,9 +700,8 @@ ERROR 로 남겨 나중에 셀 수 있게 한다.
 지금은 보는 것까지만 한다.
 
 `record` 는 **소유자를 확인한다.** 남의 것이면 403 이 아니라 404 다 — 403 은
-「있긴 있다」를 알려주는 셈이라 id 를 넣어 보며 존재를 확인할 수 있다. 다만 지금은
-`X-User-Id` 를 그대로 믿으므로 헤더를 바꾸면 통과한다. 로그인이 붙을 때 이 줄이
-그대로 실효를 가진다.
+「있긴 있다」를 알려주는 셈이라 id 를 넣어 보며 존재를 확인할 수 있다. 신원은
+로그인 쿠키에서만 나온다 (아래 「로그인」).
 
 조각은 `created_at` 이 아니라 **`idx` 순으로 준다** (FR-AD-401). 0번(씨앗)과 1번이
 같은 초에 들어가면 시각 정렬은 순서가 뒤집힌다.
@@ -715,6 +714,28 @@ ERROR 로 남겨 나중에 셀 수 있게 한다.
 
 ---
 
+## 로그인 (3-C1 · P3-SV-02 · 03)
+
+계약은 `docs/3-C1_인증_링크_초안.md`, 구현은 `app/session/auth.py` 다.
+
+| 경로 | 결과 |
+|---|---|
+| `POST /api/auth/google` `{credential}` | 200 `{user, elders}` + `msid` 쿠키 · 401 `invalid_token` · `expired_token` · 503 `auth_unavailable` |
+| `GET /api/auth/me` | 200 `{user:{user_id,name,email}, elders:[{elder_id,name}]}` · 401 `login_required` · `session_expired` |
+| `POST /api/auth/logout` | 204 |
+| `POST /api/elders` `{name}` | 201 `{elder_id, name}` — 첫 로그인에 화자가 없을 때 |
+
+- **신원은 `msid` 쿠키 하나에서만 나온다.** `X-User-Id` 헤더 · `uid` 쿠키는 읽지 않는다.
+  보호 라우트는 전부 `Depends(auth.current_user)` 를 지나고, 남의 자원은 404 · 로그인 전은 401 이다.
+- **DB 가 있어야 로그인된다.** 메모리 전용으로 뜬 서버는 로그인 503 이라 회차를 열 수 없다.
+- `.env` 에 `GOOGLE_CLIENT_ID` 가 있어야 한다. 앱 세션 수명(`SESSION_MAX_HOURS` · `SESSION_IDLE_HOURS`)은
+  팀이 아직 정하지 않았다 — 기본값은 개발용 임시값이다.
+- 상태를 바꾸는 요청은 허용한 출처(`PUBLIC_ORIGIN` · `ALLOWED_ORIGINS` · 같은 출처)에서만 받는다 (403 `bad_origin`).
+- 시험: `python -m tests.test_auth` (모의 — 구글 서명 검증과 계정 표를 메모리로 바꿔 끼운다).
+  다른 시험은 `tests/_auth.py` 로 헤더를 신원으로 꽂는다. **앱에는 그 길이 없다.**
+
+---
+
 ## 자서전 초안 (실험)
 
 엽서가 있는 회차 3~5개를 고르면 그 회차들의 말씀을 모아 짧은 초안 하나를 쓴다.
@@ -723,7 +744,7 @@ ERROR 로 남겨 나중에 셀 수 있게 한다.
 
 ```
 POST /api/memoirs/preview
-X-User-Id: dev-user
+Cookie: msid=…   (로그인)
 
 {"session_ids": ["<회차 UUID>", "<회차 UUID>", "<회차 UUID>"]}
 ```
@@ -881,13 +902,10 @@ Remove-Item Env:MEMOIR_FAIL_INJECT; .\run.ps1                 # 풀고 다시 �
 `/docs` 에 노출한다.** `main.py` 의 주석에는 개발 중에 알아야 할 것들이 적혀
 있는데, 그중 일부는 공개 문서에 뜨면 곤란하다.
 
-    GET /api/sessions/{id}   "소유자 검사가 없다. session_id 만 알면 남의 조각이 보인다"
     POST .../abort           "「정의되지 않은 전이는 409」 원칙의 유일한 예외다"
 
-**둘 다 사실이고 적어 두는 게 맞다** — 개발 중에 `/docs` 를 눌러 보는 사람이 바로
-알아야 하는 내용이다. 배포에서 자동으로 닫히니 주석을 내릴 필요는 없다. 소유자
-검사는 ⑤ 로그인이 붙을 때 실제로 막히고, 그때 저 줄이 지워진다. **이 항목이 남아
-있다는 건 아직 안 막혔다는 표시다.**
+**사실이고 적어 두는 게 맞다** — 개발 중에 `/docs` 를 눌러 보는 사람이 바로
+알아야 하는 내용이다. 배포에서 자동으로 닫히니 주석을 내릴 필요는 없다.
 
 기동 로그 첫 줄이 그날의 자세를 말한다.
 
