@@ -483,6 +483,14 @@
     .lo-box.off { color: var(--muted); -webkit-user-select: none; user-select: none; background: var(--soft); }
     .screen[data-screen="links"] { padding-bottom: calc(168px + env(safe-area-inset-bottom)); }
     .lk-list[hidden], .lk-list button[hidden] { display: none; }
+    /* 4차 문체 */
+    .style-pick[hidden], .card-style[hidden], .style-tag[hidden] { display: none; }
+    .style-pick { margin: 0 0 14px; }
+    .style-pick .tab[aria-checked="true"] { border-color: var(--ink); color: var(--ink); background: #fff; }
+    .style-tag { display: inline-block; margin: 0 0 10px; padding: 4px 12px; border-radius: 999px; background: #eef3f4; color: #2b5568; font-weight: 700; font-size: .9rem; }
+    .card-style { width: 100%; margin: 6px 0 0; }
+    .card-style .btn-line { margin: 0; }
+    .screen[data-screen="complete"]:has(.card-style:not([hidden])) { padding-bottom: calc(190px + env(safe-area-inset-bottom)); }
     .lk-list { list-style: none; margin: 0; padding: 0; }
     .lk-item { border: 1px solid var(--line); border-radius: 18px; padding: 14px 16px; margin: 0 0 12px; background: #fff; }
     .lk-item b { display: block; font-family: "Gowun Batang", serif; font-size: 1.2rem; margin: 0 0 6px; word-break: keep-all; overflow-wrap: anywhere; }
@@ -937,6 +945,13 @@
             <div class="postcard-sign" id="cardSign"></div>
           </div>
         </article>
+        <!-- 문체 (4-C1). 라벨은 지금 보이는 엽서의 문체 — 서버 응답의 style 이다 -->
+        <div class="card-style" id="cardStyleBox" hidden>
+          <p class="style-tag" id="cardStyleTag"></p>
+          <div class="tabs style-pick" id="cardStyle" role="radiogroup" aria-label="문체"></div>
+          <button class="btn-line" id="cardRegen" disabled>이 문체로 다시 만들기</button>
+          <p class="prep-note" id="cardStyleMsg" role="status" aria-live="polite"></p>
+        </div>
         <div class="dock">
           <button class="btn btn-primary" id="saveBtn">엽서 저장</button>
           <button class="btn-ghost" id="exitBtn">마치기</button>
@@ -1024,6 +1039,7 @@
 
         <div data-mm="pick" hidden>
           <p class="mm-guide" id="mmGuide">엽서 3~5장을 골라 주세요.</p>
+          <div class="tabs style-pick" id="mmStyle" role="radiogroup" aria-label="문체" hidden></div>
           <div id="mmList"></div>
         </div>
 
@@ -1052,6 +1068,7 @@
         </div>
 
         <div data-mm="result" hidden>
+          <p class="style-tag" id="mmStyleTag" hidden></p>
           <h2 class="mm-title" id="mmTitle"></h2>
           <div class="mm-body" id="mmBody"></div>
         </div>
@@ -1268,7 +1285,7 @@
   const CONFIG = {
     // 화면 아래와 개발용 패널에 그대로 찍힌다. 「고친 게 반영이 안 된 것 같다」는
     // 대부분 예전 파일이 열려 있는 경우라서, 눈으로 확인할 자리를 만들어 둔다.
-    version: 'v0.31 · 2026-10-21 (보낸 링크 목록 — 상태별 취소 · 다시 만들기)',
+    version: 'v0.32 · 2026-10-21 (4차 문체 — 자서전 · 엽서 문체 고르기, 응답 style 로 라벨)',
 
     // 이 화면을 백엔드가 직접 서빙하면(web/ 폴더) 빈 문자열 그대로 둔다.
     // 다른 포트에서 열어 시험할 때만 'http://127.0.0.1:8010' 처럼 채운다.
@@ -1352,7 +1369,7 @@
       // 넘기면 서버가 504 로 먼저 답한다. 연결이 걸려 버렸을 때만 여기서 접는다.
       timeoutMs: 60000,
       // '' 이면 실제 서버를 부른다 (기본). 서버 없이 화면만 볼 때 예시 응답을 고른다:
-      //   ready · 400 · 404 · 422 · 502 · 503 · 504 · invalid · timeout · insufficient
+      //   ready · 400 · 404 · 422 · 502 · 503 · 504 · invalid · timeout · insufficient · unsupported(400 문체)
       // 주소 뒤에 ?memoirMock=ready 처럼 붙여도 된다. 예시일 때는 화면 위에 「예시 응답 모드」가 뜬다.
       mock: '',
       mockDelayMs: 1500,
@@ -1453,6 +1470,18 @@
       path: '/i',                // 어르신 링크 주소 https://<고정 주소>/i#<토큰>
       // 모의 링크 (서버 없이): '' | ready · in_progress · elsewhere · ended · interrupted · expired · revoked · invalid
       mock: '',
+    },
+
+    // ── 4차 문체 (4-C1 · 최충 답변 2026-10-21) ─────────────────────
+    // 엽서 POST /api/sessions/{id}/postcard {style} · 자서전 POST /api/memoirs/preview {session_ids, style}.
+    // 보내지 않으면 서버도 구어체. 이 셋 말고는 400 code unsupported_style.
+    // **라벨은 언제나 응답의 style 로 붙인다** — 고른 값이 아니다 (다시 만들다 실패하면 옛 글이 남는다).
+    // 서버가 style 을 아직 모르면(지금 develop) 칸을 무시하고 구어체로 만든다 — 응답에 style 이 없으면 구어체로 본다.
+    style: {
+      names: { spoken: '구어체', novel: '소설체', cyworld: '싸이월드체' },
+      default: 'spoken',
+      pick: true,                // 자서전 · 엽서 화면에 문체 고르기를 보인다
+      regenWaitMs: 40000,        // 엽서를 다른 문체로 다시 만들 때 기다리는 상한
     },
 
     pollMs: 300,                 // 서버 상태를 물어보는 주기 (frontend-client 와 동일)
@@ -1629,7 +1658,9 @@
 
     // ── 엽서 (main.py make_postcard · get_record · get_postcard) ──
     // 굽기를 시작하고 끝날 때까지 기다린다. 409=아직/굽는 중, 503=서버 사정.
-    card: (id) => call(CONFIG.card.path.replace('{id}', id), { method: CONFIG.card.method }),
+    // style 을 주면 {"style": …} 본문 (4-C1). 주지 않으면 예전처럼 본문 없이 — 서버가 구어체로 만든다
+    card: (id, style) => call(CONFIG.card.path.replace('{id}', id),
+      Object.assign({ method: CONFIG.card.method }, style ? { body: JSON.stringify({ style }) } : {})),
     // DB 에 저장된 회차. 서버가 저절로 구운 엽서를 여기서 되찾는다.
     record: (id, signal) => call(`/sessions/${id}/record`, signal ? { signal } : undefined),
     // 서버가 구운 엽서 그림. <img> 로는 헤더를 못 보내므로 fetch 로 받는다.
@@ -1645,9 +1676,9 @@
     // 다른 API 와 같은 call() 을 쓴다. 실패는 HTTP 상태 + {"detail": …} 로 온다.
     // 화면 안내는 상태로만 고르고 detail 은 화면에 내지 않는다 (mmWhy).
     // 사용자 신원은 본문이 아니라 call() 이 붙인다 (dev 모드 X-User-Id · 로그인 모드 msid 쿠키).
-    memoirPreview: (ids, signal) => call(CONFIG.memoir.path, {
+    memoirPreview: (ids, signal, style) => call(CONFIG.memoir.path, {
       method: 'POST', signal,
-      body: JSON.stringify({ [CONFIG.memoir.idsField]: ids }),
+      body: JSON.stringify(Object.assign({ [CONFIG.memoir.idsField]: ids }, style ? { style } : {})),
     }),
 
     // 이 회차에 엽서가 있나. GET /postcard 는 JPEG 라 json() 으로 읽지 않는다.
@@ -2200,8 +2231,10 @@
     const body = String(r.text || '').trim();       // ← 서버의 키 이름은 text 다 (body 가 아니다)
     const title = String(r.title || '').trim();
     if (!body && !title) return null;               // 빈 껍데기면 임시 정리가 낫다
+    // style 이 없으면(문체를 모르는 서버) 구어체다. created_at · url 은 「새로 만든 엽서인가」 를 가리는 표시다
     return { title, body, caption: String(r.caption || '').trim(),
-             url: r.url || '', source: 'server' };
+             url: r.url || '', source: 'server',
+             style: CONFIG.style.names[r.style] ? r.style : CONFIG.style.default, created_at: r.created_at || '' };
   }
 
   /**
@@ -3099,6 +3132,11 @@
       card.classList.add('no-photo');
     }
     $('#cardTitle').textContent = piece.title || '오늘의 목소리';
+    if (typeof cardStyleDraw === 'function') {
+      // 새 엽서가 그려질 때 고른 값을 지금 엽서의 문체로 맞춰 둔다 (다시 만들기 버튼은 다른 문체를 골라야 켜진다)
+      if (!regenBusy) { cardPick = piece.style || CONFIG.style.default; stylePicker($('#cardStyle'), cardPick, (code) => { cardPick = code; $('#cardStyleMsg').textContent = ''; cardStyleDraw(); }); }
+      queueMicrotask(cardStyleDraw);
+    }
     $('#cardCopy').textContent = piece.body || '';
     const d = new Date();
     const caption = piece.caption ? `${piece.caption} · ` : '';
@@ -3606,6 +3644,7 @@
       }
       arPaint(pc, rec.photo_id ? api.photoUrl(rec.photo_id) : '', rec.created_at);
       arViewing = true;
+      cardStyleDraw();                 // 보관함에서 연 엽서에는 문체 줄을 두지 않는다
       show('complete');
       // 지난 엽서를 보는 중에는 「마치기」가 끝내는 말이 아니다. 목록으로 돌아간다.
       // 「되었습니다」도 지금 막 만든 것처럼 들리므로 바꿔 둔다.
@@ -3719,6 +3758,7 @@
   };
 
   let mmRows = [];            // 엽서가 있는 회차. thumb 는 받아 둔 엽서 그림 주소(blob:)다
+  let mmStyle = CONFIG.style.default;   // 자서전을 만들 문체 (고른 값 — 라벨은 응답으로 붙인다)
   let mmPicked = [];          // 고른 회차 ID, 고른 순서대로. 중복은 들어가지 않는다
   let mmView = 'load';
   let mmReq = 0;              // 요청 번호 — 화면을 떠났거나 다시 고른 뒤 늦게 온 응답을 버린다
@@ -3743,6 +3783,7 @@
     main.disabled = view === 'load' || view === 'wait';
     back.hidden = view === 'wait' || after;
     if (view === 'pick') mmSync();
+    $('#mmStyle').hidden = !CONFIG.style.pick || view !== 'pick';
     window.scrollTo(0, 0);
   }
 
@@ -3844,7 +3885,7 @@
   }
 
   /** 서버 대신 예시 응답을 낸다. 실제 생성이 아니라는 표시는 화면 위에 따로 있다. */
-  async function mmFake(kind, signal) {
+  async function mmFake(kind, signal, style) {
     await new Promise((resolve, reject) => {
       const t = setTimeout(resolve, CONFIG.memoir.mockDelayMs);
       signal.addEventListener('abort', () => { clearTimeout(t); reject(new DOMException('', 'AbortError')); });
@@ -3858,7 +3899,8 @@
       throw new ApiError(Number(kind), '예시 detail — 화면에는 나오지 않아야 한다');
     }
     if (kind === 'invalid') return { status: 'ready', title: '', body: 3 };
-    return MM_SAMPLE;
+    if (kind === 'unsupported') { const e = new ApiError(400, '예시'); e.code = 'unsupported_style'; throw e; }
+    return Object.assign({}, MM_SAMPLE, style ? { style } : {});
   }
 
   /** 응답을 화면 상태로. 모양이 틀리면 원 JSON 을 쏟지 않고 실패로 접는다. */
@@ -3867,7 +3909,9 @@
     if (res && res.status === 'ready'
         && typeof res.title === 'string' && res.title.trim()
         && typeof res.body === 'string' && res.body.trim()) {
-      return { view: 'result', title: res.title.trim(), body: res.body };
+      // 응답의 style (6키째). 없으면 문체를 모르는 서버 — 구어체로 만든 글이다
+      const style = CONFIG.style.names[res.style] ? res.style : CONFIG.style.default;
+      return { view: 'result', title: res.title.trim(), body: res.body, style };
     }
     log('자서전', `응답 모양이 규격과 다릅니다 · status=${res && res.status}`);
     return { view: 'fail', why: MM_FAIL.other };
@@ -3876,6 +3920,7 @@
   /** 실패 안내를 고른다. 서버의 message 나 예외 내용은 화면에 내지 않는다. */
   function mmWhy(e) {
     if (e && e.name === 'AbortError') return MM_FAIL[504];   // 화면 쪽 제한에 걸렸다
+    if (e && e.code === 'unsupported_style') return STYLE_UNSUPPORTED;   // 400 이지만 「3~5장」 과 다른 뜻 (4-C1)
     return MM_FAIL[e && e.status] || MM_FAIL.other;           // 응답 없음 · 파싱 실패 · 그 밖의 상태
   }
 
@@ -3907,7 +3952,8 @@
     const timer = setTimeout(() => ctl.abort(), timeoutMs);
     let out;
     try {
-      const res = kind ? await mmFake(kind, ctl.signal) : await api.memoirPreview(ids, ctl.signal);
+      const style = CONFIG.style.pick ? mmStyle : '';
+      const res = kind ? await mmFake(kind, ctl.signal, style) : await api.memoirPreview(ids, ctl.signal, style);
       out = mmRead(res);
     } catch (e) {
       out = { view: 'fail', why: mmWhy(e) };
@@ -3917,7 +3963,13 @@
     }
 
     if (my !== mmReq) { log('자서전', '늦게 온 응답을 버립니다'); return; }
-    if (out.view === 'result') mmPaint(out.title, out.body);
+    if (out.view === 'result') {
+      mmPaint(out.title, out.body);
+      const tag = $('#mmStyleTag');
+      tag.hidden = !CONFIG.style.pick;
+      tag.textContent = `문체: ${CONFIG.style.names[out.style]}` +
+        (out.style !== mmStyle ? ` (고르신 ${CONFIG.style.names[mmStyle]}로 오지 않았어요)` : '');
+    }
     if (out.view === 'fail') $('#mmFailMsg').textContent = out.why;
     mmShow(out.view);
     log('자서전', out.view === 'result' ? `완성 · ${kind ? '예시 응답' : '실제 응답'}` : out.view);
@@ -4030,6 +4082,106 @@
     try { applySnapshot(await api.abort(sessionId)); }
     catch (e) { log('버튼', `abort 실패 · ${e.message || e}`); void finishSession(); }
   });
+
+  /* ═══════════════════════════════════════════════════════════════
+     4차 문체 (4-C1) — 고르기 · 엽서 다시 만들기
+       · 고른 문체(버튼) · 지금 보이는 글의 문체(응답의 style) 를 따로 둔다. 라벨은 언제나 뒤의 것.
+       · 엽서를 다른 문체로 다시 만들 때 (최충 답변):
+           누르기 전 옛 엽서의 created_at · url 을 기억해 둔다 →
+           POST {style}  200 → 그 응답이 새 엽서다
+                         409 busy → 회차 기록을 보며 기다린다.
+                                    created_at(또는 url) 이 바뀌고 style 이 요청한 것과 같을 때만 새 결과.
+                                    바뀌었는데 다른 문체면 앞 요청이 먼저 끝난 것 — 다시 요청한다.
+           실패하면 옛 엽서 · 옛 라벨 그대로 (서버도 옛 엽서를 남긴다).
+       · 화면 시계와 비교하지 않는다 — 휴대전화 시계가 어긋날 수 있다.
+     ═══════════════════════════════════════════════════════════════ */
+  const STYLE_UNSUPPORTED = '지원하지 않는 문체예요. 다른 문체를 골라 주세요.';
+  function stylePicker(host, current, onPick) {
+    host.replaceChildren();
+    Object.entries(CONFIG.style.names).forEach(([code, name]) => {
+      const b = document.createElement('button');
+      b.type = 'button'; b.className = 'tab'; b.textContent = name; b.dataset.style = code;
+      b.setAttribute('role', 'radio'); b.setAttribute('aria-checked', String(code === current));
+      b.addEventListener('click', () => {
+        host.querySelectorAll('.tab').forEach(x => x.setAttribute('aria-checked', String(x === b)));
+        onPick(code);
+      });
+      host.append(b);
+    });
+  }
+  stylePicker($('#mmStyle'), mmStyle, (code) => { mmStyle = code; });
+
+  let regenBusy = false, cardPick = CONFIG.style.default;
+  /** 완성 화면 아래 문체 줄. 서버 엽서이고 방금 만든 회차일 때만 (보관함에서 연 엽서 · 임시 정리 엽서는 아님) */
+  function cardStyleDraw() {
+    const on = CONFIG.style.pick && piece && piece.source === 'server' && !!sessionId && !arViewing;
+    $('#cardStyleBox').hidden = !on;
+    if (!on) return;
+    $('#cardStyleTag').textContent = `문체: ${CONFIG.style.names[piece.style] || CONFIG.style.names[CONFIG.style.default]}`;
+    $('#cardRegen').disabled = regenBusy || cardPick === piece.style;
+    $('#cardRegen').textContent = regenBusy ? `${CONFIG.style.names[cardPick]}로 만드는 중…` : `${CONFIG.style.names[cardPick]}로 다시 만들기`;
+    $('#cardStyle').querySelectorAll('.tab').forEach(x => { x.disabled = regenBusy; });
+  }
+  async function regenCard() {
+    if (regenBusy || !piece || !sessionId) return;
+    const want = cardPick, was = piece.style;
+    const name = (c) => CONFIG.style.names[c];
+    regenBusy = true; cardStyleDraw();
+    $('#cardStyleMsg').textContent = `${name(want)}로 만드는 중이에요. 지금 엽서는 그대로 둡니다.`;
+    // 옛 엽서의 표시를 **회차 기록에서** 읽어 둔다. 처음 받은 POST 응답에는 created_at 이 없어서,
+    // 화면이 들고 있는 값으로 비교하면 옛 엽서도 「바뀌었다」 로 보였다
+    const prev = { created_at: piece.created_at, url: piece.url };
+    try {
+      const rec = await api.record(sessionId);
+      if (rec && rec.postcard) { prev.created_at = rec.postcard.created_at || ''; prev.url = rec.postcard.url || ''; }
+    } catch (_) {}
+    const changed = (pc) => pc && ((pc.created_at || '') !== (prev.created_at || '') || (pc.url || '') !== (prev.url || ''));
+    const deadline = Date.now() + CONFIG.style.regenWaitMs;
+    let got = null, fail = null;
+    try {
+      for (let round = 0; !got && !fail && round < 4 && Date.now() < deadline; round++) {
+        try {
+          got = shapeServerCard(await api.card(sessionId, want));
+          if (!got) fail = { status: 200 };
+        } catch (e) {
+          if (!cardWaiting(e)) { fail = e; break; }
+          // busy — 앞 요청(다른 문체일 수 있다)이 굽는 중. 회차 기록을 보며 기다린다
+          log('문체', '다른 엽서를 굽는 중 — 기다립니다');
+          for (;;) {
+            if (Date.now() >= deadline) { fail = { status: 0, why: 'timeout' }; break; }
+            await sleep(CONFIG.card.pollMs);
+            let pc = null;
+            try { const rec = await api.record(sessionId); pc = rec && rec.postcard; } catch (_) { continue; }
+            if (!changed(pc)) continue;
+            const c = shapeServerCard(pc);
+            if (c && c.style === want) { got = c; break; }
+            // 바뀌었는데 다른 문체 — 앞 요청의 결과다. 새 결과가 아니므로 기억을 갱신하고 다시 요청한다
+            log('문체', `앞 요청(${name(c && c.style)})이 먼저 끝났습니다 — 다시 요청합니다`);
+            prev.created_at = pc.created_at; prev.url = pc.url;
+            break;
+          }
+        }
+      }
+      if (!got && !fail) fail = { status: 0, why: 'timeout' };
+    } finally { regenBusy = false; }
+    if (got) {
+      // 서버가 준 엽서 그대로 — 라벨도 응답의 style. 문체를 모르는 서버면 구어체로 온다
+      Object.assign(piece, got);
+      renderPostcard(piece);
+      $('#cardStyleMsg').textContent = got.style === want ? `${name(want)}로 다시 만들었어요.`
+        : `${name(want)}로 오지 않고 ${name(got.style)}로 왔어요. (서버가 아직 문체를 고르지 못할 수 있어요)`;
+      log('문체', `엽서 — 요청 ${want} · 받은 ${got.style}`);
+    } else {
+      const lack = fail.code === 'insufficient_material' || fail.code === 'no_answers';
+      $('#cardStyleMsg').textContent = fail.code === 'unsupported_style' ? STYLE_UNSUPPORTED
+        : lack ? `엽서에 담을 이야기가 부족해 ${name(want)}로 바꾸지 못했어요. 지금 엽서는 ${name(was)} 그대로예요.`
+        : `${name(want)}로 바꾸지 못했어요. 지금 엽서는 ${name(was)} 그대로예요.`;
+      log('문체', `엽서 실패 · ${fail.status || ''} ${fail.code || fail.why || ''}`);
+    }
+    cardStyleDraw();
+  }
+  stylePicker($('#cardStyle'), cardPick, (code) => { cardPick = code; $('#cardStyleMsg').textContent = ''; cardStyleDraw(); });
+  $('#cardRegen').addEventListener('click', () => void regenCard());
 
   $('#saveBtn').addEventListener('click', () => void savePostcard());
   $('#exitBtn').addEventListener('click', () => { ended = true; show('closed'); });
