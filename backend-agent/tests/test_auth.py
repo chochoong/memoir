@@ -238,6 +238,19 @@ def test_expiry():
         r = c.get("/api/auth/me")
         check("유휴 시간 안이면 그대로 로그인", r.status_code == 200, r.text[:80])
 
+        # 유휴 만료는 소수 시간을 받는다 — 0.5 = 30분
+        with _Env(SESSION_IDLE_HOURS="0.5"):
+            acc.logins[h]["last_seen_at"] = now - timedelta(minutes=20)
+            auth._cache.clear()
+            c.cookies.set(auth.COOKIE, raw)
+            r = c.get("/api/auth/me")
+            check("SESSION_IDLE_HOURS=0.5 · 20분 전이면 그대로", r.status_code == 200, r.text[:80])
+            acc.logins[h]["last_seen_at"] = now - timedelta(minutes=31)
+            auth._cache.clear()
+            r = c.get("/api/auth/me")
+            check("SESSION_IDLE_HOURS=0.5 · 31분 전이면 401 session_expired", r.status_code == 401
+                  and r.json().get("code") == "session_expired", r.text[:80])
+
         with _client() as c2:
             r = c2.get("/api/auth/me")
             check("쿠키가 없으면 401 login_required", r.status_code == 401

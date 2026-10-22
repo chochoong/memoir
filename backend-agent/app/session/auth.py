@@ -36,7 +36,7 @@ from datetime import datetime, timedelta, timezone
 from fastapi import Request
 
 from . import store
-from .conf import env_int, env_str
+from .conf import env_float, env_int, env_str
 
 log = logging.getLogger("auth")
 
@@ -70,9 +70,9 @@ def max_hours() -> int:
     return max(1, env_int("SESSION_MAX_HOURS", 24 * 7))
 
 
-def idle_hours() -> int:
-    """마지막 요청부터 몇 시간이면 끊는다. 0 이면 유휴 만료를 쓰지 않는다."""
-    return max(0, env_int("SESSION_IDLE_HOURS", 24))
+def idle_hours() -> float:
+    """마지막 요청부터 몇 시간이면 끊는다 (0.5 = 30분). 0 이면 유휴 만료를 쓰지 않는다."""
+    return env_float("SESSION_IDLE_HOURS", 24)
 
 
 # ---------------------------------------------------------------- 구글 검증
