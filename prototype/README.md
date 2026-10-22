@@ -178,7 +178,11 @@ PC 처럼 폭이 760px 이상일 때만 차이가 나고, 휴대전화에서는 
   서버 상한은 1~40자이고 화면은 30자로 막습니다. 띄어쓰기만 적으면 화면에서 막고, 422 가 오면 「이름을 확인해 주세요」.
 - 칸 이름: `user {user_id, name, email}` · `elders [{elder_id, name}]`. 위쪽에는 이름(없으면 이메일) · 화자 이름. `elder_id` 는 링크 발급에 씁니다.
 - 위쪽에 「이름 · 화자 · 로그아웃」. 로그아웃하면 `POST /api/auth/logout` 뒤 화면을 통째로 비웁니다.
-- 실제 로그인에는 `CONFIG.auth.googleClientId` (Google Cloud 웹 클라이언트 ID, 비밀값 아님)가 필요합니다. **최충 님이 만들어 전달** — 받으면 여기에 넣습니다.
+- 실제 로그인에는 `CONFIG.auth.googleClientId` (Google Cloud 웹 클라이언트 ID, 비밀값 아님)가 필요합니다. **v0.36 에 넣었습니다** (최충 님 전달).
+  서버 `.env` 의 `GOOGLE_CLIENT_ID` 와 같은 값이어야 합니다. **클라이언트 보안 비밀번호(`GOCSPX-…`)는 화면 · 서버 어디에도 쓰지 않습니다.**
+- 그래서 배포는 **원본을 `web\index.html` 로 복사만 하면 됩니다** (주소로 로그인 모드 자동 · 클라이언트 ID 들어 있음).
+- 서버 `.env` 의 `PUBLIC_ORIGIN` 은 끝에 `/` 없이 `https://naemalssami.com`. `/` 가 붙으면 브라우저가 보내는 출처와 글자가 달라
+  로그인 · 링크 만들기 같은 쓰기 요청이 403(`bad_origin`)으로 막힐 수 있고, 어르신 링크가 `…com//i#…` 가 됩니다.
 
 **자녀 — 어르신께 링크로 보내기** (로그인 모드에서만)
 - 준비 화면(테마 · 주제 · 사진)에서 「어르신께 링크로 보내기」 → `POST /api/links {elder_id, title, seed, theme, topic, photo_id?}`.
