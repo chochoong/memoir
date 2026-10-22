@@ -321,7 +321,10 @@ def _session_row(r: Any) -> dict:
 
 async def list_sessions(user_id: str, limit: int = 20, has_postcard: bool = False) -> list[dict]:
     """
-    지난 회차 목록. 최근 순. 조각 개수와 엽서가 있는지를 같이 싣는다.
+    지난 회차 목록. 최근 순. 조각 개수와 엽서가 있는지 · 엽서 제목을 같이 싣는다.
+
+    postcard_title 은 엽서가 없으면 칸을 빼지 않고 None 이다. 화면이 「칸이 없다
+    (예전 서버)」 와 「엽서가 없다」 를 가른다. 006 이전 엽서는 제목이 없어 None 이다.
 
     user_id 로 거른다 — 로그인한 자녀의 것만 나간다.
 
@@ -337,7 +340,8 @@ async def list_sessions(user_id: str, limit: int = 20, has_postcard: bool = Fals
                 f"""
                 SELECT s.*, (SELECT count(*) FROM turn t
                               WHERE t.session_id = s.session_id) AS fragment_count,
-                       p.session_id IS NOT NULL AS has_postcard
+                       p.session_id IS NOT NULL AS has_postcard,
+                       p.title AS postcard_title
                   FROM session s
                   LEFT JOIN postcard p ON p.session_id = s.session_id
                  WHERE s.user_id = $1 {only}
@@ -349,7 +353,8 @@ async def list_sessions(user_id: str, limit: int = 20, has_postcard: bool = Fals
         log.error("회차 목록 읽기 실패 (%s: %s)", type(e).__name__, str(e)[:120])
         raise StoreUnavailable("회차 목록을 읽지 못했습니다") from e
     return [{**_session_row(r), "fragment_count": r["fragment_count"],
-             "has_postcard": r["has_postcard"]} for r in rows]
+             "has_postcard": r["has_postcard"],
+             "postcard_title": r["postcard_title"]} for r in rows]
 
 
 async def load_session(session_id: str) -> dict | None:

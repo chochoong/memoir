@@ -575,7 +575,7 @@ async def latency(session_id: str, who: str = Depends(auth.current_user)):
 async def list_sessions(limit: int = 20, has_postcard: bool = False,
                         who: str = Depends(auth.current_user)):
     """
-    지난 회차 목록. 최근 순. 회차마다 has_postcard 를 싣는다.
+    지난 회차 목록. 최근 순. 회차마다 has_postcard · postcard_title 을 싣는다.
 
     `?has_postcard=1` 이면 엽서가 있는 회차만 준다 — 자서전에 고를 회차다.
 

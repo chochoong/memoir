@@ -669,13 +669,14 @@ def test_checked():
 
 
 def test_list():
-    """목록은 has_postcard 를 싣고, ?has_postcard=1 이면 엽서 있는 회차만 준다."""
+    """목록은 has_postcard · postcard_title 을 싣고, ?has_postcard=1 이면 엽서 있는 회차만 준다."""
     print("\n[8] 목록에서 엽서 있는 회차 거르기")
     from fastapi.testclient import TestClient
 
     from app.main import app
 
-    rows = [{"session_id": "a", "has_postcard": True}, {"session_id": "b", "has_postcard": False}]
+    rows = [{"session_id": "a", "has_postcard": True, "postcard_title": "처음 연 가게"},
+            {"session_id": "b", "has_postcard": False, "postcard_title": None}]
     got: list[tuple] = []
     real = store.list_sessions
 
@@ -695,12 +696,17 @@ def test_list():
             check("has_postcard=1 이면 엽서 있는 회차만",
                   r.status_code == 200 and [s["session_id"] for s in r.json()["sessions"]] == ["a"]
                   and got[-1] == ("kim", 50, True), f"{r.status_code} {got[-1:]}")
+            check("엽서가 없어도 postcard_title 칸은 빠지지 않고 null 이다",
+                  all("postcard_title" in s for s in c.get("/api/sessions", headers=kim).json()["sessions"])
+                  and c.get("/api/sessions", headers=kim).json()["sessions"][1]["postcard_title"] is None)
     finally:
         store.list_sessions = real
 
     sql = Path(store.__file__).read_text(encoding="utf-8")
     check("거르는 것은 DB 다 — limit 안에서 거르면 다시 밀린다",
           "AND p.session_id IS NOT NULL" in sql)
+    check("엽서 제목은 목록 SQL 이 엽서 표에서 같이 읽는다 (/record 의 postcard.title 과 같은 열)",
+          "p.title AS postcard_title" in sql and '"postcard_title": r["postcard_title"]' in sql)
 
 
 def test_all_checks_passed():
