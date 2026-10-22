@@ -168,6 +168,7 @@ class _Fake:
         self.fail = False
         self.insufficient = False
         self.writes = 0
+        self.saves = 0
         self.gate: asyncio.Event | None = None
 
     def __enter__(self):
@@ -181,14 +182,17 @@ class _Fake:
             return {**self.session, "fragments": list(self.session["fragments"]),
                     "postcard": {"title": card["title"], "text": card["text"],
                                  "caption": card["caption"], "storage_key": card["storage_key"],
-                                 "created_at": "2026-09-24T10:20:00+09:00"} if card else None}
+                                 "style": card["style"] or "spoken",
+                                 "created_at": card["created_at"]} if card else None}
 
         async def save_postcard(rec):
             if self.fail:
                 raise store.StoreUnavailable("일부러 실패")
             old = self.card["storage_key"] if self.card else None
-            self.card = dict(rec)
-            return old
+            self.saves += 1
+            at = f"2026-09-24T10:{20 + self.saves:02d}:00+09:00"     # DB 의 now() 흉내
+            self.card = {**rec, "created_at": at}
+            return old, at
 
         async def load_postcard(sid):
             return self.card if sid == SID else None
@@ -286,6 +290,11 @@ def test_routes():
             check("기록에 엽서가 딸려 온다", pc.get("url") == first.get("url"), str(pc))
             check("제목도 딸려 온다", pc.get("title") == "완행열차", str(pc))
             check("기록에도 저장 키는 안 나간다", "storage_key" not in pc)
+            check("본문 없이 구우면 구어체 · 응답과 기록에 style", first.get("style") == "spoken"
+                  and pc.get("style") == "spoken", f"{first.get('style')} {pc.get('style')}")
+            check("POST 응답의 created_at 이 기록의 created_at 과 같다 (busy 뒤 판단 기준)",
+                  bool(first.get("created_at")) and first.get("created_at") == pc.get("created_at"),
+                  f"{first.get('created_at')} {pc.get('created_at')}")
 
             r2 = c.post(url, headers=kim)
             second = r2.json() if r2.status_code == 200 else {}
@@ -294,6 +303,31 @@ def test_routes():
             check("옛 바이트를 지운다", len(_blobs()) == 1, f"{len(_blobs())}장")
             stale = c.get(url, headers={**kim, "If-None-Match": etag})
             check("옛 ETag 로는 304 가 안 난다", stale.status_code == 200, str(stale.status_code))
+            check("다시 구우면 created_at 이 바뀐다",
+                  second.get("created_at") not in (None, first.get("created_at")),
+                  f"{first.get('created_at')} → {second.get('created_at')}")
+
+            r = c.post(url, json={"style": "spoken"}, headers=kim)
+            check("style spoken 을 보내면 200 · spoken", r.status_code == 200
+                  and r.json().get("style") == "spoken", f"{r.status_code} {r.text[:80]}")
+
+            # 지원하지 않는 문체 — 모델을 부르지 않고, 옛 엽서를 건드리지 않는다.
+            writes, kept = fake.writes, dict(fake.card)
+            for v in ("novel", "cyworld", "essay", "Spoken", "", 3, ["spoken"]):
+                r = c.post(url, json={"style": v}, headers=kim)
+                check(f"style {v!r} → 400 · code unsupported_style",
+                      r.status_code == 400 and r.json() == {
+                          "detail": "지원하지 않는 문체예요.", "code": "unsupported_style"},
+                      f"{r.status_code} {r.text[:80]}")
+            check("거절한 문체로는 모델을 안 불렀다", fake.writes == writes, f"{fake.writes - writes}번")
+            check("거절한 뒤 옛 엽서가 그대로다", fake.card == kept)
+
+            r = c.post(url, content=b"{not json", headers={**kim, "Content-Type": "application/json"})
+            check("깨진 본문 → 400 · code 없음", r.status_code == 400
+                  and "code" not in r.json(), f"{r.status_code} {r.text[:80]}")
+            r = c.post(url, json=["spoken"], headers=kim)
+            check("객체가 아닌 본문 → 400 · code 없음", r.status_code == 400
+                  and "code" not in r.json(), f"{r.status_code} {r.text[:80]}")
 
             fake.fail = True
             r3 = c.post(url, headers=kim)

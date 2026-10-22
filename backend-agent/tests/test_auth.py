@@ -254,11 +254,11 @@ def test_isolation():
     real = (postcard.make, memoir.preview, store.load_session, store.load_photo,
             store.load_postcard, store.list_sessions)
 
-    async def fake_make(session_id, who):
+    async def fake_make(session_id, who, style="spoken"):
         calls["postcard"].append(who)
         raise LookupError(session_id)           # 남의 회차 — postcard.make 의 실제 동작
 
-    async def fake_preview(ids, who):
+    async def fake_preview(ids, who, style="spoken"):
         calls["memoir"].append(who)
         raise memoir.NotFound("남의 것")
 

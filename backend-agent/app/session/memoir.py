@@ -401,11 +401,14 @@ def check(out, turns: set[int]) -> dict:
 # ---------------------------------------------------------------- 한 요청
 
 
-async def preview(session_ids, user_id: str) -> dict:
+async def preview(session_ids, user_id: str, style: str = "spoken") -> dict:
     """
-    고른 회차로 초안 하나. 돌려주는 것은 5개 키뿐이다 (SHOWN) — turn_map 은 이 요청
-    안에서 출처를 따져 보는 데만 쓰고 화면에 내보내지 않는다. missing_context ·
-    coverage_notes 는 로그에만 남긴다.
+    고른 회차로 초안 하나. 돌려주는 것은 5개 키(SHOWN)에 요청받은 style 을 더한
+    6키다 — turn_map 은 이 요청 안에서 출처를 따져 보는 데만 쓰고 화면에 내보내지
+    않는다. missing_context · coverage_notes 는 로그에만 남긴다.
+
+    style 은 라우트가 거른 값이다. 지금은 spoken 뿐이라 모델에 보내지 않는다
+    (style.py 머리). 화면은 늦게 온 응답의 문체를 이 값으로 알아본다.
 
     로그에는 회차 ID 와 개수만 남긴다. 원문은 남기지 않는다.
     """
@@ -420,4 +423,4 @@ async def preview(session_ids, user_id: str) -> dict:
     log.info("자서전 응답 — %s · 본문 %d줄 · 확인 %d건 · 범위 메모 %s",
              out["status"], len(out["body"].split("\n")) if out["body"] else 0,
              len(out["to_confirm"]), out["coverage_notes"])
-    return {k: out[k] for k in SHOWN}
+    return {**{k: out[k] for k in SHOWN}, "style": style}

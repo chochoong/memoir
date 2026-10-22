@@ -46,7 +46,7 @@ from pathlib import Path
 
 from PIL import Image, ImageDraw, ImageFont, ImageOps
 
-from . import photostore, roledoc, store
+from . import photostore, roledoc, store, style as styles
 from .conf import env_float, env_str
 from .question import _client
 from .shared import _facts
@@ -165,11 +165,13 @@ _busy: set[str] = set()
 # ---------------------------------------------------------------- 만들기
 
 
-async def make(session_id: str, user_id: str) -> dict:
+async def make(session_id: str, user_id: str, style: str = styles.DEFAULT) -> dict:
     """
     회차 하나의 엽서를 굽고 저장한다. 저장된 행을 돌려준다.
 
     회차가 없거나 남의 것이면 None 대신 LookupError 다 — 라우트가 404 로 바꾼다.
+    style 은 라우트가 styles.pick 으로 거른 값이다. 지금은 spoken 뿐이라 모델에
+    보내지 않고 행에만 남긴다 (style.py 머리).
     """
     rec = await store.load_session(session_id)
     if rec is None or rec["user_id"] != user_id:
@@ -185,7 +187,7 @@ async def make(session_id: str, user_id: str) -> dict:
         raise PostcardNotReady("엽서를 만드는 중입니다. 잠시 기다려 주세요", "busy")
     _busy.add(session_id)
     try:
-        return await _make(rec, said)
+        return await _make(rec, said, style)
     finally:
         _busy.discard(session_id)
 
@@ -201,7 +203,7 @@ async def on_closed(session_id: str, user_id: str, reason: str) -> None:
     log.info("엽서 %s — %s 로 닫혔다. 「엽서 만들기」를 누를 때 굽는다", session_id[:8], reason)
 
 
-async def _make(rec: dict, said: list[dict]) -> dict:
+async def _make(rec: dict, said: list[dict], style: str) -> dict:
     session_id = rec["session_id"]
     font_path = _font_path()                 # 모델 값을 쓰기 전에 먼저 본다
 
@@ -235,9 +237,10 @@ async def _make(rec: dict, said: list[dict]) -> dict:
         "photo_id": rec.get("photo_id") if photo else None,
         "text_model": _text_model(),
         "image_model": None,
+        "style": style,
     }
     try:
-        old = await store.save_postcard(row)
+        old, row["created_at"] = await store.save_postcard(row)
     except store.StoreUnavailable:
         # photo.save 와 같은 보상 삭제. 행이 없으면 이 바이트를 가리킬 것이 없다.
         await _forget(key)

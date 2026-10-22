@@ -35,6 +35,7 @@ from pydantic import BaseModel, Field
 
 from app.session import controller as sc
 from app.session import auth, limits, link, memoir, photo, photostore, postcard, prompt, store, stt, tts
+from app.session import style as styles
 from app.session.conf import env_flag, env_int, env_str
 from app.session.machine import State, TransitionError
 from app.session.question import gemini_question, warmup
@@ -725,7 +726,7 @@ async def _photo_bytes(rec: dict, request: Request) -> Response:
 
 
 @app.post("/api/sessions/{session_id}/postcard")
-async def make_postcard(session_id: str, who: str = Depends(auth.current_user)):
+async def make_postcard(session_id: str, request: Request, who: str = Depends(auth.current_user)):
     """
     끝난 회차의 엽서를 굽는다. 이미 있으면 새로 구워 덮어쓴다.
 
@@ -736,9 +737,23 @@ async def make_postcard(session_id: str, who: str = Depends(auth.current_user)):
     409 는 어르신이 다른 것을 하면 되는 경우(회차가 안 끝났다 · 말씀이 없다 ·
     이미 굽는 중 · 담을 말씀이 부족하다), 503 은 서버 쪽 사정이다. 화면이 둘을
     다르게 말해야 한다. 409 의 네 원인은 본문의 code 로 가른다.
+
+    본문은 없어도 된다. 있으면 `{"style": ...}` 이고, 없으면 구어체다 (style.py).
+    응답의 created_at 은 DB 가 찍은 값이다 — 화면은 busy 뒤에 이 값이 바뀌었는지로
+    새 엽서를 알아본다 (4-C1 §6).
     """
     try:
-        rec = await postcard.make(session_id, who)
+        body = json.loads(await _body_capped(request, 1024) or b"{}")
+    except ValueError:
+        body = None
+    if not isinstance(body, dict):
+        raise HTTPException(400, "요청을 읽지 못했어요.")
+    try:
+        chosen = styles.pick(body.get("style"))
+    except styles.UnsupportedStyle:
+        return _unsupported_style()
+    try:
+        rec = await postcard.make(session_id, who, chosen)
     except LookupError as e:
         raise HTTPException(404, "회차를 찾을 수 없습니다") from e
     except postcard.PostcardNotReady as e:
@@ -755,7 +770,14 @@ async def make_postcard(session_id: str, who: str = Depends(auth.current_user)):
         "width": rec["width"],
         "height": rec["height"],
         "bytes": rec["bytes"],
+        "style": rec["style"],
+        "created_at": rec["created_at"],
     }
+
+
+def _unsupported_style() -> JSONResponse:
+    """엽서 · 자서전이 같은 모양으로 거절한다. 400 의 다른 원인과는 code 로 갈린다."""
+    return JSONResponse({"detail": styles.SAYS, "code": styles.CODE}, status_code=400)
 
 
 @app.get("/api/sessions/{session_id}/postcard")
@@ -820,7 +842,8 @@ async def memoir_preview(request: Request, who: str = Depends(auth.current_user)
     """
     고른 회차로 자서전 초안을 쓴다. **기다리는 요청이다** — 다 쓰거나 실패해야 답이 간다.
 
-    본문은 `{"session_ids": [...]}` 뿐이다. 누구의 요청인지는 로그인으로 안다.
+    본문은 `{"session_ids": [...], "style": ...}` 다. style 은 없으면 구어체다.
+    누구의 요청인지는 로그인으로 안다.
     본문을 pydantic 으로 받지 않는 것은 모양이 틀렸을 때 FastAPI 가 422 를
     내기 때문이다 — 여기서 422 는 「자료를 못 읽었다」는 다른 뜻이다.
 
@@ -833,7 +856,11 @@ async def memoir_preview(request: Request, who: str = Depends(auth.current_user)
         body = None
     ids = body.get("session_ids") if isinstance(body, dict) else None
     try:
-        return await memoir.preview(ids, who)
+        chosen = styles.pick(body.get("style") if isinstance(body, dict) else None)
+    except styles.UnsupportedStyle:
+        return _unsupported_style()
+    try:
+        return await memoir.preview(ids, who, chosen)
     except memoir.MemoirError as e:
         code = next(c for kind, c in _MEMOIR_STATUS if isinstance(e, kind))
         log.warning("자서전 %d %s — %s", code, type(e).__name__, str(e)[:200])

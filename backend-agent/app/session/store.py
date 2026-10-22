@@ -377,7 +377,7 @@ async def load_session(session_id: str) -> dict | None:
                   FROM turn WHERE session_id = $1 ORDER BY idx
                 """, sid)
             prow = await con.fetchrow(
-                "SELECT title, text, caption, storage_key, created_at FROM postcard"
+                "SELECT title, text, caption, storage_key, style, created_at FROM postcard"
                 " WHERE session_id = $1",
                 sid)
     except Exception as e:                                   # noqa: BLE001
@@ -403,6 +403,7 @@ async def load_session(session_id: str) -> dict | None:
             "text": prow["text"],
             "caption": prow["caption"],
             "storage_key": prow["storage_key"],
+            "style": prow["style"] or "spoken",
             "created_at": prow["created_at"].isoformat(),
         } if prow else None,
     }
@@ -561,13 +562,18 @@ def _postcard_row(r: Any) -> dict:
         "photo_id": str(r["photo_id"]) if r["photo_id"] else None,
         "text_model": r["text_model"],
         "image_model": r["image_model"],
+        # NULL 은 011 전에 구운 엽서다. 그때는 구어체뿐이었다.
+        "style": r["style"] or "spoken",
         "created_at": r["created_at"].isoformat(),
     }
 
 
-async def save_postcard(rec: dict) -> str | None:
+async def save_postcard(rec: dict) -> tuple[str | None, str]:
     """
-    엽서 행을 넣거나 덮어쓴다. **덮어쓰기 전의 키를 돌려준다.**
+    엽서 행을 넣거나 덮어쓴다. **덮어쓰기 전의 키와 새로 찍힌 created_at 을 돌려준다.**
+
+    created_at 은 DB 의 now() 다. 화면은 busy 뒤에 이 값이 바뀌었는지로 새 엽서를
+    알아본다 (4-C1 §6) — 그래서 POST 응답에도 같은 값이 나가야 한다.
 
     옛 바이트를 지우는 것은 호출자다. 여기서 지우면 행과 바이트를 한 함수가 같이
     쥐게 되는데, 바이트는 이 파일이 아니라 PhotoStore 의 일이다.
@@ -578,13 +584,14 @@ async def save_postcard(rec: dict) -> str | None:
     pool_ = _need_pool()
     try:
         async with pool_.acquire() as con:
-            return await con.fetchval(
+            row = await con.fetchrow(
                 """
                 WITH old AS (SELECT storage_key FROM postcard WHERE session_id = $1)
                 INSERT INTO postcard (session_id, user_id, text, storage_key, mime,
                                       bytes, width, height, photo_id,
-                                      text_model, image_model, title, caption, sources)
-                VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
+                                      text_model, image_model, title, caption, sources,
+                                      style)
+                VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
                 ON CONFLICT (session_id) DO UPDATE
                    SET user_id     = EXCLUDED.user_id,
                        title       = EXCLUDED.title,
@@ -599,8 +606,9 @@ async def save_postcard(rec: dict) -> str | None:
                        photo_id    = EXCLUDED.photo_id,
                        text_model  = EXCLUDED.text_model,
                        image_model = EXCLUDED.image_model,
+                       style       = EXCLUDED.style,
                        created_at  = now()
-                RETURNING (SELECT storage_key FROM old)
+                RETURNING (SELECT storage_key FROM old) AS old, created_at
                 """,
                 uuid.UUID(rec["session_id"]), rec["user_id"], rec["text"],
                 rec["storage_key"], rec["mime"], rec["bytes"], rec["width"],
@@ -608,11 +616,13 @@ async def save_postcard(rec: dict) -> str | None:
                 rec.get("text_model"), rec.get("image_model"),
                 rec.get("title"), rec.get("caption"),
                 json.dumps(rec.get("sources"), ensure_ascii=False)
-                if rec.get("sources") is not None else None)
+                if rec.get("sources") is not None else None,
+                rec.get("style"))
     except Exception as e:                                   # noqa: BLE001
         log.error("엽서 행 저장 실패 %s (%s: %s)",
                   rec.get("session_id"), type(e).__name__, str(e)[:120])
         raise StoreUnavailable("엽서를 저장하지 못했습니다") from e
+    return row["old"], row["created_at"].isoformat()
 
 
 async def load_postcard(session_id: str) -> dict | None:

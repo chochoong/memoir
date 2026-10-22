@@ -267,8 +267,9 @@ EMPTY = {"status": "insufficient_material", "title": "", "body": "", "sources": 
          "missing_context": [], "coverage_notes": []}
 
 
-def shown(out: dict) -> dict:
-    return {k: out[k] for k in memoir.SHOWN}
+def shown(out: dict, style: str = "spoken") -> dict:
+    """화면에 나가는 6키 — 모델 응답의 다섯 키에 요청받은 문체."""
+    return {**{k: out[k] for k in memoir.SHOWN}, "style": style}
 TURNS = {1, 2, 3, 4, 5, 6}
 
 
@@ -411,13 +412,27 @@ def test_routes():
                 return list(body) == ["detail"] and isinstance(body["detail"], str) and "요" in body["detail"]
 
             r = c.post(url, json=three, headers=me)
-            check("3개를 고르면 200 · 모델 응답의 다섯 키", r.status_code == 200 and r.json() == shown(READY),
+            check("3개를 고르면 200 · 다섯 키 + style", r.status_code == 200 and r.json() == shown(READY),
                   f"{r.status_code} {r.text[:80]}")
             check("모델은 한 번만 부른다", fake.writes == 1, str(fake.writes))
             check("모델에 간 입력은 합치기 결과다 (말씀 6개 · 회차 3개)",
                   len(fake.seen["utterances"]) == 6 and len(fake.seen["sessions"]) == 3)
             check("응답에 turn_map · missing_context · coverage_notes 가 실리지 않는다",
-                  set(r.json()) == set(memoir.SHOWN))
+                  set(r.json()) == {*memoir.SHOWN, "style"})
+
+            r = c.post(url, json={**three, "style": "spoken"}, headers=me)
+            check("style spoken 을 보내면 200 · 응답 style spoken",
+                  r.status_code == 200 and r.json() == shown(READY), f"{r.status_code} {r.text[:80]}")
+
+            # 지원하지 않는 문체 — 고른 회차가 틀린 400 과 code 로 갈린다.
+            fake.writes = 0
+            for v in ("novel", "cyworld", "essay", "Spoken", "", 3, ["spoken"]):
+                r = c.post(url, json={**three, "style": v}, headers=me)
+                check(f"style {v!r} → 400 · code unsupported_style",
+                      r.status_code == 400 and r.json() == {
+                          "detail": "지원하지 않는 문체예요.", "code": "unsupported_style"},
+                      f"{r.status_code} {r.text[:80]}")
+            check("거절한 문체로는 모델을 안 불렀다", fake.writes == 0, str(fake.writes))
 
             r = c.post(url, json=fake.pick("s-a", "s-b", "s-c", "s-d", "s-e"), headers=me)
             check("5개를 고르면 말씀 8개가 전부 간다",
@@ -432,7 +447,7 @@ def test_routes():
                 "session_ids 가 없는 본문": {"ids": three["session_ids"]},
             }.items():
                 r = c.post(url, json=body, headers=me)
-                check(f"{name} → 400 · detail", r.status_code == 400 and only_detail(r),
+                check(f"{name} → 400 · detail (code 없음)", r.status_code == 400 and only_detail(r),
                       f"{r.status_code} {r.text[:60]}")
             r = c.post(url, content=b"{not json", headers={**me, "Content-Type": "application/json"})
             check("깨진 본문 → 400 · detail", r.status_code == 400 and only_detail(r), f"{r.status_code}")
