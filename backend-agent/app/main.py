@@ -831,9 +831,13 @@ _MEMOIR_SAYS = {
     503: "지금은 자서전을 만들 수 없어요. 엽서 선택 화면으로 돌아가 주세요.",
     504: "정해진 시간 안에 자서전을 받지 못했어요. 엽서 선택 화면으로 돌아가 주세요.",
 }
+# code 는 화면이 HTTP 숫자보다 먼저 보는 갈래다. 모르는 code 면 화면은 숫자로 고른다.
+# needs_confirmation · needs_context 는 화면이 나누지 않으므로 not_final 하나다.
 _MEMOIR_STATUS = (
-    (memoir.BadSelection, 400), (memoir.NotFound, 404), (memoir.SourceUnavailable, 422),
-    (memoir.GenerationTimeout, 504), (memoir.GenerationFailed, 502), (memoir.NotFinal, 503),
+    (memoir.BadSelection, 400, "bad_selection"), (memoir.NotFound, 404, "not_found"),
+    (memoir.SourceUnavailable, 422, "source_unavailable"),
+    (memoir.GenerationTimeout, 504, "generation_timeout"),
+    (memoir.GenerationFailed, 502, "invalid_model_output"), (memoir.NotFinal, 503, "not_final"),
 )
 
 
@@ -848,7 +852,7 @@ async def memoir_preview(request: Request, who: str = Depends(auth.current_user)
     내기 때문이다 — 여기서 422 는 「자료를 못 읽었다」는 다른 뜻이다.
 
     자료 부족은 200 의 insufficient_material 이고 실패가 아니다. 실패는 상태 코드와
-    `{"detail": 안내}` 로만 나간다. 둘을 서로 바꿔 내보내지 않는다.
+    `{"detail": 안내, "code": 갈래}` 로만 나간다. 둘을 서로 바꿔 내보내지 않는다.
     """
     try:
         body = json.loads(await _body_capped(request, 16 * 1024) or b"null")
@@ -862,9 +866,9 @@ async def memoir_preview(request: Request, who: str = Depends(auth.current_user)
     try:
         return await memoir.preview(ids, who, chosen)
     except memoir.MemoirError as e:
-        code = next(c for kind, c in _MEMOIR_STATUS if isinstance(e, kind))
-        log.warning("자서전 %d %s — %s", code, type(e).__name__, str(e)[:200])
-        raise HTTPException(code, _MEMOIR_SAYS[code]) from e
+        status, code = next((s, c) for kind, s, c in _MEMOIR_STATUS if isinstance(e, kind))
+        log.warning("자서전 %d %s — %s", status, type(e).__name__, str(e)[:200])
+        return JSONResponse({"detail": _MEMOIR_SAYS[status], "code": code}, status_code=status)
 
 
 # ---------------------------------------------------------------- 인터뷰 링크 (자녀)

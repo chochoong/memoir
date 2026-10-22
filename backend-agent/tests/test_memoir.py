@@ -407,9 +407,11 @@ def test_routes():
         with TestClient(app) as c:
             three = fake.pick("s-a", "s-b", "s-c")
 
-            def only_detail(r) -> bool:
+            def failed(r, code: str) -> bool:
+                """안내 문장 + 갈래 code 둘만 나간다."""
                 body = r.json()
-                return list(body) == ["detail"] and isinstance(body["detail"], str) and "요" in body["detail"]
+                return (set(body) == {"detail", "code"} and body["code"] == code
+                        and isinstance(body["detail"], str) and "요" in body["detail"])
 
             r = c.post(url, json=three, headers=me)
             check("3개를 고르면 200 · 다섯 키 + style", r.status_code == 200 and r.json() == shown(READY),
@@ -447,22 +449,22 @@ def test_routes():
                 "session_ids 가 없는 본문": {"ids": three["session_ids"]},
             }.items():
                 r = c.post(url, json=body, headers=me)
-                check(f"{name} → 400 · detail (code 없음)", r.status_code == 400 and only_detail(r),
+                check(f"{name} → 400 · code bad_selection", r.status_code == 400 and failed(r, "bad_selection"),
                       f"{r.status_code} {r.text[:60]}")
             r = c.post(url, content=b"{not json", headers={**me, "Content-Type": "application/json"})
-            check("깨진 본문 → 400 · detail", r.status_code == 400 and only_detail(r), f"{r.status_code}")
+            check("깨진 본문 → 400 · bad_selection", r.status_code == 400 and failed(r, "bad_selection"), f"{r.status_code}")
 
             ghost = {"session_ids": three["session_ids"][:2] + ["00000000-0000-4000-8000-0000000000ff"]}
             r = c.post(url, json=ghost, headers=me)
-            check("없는 회차 → 404 · detail", r.status_code == 404 and only_detail(r), f"{r.status_code}")
+            check("없는 회차 → 404 · not_found", r.status_code == 404 and failed(r, "not_found"), f"{r.status_code}")
 
             r = c.post(url, json=three, headers=other)
-            check("다른 X-User-Id → 404 · detail (S4)", r.status_code == 404 and only_detail(r),
+            check("다른 X-User-Id → 404 · not_found (S4)", r.status_code == 404 and failed(r, "not_found"),
                   f"{r.status_code}")
 
             fake.recs[fake.ids["s-b"]]["postcard"] = None
             r = c.post(url, json=three, headers=me)
-            check("엽서가 없는 회차 → 404", r.status_code == 404, f"{r.status_code}")
+            check("엽서가 없는 회차 → 404 · not_found", r.status_code == 404 and failed(r, "not_found"), f"{r.status_code}")
             fake.recs[fake.ids["s-b"]] = record(SEED_A["sessions"][1], fake.ids["s-b"])
             check("잘못 고른 요청은 모델을 부르지 않는다", fake.writes == 0, str(fake.writes))
 
@@ -474,28 +476,27 @@ def test_routes():
             for name in ("없는 턴을 가리키는 출처", "sentence 번호가 겹치는 출처"):
                 fake.out = copy.deepcopy(BROKEN[name])
                 r = c.post(url, json=three, headers=me)
-                check(f"{name} → 502 · detail", r.status_code == 502 and only_detail(r),
+                check(f"{name} → 502 · invalid_model_output", r.status_code == 502 and failed(r, "invalid_model_output"),
                       f"{r.status_code} {r.text[:60]}")
-            check("실패 응답에 본문이나 원문이 새지 않는다",
-                  "광주" not in r.text and "invalid_model_output" not in r.text)
+            check("실패 응답에 본문이나 원문이 새지 않는다", "광주" not in r.text)
             for status in ("needs_confirmation", "needs_context"):
                 fake.out = _with(EMPTY, status=status)
                 r = c.post(url, json=three, headers=me)
-                check(f"{status} → 503 · detail", r.status_code == 503 and only_detail(r),
+                check(f"{status} → 503 · not_final", r.status_code == 503 and failed(r, "not_final"),
                       f"{r.status_code} {r.text[:60]}")
             fake.out = copy.deepcopy(READY)
 
             fake.db_down = True
             fake.writes = 0
             r = c.post(url, json=three, headers=me)
-            check("DB 를 못 읽으면 422 · detail", r.status_code == 422 and only_detail(r), f"{r.status_code}")
+            check("DB 를 못 읽으면 422 · source_unavailable", r.status_code == 422 and failed(r, "source_unavailable"), f"{r.status_code}")
             check("못 읽었으면 모델을 부르지 않는다", fake.writes == 0)
             fake.db_down = False
 
             with _Env(MEMOIR_FAIL_INJECT="source_material_unavailable"):
                 r = c.post(url, json=three, headers=me)
                 check("주입 source_material_unavailable → 422 (S8)",
-                      r.status_code == 422 and only_detail(r), f"{r.status_code}")
+                      r.status_code == 422 and failed(r, "source_unavailable"), f"{r.status_code}")
                 check("S8 — 모델을 부르지 않는다", fake.writes == 0)
                 r = c.post(url, json=fake.pick("s-a", "s-b"), headers=me)
                 check("S8 — 선택 검사가 주입보다 먼저다 (400)", r.status_code == 400, f"{r.status_code}")
@@ -504,11 +505,12 @@ def test_routes():
 
             # S9 는 진짜 write 로 본다. 주입은 모델을 부르기 전에 걸린다.
             memoir.write = fake._saved[1]
-            for hook, code in (("generation_failed", 502), ("generation_timeout", 504)):
+            for hook, code, kind in (("generation_failed", 502, "invalid_model_output"),
+                                     ("generation_timeout", 504, "generation_timeout")):
                 with _Env(MEMOIR_FAIL_INJECT=hook):
                     r = c.post(url, json=three, headers=me)
-                    check(f"주입 {hook} → {code} · detail (S9)",
-                          r.status_code == code and only_detail(r), f"{r.status_code} {r.text[:60]}")
+                    check(f"주입 {hook} → {code} · {kind} (S9)",
+                          r.status_code == code and failed(r, kind), f"{r.status_code} {r.text[:60]}")
                     check(f"{hook} — 가짜 본문도 자료 부족도 아니다", "status" not in r.json())
 
     with _Env(MEMOIR_FAIL_INJECT="nonsense"):
