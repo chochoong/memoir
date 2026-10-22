@@ -136,7 +136,9 @@ def _client():
     from fastapi.testclient import TestClient
 
     from app.main import app
-    return TestClient(app)
+    # https 로 연다 — 배포 .env(PUBLIC_ORIGIN=https://…)면 쿠키에 Secure 가 붙고,
+    # http 시험 클라이언트는 그 쿠키를 다시 싣지 않아 로그인이 끊긴 것처럼 보인다.
+    return TestClient(app, base_url="https://testserver")
 
 
 def _parent(sub, elder_name="어머니"):
@@ -167,7 +169,7 @@ async def _together(token):
     store.claim_link = slow
     try:
         t = httpx.ASGITransport(app=app)
-        async with httpx.AsyncClient(transport=t, base_url="http://testserver") as c1,                 httpx.AsyncClient(transport=t, base_url="http://testserver") as c2:
+        async with httpx.AsyncClient(transport=t, base_url="https://testserver") as c1,                 httpx.AsyncClient(transport=t, base_url="https://testserver") as c2:
             return await asyncio.gather(c1.post("/api/i/start", headers={H: token}),
                                         c2.post("/api/i/start", headers={H: token}))
     finally:
@@ -338,6 +340,31 @@ def run():
                              ("get", "/api/i/../sessions")]:
             r = getattr(dev, method)(path)
             check(f"mlink 만으로 {method.upper()} {path} → 401", r.status_code == 401, str(r.status_code))
+        # 문체 생성(4차)도 자녀 경로다 — 링크로는 문체를 실어도 401, 모델 앞까지 가지 않는다
+        from app.session import memoir, postcard
+        calls: list[str] = []
+
+        async def _no_make(*a, **k):
+            calls.append("postcard")
+
+        async def _no_preview(*a, **k):
+            calls.append("memoir")
+
+        real_make, real_preview = postcard.make, memoir.preview
+        postcard.make, memoir.preview = _no_make, _no_preview
+        try:
+            for style in (None, "spoken", "novel"):
+                body = {} if style is None else {"style": style}
+                r = dev.post(f"/api/sessions/{sid}/postcard", json=body)
+                check(f"mlink 만으로 엽서 굽기 (style={style}) → 401", r.status_code == 401, str(r.status_code))
+                r = dev.post("/api/memoirs/preview", json={"session_ids": [sid] * 3, **body})
+                check(f"mlink 만으로 자서전 미리보기 (style={style}) → 401",
+                      r.status_code == 401, str(r.status_code))
+            r = dev.get(f"/api/sessions/{sid}/postcard")
+            check("mlink 만으로 엽서 그림 → 401", r.status_code == 401, str(r.status_code))
+        finally:
+            postcard.make, memoir.preview = real_make, real_preview
+        check("링크로 온 생성 요청은 엽서 · 자서전 모델을 부르지 않았다", calls == [], str(calls))
         # a 는 msid 만 있다 — 링크 경로에 신원이 없어야 한다
         r = a.get("/api/i/session")
         check("msid 만으로 /api/i/session → 404 invalid_link", r.status_code == 404

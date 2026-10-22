@@ -146,7 +146,9 @@ def _client():
     from fastapi.testclient import TestClient
 
     from app.main import app
-    return TestClient(app)
+    # https 로 연다 — 배포 .env(PUBLIC_ORIGIN=https://…)면 쿠키에 Secure 가 붙고,
+    # http 시험 클라이언트는 그 쿠키를 다시 싣지 않아 로그인이 끊긴 것처럼 보인다.
+    return TestClient(app, base_url="https://testserver")
 
 
 def _login(c, sub):
@@ -385,7 +387,7 @@ def test_origin_and_elders():
                    headers={"Origin": "https://evil.example"})
         check("로그인 요청도 다른 출처면 403", r.status_code == 403, str(r.status_code))
 
-        r = c.post("/api/elders", json={"name": "  어머니 "}, headers={"Origin": "http://testserver"})
+        r = c.post("/api/elders", json={"name": "  어머니 "}, headers={"Origin": "https://testserver"})
         check("같은 출처면 화자를 만든다 · 201 · name", r.status_code == 201
               and r.json().get("name") == "어머니" and r.json().get("elder_id"), r.text[:80])
         r2 = c.post("/api/elders", json={"name": "어머니"})
