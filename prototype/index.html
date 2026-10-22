@@ -431,6 +431,7 @@
 
     /* ── 개발용 패널 (시연 중에는 닫아 둔다) ────────── */
     /* 화면 아래쪽 큰 버튼을 절대 가리지 않도록 위쪽에 둔다 */
+    .dev-toggle[hidden] { display: none; }
     .dev-toggle { position: fixed; z-index: 40; right: 8px; top: max(10px, env(safe-area-inset-top)); width: 28px; height: 28px; border-radius: 50%; border: 1px solid var(--line); background: rgba(255,255,255,.8); color: var(--muted); font-size: .8rem; line-height: 1; opacity: .5; }
     .dev-toggle:hover { opacity: 1; }
     .dev { position: fixed; z-index: 39; left: 10px; right: 10px; top: 46px; bottom: auto; max-width: 410px; margin: 0 auto; display: none;
@@ -775,6 +776,7 @@
           <span class="mm-sample" id="loginMock" hidden>모의 로그인 — 실제 구글 계정을 쓰지 않습니다</span>
           <div class="gsi-btn" id="gsiBtn"></div>
           <p class="login-msg" id="loginMsg" role="status" aria-live="polite"></p>
+          <p class="version" id="loginVersion"></p>
         </div>
       </section>
 
@@ -1326,7 +1328,7 @@
   const CONFIG = {
     // 화면 아래와 개발용 패널에 그대로 찍힌다. 「고친 게 반영이 안 된 것 같다」는
     // 대부분 예전 파일이 열려 있는 경우라서, 눈으로 확인할 자리를 만들어 둔다.
-    version: 'v0.37 · 2026-10-22 (나눈 이야기에 「엽서 만들기」 · 실제와 다른 안내 문구 고침)',
+    version: 'v0.38 · 2026-10-22 (로그인 화면에 버전 · 배포 주소에서는 개발 패널 ⚙ 숨김)',
 
     // 이 화면을 백엔드가 직접 서빙하면(web/ 폴더) 빈 문자열 그대로 둔다.
     // 다른 포트에서 열어 시험할 때만 'http://127.0.0.1:8010' 처럼 채운다.
@@ -1555,6 +1557,10 @@
 
     pollMs: 300,                 // 서버 상태를 물어보는 주기 (frontend-client 와 동일)
     dev: false,                  // true 면 개발용 패널이 처음부터 열려 있다
+    // 개발 패널(⚙) 버튼을 보일까. 'auto' = 내 PC · 같은 와이파이 주소면 보이고, 배포 주소(naemalssami.com)에서는
+    // 숨긴다 — 실제 이용자에게 「마이크 없이 발화 보내기」 같은 시험 도구를 내보이지 않는다.
+    // 배포 주소에서도 필요하면 주소 뒤에 ?dev=1. true = 언제나 보임 · false = 언제나 숨김
+    devPanel: 'auto',
   };
 
   /* ═══════════════════════════════════════════════════════════════
@@ -1564,13 +1570,14 @@
 
   /* ── 3차 인증 · 링크 — 지금 어느 모드로 도는가 (3-C1 초안) ── */
   const QS = new URLSearchParams(location.search);
-  /** 'auto' 를 dev | session 으로. 내 PC · 집 안 주소면 dev, 그 밖은 배포 서버로 본다 */
-  function autoAuthMode() {
+  /** 내 PC · 같은 와이파이 안의 주소인가. 아니면 배포 서버로 본다 (로그인 모드 · 개발 패널이 같이 쓴다) */
+  function isLocalHost() {
     const h = location.hostname.replace(/^\[|\]$/g, '');
-    const local = !h || h === 'localhost' || h === '::1' || /^127\./.test(h) || /^10\./.test(h)
+    return !h || h === 'localhost' || h === '::1' || /^127\./.test(h) || /^10\./.test(h)
       || /^192\.168\./.test(h) || /^172\.(1[6-9]|2\d|3[01])\./.test(h) || h.endsWith('.local');
-    return local ? 'dev' : 'session';
   }
+  /** 'auto' 를 dev | session 으로. 내 PC · 집 안 주소면 dev, 그 밖은 배포 서버로 본다 */
+  function autoAuthMode() { return isLocalHost() ? 'dev' : 'session'; }
   const AUTH = {
     mode: QS.get('auth') || (CONFIG.auth.mode === 'auto' ? autoAuthMode() : CONFIG.auth.mode),   // dev | session
     mock: QS.get('authMock') ?? CONFIG.auth.mock,
@@ -4583,8 +4590,10 @@
   /* ═══════════════════════════════════════════════════════════════
      개발용 패널 — 시연 중에는 닫아 둔다
      ═══════════════════════════════════════════════════════════════ */
+  const DEV_PANEL = CONFIG.devPanel === 'auto' ? (isLocalHost() || QS.get('dev') === '1') : !!CONFIG.devPanel;
+  $('#devToggle').hidden = !DEV_PANEL;
   $('#devToggle').addEventListener('click', () => $('#dev').classList.toggle('show'));
-  if (CONFIG.dev) $('#dev').classList.add('show');
+  if (CONFIG.dev && DEV_PANEL) $('#dev').classList.add('show');
   $('#devSend').addEventListener('click', async () => {
     const t = $('#devText').value.trim();
     if (!t || !sessionId) return;
@@ -5515,6 +5524,7 @@
 
   // 버전을 화면과 기록 양쪽에 남긴다
   $('#version').textContent = CONFIG.version;
+  $('#loginVersion').textContent = CONFIG.version;   // 로그인 전에도 배포된 버전을 볼 수 있게
   log('버전', CONFIG.version);
 
   // 버튼 이름을 CONFIG 에서 한 번에 입힌다
