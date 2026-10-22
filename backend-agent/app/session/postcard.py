@@ -198,7 +198,9 @@ async def _injected() -> None:
         await asyncio.sleep(delay)
     hook = inject()
     if hook == INJECT_FAILED:
-        raise PostcardUnavailable("엽서 글을 만들지 못했습니다 (POSTCARD_FAIL_INJECT)")
+        # 화면에는 실제 실패와 같은 문구가 나간다. 주입인 것은 로그로만 안다.
+        log.warning("POSTCARD_FAIL_INJECT=generation_failed — 모델을 부르지 않고 실패한다")
+        raise PostcardUnavailable("엽서 글을 만들지 못했습니다")
     if hook == INSUFFICIENT:
         raise PostcardInsufficient()
 

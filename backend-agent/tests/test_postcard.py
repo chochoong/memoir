@@ -384,6 +384,8 @@ def test_inject():
             with _Env(POSTCARD_FAIL_INJECT="generation_failed"):
                 r = c.post(url, headers=kim)
                 check("generation_failed → 503", r.status_code == 503, f"{r.status_code} {r.text[:80]}")
+                check("503 안내는 실제 실패와 같다 — 주입 이름이 새지 않는다",
+                      "INJECT" not in r.text, r.text[:80])
             with _Env(POSTCARD_FAIL_INJECT="insufficient_material"):
                 r = c.post(url, headers=kim)
                 check("insufficient_material → 409 · code insufficient_material",
