@@ -153,9 +153,13 @@ PC 처럼 폭이 760px 이상일 때만 차이가 나고, 휴대전화에서는 
 최충 님의 `backend-agent/docs/3-C1_인증_링크_초안.md` 모양대로 만들었고, **서버 코드는 `feature/theme-interview`
 (40551ea)에 올라와 있습니다.** v0.30 은 그 서버에 실제로 붙여 로그인 · 링크 발급부터 어르신 링크 끝까지 시험했습니다.
 
-- **기본값(`CONFIG.auth.mode: 'dev'`)은 아직 `X-User-Id: dev-user` 입니다.** develop 서버가 그대로라서입니다.
-- **새 서버는 `X-User-Id` 를 읽지 않습니다.** 그 브랜치에 붙일 때는 `?auth=session` 으로 열고,
-  develop 에 함께 올릴 때 `CONFIG.auth.mode` 기본값을 `'session'` 으로 바꿉니다.
+- **기본값은 `CONFIG.auth.mode: 'auto'` 입니다 (v0.35 · 최충 님 부탁).** 주소를 보고 고릅니다.
+  - 내 PC(`localhost` · `127.0.0.1`) · 같은 와이파이 안 주소(`192.168.…` · `10.…` · `172.16~31.…` · `….local`) → `dev` (`X-User-Id: dev-user`, 지금처럼)
+  - 그 밖, 곧 배포 주소(`https://naemalssami.com/`) → `session` (구글 로그인)
+  - 그래서 **원본을 그대로 `web\index.html` 로 복사하면 배포 서버에서도 맞게 돕니다.** 넣을 때마다 값을 바꿀 필요가 없습니다.
+  - 주소 뒤 `?auth=dev` · `?auth=session` 이 언제나 먼저입니다. 어느 쪽으로 골랐는지는 기록(⚙)에 「모드 주소(…)로 고름 → …」 로 남습니다.
+- **새 서버(feature/theme-interview)는 `X-User-Id` 를 읽지 않습니다.** 내 PC 에서 그 서버에 붙일 때는 `?auth=session` 으로 엽니다.
+- 배포할 때 `web\assets` 폴더는 비어 있어도 지우면 안 됩니다 (서버가 못 켜짐).
 
 | 보고 싶은 것 | 주소 |
 |---|---|
@@ -249,7 +253,9 @@ PC 처럼 폭이 760px 이상일 때만 차이가 나고, 휴대전화에서는 
 | `has_postcard: true` 인데 `postcard_title` 칸이 아예 없음 (지금 서버) | 회차 제목 (없으면 「제목 없는 기록」) + 기록에 「실제 연결 미확인」 |
 | 엽서 없음 + 회차 제목 있음 / 없음 | 회차 제목 / 제목 없는 기록 |
 
-- **`postcard_title` 은 아직 서버에 없는 제안 이름입니다.** 충 님과 이름을 맞추면 `CONFIG.archive.postcardTitleField` 만 바꿉니다.
+- **`postcard_title` 로 확정했습니다** (최충 님 · `feature/theme-interview` 5a9fddd). 모든 회차에 칸이 늘 있고, 엽서가 없으면 `null`.
+  006 이전에 만든 엽서는 제목이 저장돼 있지 않아 `has_postcard: true` + `null` → 「제목 없는 엽서」 로 보입니다.
+  서버는 저장값을 그대로 주고(공백 정리 없음) 화면이 앞뒤 공백을 정리합니다. 이름이 바뀌면 `CONFIG.archive.postcardTitleField` 만 고칩니다.
 - 상세(엽서 화면) 제목도 같은 대체 표기를 씁니다 — 예전처럼 「오늘의 목소리」 를 실제 제목처럼 보이지 않습니다.
 - 제목을 얻으려고 회차마다 `/record` 를 더 묻거나, 본문을 요약해 제목을 만들지 않습니다. 제목은 `textContent` 로만 넣습니다.
 - 엽서를 만들거나 다시 만들면 받아 둔 목록을 「낡음」 으로 두고, 목록으로 돌아갈 때 다시 읽습니다. 클릭 · 선택은 제목이 아니라 `session_id` 로 합니다.

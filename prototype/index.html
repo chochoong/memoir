@@ -1323,7 +1323,7 @@
   const CONFIG = {
     // 화면 아래와 개발용 패널에 그대로 찍힌다. 「고친 게 반영이 안 된 것 같다」는
     // 대부분 예전 파일이 열려 있는 경우라서, 눈으로 확인할 자리를 만들어 둔다.
-    version: 'v0.34 · 2026-10-22 (엽서 목록 제목 · 자서전 목차·장 읽기 · 서버 문체 1단계에 맞춤)',
+    version: 'v0.35 · 2026-10-22 (배포 주소면 로그인 모드 자동 · 엽서 제목 칸 postcard_title 확정)',
 
     // 이 화면을 백엔드가 직접 서빙하면(web/ 폴더) 빈 문자열 그대로 둔다.
     // 다른 포트에서 열어 시험할 때만 'http://127.0.0.1:8010' 처럼 채운다.
@@ -1385,7 +1385,8 @@
       // 두 줄이 같이 나온다. 지금은 session 표 컬럼만 와서 끌 수밖에 없다.
       previewInList: false,
       // 목록 응답의 「저장된 엽서 제목」 칸 이름 (엽서 목록 제목 업무지시서 v1.0 §3 의 제안 이름).
-      // 아직 서버에 없는 칸이다 — 충 님과 이름 하나로 맞추면 여기만 바꾼다.
+      // 최충 님 확정 (feature/theme-interview 5a9fddd) — 모든 회차에 늘 있고, 엽서가 없거나 006 이전 엽서면 null.
+      // 서버는 저장값 그대로 준다(공백 정리 없음). 정리는 화면이 한다.
       postcardTitleField: 'postcard_title',
       // 서버 없이 목록 제목 규칙을 볼 때: ?listMock=title (여러 경우) · old (칸 없는 예전 응답)
       //   · empty (빈 목록) · fail (503). 예시일 때는 화면 위에 「예시 목록」 이 뜬다.
@@ -1511,7 +1512,11 @@
     auth: {
       // 'dev'     = 지금처럼 X-User-Id: dev-user 헤더 (서버에 인증이 붙기 전)
       // 'session' = 구글 로그인 → 서버가 msid 쿠키를 준다. 화면은 X-User-Id 를 보내지 않는다
-      mode: 'dev',
+      // 'auto'    = 주소로 고른다 (최충 님 부탁 · 2026-10-22). 내 PC(localhost · 127.0.0.1)와 같은 와이파이
+      //             안의 주소(192.168.… · 10.… · 172.16~31.…)면 dev, 그 밖(naemalssami.com 같은 배포 주소)이면 session.
+      //             그래서 원본을 그대로 web\index.html 로 복사하면 배포 서버에서는 로그인 모드로 돈다.
+      // 주소 뒤 ?auth=dev · ?auth=session 이 언제나 먼저다.
+      mode: 'auto',
       // Google Cloud 웹 클라이언트 ID (비밀값 아님). 비어 있으면 로그인 버튼 자리에 「준비 중」 이 뜬다
       googleClientId: '',
       // 모의 로그인 (서버 없이): '' | ok | new(화자 없음) | cancel | invalid_token | expired_token
@@ -1552,8 +1557,15 @@
 
   /* ── 3차 인증 · 링크 — 지금 어느 모드로 도는가 (3-C1 초안) ── */
   const QS = new URLSearchParams(location.search);
+  /** 'auto' 를 dev | session 으로. 내 PC · 집 안 주소면 dev, 그 밖은 배포 서버로 본다 */
+  function autoAuthMode() {
+    const h = location.hostname.replace(/^\[|\]$/g, '');
+    const local = !h || h === 'localhost' || h === '::1' || /^127\./.test(h) || /^10\./.test(h)
+      || /^192\.168\./.test(h) || /^172\.(1[6-9]|2\d|3[01])\./.test(h) || h.endsWith('.local');
+    return local ? 'dev' : 'session';
+  }
   const AUTH = {
-    mode: QS.get('auth') || CONFIG.auth.mode,           // dev | session
+    mode: QS.get('auth') || (CONFIG.auth.mode === 'auto' ? autoAuthMode() : CONFIG.auth.mode),   // dev | session
     mock: QS.get('authMock') ?? CONFIG.auth.mock,
     user: null, elders: [],
   };
@@ -5511,6 +5523,7 @@
     if (LINK.on) void enterLink();
     else if (AUTH.mode === 'session') void authBoot();
   }
+  if (CONFIG.auth.mode === 'auto' && !QS.get('auth')) log('모드', `주소(${location.hostname || '파일'})로 고름 → ${AUTH.mode}`);
   if (AUTH.mode !== 'dev' || LINK.on) log('모드', `${LINK.on ? '어르신 링크' : '로그인'}${AUTH.mock ? ` · 모의 로그인(${AUTH.mock})` : ''}${LINK.mock ? ` · 모의 링크(${LINK.mock})` : ''}`);
 
   // 서버가 살아 있는지 조용히 확인해 둔다 (CORS 설정이 맞는지도 여기서 드러난다)
