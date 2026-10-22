@@ -357,6 +357,8 @@
                      font: inherit; font-size: 1.08rem; line-height: 1.4; text-decoration: underline;
                      text-underline-offset: 3px; word-break: keep-all; overflow-wrap: anywhere; }
     .mm-ch { margin: 0 0 26px; scroll-margin-top: 70px; }
+    .mm-draft.warn { background: #fbeee8; color: #8a3b1e; font-weight: 600; }
+    .mm-toc button.mm-toc-miss { color: var(--muted); text-decoration: none; font-style: italic; }
     .mm-ch h3 { font-family: "Gowun Batang", serif; font-size: 1.38rem; line-height: 1.4; margin: 0 0 12px;
                 word-break: keep-all; overflow-wrap: anywhere; }
     .mm-ch h3 small { display: block; font-family: inherit; font-size: .82rem; color: var(--muted); margin-bottom: 2px; }
@@ -1328,7 +1330,7 @@
   const CONFIG = {
     // 화면 아래와 개발용 패널에 그대로 찍힌다. 「고친 게 반영이 안 된 것 같다」는
     // 대부분 예전 파일이 열려 있는 경우라서, 눈으로 확인할 자리를 만들어 둔다.
-    version: 'v0.38 · 2026-10-22 (로그인 화면에 버전 · 배포 주소에서는 개발 패널 ⚙ 숨김)',
+    version: 'v0.39 · 2026-10-22 (자서전 장 형식을 서버 7-C1 초안에 맞춤 · 일부 장 실패 A/B · 오류 code)',
 
     // 이 화면을 백엔드가 직접 서빙하면(web/ 폴더) 빈 문자열 그대로 둔다.
     // 다른 포트에서 열어 시험할 때만 'http://127.0.0.1:8010' 처럼 채운다.
@@ -1425,9 +1427,15 @@
       mockDelayMs: 1500,
       // 장 · 문단 형식 (자서전 고도화 v1.0 §7.1 의 제안 — 아직 서버 API 에 없다).
       // 응답에 chapters 가 있으면 장 읽기로, 없으면 예전처럼 body 한 줄 한 문장으로 읽는다.
-      // 예시: ?memoirMock=chapters · verified · partial · nodata · badref · html · badshape
+      // 예시 (7-C1 모양): ?memoirMock=chapters · partial · nodata · html · badshape · mismatch(다른 회차의 결과)
+      //       (독립 실행 ② 모양): proposal · verified · badref     · code 붙은 오류: 502:invalid_model_output 등
       chapters: {
-        // generation_state 의 뜻 — 이름은 C1/result 에서 맞춘다
+        // 일부 장 실패(status: partial)를 보여 줄까 — 태헌 님 결정 전 (7-C1 §4).
+        //   false (A · 기본) 완성본으로 열지 않고 「일부 장을 만들지 못했어요」
+        //   true  (B)        만든 장만 보여 주고 위에 「○장을 만들지 못했어요. 지금 보이는 글은 자서전의 일부예요」
+        // 주소 뒤 ?memoirPartial=show 로 B 를 미리 볼 수 있다
+        showPartial: false,
+        // ② 모양(독립 실행 파일)의 generation_state 뜻
         ok: ['generated'],
         lack: ['insufficient_material', 'no_material'],
         partial: ['partial'],
@@ -4137,7 +4145,7 @@
   }
 
   /** 서버 대신 예시 응답을 낸다. 실제 생성이 아니라는 표시는 화면 위에 따로 있다. */
-  async function mmFake(kind, signal, style) {
+  async function mmFake(kind, signal, style, ids) {
     await new Promise((resolve, reject) => {
       const t = setTimeout(resolve, CONFIG.memoir.mockDelayMs);
       signal.addEventListener('abort', () => { clearTimeout(t); reject(new DOMException('', 'AbortError')); });
@@ -4150,81 +4158,119 @@
     if (/^\d{3}$/.test(kind)) {                      // 400 · 404 · 422 · 502 · 504 — call() 이 던지는 것과 같은 모양
       throw new ApiError(Number(kind), '예시 detail — 화면에는 나오지 않아야 한다');
     }
+    if (/^\d{3}:\w+$/.test(kind)) {                  // 502:invalid_model_output 처럼 code 가 붙은 오류 (7-C1 §3-4 안)
+      const [st, code] = kind.split(':'); const e = new ApiError(Number(st), '예시'); e.code = code; throw e;
+    }
     if (kind === 'invalid') return { status: 'ready', title: '', body: 3 };
     if (kind === 'unsupported') { const e = new ApiError(400, '예시'); e.code = 'unsupported_style'; throw e; }
-    if (MM_CH_KINDS.includes(kind)) return mmChapterSample(kind, style);
+    if (MM_CH_KINDS.includes(kind)) return mmChapterSample(kind, style, ids);
     return Object.assign({}, MM_SAMPLE, style ? { style } : {});
   }
 
-  /* ── 장 · 문단 형식 (자서전 고도화 v1.0 §7.1 제안 · C1/result 합의 전) ──────────
-     { run_ref, input_ref, title, chapters: [{ chapter_key, title:{text,kind,turns},
-       paragraphs: [[{text,kind,turns}, …], …] }], review_notes, verification:{state,issues},
-       generation_state, failure:{reason} }
+  /* ── 장 · 문단 형식 ─────────────────────────────────────────────
+     두 모양을 받는다. 화면 안에서는 하나로 바꿔(mmNormalize) 그린다.
+     ① 7-C1 §3 (최충 서버 계약 초안 · 2c60347) — 서비스 응답은 이것
+        { status: ready | partial | insufficient_material, style, title: "…",
+          chapters: [{ no, title: "…", status: ready | failed, reason?, paragraphs: [{ sentences: [{ text, turns }] }] }],
+          to_confirm, body, sources, run: { session_ids, chapters_requested } }
+        body · sources 는 서버가 장을 펼친 것 — 화면은 chapters 가 있으면 그쪽을 읽는다.
+     ② 자서전 고도화 v1.0 §7.1 제안 — 대원 님 독립 실행 파일이 쓸 수 있다
+        { run_ref, generation_state, title: {text}, chapters: [{ chapter_key, title: {text}, paragraphs: [[{text}]] }],
+          review_notes, verification: { state } }
      · 본문을 다시 쓰거나 요약하지 않는다. 장 · 문단 · 문장을 받은 순서 그대로 글자로만 넣는다.
-     · review_notes · verification.issues 는 본문에 넣지 않는다 — 개수만 기록(⚙)에 남긴다.
-     · 목차가 있는데 장이 빈 결과는 완성본으로 열지 않는다 (partial). */
-  const MM_CH_KINDS = ['chapters', 'verified', 'partial', 'nodata', 'badref', 'html', 'badshape'];
+     · review_notes · verification.issues · to_confirm · 장의 reason 은 본문에 넣지 않는다 — 기록(⚙)에만.
+     · 일부 장 실패(partial)는 완성본이 아니다. 기본은 열지 않고(A), CONFIG.memoir.chapters.showPartial 이면
+       만든 장만 「일부」 라고 밝혀 보여 준다(B). 태헌 님 결정 전이다. */
+  const MM_CH_KINDS = ['chapters', 'partial', 'nodata', 'html', 'badshape', 'mismatch', 'proposal', 'verified', 'badref'];
   // 예시 — 설명용 합성 화자 (업무지시서 §4 · §7.2 의 합성 원문을 늘린 것). **실제 생성 결과가 아니다.**
-  function mmChapterSample(kind, style) {
-    const S = (text, kind, turns) => ({ text, kind: kind || 'supported', turns: turns || [] });
-    const ch = (key, title, paras) => ({ chapter_key: key, title: S(title, 'editorial'), paragraphs: paras });
-    const out = {
-      run_ref: 'demo-run-1', input_ref: 'demo-input-a', generation_state: 'generated',
-      title: { text: kind === 'html' ? '<i>배움</i>을 이어 간 "삶" & 시간' : '다시 펼친 배움', kind: 'editorial', turns: [] },
-      chapters: [
-        ch('ch-1', '그만둔 학교, 남은 마음', [
-          [S('학교는 그만뒀지만 배우고 싶었어요.', 'supported', [1])],
-        ]),
-        ch('ch-2', '책을 펼치는 시간', [
-          [S('가게 일을 하면서 회계책을 읽었어요.', 'supported', [2]),
-           S('장사가 끝난 밤이면 계산대 옆에서 한 장씩 넘겼어요.', 'supported', [4])],
-          [S('숫자를 맞춰 보는 일이 생각보다 재미있었어요.', 'supported', [5])],
-        ]),
-        ch('ch-3', '쉰 살에 잡은 기타 — 늦게 시작해도 괜찮았던 일들에 대하여', [
-          [S('쉰 살이 넘어서는 기타를 배웠어요.', 'supported', [3]),
-           S('손가락이 아파도 매주 학원에 갔어요.', 'supported', [6])],
-          [S('이렇게 배움은 끝나지 않고 이어졌어요.', 'editorial')],
-        ]),
-      ],
-      review_notes: [{ note: '예시 검토 메모 — 본문에 나오면 안 된다' }],
-      verification: { state: kind === 'verified' ? 'pass' : 'not_run', issues: [] },
-    };
-    if (style) out.style = style;
-    if (kind === 'partial') { out.generation_state = 'partial'; out.chapters[1].paragraphs = []; out.failure = { reason: 'chapter_failed', chapter_key: 'ch-2' }; }
-    if (kind === 'nodata') return { run_ref: 'demo-run-2', generation_state: 'insufficient_material', chapters: [] };
-    if (kind === 'badref') return { run_ref: 'demo-run-3', generation_state: 'failed', failure: { reason: 'bad_reference' }, chapters: [] };
-    if (kind === 'badshape') out.chapters[0].paragraphs = '문단이 배열이 아니다';
+  const MM_DEMO = [
+    ['그만둔 학교, 남은 마음', [[['학교는 그만뒀지만 배우고 싶었어요.', [1]]]]],
+    ['책을 펼치는 시간', [[['가게 일을 하면서 회계책을 읽었어요.', [2]], ['장사가 끝난 밤이면 계산대 옆에서 한 장씩 넘겼어요.', [4]]],
+                       [['숫자를 맞춰 보는 일이 생각보다 재미있었어요.', [5]]]]],
+    ['쉰 살에 잡은 기타 — 늦게 시작해도 괜찮았던 일들에 대하여', [[['쉰 살이 넘어서는 기타를 배웠어요.', [3]], ['손가락이 아파도 매주 학원에 갔어요.', [6]]],
+                       [['이렇게 배움은 끝나지 않고 이어졌어요.', []]]]],
+  ];
+  function mmChapterSample(kind, style, ids) {
+    const sid = (ids && ids.length) ? ids : ['demo-1', 'demo-2', 'demo-3'];
+    if (kind === 'proposal' || kind === 'verified' || kind === 'badref') {      // ② 모양
+      if (kind === 'badref') return { run_ref: 'demo-run-3', generation_state: 'failed', failure: { reason: 'bad_reference' }, chapters: [] };
+      return { run_ref: 'demo-run-1', input_ref: 'demo-input-a', generation_state: 'generated', title: { text: '다시 펼친 배움' },
+        chapters: MM_DEMO.map(([t, ps], i) => ({ chapter_key: `ch-${i + 1}`, title: { text: t, kind: 'editorial', turns: [] },
+          paragraphs: ps.map(pp => pp.map(([text, turns]) => ({ text, kind: turns.length ? 'supported' : 'editorial', turns }))) })),
+        review_notes: [{ note: '예시 검토 메모 — 본문에 나오면 안 된다' }],
+        verification: { state: kind === 'verified' ? 'pass' : 'not_run', issues: [] }, style };
+    }
+    const run = { session_ids: kind === 'mismatch' ? ['other-1', 'other-2', 'other-3'] : sid, chapters_requested: MM_DEMO.length };
+    if (kind === 'nodata') return { status: 'insufficient_material', style: style || 'spoken', title: '', chapters: [], to_confirm: [], body: '', sources: [], run };
+    const chapters = MM_DEMO.map(([t, ps], i) => ({ no: i + 1, title: t, status: 'ready',
+      paragraphs: ps.map(pp => ({ sentences: pp.map(([text, turns]) => ({ text, turns })) })) }));
+    const out = { status: 'ready', style: style || 'spoken', title: kind === 'html' ? '<i>배움</i>을 이어 간 "삶" & 시간' : '다시 펼친 배움',
+      chapters, to_confirm: [{ issue: '예시 확인 메모 — 본문에 나오면 안 된다', turns: [2] }], body: '', sources: [], run };
+    if (kind === 'partial') { out.status = 'partial'; Object.assign(chapters[1], { title: '', status: 'failed', reason: 'generation_timeout', paragraphs: [] }); }
+    if (kind === 'badshape') chapters[0].paragraphs = '문단이 배열이 아니다';
+    // body 는 서버처럼 장을 펼쳐 만든다 (화면은 chapters 가 있으면 body 를 읽지 않는다)
+    out.body = chapters.filter(c => c.status === 'ready' && Array.isArray(c.paragraphs))
+      .flatMap(c => c.paragraphs.flatMap(p => p.sentences.map(x => x.text))).join('\n');
     return out;
   }
   const txt = v => (typeof v === 'string' ? v : v && typeof v.text === 'string' ? v.text : '');
-  /** 장 형식 응답 → 화면 상태. 모양이 틀리면 실패로 접는다 — 고쳐서 통과시키지 않는다 */
-  function mmReadChapters(res) {
-    const C = CONFIG.memoir.chapters, st = res.generation_state;
-    const run = String(res.run_ref || '').slice(0, 40);
-    const notes = (Array.isArray(res.review_notes) ? res.review_notes.length : 0)
-                + (res.verification && Array.isArray(res.verification.issues) ? res.verification.issues.length : 0);
-    if (C.lack.includes(st)) return { view: 'short' };
-    if (C.partial.includes(st)) { log('자서전', `일부 장 실패 · ${run} · ${txt(res.failure && res.failure.chapter_key) || res.failure && res.failure.chapter_key || ''}`); return { view: 'partial' }; }
-    if (!C.ok.includes(st)) {
+
+  /** ① · ② 를 화면 모양 하나로. { state: ready|partial|short|fail, title, chapters:[{no,title,ok,paras:[[문장]]}], run, ver, notes } */
+  function mmNormalize(res, ids) {
+    const C = CONFIG.memoir.chapters;
+    const legacy = 'generation_state' in res;                         // ② 모양
+    const st = legacy ? (C.ok.includes(res.generation_state) ? 'ready' : C.partial.includes(res.generation_state) ? 'partial'
+                        : C.lack.includes(res.generation_state) ? 'insufficient_material' : 'failed') : res.status;
+    const run = legacy ? String(res.run_ref || '').slice(0, 40) : '';
+    if (st === 'insufficient_material') return { state: 'short' };
+    if (st !== 'ready' && st !== 'partial') {
       log('자서전', `생성 실패 · ${run} · ${(res.failure && res.failure.reason) || st || '상태 없음'}`);
-      return { view: 'fail', why: MM_FAIL.other };
+      return { state: 'fail' };
     }
-    const title = txt(res.title).trim();
-    const chs = res.chapters;
-    const okSent = x => typeof txt(x) === 'string' && txt(x).trim();
-    const shapeOk = title && Array.isArray(chs) && chs.length && chs.every(c => c && txt(c.title).trim()
-      && Array.isArray(c.paragraphs) && c.paragraphs.every(p => Array.isArray(p) && p.every(okSent)));
-    if (!shapeOk) { log('자서전', `장 형식이 규격과 다릅니다 · ${run}`); return { view: 'fail', why: MM_FAIL.other }; }
-    if (chs.some(c => !c.paragraphs.length)) { log('자서전', `빈 장이 있습니다 · ${run}`); return { view: 'partial' }; }
-    if (notes) log('자서전', `검토 메모 · 검증 지적 ${notes}건 — 본문에는 넣지 않습니다`);
+    // 늦게 온 다른 요청의 결과인가 (7-C1 run) — 고른 회차와 다르면 보여 주지 않는다
+    if (!legacy && ids && res.run && Array.isArray(res.run.session_ids)) {
+      const a = [...res.run.session_ids].sort().join(), b = [...ids].sort().join();
+      if (a !== b) { log('자서전', '고른 엽서와 다른 회차의 결과가 왔습니다 — 보여 주지 않습니다'); return { state: 'fail' }; }
+    }
+    const sentences = p => Array.isArray(p) ? p : (p && Array.isArray(p.sentences) ? p.sentences : null);
+    const chs = res.chapters, title = txt(res.title).trim();
+    const okText = x => !!txt(x).trim();
+    const shapeOk = title && Array.isArray(chs) && chs.length && chs.every(c => c && (
+      c.status === 'failed' ? true
+        : txt(c.title).trim() && Array.isArray(c.paragraphs) && c.paragraphs.every(p => { const ss = sentences(p); return ss && ss.length && ss.every(okText); })));
+    if (!shapeOk) { log('자서전', `장 형식이 규격과 다릅니다 ${run}`); return { state: 'fail' }; }
+    const chapters = chs.map((c, i) => {
+      const ok = c.status !== 'failed' && c.paragraphs.length > 0;
+      return { no: Number(c.no) || i + 1, title: txt(c.title).trim(), ok, reason: c.reason || '',
+               paras: ok ? c.paragraphs.map(p => sentences(p).map(x => txt(x).trim())) : [] };
+    });
+    const failed = chapters.filter(c => !c.ok);
+    const notes = (Array.isArray(res.review_notes) ? res.review_notes.length : 0) + (Array.isArray(res.to_confirm) ? res.to_confirm.length : 0)
+                + (res.verification && Array.isArray(res.verification.issues) ? res.verification.issues.length : 0);
+    if (notes) log('자서전', `검토 · 확인 메모 ${notes}건 — 본문에는 넣지 않습니다`);
+    if (failed.length) log('자서전', `만들지 못한 장 ${failed.map(c => `${c.no}장${c.reason ? `(${c.reason})` : ''}`).join(' · ')}`);
+    // ready 라는데 빈 장이 있거나, partial 이라는데 다 있으면 — 더 조심스러운 쪽(partial)으로 본다
+    const state = (st === 'partial' || failed.length) ? 'partial' : 'ready';
+    if (state === 'partial' && !chapters.some(c => c.ok)) return { state: 'fail' };
+    return { state, title, chapters, run, ver: res.verification ? (res.verification.state || 'not_run') : '' };
+  }
+
+  /** 장 형식 응답 → 화면 상태. 모양이 틀리면 실패로 접는다 — 고쳐서 통과시키지 않는다 */
+  function mmReadChapters(res, ids) {
+    const n = mmNormalize(res, ids);
+    if (n.state === 'short') return { view: 'short' };
+    if (n.state === 'fail') return { view: 'fail', why: MM_FAIL.other };
+    const showPartial = (new URLSearchParams(location.search).get('memoirPartial') || (CONFIG.memoir.chapters.showPartial ? 'show' : '')) === 'show';
+    if (n.state === 'partial' && !showPartial) return { view: 'partial' };       // A — 완성본으로 열지 않는다
     const style = CONFIG.style.names[res.style] ? res.style : CONFIG.style.default;
-    const ver = (res.verification && res.verification.state) || 'not_run';
-    return { view: 'result', title, chapters: chs, run, ver, style };
+    return { view: 'result', title: n.title, chapters: n.chapters, partial: n.state === 'partial', run: n.run, ver: n.ver, style };
   }
 
   /** 응답을 화면 상태로. 모양이 틀리면 원 JSON 을 쏟지 않고 실패로 접는다. */
-  function mmRead(res) {
-    if (res && typeof res === 'object' && ('chapters' in res || 'generation_state' in res)) return mmReadChapters(res);
+  function mmRead(res, ids) {
+    // 장이 실려 오면 장으로 읽는다. 장 없이 ready 면 지금 서버처럼 body 한 줄 한 문장
+    if (res && typeof res === 'object' && ('generation_state' in res
+        || (Array.isArray(res.chapters) && res.chapters.length) || res.status === 'partial')) return mmReadChapters(res, ids);
     if (res && res.status === 'insufficient_material') return { view: 'short' };
     if (res && res.status === 'ready'
         && typeof res.title === 'string' && res.title.trim()
@@ -4238,40 +4284,50 @@
   }
 
   /** 실패 안내를 고른다. 서버의 message 나 예외 내용은 화면에 내지 않는다. */
+  // 7-C1 §3-4 의 code (안). 있으면 code 로, 없거나 모르는 값이면 지금처럼 HTTP 상태로 고른다
+  const MM_CODE = { bad_selection: 400, not_found: 404, source_unavailable: 422, invalid_model_output: 502,
+                    needs_confirmation: 503, needs_context: 503, generation_timeout: 504 };
   function mmWhy(e) {
     if (e && e.name === 'AbortError') return MM_FAIL[504];   // 화면 쪽 제한에 걸렸다
     if (e && e.code === 'unsupported_style') return STYLE_UNSUPPORTED;   // 400 이지만 「3~5장」 과 다른 뜻 (4-C1)
+    if (e && MM_CODE[e.code]) return MM_FAIL[MM_CODE[e.code]];
     return MM_FAIL[e && e.status] || MM_FAIL.other;           // 응답 없음 · 파싱 실패 · 그 밖의 상태
   }
 
-  /** 장 읽기 — 제목 · 목차 · 장 제목 · 문단. 목차를 누르면 그 장으로 간다 */
+  /** 장 읽기 — 제목 · 목차 · 장 제목 · 문단. 목차를 누르면 그 장으로 간다.
+      일부 장 실패를 보여 줄 때(B)는 만들지 못한 장을 목차에만 「만들지 못했어요」 로 남기고 본문에는 넣지 않는다 */
   function mmPaintChapters(out) {
     $('#mmTitle').textContent = out.title;
     const box = $('#mmBody'), toc = $('#mmTocList');
     box.replaceChildren(); toc.replaceChildren();
-    out.chapters.forEach((c, i) => {
+    out.chapters.forEach((c) => {
+      const li = document.createElement('li'), b = document.createElement('button');
+      b.type = 'button';
+      if (!c.ok) {
+        b.textContent = `${c.title ? `${c.title} — ` : ''}만들지 못했어요`; b.disabled = true; b.className = 'mm-toc-miss';
+        li.append(b); toc.append(li); return;
+      }
       const sec = document.createElement('section');
       sec.className = 'mm-ch';
-      sec.id = `mmCh${i + 1}`;
+      sec.id = `mmCh${c.no}`;
       const h = document.createElement('h3');
       const no = document.createElement('small');
-      no.textContent = `${i + 1}장`;
-      h.append(no, document.createTextNode(txt(c.title).trim()));
+      no.textContent = `${c.no}장`;
+      h.append(no, document.createTextNode(c.title));
       sec.append(h);
-      c.paragraphs.forEach(p => {
+      c.paras.forEach(p => {
         const el = document.createElement('p');
-        el.textContent = p.map(x => txt(x).trim()).join(' ');    // 문장은 바꾸지 않고 한 문단으로 잇기만 한다
+        el.textContent = p.join(' ');            // 문장은 바꾸지 않고 한 문단으로 잇기만 한다
         sec.append(el);
       });
       box.append(sec);
-      const li = document.createElement('li'), b = document.createElement('button');
-      b.type = 'button'; b.textContent = txt(c.title).trim();
+      b.textContent = c.title;
       b.addEventListener('click', () => sec.scrollIntoView({ behavior: reducedMotion() ? 'auto' : 'smooth', block: 'start' }));
       li.append(b); toc.append(li);
     });
     $('#mmToc').hidden = false;
   }
-  /** 결과 위 표시 — 어디서 온 글인지 · 초안인지 (MEM-FE-04 · 05). 숨기지 않는다 */
+  /** 결과 위 표시 — 어디서 온 글인지 · 초안인지 · 일부인지 (MEM-FE-04 · 05). 숨기지 않는다 */
   function mmMark(origin, out) {
     const o = $('#mmOrigin');
     o.hidden = false;
@@ -4280,9 +4336,11 @@
                   : out.chapters ? `서버 응답 · 장 형식${out.run ? ` · ${out.run}` : ''}` : '서버 응답';
     const d = $('#mmDraft');
     d.hidden = false;
-    d.textContent = out.chapters && out.ver !== 'pass'
-      ? '자서전 초안이에요. 아직 검증과 사람의 확인을 거치지 않았어요.'
+    const miss = out.partial ? out.chapters.filter(c => !c.ok).map(c => `${c.no}장`).join(' · ') : '';
+    d.textContent = miss ? `${miss}을 만들지 못했어요. 지금 보이는 글은 자서전의 일부예요.`
+      : out.chapters && out.ver && out.ver !== 'pass' ? '자서전 초안이에요. 아직 검증과 사람의 확인을 거치지 않았어요.'
       : '자서전 초안이에요. 아직 사람의 확인을 거치지 않았어요.';
+    d.classList.toggle('warn', !!miss);
   }
 
   function mmPaint(title, body) {
@@ -4315,8 +4373,8 @@
     let out;
     try {
       const style = CONFIG.style.pick ? mmStyle : '';
-      const res = kind ? await mmFake(kind, ctl.signal, style) : await api.memoirPreview(ids, ctl.signal, style);
-      out = mmRead(res);
+      const res = kind ? await mmFake(kind, ctl.signal, style, ids) : await api.memoirPreview(ids, ctl.signal, style);
+      out = mmRead(res, ids);
     } catch (e) {
       out = { view: 'fail', why: mmWhy(e) };
       log('자서전', `실패 · ${e.name === 'AbortError' ? '화면 쪽 시간 초과' : `HTTP ${e.status || '응답 없음'}`}`);

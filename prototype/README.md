@@ -273,24 +273,30 @@ PC 처럼 폭이 760px 이상일 때만 차이가 나고, 휴대전화에서는 
 - 엽서를 만들거나 다시 만들면 받아 둔 목록을 「낡음」 으로 두고, 목록으로 돌아갈 때 다시 읽습니다. 클릭 · 선택은 제목이 아니라 `session_id` 로 합니다.
 - **서버 없이 보기**: `?listMock=title` (T01 · T03 · T04 · T08 · T09 경우 12개) · `old` (칸 없는 예전 응답) · `empty` · `fail`. 화면 위에 「예시 목록」 이 뜨고, 자서전도 예시 응답으로 돕니다.
 
-## 자서전 읽기 화면 — 목차 · 장 (자서전 고도화 업무지시서 v1.0 · v0.33)
+## 자서전 읽기 화면 — 목차 · 장 (v0.33 · v0.39 에서 서버 7-C1 초안에 맞춤)
 
-결과에 `chapters` 가 있으면 **제목 → 초안 안내 → 목차 → 장(장 제목 + 문단)** 으로 보여 줍니다. 없으면 예전처럼 `body` 한 줄 한 문장입니다 (지금 서버는 이쪽).
-장 형식은 업무지시서 §7.1 의 **제안** 이고 아직 서버 API 에 없습니다. C1/result 에서 이름을 맞춥니다.
+결과에 `chapters` 가 있으면 **제목 → 초안 안내 → 목차 → 장(장 제목 + 문단)** 으로 보여 줍니다. 장 없이 `ready` 면 예전처럼 `body` 한 줄 한 문장입니다 (지금 서버는 이쪽).
 
-```
-{ run_ref, input_ref, title:{text}, generation_state: "generated",
-  chapters: [{ chapter_key, title:{text,kind,turns}, paragraphs: [[{text,kind,turns}, …], …] }],
-  review_notes: [...], verification: { state: "not_run" | "pass" | …, issues: [...] } }
-```
+두 모양을 읽습니다.
 
-- 문장은 바꾸지 않고 문단 안에서 이어 붙이기만 합니다. 목차를 누르면 그 장으로 내려갑니다.
-- 결과 위에 **어디서 온 글인지** 붙습니다: 「예시(합성) 결과」 · 「독립 실행 결과 파일 — 서비스 생성 아님」 · 「서버 응답」. 그리고 「자서전 초안이에요. 아직 검증과 사람의 확인을 거치지 않았어요」.
-- `review_notes` · `verification.issues` 는 본문에 넣지 않습니다 (개수만 기록 ⚙).
-- 상태: `insufficient_material` → 자료 부족, `partial` 이나 빈 장 → 「일부 장을 만들지 못했어요」 (완성본으로 열지 않음), 그 밖 · 모양이 틀림 → 실패.
+| 모양 | 어디서 | 생김새 |
+|---|---|---|
+| **7-C1 §3** (최충 서버 계약 초안 · 2c60347) | 서비스 응답 | `status: ready · partial · insufficient_material` · `title: "…"` · `chapters: [{no, title, status, reason?, paragraphs: [{sentences: [{text, turns}]}]}]` · `body` · `sources` · `run: {session_ids, chapters_requested}` |
+| 업무지시서 §7.1 제안 | 대원 님 독립 실행 파일 | `generation_state` · `title: {text}` · `chapters: [{title: {text}, paragraphs: [[{text}]]}]` · `verification` |
+
+- 문장은 바꾸지 않고 문단 안에서 이어 붙이기만 합니다. 목차를 누르면 그 장으로 내려갑니다. 장 번호는 `no` 를 씁니다.
+- 결과 위에 **어디서 온 글인지**(예시 · 독립 실행 파일 · 서버 응답)와 「자서전 초안이에요」 안내가 붙습니다. 검증 칸이 있고 `pass` 가 아니면 「검증과 사람의 확인을 거치지 않았어요」.
+- `to_confirm` · `review_notes` · 장의 `reason` 은 본문에 넣지 않습니다 (기록 ⚙ 에만).
+- `run.session_ids` 가 고른 엽서와 다르면 늦게 온 다른 요청의 결과로 보고 보여 주지 않습니다.
+- **일부 장 실패(`partial`)** — 태헌 님 결정 전이라 두 안을 다 넣었습니다 (`CONFIG.memoir.chapters.showPartial`).
+  - A (기본 · `false`): 완성본으로 열지 않고 「자서전의 일부 장을 만들지 못했어요」.
+  - B (`true`): 만든 장만 본문에 · 목차에는 빠진 장을 「만들지 못했어요」 · 위에 「2장을 만들지 못했어요. 지금 보이는 글은 자서전의 일부예요.」
+  - 주소 뒤 `?memoirPartial=show` 로 B 를 미리 볼 수 있습니다.
+- **오류 `code`** (7-C1 §3-4 안): `bad_selection` → 400 문구 · `not_found` → 404 · `source_unavailable` → 422 · `invalid_model_output` → 502 ·
+  `needs_confirmation` · `needs_context` → 503 · `generation_timeout` → 504 · `unsupported_style` → 문체 안내. **code 가 HTTP 숫자보다 먼저**이고, 없거나 모르는 code 는 HTTP 숫자로 고릅니다.
 - PC 에서는 본문 폭을 약 38자로 묶고, 휴대전화에서는 가로 넘침 없이 이어 읽습니다. 두 화면은 같은 글 · 같은 순서입니다.
-- **대원 님 독립 실행 결과 보기**: ⚙ → 「자서전 결과 파일 열기」 → JSON 파일 고르기. 브라우저 안에서만 읽고 서버로 보내지 않습니다.
-- **예시**: `?listMock=title&memoirMock=chapters` (그 밖 `verified` · `partial` · `nodata` · `badref` · `html` · `badshape`). 실제 생성 결과가 아닌 합성 글입니다.
+- **대원 님 독립 실행 결과 보기**: ⚙ → 「자서전 결과 파일 열기」 → JSON 파일 고르기 (두 모양 다 됨). 브라우저 안에서만 읽고 서버로 보내지 않습니다.
+- **예시**: `?listMock=title&memoirMock=chapters` (그 밖 `partial` · `nodata` · `html` · `badshape` · `mismatch` · 독립 실행 모양 `proposal` · `verified` · `badref` · 오류 `502:invalid_model_output` 처럼 `상태:code`). 실제 생성 결과가 아닌 합성 글입니다.
 
 ## 예전 흐름 (`?flow=postcard`)
 
