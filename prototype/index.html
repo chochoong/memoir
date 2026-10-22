@@ -504,7 +504,7 @@
     .screen[data-screen="links"] { padding-bottom: calc(168px + env(safe-area-inset-bottom)); }
     .lk-list[hidden], .lk-list button[hidden] { display: none; }
     /* 4차 문체 */
-    .style-pick[hidden], .card-style[hidden], .style-tag[hidden] { display: none; }
+    .style-pick[hidden], .card-style[hidden], .style-tag[hidden], #rvCard[hidden], #rvCardMsg[hidden] { display: none; }
     .style-pick { margin: 0 0 14px; }
     .style-pick .tab[aria-checked="true"] { border-color: var(--ink); color: var(--ink); background: #fff; }
     .style-tag { display: inline-block; margin: 0 0 10px; padding: 4px 12px; border-radius: 999px; background: #eef3f4; color: #2b5568; font-weight: 700; font-size: .9rem; }
@@ -1071,7 +1071,7 @@
           <div class="blank">
             <div class="blank-face" aria-hidden="true">&#127793;</div>
             <h2>고를 수 있는 엽서가<br />아직 없습니다.</h2>
-            <p>이야기를 마치면 엽서가 한 장씩 생깁니다.</p>
+            <p>지난 이야기에서 회차를 열고<br />「엽서 만들기」를 누르면 엽서가 생깁니다.</p>
           </div>
         </div>
 
@@ -1131,7 +1131,8 @@
         </div>
       </section>
 
-      <!-- 내용 확인 — 업무지시서 03 UI-07. 읽기만 한다. 고치기 · 문체 · 엽서 버튼은 이번 범위가 아니다 -->
+      <!-- 내용 확인 — 업무지시서 03 UI-07. 고치기 · 문체는 이번 범위가 아니다.
+           「엽서 만들기」 는 v0.37 — 서버는 회차가 닫힐 때 엽서를 만들지 않고, 이 화면의 버튼으로 만든다 (최충 2026-10-22) -->
       <section class="screen" data-screen="review">
         <h1>나눈 이야기</h1>
         <span class="mm-sample" id="rvSample" hidden>예시 화면 — 서버에 저장된 내용이 아닙니다</span>
@@ -1149,6 +1150,7 @@
         <div data-rv="list" hidden>
           <p class="rv-warn" id="rvWarn" hidden>마지막 답변이 아직 저장되지 않았을 수 있어요. 잠시 뒤 「다시 불러오기」를 눌러 주세요.</p>
           <ol class="rv-list" id="rvList"></ol>
+          <p class="prep-note" id="rvCardMsg" role="status" aria-live="polite" hidden></p>
         </div>
 
         <!-- 실제로 답이 없다 — 「못 불러왔다」 와 반드시 구분한다 -->
@@ -1170,6 +1172,7 @@
         </div>
 
         <div class="dock">
+          <button class="btn btn-primary" id="rvCard" hidden>엽서 만들기</button>
           <button class="btn btn-primary" id="rvMain">처음으로</button>
           <button class="btn-ghost" id="rvRetry" hidden>다시 불러오기</button>
         </div>
@@ -1323,7 +1326,7 @@
   const CONFIG = {
     // 화면 아래와 개발용 패널에 그대로 찍힌다. 「고친 게 반영이 안 된 것 같다」는
     // 대부분 예전 파일이 열려 있는 경우라서, 눈으로 확인할 자리를 만들어 둔다.
-    version: 'v0.36 · 2026-10-22 (구글 클라이언트 ID 넣음 — 복사만으로 배포)',
+    version: 'v0.37 · 2026-10-22 (나눈 이야기에 「엽서 만들기」 · 실제와 다른 안내 문구 고침)',
 
     // 이 화면을 백엔드가 직접 서빙하면(web/ 폴더) 빈 문자열 그대로 둔다.
     // 다른 포트에서 열어 시험할 때만 'http://127.0.0.1:8010' 처럼 채운다.
@@ -1473,8 +1476,11 @@
         start:   '녹음 시작',
         pause:   '일시정지',
         resume:  '이어서 말하기',
-        stop:    '녹음 정지 · 엽서 만들기',
-        end:     '인터뷰 마치기',          // 1차 흐름의 정지 버튼
+        stop:    '녹음 정지 · 엽서 만들기',   // 예전 흐름(?flow=postcard) — 닫으면 바로 엽서를 만든다
+        end:     '인터뷰 마치기',          // 1차 흐름의 정지 버튼 — 닫기만 한다. 엽서는 나눈 이야기에서 따로
+        card:    '엽서 만들기',            // 나눈 이야기 — POST /postcard (서버 설계: 닫힐 때 자동으로 만들지 않는다)
+        cardView: '엽서 보기',             // 이미 엽서가 있는 회차
+        cardBusy: '엽서를 만드는 중이에요…',
         begin:   '이 기기에서 시작',       // 1차 흐름의 시작 버튼
         reading: '읽어 드리는 중…',
         skip:    '소리 없이 넘어가기',
@@ -3536,12 +3542,20 @@
   let rvReq = 0;
   let rvId = null, rvWhyClosed = '';
   let rvFromArchive = false;       // 지난 이야기에서 열었다 — 아래 버튼이 「목록으로」 가 된다
+  let rvHasCard = false;           // 이 회차에 엽서가 이미 있다 — 버튼이 「엽서 보기」 가 된다
+  let rvCardBusy = false;
 
   function rvShow(which, stale) {
     ['load', 'list', 'empty', 'error'].forEach(k => $(`[data-rv="${k}"]`).hidden = (k !== which));
     $('#rvMain').textContent = which === 'error' ? '다시 불러오기' : rvFromArchive ? '목록으로' : '처음으로';
     // 링크로 연 어르신 화면에는 앱으로 들어가는 버튼을 두지 않는다 (다시 불러오기만)
     $('#rvMain').hidden = LINK.on && which !== 'error';
+    // 엽서 만들기 — 답변이 있을 때만. 어르신 링크에는 두지 않는다 (엽서 API 는 자녀 로그인 쪽이다).
+    // 서버 없이 보는 예시 화면(rvId 없음)에도 두지 않는다
+    const card = which === 'list' && !!rvId && !LINK.on;
+    $('#rvCard').hidden = !card;
+    if (card && !rvCardBusy) $('#rvCard').textContent = rvHasCard ? CONFIG.ui.labels.cardView : CONFIG.ui.labels.card;
+    $('#rvMain').className = card ? 'btn-ghost' : 'btn btn-primary';   // 큰 버튼은 화면에 하나
     $('#rvRetry').hidden = !(which === 'empty' || (which === 'list' && stale));
   }
 
@@ -3557,6 +3571,8 @@
     $('#rvPrep').hidden = !(theme || topic);
 
     const said = frs.filter(f => f.idx > 0 && String(f.answer || '').trim());
+    const pc = rec && rec.postcard;
+    rvHasCard = !!(pc && (typeof pc.title === 'string' && pc.title.trim() || typeof pc.text === 'string' && pc.text.trim()));
     const warn = $('#rvWarn');
     warn.textContent = rvWhyClosed === 'gone'
       ? '서버에서 인터뷰가 먼저 정리되었어요. 저장된 내용까지만 보여 드려요.'
@@ -3593,6 +3609,9 @@
     const my = ++rvReq;
     rvId = id; rvWhyClosed = why || '';
     rvFromArchive = !!(opts && opts.fromArchive);
+    rvHasCard = false; rvCardBusy = false;
+    $('#rvCard').disabled = false;
+    $('#rvCardMsg').hidden = true;
     show('review');
     rvShow('load');
     $('#rvPrep').hidden = true;
@@ -3648,6 +3667,46 @@
     location.reload();                   // 새 인터뷰는 처음부터 (MVP 범위)
   });
   $('#rvRetry').addEventListener('click', () => void openReview(rvId, rvWhyClosed, { fromArchive: rvFromArchive }));
+
+  /* 「엽서 만들기」 — 서버 설계대로 회차가 닫힐 때가 아니라 여기서 만든다 (POST /api/sessions/{id}/postcard).
+     serverCard() 를 그대로 쓴다: 이미 있으면 기록에서 꺼내고, 409 busy 면 기록을 보며 기다린다.
+     만들면 지난 이야기에서 여는 엽서와 같은 화면으로 보여 주고, 「목록으로」 는 목록을 다시 읽는다.
+     실패는 엽서처럼 꾸미지 않는다 — 이 화면에 이유만 적고 나눈 이야기는 그대로 둔다. */
+  async function rvMakeCard() {
+    if (rvCardBusy || !rvId || LINK.on) return;
+    const id = rvId, my = rvReq, L = CONFIG.ui.labels, msg = $('#rvCardMsg'), btn = $('#rvCard');
+    rvCardBusy = true;
+    btn.disabled = true; btn.textContent = rvHasCard ? L.cardView : L.cardBusy;
+    msg.hidden = rvHasCard; msg.textContent = '들려주신 이야기를 엽서 글로 짓고 있어요. 조금만 기다려 주세요.';
+    log('엽서', `${rvHasCard ? '보기' : '만들기'} · ${id.slice(0, 8)}`);
+    let got;
+    try { got = await serverCard(id); } finally { rvCardBusy = false; }
+    if (got && !got.fail) arStale = true;            // 목록의 제목 · 엽서 유무가 바뀌었다
+    if (my !== rvReq) { log('엽서', '화면을 떠난 뒤 끝났습니다 — 띄우지 않습니다'); return; }
+    btn.disabled = false;
+    if (got.fail) {
+      btn.textContent = L.card;
+      msg.hidden = false;
+      msg.textContent = got.fail === 'lack' ? '엽서에 담을 만큼 분명한 이야기가 모이지 않았어요. 나눈 이야기는 그대로 있어요.'
+        : got.code === 'not_closed' ? '인터뷰를 정리하는 중이에요. 잠시 뒤 다시 눌러 주세요.'
+        : got.why === 'timeout' ? '정해진 시간 안에 엽서를 받지 못했어요. 잠시 뒤 다시 눌러 주세요.'
+        : '엽서를 만들지 못했어요. 잠시 뒤 다시 눌러 주세요.';
+      log('엽서', `만들지 못함 · ${got.status || ''} ${got.code || got.why || ''}`);
+      return;
+    }
+    rvHasCard = true;
+    let rec = null;
+    try { rec = await api.record(id); } catch (_) {}
+    if (my !== rvReq) return;
+    if (!rec || !rec.postcard) {                      // 만들었는데 기록을 못 읽었다 — 만든 것은 알린다
+      btn.textContent = L.cardView; msg.hidden = false;
+      msg.textContent = '엽서를 만들었어요. 지난 이야기에서 볼 수 있어요.';
+      return;
+    }
+    rvReq++;                                          // 나눈 이야기 화면을 떠난다
+    arShowCard(rec, id);
+  }
+  $('#rvCard').addEventListener('click', () => void rvMakeCard());
 
   /* ═══════════════════════════════════════════════════════════════
      보관함 — 지난 이야기
@@ -3805,6 +3864,19 @@
   let arReq = 0;                   // 보관함 요청 번호 — 화면을 떠난 뒤 늦게 온 응답을 버린다
   const arOnScreen = () => $('[data-screen="archive"]').classList.contains('active');
 
+  /** 기록(rec)의 엽서를 완성 화면에 — 지난 이야기에서 열 때와 「엽서 만들기」 뒤에 같이 쓴다 */
+  function arShowCard(rec, id) {
+    arPaint(rec.postcard, rec.photo_id ? api.photoUrl(rec.photo_id) : '', rec.created_at);
+    arViewing = true;
+    cardStyleDraw();                 // 보관함에서 연 엽서에는 문체 줄을 두지 않는다
+    show('complete');
+    // 지난 엽서를 보는 중에는 「마치기」가 끝내는 말이 아니다. 목록으로 돌아간다.
+    // 「되었습니다」도 지금 막 만든 것처럼 들리므로 바꿔 둔다.
+    $('#stepLabel').textContent = '지난 이야기';
+    $('#exitBtn').textContent = '목록으로';
+    $('#cardHead').innerHTML = '그날 남기신<br />이야기입니다.';
+  }
+
   async function arOpen(id) {
     const my = ++arReq;
     try {
@@ -3819,15 +3891,7 @@
         void openReview(id, '', { rec, fromArchive: true });
         return;
       }
-      arPaint(pc, rec.photo_id ? api.photoUrl(rec.photo_id) : '', rec.created_at);
-      arViewing = true;
-      cardStyleDraw();                 // 보관함에서 연 엽서에는 문체 줄을 두지 않는다
-      show('complete');
-      // 지난 엽서를 보는 중에는 「마치기」가 끝내는 말이 아니다. 목록으로 돌아간다.
-      // 「되었습니다」도 지금 막 만든 것처럼 들리므로 바꿔 둔다.
-      $('#stepLabel').textContent = '지난 이야기';
-      $('#exitBtn').textContent = '목록으로';
-      $('#cardHead').innerHTML = '그날 남기신<br />이야기입니다.';
+      arShowCard(rec, id);
       log('보관함', `지난 엽서를 열었습니다 · ${id.slice(0, 8)}`);
     } catch (e) {
       if (my !== arReq || !arOnScreen()) return;
@@ -4743,7 +4807,14 @@
       });
       window.google.accounts.id.renderButton(box, { theme: 'outline', size: 'large', text: 'signin_with', shape: 'pill', locale: 'ko', width: 300 });
     };
-    sc.onerror = () => authNote('구글 로그인 버튼을 불러오지 못했어요. 연결을 확인해 주세요.');
+    // 이것도 버튼 자리에 — 「로그아웃했어요」 같은 안내 줄을 덮지 않는다. 다음에 화면을 열면 다시 불러 본다
+    sc.onerror = () => {
+      sc.remove();
+      const n = document.createElement('p'); n.className = 'login-msg note';
+      n.textContent = '구글 로그인 버튼을 불러오지 못했어요. 연결을 확인하고 새로고침해 주세요.';
+      box.replaceChildren(n);
+      log('로그인', '구글 로그인 스크립트를 받지 못했습니다');
+    };
     document.head.append(sc);
   }
   async function authBoot() {
