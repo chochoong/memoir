@@ -39,6 +39,7 @@ import io
 import json
 import logging
 import re
+import time
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from functools import lru_cache
@@ -249,15 +250,20 @@ async def on_closed(session_id: str, user_id: str, reason: str) -> None:
 async def _make(rec: dict, said: list[dict], style: str) -> dict:
     session_id = rec["session_id"]
     font_path = _font_path()                 # 모델 값을 쓰기 전에 먼저 본다
+    t0 = time.perf_counter()
 
     photo = await _photo(rec.get("photo_id"))
+    t1 = time.perf_counter()
     await _injected()
     card = await write(material(rec["fragments"], photo.clues if photo else None,
                                 rec.get("closing_decision")))
     card = checked(card, {f["idx"] for f in said})
+    t2 = time.perf_counter()
 
     data, w, h = await asyncio.to_thread(
         _compose, photo.data if photo else None, card, _date(rec["created_at"]), font_path)
+
+    t3 = time.perf_counter()
 
     key = storage_key(session_id, data)
     ps = photostore.current()
@@ -295,6 +301,11 @@ async def _make(rec: dict, said: list[dict], style: str) -> dict:
 
     log.info("엽서 %s — %d×%d %.0fKB · 「%s」 %s",
              session_id[:8], w, h, len(data) / 1024, card.title, " / ".join(card.sentences))
+    # 화면의 엽서 대기 한도 (CONFIG.card.waitMs) 를 실제 시간에 맞추는 근거
+    t4 = time.perf_counter()
+    log.info("엽서 %s 시간 %.0fms  (사진 %.0f · 글 %.0f · 합성 %.0f · 저장 %.0f)",
+             session_id[:8], (t4 - t0) * 1000, (t1 - t0) * 1000, (t2 - t1) * 1000,
+             (t3 - t2) * 1000, (t4 - t3) * 1000)
     return row
 
 
