@@ -293,7 +293,7 @@ PC 처럼 폭이 760px 이상일 때만 차이가 나고, 휴대전화에서는 
   - B (`true`): 만든 장만 본문에 · 목차에는 빠진 장을 「만들지 못했어요」 · 위에 「2장을 만들지 못했어요. 지금 보이는 글은 자서전의 일부예요.」
   - 주소 뒤 `?memoirPartial=show` 로 B 를 미리 볼 수 있습니다.
 - **오류 `code`** (7-C1 §3-4 안): `bad_selection` → 400 문구 · `not_found` → 404 · `source_unavailable` → 422 · `invalid_model_output` → 502 ·
-  `needs_confirmation` · `needs_context` → 503 · `generation_timeout` → 504 · `unsupported_style` → 문체 안내. **code 가 HTTP 숫자보다 먼저**이고, 없거나 모르는 code 는 HTTP 숫자로 고릅니다.
+  `not_final` (서버가 `needs_*` 를 묶은 이름 · 최충 회신) · `needs_confirmation` · `needs_context` → 503 · `generation_timeout` → 504 · `unsupported_style` → 문체 안내. **code 가 HTTP 숫자보다 먼저**이고, 없거나 모르는 code 는 HTTP 숫자로 고릅니다.
 - PC 에서는 본문 폭을 약 38자로 묶고, 휴대전화에서는 가로 넘침 없이 이어 읽습니다. 두 화면은 같은 글 · 같은 순서입니다.
 - **대원 님 독립 실행 결과 보기**: ⚙ → 「자서전 결과 파일 열기」 → JSON 파일 고르기 (두 모양 다 됨). 브라우저 안에서만 읽고 서버로 보내지 않습니다.
 - **예시**: `?listMock=title&memoirMock=chapters` (그 밖 `partial` · `nodata` · `html` · `badshape` · `mismatch` · 독립 실행 모양 `proposal` · `verified` · `badref` · 오류 `502:invalid_model_output` 처럼 `상태:code`). 실제 생성 결과가 아닌 합성 글입니다.
@@ -488,6 +488,14 @@ A 세트는 `[A]` 로 시작하는 회차 5개다. **A 와 B 를 섞어 고르�
 
 > 사진 분석에는 Gemini 키가 필요합니다. 키가 없으면 서버 로그에
 > 「GEMINI_API_KEY 없음 — 사진 분석을 건너뛴다」가 찍히고 위 표의 세 번째 줄로 갑니다.
+
+## 목록 크기 · 그린 그림 표시 (v0.40 · 최충 회신 2026-10-22)
+
+- 기록 목록과 자서전 고르기는 **100개**까지 요청합니다 (`CONFIG.archive.limit` · `CONFIG.memoir.listLimit`, 서버 상한 100).
+  예전에는 20개라 기록이 21개만 넘어도 오래된 것이 안 보였습니다. 커서 방식 「더 보기」 는 정렬 작업 때 서버와 같이 붙입니다.
+- 자서전 고르기는 회차마다 엽서 그림을 받아 썸네일로 씁니다. 100장을 한꺼번에 받지 않도록 **동시에 6장씩** 받습니다 (`CONFIG.memoir.thumbParallel`).
+- 엽서 응답의 `image_kind` (`photo` · `paper` · `drawn`)를 읽습니다. **`drawn` 일 때만** 엽서 아래에 「AI가 그린 그림이에요 — 실제 사진이 아니에요」.
+  서버는 `photo` · `paper` 를 곧 주고, `drawn` 은 그림 생성이 생기면 줍니다. 칸이 없으면 아무것도 표시하지 않습니다.
 
 ## 배포 주소에서 달라지는 것 (v0.38)
 

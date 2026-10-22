@@ -231,6 +231,8 @@
     .postcard.no-photo .postcard-title { padding-right: 96px; }
     .postcard-title { font-family: "Gowun Batang", serif; font-size: 1.42rem; font-weight: 700; margin: 24px 0 16px; padding-bottom: 14px; border-bottom: 1px solid #d7c9b0; letter-spacing: -.03em; }
     .postcard-copy { font-family: "Gowun Batang", serif; font-size: 1.05rem; line-height: 1.95; margin: 0; color: #304753; white-space: pre-wrap; }
+    .card-kind { margin: 10px auto 0; text-align: center; font-size: .9rem; color: var(--muted); }
+    .card-kind[hidden] { display: none; }
     .postcard-sign { margin-top: 22px; padding-top: 14px; border-top: 1px dashed #d7c9b0; font-size: .8rem; color: #8b7f68; }
     .done-icon { width: 54px; height: 54px; border-radius: 50%; background: #e6f3ee; color: var(--success); display: grid; place-items: center; margin: 4px auto 12px; }
 
@@ -972,6 +974,8 @@
             <div class="postcard-sign" id="cardSign"></div>
           </div>
         </article>
+        <!-- 그린 그림이면 밝힌다 (FE-04 · image_kind). 사진 · 종이 바탕이면 숨긴다 -->
+        <p class="card-kind" id="cardKind" hidden>AI가 그린 그림이에요 — 실제 사진이 아니에요</p>
         <!-- 문체 (4-C1). 라벨은 지금 보이는 엽서의 문체 — 서버 응답의 style 이다 -->
         <div class="card-style" id="cardStyleBox" hidden>
           <p class="style-tag" id="cardStyleTag"></p>
@@ -1330,7 +1334,7 @@
   const CONFIG = {
     // 화면 아래와 개발용 패널에 그대로 찍힌다. 「고친 게 반영이 안 된 것 같다」는
     // 대부분 예전 파일이 열려 있는 경우라서, 눈으로 확인할 자리를 만들어 둔다.
-    version: 'v0.39 · 2026-10-22 (자서전 장 형식을 서버 7-C1 초안에 맞춤 · 일부 장 실패 A/B · 오류 code)',
+    version: 'v0.40 · 2026-10-22 (목록 100개 · 오류 code not_final · 엽서 image_kind 받을 준비)',
 
     // 이 화면을 백엔드가 직접 서빙하면(web/ 폴더) 빈 문자열 그대로 둔다.
     // 다른 포트에서 열어 시험할 때만 'http://127.0.0.1:8010' 처럼 채운다.
@@ -1385,7 +1389,9 @@
     // 서버가 일부러 그렇게 둔다. 빈 목록으로 답하면 화면이 「기록이 없습니다」
     // 라고 말하게 되고, 그건 어르신에게 조각이 사라졌다는 말이 되기 때문이다.
     archive: {
-      limit: 20,
+      // 서버 상한이 100 이다 (최충 회신 2026-10-22). 20 이면 기록이 21개만 넘어도 오래된 것이 안 보였다.
+      // 커서 방식 「더 보기」 는 정렬 작업 때 서버와 같이 붙인다
+      limit: 100,
       // 확정된 회차만 보여준다 (FR-AR-501). 아직 안 끝난 회차는 목록에 넣지 않는다.
       closedOnly: true,
       // 목록 응답에 엽서 제목·본문이 실리면 true 로 바꾼다 — 그때 카드에 본문
@@ -1416,7 +1422,9 @@
       max: 5,
       // 고를 엽서 수 (서버 상한 100). 서버에 「엽서 있는 회차만」(?has_postcard=1) 을 달라고 하므로
       // 최근 회차에 엽서 없는 회차가 많아도 밀려나지 않는다. (v0.26 에서 잠깐 100 으로 늘렸다가 되돌림)
-      listLimit: 20,
+      listLimit: 100,
+      // 엽서 그림(썸네일)을 한 번에 몇 장씩 받나. 100장을 한꺼번에 받지 않는다
+      thumbParallel: 6,
       // 화면 쪽 안전장치일 뿐이다. 모델 호출 제한(서버 MEMOIR_TEXT_TIMEOUT, 지금 20초)을
       // 넘기면 서버가 504 로 먼저 답한다. 연결이 걸려 버렸을 때만 여기서 접는다.
       timeoutMs: 60000,
@@ -2390,7 +2398,9 @@
     // style 이 없으면(문체를 모르는 서버) 구어체다. created_at · url 은 「새로 만든 엽서인가」 를 가리는 표시다
     return { title, body, caption: str(r.caption),
              url: r.url || '', source: 'server',
-             style: CONFIG.style.names[r.style] ? r.style : CONFIG.style.default, created_at: r.created_at || '' };
+             style: CONFIG.style.names[r.style] ? r.style : CONFIG.style.default, created_at: r.created_at || '',
+             // photo · paper · drawn (최충 회신: photo/paper 는 곧, drawn 은 그림 생성이 생기면). 없으면 모름
+             image_kind: typeof r.image_kind === 'string' ? r.image_kind : '' };
   }
 
   /**
@@ -3291,6 +3301,7 @@
     }
     // 서버 엽서인데 제목이 비었으면 목록과 같은 「제목 없는 엽서」 (임시 정리 엽서는 polish 가 제목을 짓는다)
     $('#cardTitle').textContent = piece.title || (piece.source === 'server' ? '제목 없는 엽서' : '오늘의 목소리');
+    $('#cardKind').hidden = piece.image_kind !== 'drawn';
     if (typeof cardStyleDraw === 'function') {
       // 새 엽서가 그려질 때 고른 값을 지금 엽서의 문체로 맞춰 둔다 (다시 만들기 버튼은 다른 문체를 골라야 켜진다)
       if (!regenBusy) { cardPick = piece.style || CONFIG.style.default; stylePicker($('#cardStyle'), cardPick, (code) => { cardPick = code; $('#cardStyleMsg').textContent = ''; cardStyleDraw(); }); }
@@ -3867,6 +3878,7 @@
       card.classList.add('no-photo');
     }
     $('#cardTitle').textContent = clean(pc.title) || NO_CARD_TITLE;   // 목록과 같은 대체 표기
+    $('#cardKind').hidden = pc.image_kind !== 'drawn';
     $('#cardCopy').textContent = typeof pc.text === 'string' ? pc.text : '';
     const d = new Date(createdAt);
     const caption = pc.caption ? `${pc.caption} · ` : '';
@@ -4105,6 +4117,21 @@
     });
   }
 
+  /** Promise.allSettled 와 같은 결과를 돌려주되, 한 번에 n 개까지만 돌린다 */
+  async function settleLimited(jobs, n) {
+    const out = new Array(jobs.length);
+    let next = 0;
+    const worker = async () => {
+      while (next < jobs.length) {
+        const i = next++;
+        try { out[i] = { status: 'fulfilled', value: await jobs[i]() }; }
+        catch (e) { out[i] = { status: 'rejected', reason: e }; }
+      }
+    };
+    await Promise.all(Array.from({ length: Math.max(1, Math.min(n || 1, jobs.length)) }, worker));
+    return out;
+  }
+
   function mmForget() {
     mmRows.forEach(r => URL.revokeObjectURL(r.thumb));
     mmRows = [];
@@ -4123,7 +4150,7 @@
       const closed = ((res && res.sessions) || []).filter(s => s.closed_at && s.has_postcard !== false);
       // 회차마다 엽서가 있는지 묻는다. 404 는 「엽서 없음」 이라 빼고, 그 밖의 실패가
       // 하나라도 있으면 목록 전체를 「불러오지 못했다」 로 본다 — 숨기면 엽서가 사라진 것처럼 보인다.
-      const got = await Promise.allSettled(closed.map(s => api.postcardThumb(s.session_id)));
+      const got = await settleLimited(closed.map(s => () => api.postcardThumb(s.session_id)), CONFIG.memoir.thumbParallel);
       const thumbs = got.map(g => (g.status === 'fulfilled' ? g.value : null));
       const broke = got.find(g => g.status === 'rejected');
       if (broke || my !== mmReq) {
@@ -4285,8 +4312,9 @@
 
   /** 실패 안내를 고른다. 서버의 message 나 예외 내용은 화면에 내지 않는다. */
   // 7-C1 §3-4 의 code (안). 있으면 code 로, 없거나 모르는 값이면 지금처럼 HTTP 상태로 고른다
+  // 최충 회신 (2026-10-22): needs_* 는 서버에서 not_final 하나로 묶는다. 예전 이름도 그대로 받는다
   const MM_CODE = { bad_selection: 400, not_found: 404, source_unavailable: 422, invalid_model_output: 502,
-                    needs_confirmation: 503, needs_context: 503, generation_timeout: 504 };
+                    not_final: 503, needs_confirmation: 503, needs_context: 503, generation_timeout: 504 };
   function mmWhy(e) {
     if (e && e.name === 'AbortError') return MM_FAIL[504];   // 화면 쪽 제한에 걸렸다
     if (e && e.code === 'unsupported_style') return STYLE_UNSUPPORTED;   // 400 이지만 「3~5장」 과 다른 뜻 (4-C1)
