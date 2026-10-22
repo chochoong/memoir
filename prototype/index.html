@@ -298,7 +298,9 @@
     .thumb .no { display: grid; place-items: center; width: 100%; height: 100%;
                  color: var(--muted); font-size: .8rem; font-weight: 600; }
     .p-ttl { display: block; font-family: "Gowun Batang", serif; font-size: 1.5rem;
-             font-weight: 700; line-height: 1.3; margin: 0 0 6px; }
+             font-weight: 700; line-height: 1.3; margin: 0 0 6px;
+             word-break: keep-all; overflow-wrap: anywhere; }   /* 긴 제목은 줄을 바꾼다 — 자르지 않는다 */
+    .p-ttl.untitled { color: var(--muted); font-weight: 600; }  /* 「제목 없는 엽서 · 기록」 은 실제 제목이 아니다 */
     .p-body { display: block; font-size: 1.02rem; line-height: 1.5; color: var(--muted);
               margin: 0 0 10px; }
     .p-meta { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
@@ -341,6 +343,24 @@
                 margin: 6px 0 18px; word-break: keep-all; overflow-wrap: anywhere; }
     .mm-body p { font-family: "Gowun Batang", serif; font-size: 1.2rem; line-height: 1.9;
                  margin: 0 0 10px; word-break: keep-all; overflow-wrap: anywhere; white-space: pre-wrap; }
+    /* 자서전 읽기 영역 (자서전 고도화 MEM-FE-02) — 제목 · 목차 · 장 제목 · 문단의 위계 하나 */
+    .mm-origin { display: inline-block; margin: 0 6px 10px 0; padding: 5px 11px; border-radius: 12px;
+                 font-size: .86rem; font-weight: 700; background: #e7eef0; color: #3d5a68; }
+    .mm-origin[hidden], .mm-draft[hidden], .mm-toc[hidden] { display: none; }
+    .mm-draft { margin: 0 0 16px; padding: 10px 14px; border-radius: 14px; background: #fbf3e4;
+                color: #7a5a1c; font-size: .98rem; line-height: 1.5; }
+    .mm-toc { margin: 0 0 22px; padding: 14px 16px; border: 1px solid var(--line); border-radius: 18px; background: var(--paper); }
+    .mm-toc h3 { margin: 0 0 8px; font-size: 1rem; color: var(--muted); }
+    .mm-toc ol { margin: 0; padding-left: 1.4em; }
+    .mm-toc li { margin: 4px 0; }
+    .mm-toc button { background: none; border: 0; padding: 4px 0; text-align: left; color: var(--ink);
+                     font: inherit; font-size: 1.08rem; line-height: 1.4; text-decoration: underline;
+                     text-underline-offset: 3px; word-break: keep-all; overflow-wrap: anywhere; }
+    .mm-ch { margin: 0 0 26px; scroll-margin-top: 70px; }
+    .mm-ch h3 { font-family: "Gowun Batang", serif; font-size: 1.38rem; line-height: 1.4; margin: 0 0 12px;
+                word-break: keep-all; overflow-wrap: anywhere; }
+    .mm-ch h3 small { display: block; font-family: inherit; font-size: .82rem; color: var(--muted); margin-bottom: 2px; }
+    .mm-ch p { margin: 0 0 16px; text-indent: 0; }
 
     /* ── 1차 인터뷰 흐름 (업무지시서 03) ──────────────────── */
     /* 준비 — 테마 · 구체 주제 · 보조 사진. 예전 흐름(?flow=postcard)에서는 숨긴다 */
@@ -644,6 +664,9 @@
 
       /* 내용 확인 · 자서전 글 — 읽기 좋은 폭 */
       .app.web [data-screen="review"] > *, .app.web [data-screen="memoir"] [data-mm="result"] { max-width: 760px; }
+      /* 자서전 본문은 한 줄이 너무 길어지지 않게 (한글 약 38자) */
+      .app.web [data-screen="memoir"] [data-mm="result"] .mm-body,
+      .app.web [data-screen="memoir"] [data-mm="result"] .mm-toc { max-width: 38em; }
       .app.web .rv-q { margin-right: 120px; }
       .app.web .rv-a { margin-left: 120px; }
 
@@ -983,6 +1006,7 @@
       <!-- ── 보관함 (AR) ───────────────────────────── -->
       <section class="screen" data-screen="archive">
         <h1>지난 이야기</h1>
+        <span class="mm-sample" id="arSample" hidden>예시 목록 — 실제 서버 응답이 아닙니다 (?listMock)</span>
 
         <!-- 불러오는 중 -->
         <div data-ar="load">
@@ -1068,9 +1092,21 @@
         </div>
 
         <div data-mm="result" hidden>
+          <span class="mm-origin" id="mmOrigin" hidden></span>
           <p class="style-tag" id="mmStyleTag" hidden></p>
           <h2 class="mm-title" id="mmTitle"></h2>
+          <p class="mm-draft" id="mmDraft" hidden></p>
+          <nav class="mm-toc" id="mmToc" aria-label="목차" hidden><h3>목차</h3><ol id="mmTocList"></ol></nav>
           <div class="mm-body" id="mmBody"></div>
+        </div>
+
+        <!-- 목차는 왔는데 빠진 장이 있다 — 완성본으로 열지 않는다 (MEM-FE-05) -->
+        <div data-mm="partial" hidden>
+          <div class="blank">
+            <div class="blank-face" aria-hidden="true">&#128214;</div>
+            <h2>자서전의 일부 장을<br />만들지 못했어요.</h2>
+            <p>빠진 장이 있어 완성본으로 보여드리지 않아요.<br />엽서 선택 화면으로 돌아가 주세요.</p>
+          </div>
         </div>
 
         <div data-mm="short" hidden>
@@ -1271,7 +1307,9 @@
       <button id="devSend">전송</button>
       <button id="devDone" title="다음 질문으로 즉시 넘어가기 (POST /done)">다 말했어요</button>
     </div>
-    <div class="row"><button id="devLab" title="2~7차 혼자 준비하는 일(FE-01~06) 화면 시안">개발 시안 열기</button></div>
+    <div class="row"><button id="devLab" title="2~7차 혼자 준비하는 일(FE-01~06) 화면 시안">개발 시안 열기</button>
+      <button id="devMemFile" title="대원 님 독립 실행 결과(JSON)를 읽기 화면에 띄운다. 서버로 보내지 않는다">자서전 결과 파일 열기</button>
+      <input type="file" id="devMemInput" accept=".json,application/json" hidden /></div>
     <pre id="devLog"></pre>
   </div>
 
@@ -1285,7 +1323,7 @@
   const CONFIG = {
     // 화면 아래와 개발용 패널에 그대로 찍힌다. 「고친 게 반영이 안 된 것 같다」는
     // 대부분 예전 파일이 열려 있는 경우라서, 눈으로 확인할 자리를 만들어 둔다.
-    version: 'v0.32 · 2026-10-21 (4차 문체 — 자서전 · 엽서 문체 고르기, 응답 style 로 라벨)',
+    version: 'v0.34 · 2026-10-22 (엽서 목록 제목 · 자서전 목차·장 읽기 · 서버 문체 1단계에 맞춤)',
 
     // 이 화면을 백엔드가 직접 서빙하면(web/ 폴더) 빈 문자열 그대로 둔다.
     // 다른 포트에서 열어 시험할 때만 'http://127.0.0.1:8010' 처럼 채운다.
@@ -1346,6 +1384,12 @@
       // 목록 응답에 엽서 제목·본문이 실리면 true 로 바꾼다 — 그때 카드에 본문
       // 두 줄이 같이 나온다. 지금은 session 표 컬럼만 와서 끌 수밖에 없다.
       previewInList: false,
+      // 목록 응답의 「저장된 엽서 제목」 칸 이름 (엽서 목록 제목 업무지시서 v1.0 §3 의 제안 이름).
+      // 아직 서버에 없는 칸이다 — 충 님과 이름 하나로 맞추면 여기만 바꾼다.
+      postcardTitleField: 'postcard_title',
+      // 서버 없이 목록 제목 규칙을 볼 때: ?listMock=title (여러 경우) · old (칸 없는 예전 응답)
+      //   · empty (빈 목록) · fail (503). 예시일 때는 화면 위에 「예시 목록」 이 뜬다.
+      mock: '',
       // 목록이 이 안에 안 오면 「불러오지 못했다」로 접는다. 예전에는 서버가 답하지
       // 않으면 불러오는 화면에 갇혀 돌아갈 버튼도 없었다.
       timeoutMs: 15000,
@@ -1373,6 +1417,15 @@
       // 주소 뒤에 ?memoirMock=ready 처럼 붙여도 된다. 예시일 때는 화면 위에 「예시 응답 모드」가 뜬다.
       mock: '',
       mockDelayMs: 1500,
+      // 장 · 문단 형식 (자서전 고도화 v1.0 §7.1 의 제안 — 아직 서버 API 에 없다).
+      // 응답에 chapters 가 있으면 장 읽기로, 없으면 예전처럼 body 한 줄 한 문장으로 읽는다.
+      // 예시: ?memoirMock=chapters · verified · partial · nodata · badref · html · badshape
+      chapters: {
+        // generation_state 의 뜻 — 이름은 C1/result 에서 맞춘다
+        ok: ['generated'],
+        lack: ['insufficient_material', 'no_material'],
+        partial: ['partial'],
+      },
     },
 
     // ── 사진 ──────────────────────────────────────────────────────
@@ -1481,6 +1534,10 @@
       names: { spoken: '구어체', novel: '소설체', cyworld: '싸이월드체' },
       default: 'spoken',
       pick: true,                // 자서전 · 엽서 화면에 문체 고르기를 보인다
+      // 서버가 지금 받는 문체 (feature/theme-interview 4c8d0f7 · 1단계는 spoken 하나).
+      // 나머지는 고르기에서 숨긴다 — 누르면 400 unsupported_style 만 온다. 4-P1 뒤 서버가 열면 여기에 더한다.
+      // 고를 것이 하나뿐이면 고르기 줄은 숨기고 「문체: ○○」 라벨만 둔다. ?styles=all 이면 전부 보인다 (400 시험용)
+      open: ['spoken'],
       regenWaitMs: 40000,        // 엽서를 다른 문체로 다시 만들 때 기다리는 상한
     },
 
@@ -1693,6 +1750,70 @@
       return URL.createObjectURL(await res.blob());
     },
   };
+
+  /* ═══════════════════════════════════════════════════════════════
+     예시 목록 (?listMock=title · old · empty · fail) — 엽서 목록 제목 업무지시서 §3 의 합성 자료
+       **실제 서버 응답이 아니다.** 목록 · 엽서 그림 · 기록 세 가지만 가짜로 돌려준다.
+       제목 규칙(TITLE-T01·03·04·08·09) 을 서버 없이 눈으로 보는 용도다.
+     ═══════════════════════════════════════════════════════════════ */
+  function listMock() {
+    const q = new URLSearchParams(location.search).get('listMock');
+    return q !== null ? q : (CONFIG.archive.mock || '');
+  }
+  if (listMock()) {
+    const kind = listMock();
+    const K = CONFIG.archive.postcardTitleField;
+    const at = h => new Date(Date.UTC(2026, 9, 22, h)).toISOString();
+    const row = (n, title, pc, ptitle, frag) => {
+      const r = { session_id: `${String(n).repeat(8)}-0000-4000-8000-${String(n).padStart(12, '0')}`,
+                  title, has_postcard: pc, photo_id: null, state: 'CLOSED', fragment_count: frag || 3,
+                  created_at: at(12 - n), closed_at: at(12 - n) };
+      if (ptitle !== undefined) r[K] = ptitle;
+      return r;
+    };
+    const rows = kind === 'old' ? [
+      row(1, '2026-10-22 기록', true, undefined), row(2, '', true, undefined), row(3, '가족 이야기', false, undefined),
+    ] : [
+      row(1, '2026-10-22 기록', true, '처음 열었던 작은 가게', 4),      // T01 날짜형 회차 제목 + 내용형 엽서 제목
+      row(2, '가족 이야기', false, null),                              // T03 엽서 없음 · 회차 제목 있음
+      row(3, '', false, null),                                         // T03 엽서 없음 · 회차 제목 없음
+      row(4, '2026-10-21 기록', true, ''),                             // T04 빈 문자열
+      row(5, '2026-10-21 기록', true, '   '),                          // T04 공백
+      row(6, '2026-10-20 기록', true, null),                           // T04 null
+      row(7, '2026-10-20 기록', true, 42),                             // T04 잘못된 자료형 (숫자)
+      row(8, '2026-10-19 기록', true, { text: '객체' }),               // T04 잘못된 자료형 (객체)
+      row(9, '나', true, '1997년의 여름', 5),                          // 날짜가 든 실제 제목 — 지우지 않는다
+      row(5 * 2, '취미', true, '<b>꺾쇠</b> "따옴표" & 🌸 — 시장 골목 끝 작은 인쇄소에서 처음 받은 월급으로 어머니께 목도리를 사 드린 날', 6), // T08
+      row(11, '가족', true, '봄날의 기차', 2),                          // T09 같은 제목, 다른 회차
+      row(12, '가족', true, '봄날의 기차', 3),
+    ];
+    const byId = id => rows.find(r => r.session_id === id);
+    const nap = ms => new Promise(r => setTimeout(r, ms));
+    api.sessions = async (limit, signal, opts) => {
+      await nap(400);
+      if (kind === 'fail') throw new ApiError(503, '예시 503');
+      if (kind === 'empty') return { sessions: [] };
+      return { sessions: rows.filter(r => !(opts && opts.hasPostcard) || r.has_postcard === true) };
+    };
+    api.postcardThumb = async (id) => {
+      const r = byId(id);
+      if (!r || !r.has_postcard) return null;
+      const c = document.createElement('canvas'); c.width = c.height = 84;
+      const g = c.getContext('2d'); g.fillStyle = `hsl(${(parseInt(id, 16) || 1) * 37 % 360} 40% 80%)`; g.fillRect(0, 0, 84, 84);
+      g.fillStyle = '#17374a'; g.font = '14px sans-serif'; g.fillText('예시', 26, 48);
+      return URL.createObjectURL(await new Promise(res => c.toBlob(res)));
+    };
+    api.record = async (id) => {
+      await nap(200);
+      const r = byId(id);
+      if (!r) throw new ApiError(404, '예시 404');
+      // 상세의 postcard.title 은 목록과 같은 저장값이다 (예전 응답 예시에서는 목록에 칸만 없다)
+      const t = r[K] !== undefined ? r[K] : (r.session_id.startsWith('1') ? '기차역의 아침' : '');
+      return { session_id: id, title: r.title, photo_id: null, created_at: r.created_at,
+               fragments: [{ idx: 0, question: null, answer: '예시 씨앗 문장' }, { idx: 1, question: '예시 질문', answer: '예시 답입니다.' }],
+               postcard: r.has_postcard ? { title: t, text: '예시 엽서 글입니다. 실제 생성 결과가 아닙니다.', caption: '', url: '', created_at: r.created_at } : null };
+    };
+  }
 
   /* ═══════════════════════════════════════════════════════════════
      speaker — 질문 mp3 재생 (src/speaker.ts 를 옮긴 것)
@@ -2228,11 +2349,12 @@
   /** 서버 응답(POST /postcard 또는 /record 의 postcard)을 화면이 쓰는 모양으로. */
   function shapeServerCard(r) {
     if (!r) return null;
-    const body = String(r.text || '').trim();       // ← 서버의 키 이름은 text 다 (body 가 아니다)
-    const title = String(r.title || '').trim();
+    const str = v => (typeof v === 'string' ? v.trim() : '');   // 숫자 · 객체가 와도 [object Object] 를 내지 않는다
+    const body = str(r.text);                       // ← 서버의 키 이름은 text 다 (body 가 아니다)
+    const title = str(r.title);
     if (!body && !title) return null;               // 빈 껍데기면 임시 정리가 낫다
     // style 이 없으면(문체를 모르는 서버) 구어체다. created_at · url 은 「새로 만든 엽서인가」 를 가리는 표시다
-    return { title, body, caption: String(r.caption || '').trim(),
+    return { title, body, caption: str(r.caption),
              url: r.url || '', source: 'server',
              style: CONFIG.style.names[r.style] ? r.style : CONFIG.style.default, created_at: r.created_at || '' };
   }
@@ -3071,6 +3193,7 @@
     piece = await composePostcard(sessionId, fragments);
     if (piece.fail) { showCardFail(piece); return; }
     renderPostcard(piece);
+    if (piece.source === 'server') arStale = true;
     show('complete');
     log('엽서', `완성 (${piece.source})`);
   }
@@ -3112,6 +3235,7 @@
       piece = await composePostcard(sessionId, (snap && snap.fragments) || []);
       if (piece.fail) { showCardFail(piece); return; }
       renderPostcard(piece);
+      if (piece.source === 'server') arStale = true;
       show('complete');
       log('엽서', `다시 만들기 — 완성 (${piece.source})`);
     } finally { cfBusy = false; }
@@ -3131,7 +3255,8 @@
       frame.style.display = 'none';
       card.classList.add('no-photo');
     }
-    $('#cardTitle').textContent = piece.title || '오늘의 목소리';
+    // 서버 엽서인데 제목이 비었으면 목록과 같은 「제목 없는 엽서」 (임시 정리 엽서는 polish 가 제목을 짓는다)
+    $('#cardTitle').textContent = piece.title || (piece.source === 'server' ? '제목 없는 엽서' : '오늘의 목소리');
     if (typeof cardStyleDraw === 'function') {
       // 새 엽서가 그려질 때 고른 값을 지금 엽서의 문체로 맞춰 둔다 (다시 만들기 버튼은 다른 문체를 골라야 켜진다)
       if (!regenBusy) { cardPick = piece.style || CONFIG.style.default; stylePicker($('#cardStyle'), cardPick, (code) => { cardPick = code; $('#cardStyleMsg').textContent = ''; cardStyleDraw(); }); }
@@ -3506,7 +3631,7 @@
   // 다시 불러오기는 읽기만 한다 — 엽서를 다시 만들거나 회차를 건드리지 않는다
   $('#rvMain').addEventListener('click', () => {
     if ($('[data-rv="error"]').hidden === false) { void openReview(rvId, rvWhyClosed, { fromArchive: rvFromArchive }); return; }
-    if (rvFromArchive) { rvReq++; show('archive'); return; }   // 목록은 받아 둔 그대로 다시 보인다
+    if (rvFromArchive) { rvReq++; if (arStale) void openArchive(); else show('archive'); return; }   // 받아 둔 목록 그대로 (낡았으면 다시 읽는다)
     location.reload();                   // 새 인터뷰는 처음부터 (MVP 범위)
   });
   $('#rvRetry').addEventListener('click', () => void openReview(rvId, rvWhyClosed, { fromArchive: rvFromArchive }));
@@ -3520,6 +3645,7 @@
      ═══════════════════════════════════════════════════════════════ */
   const $$ = (q) => [...document.querySelectorAll(q)];
   let arRows = [];                 // 마지막으로 받아 둔 목록
+  let arStale = false;             // 그 뒤 엽서를 만들었다 — 받아 둔 제목이 낡았다. 다음에 목록을 보일 때 다시 읽는다
   let arSort = 'new';
   let arViewing = false;           // 보관함에서 연 엽서를 보고 있는가
   let arPhoto = '';                // 그 회차의 사진 주소 — 저장할 때도 이것을 쓴다
@@ -3536,11 +3662,49 @@
     back.hidden = false;           // 불러오는 중에도 돌아갈 수 있어야 한다
   }
 
-  /* 제목이 비어 있으면 날짜로 부른다 — session.title 은 비어 있을 수 있다 */
+  /* 목록의 주 제목 (엽서 목록 제목 업무지시서 v1.0 · TITLE-FE-02).
+     기록 목록과 자서전 엽서 고르기가 **같은 이 함수**를 쓴다.
+       엽서 있음 + 저장된 엽서 제목   → 그 제목 (회차 title 이 날짜·테마여도 엽서 제목이 먼저)
+       엽서 있음 + "" · 공백 · null   → 「제목 없는 엽서」
+       엽서 없음 + 회차 title         → 회차 title
+       엽서 없음 + 회차 title 없음    → 「제목 없는 기록」
+     날짜는 제목 자리에 넣지 않는다 — 작성 날짜(created_at)는 아래 보조 줄에 따로 나온다.
+     본문을 요약해 제목을 만들거나 회차마다 /record 를 더 묻지 않는다.
+     돌려주는 from: postcard · session · none,  issue: old(칸이 없는 예전 응답) · type(문자열이 아님) */
+  const NO_CARD_TITLE = '제목 없는 엽서', NO_REC_TITLE = '제목 없는 기록';
+  const clean = v => (typeof v === 'string' ? v.trim() : '');
   function arTitle(s) {
-    if (s.title && s.title.trim()) return s.title.trim();
-    const d = new Date(s.created_at);
-    return `${d.getMonth() + 1}월 ${d.getDate()}일의 이야기`;
+    const key = CONFIG.archive.postcardTitleField;
+    const own = clean(s.title);
+    if (s.has_postcard === true) {
+      if (!(key in s)) {
+        // 칸 자체가 없다 = 아직 연결 안 된 서버. 「제목이 없다」 고 단정하지 않고 예전처럼 회차 제목을 쓴다
+        return own ? { text: own, from: 'session', issue: 'old' } : { text: NO_REC_TITLE, from: 'none', issue: 'old' };
+      }
+      const v = s[key];
+      if (v !== null && typeof v !== 'string') return { text: NO_CARD_TITLE, from: 'none', issue: 'type' };
+      const t = clean(v);
+      return t ? { text: t, from: 'postcard' } : { text: NO_CARD_TITLE, from: 'none' };
+    }
+    return own ? { text: own, from: 'session' } : { text: NO_REC_TITLE, from: 'none' };
+  }
+  /** 제목 줄 하나. 서버 글은 textContent 로만 넣는다. data-from 은 개발자 도구에서 출처를 보는 표시 */
+  function titleEl(s) {
+    const t = arTitle(s);
+    const e = document.createElement('span');
+    e.className = `p-ttl${t.from === 'none' ? ' untitled' : ''}`;
+    e.textContent = t.text;
+    e.dataset.from = t.from;
+    if (t.issue) e.dataset.issue = t.issue;
+    return e;
+  }
+  /** 목록을 받은 뒤 한 번 — 예전 응답 · 잘못된 자료형을 기록에 남긴다 (정상 빈 제목과 섞지 않는다) */
+  function titleAudit(tag, rows) {
+    const key = CONFIG.archive.postcardTitleField;
+    const old = rows.filter(s => arTitle(s).issue === 'old').length;
+    const bad = rows.filter(s => arTitle(s).issue === 'type');
+    if (old) log(tag, `엽서 제목 칸(${key})이 없는 응답 ${old}건 — 회차 제목으로 대신 보입니다 (실제 연결 미확인)`);
+    bad.forEach(s => log(tag, `엽서 제목이 문자열이 아닙니다 (${Array.isArray(s[key]) ? 'array' : typeof s[key]}) · ${String(s.session_id).slice(0, 8)}`));
   }
   const arDate = iso => {
     const d = new Date(iso);
@@ -3574,7 +3738,7 @@
       } else thumb.appendChild(el('span', 'no', '사진 없음'));
       const text = el('span');
       text.style.cssText = 'flex:1; min-width:0';
-      text.appendChild(el('span', 'p-ttl', arTitle(s)));
+      text.appendChild(titleEl(s));
       // 목록 응답에 엽서 본문이 실리면 그때 두 줄을 같이 보여준다 (CONFIG.archive.previewInList)
       if (CONFIG.archive.previewInList && s.postcard_body) text.appendChild(el('span', 'p-body', s.postcard_body));
       const meta = el('span', 'p-meta');
@@ -3615,8 +3779,8 @@
       frame.style.display = 'none';
       card.classList.add('no-photo');
     }
-    $('#cardTitle').textContent = pc.title || '오늘의 목소리';
-    $('#cardCopy').textContent = pc.text || '';
+    $('#cardTitle').textContent = clean(pc.title) || NO_CARD_TITLE;   // 목록과 같은 대체 표기
+    $('#cardCopy').textContent = typeof pc.text === 'string' ? pc.text : '';
     const d = new Date(createdAt);
     const caption = pc.caption ? `${pc.caption} · ` : '';
     $('#cardSign').textContent =
@@ -3637,7 +3801,7 @@
       const pc = rec && rec.postcard;
       // 엽서가 없으면 그 회차의 「나눈 이야기」 를 연다 (읽기 전용). 자동 엽서가 꺼진 뒤로는
       // 새 회차가 다 이렇다 — 예전처럼 안내만 띄우면 막다른 길이 된다. 받은 기록을 그대로 쓴다.
-      if (!pc || !(pc.text || pc.title)) {
+      if (!pc || !(clean(pc.text) || clean(pc.title))) {
         log('보관함', `엽서 없는 회차 — 나눈 이야기를 엽니다 · ${id.slice(0, 8)}`);
         void openReview(id, '', { rec, fromArchive: true });
         return;
@@ -3663,6 +3827,7 @@
     const my = ++arReq;
     show('archive');
     arShow('load');
+    $('#arSample').hidden = !listMock();
     const ctl = new AbortController();
     const timer = setTimeout(() => ctl.abort(), CONFIG.archive.timeoutMs);
     try {
@@ -3672,7 +3837,9 @@
       // 확정된 회차만 (FR-AR-501). 진행 중인 회차는 보여 주지 않는다.
       if (CONFIG.archive.closedOnly) rows = rows.filter(s => s.closed_at);
       arRows = rows;
+      arStale = false;
       if (!rows.length) { arShow('empty'); log('보관함', '기록 없음'); return; }
+      titleAudit('보관함', rows);
       arDraw(); arShow('list');
       log('보관함', `${rows.length}회차`);
     } catch (e) {
@@ -3703,7 +3870,7 @@
     arPhoto = arCardUrl = '';
     $('#exitBtn').textContent = '마치기';
     $('#cardHead').innerHTML = '한 편의 엽서가<br />되었습니다.';
-    show('archive');
+    if (arStale) void openArchive(); else show('archive');
   }, true);
 
   $$('.tab').forEach(b => b.addEventListener('click', () => {
@@ -3728,7 +3895,7 @@
      고를 엽서 = 엽서가 있는 회차다. GET /api/sessions 로 회차를 받고, 회차마다
      GET /postcard 를 물어 404 면 뺀다. 받은 엽서 그림은 그대로 썸네일이 된다.
      ═══════════════════════════════════════════════════════════════ */
-  const MM_VIEWS = ['load', 'pick', 'none', 'loadfail', 'wait', 'result', 'short', 'fail'];
+  const MM_VIEWS = ['load', 'pick', 'none', 'loadfail', 'wait', 'result', 'short', 'fail', 'partial'];
   // 실패 안내는 HTTP 상태로 고른다 (C1 v1.1). 서버의 detail 은 화면에 내지 않는다 —
   // 문자열이 아니거나 내부 사정이 섞일 수 있다.
   const MM_FAIL = {
@@ -3766,7 +3933,8 @@
   /** 지금 예시 응답으로 도는가. 주소의 ?memoirMock= 이 설정보다 먼저다. */
   function mmMock() {
     const q = new URLSearchParams(location.search).get('memoirMock');
-    return q !== null ? q : (CONFIG.memoir.mock || '');
+    // 예시 목록(?listMock)의 회차는 서버에 없다 — 그때는 자서전도 예시로 돈다
+    return q !== null ? q : (CONFIG.memoir.mock || (listMock() ? 'ready' : ''));
   }
 
   function mmShow(view) {
@@ -3774,7 +3942,7 @@
     MM_VIEWS.forEach(k => { $(`[data-mm="${k}"]`).hidden = (k !== view); });
     $('#mmSample').hidden = !mmMock();
     const main = $('#mmMain'), back = $('#mmBack');
-    const after = view === 'result' || view === 'short' || view === 'fail';
+    const after = view === 'result' || view === 'short' || view === 'fail' || view === 'partial';
     main.hidden = view === 'none';
     main.textContent = view === 'loadfail' ? '다시 불러오기'
                      : view === 'wait' ? '자서전을 쓰는 중이에요'
@@ -3783,7 +3951,7 @@
     main.disabled = view === 'load' || view === 'wait';
     back.hidden = view === 'wait' || after;
     if (view === 'pick') mmSync();
-    $('#mmStyle').hidden = !CONFIG.style.pick || view !== 'pick';
+    $('#mmStyle').hidden = !stylePickable() || view !== 'pick';
     window.scrollTo(0, 0);
   }
 
@@ -3828,8 +3996,7 @@
       thumb.appendChild(img);
       const text = document.createElement('span');
       text.style.cssText = 'flex:1; min-width:0';
-      const ttl = document.createElement('span');
-      ttl.className = 'p-ttl'; ttl.textContent = arTitle(s);
+      const ttl = titleEl(s);
       const meta = document.createElement('span');
       meta.className = 'p-meta';
       const date = document.createElement('span');
@@ -3874,6 +4041,7 @@
       }
       mmRows = closed.map((s, i) => Object.assign({}, s, { thumb: thumbs[i] })).filter(s => s.thumb);
       if (!mmRows.length) { mmShow('none'); log('자서전', '고를 엽서 없음'); return; }
+      titleAudit('자서전', mmRows);
       mmDraw();
       mmShow('pick');
       log('자서전', `고를 수 있는 엽서 ${mmRows.length}장`);
@@ -3900,11 +4068,79 @@
     }
     if (kind === 'invalid') return { status: 'ready', title: '', body: 3 };
     if (kind === 'unsupported') { const e = new ApiError(400, '예시'); e.code = 'unsupported_style'; throw e; }
+    if (MM_CH_KINDS.includes(kind)) return mmChapterSample(kind, style);
     return Object.assign({}, MM_SAMPLE, style ? { style } : {});
+  }
+
+  /* ── 장 · 문단 형식 (자서전 고도화 v1.0 §7.1 제안 · C1/result 합의 전) ──────────
+     { run_ref, input_ref, title, chapters: [{ chapter_key, title:{text,kind,turns},
+       paragraphs: [[{text,kind,turns}, …], …] }], review_notes, verification:{state,issues},
+       generation_state, failure:{reason} }
+     · 본문을 다시 쓰거나 요약하지 않는다. 장 · 문단 · 문장을 받은 순서 그대로 글자로만 넣는다.
+     · review_notes · verification.issues 는 본문에 넣지 않는다 — 개수만 기록(⚙)에 남긴다.
+     · 목차가 있는데 장이 빈 결과는 완성본으로 열지 않는다 (partial). */
+  const MM_CH_KINDS = ['chapters', 'verified', 'partial', 'nodata', 'badref', 'html', 'badshape'];
+  // 예시 — 설명용 합성 화자 (업무지시서 §4 · §7.2 의 합성 원문을 늘린 것). **실제 생성 결과가 아니다.**
+  function mmChapterSample(kind, style) {
+    const S = (text, kind, turns) => ({ text, kind: kind || 'supported', turns: turns || [] });
+    const ch = (key, title, paras) => ({ chapter_key: key, title: S(title, 'editorial'), paragraphs: paras });
+    const out = {
+      run_ref: 'demo-run-1', input_ref: 'demo-input-a', generation_state: 'generated',
+      title: { text: kind === 'html' ? '<i>배움</i>을 이어 간 "삶" & 시간' : '다시 펼친 배움', kind: 'editorial', turns: [] },
+      chapters: [
+        ch('ch-1', '그만둔 학교, 남은 마음', [
+          [S('학교는 그만뒀지만 배우고 싶었어요.', 'supported', [1])],
+        ]),
+        ch('ch-2', '책을 펼치는 시간', [
+          [S('가게 일을 하면서 회계책을 읽었어요.', 'supported', [2]),
+           S('장사가 끝난 밤이면 계산대 옆에서 한 장씩 넘겼어요.', 'supported', [4])],
+          [S('숫자를 맞춰 보는 일이 생각보다 재미있었어요.', 'supported', [5])],
+        ]),
+        ch('ch-3', '쉰 살에 잡은 기타 — 늦게 시작해도 괜찮았던 일들에 대하여', [
+          [S('쉰 살이 넘어서는 기타를 배웠어요.', 'supported', [3]),
+           S('손가락이 아파도 매주 학원에 갔어요.', 'supported', [6])],
+          [S('이렇게 배움은 끝나지 않고 이어졌어요.', 'editorial')],
+        ]),
+      ],
+      review_notes: [{ note: '예시 검토 메모 — 본문에 나오면 안 된다' }],
+      verification: { state: kind === 'verified' ? 'pass' : 'not_run', issues: [] },
+    };
+    if (style) out.style = style;
+    if (kind === 'partial') { out.generation_state = 'partial'; out.chapters[1].paragraphs = []; out.failure = { reason: 'chapter_failed', chapter_key: 'ch-2' }; }
+    if (kind === 'nodata') return { run_ref: 'demo-run-2', generation_state: 'insufficient_material', chapters: [] };
+    if (kind === 'badref') return { run_ref: 'demo-run-3', generation_state: 'failed', failure: { reason: 'bad_reference' }, chapters: [] };
+    if (kind === 'badshape') out.chapters[0].paragraphs = '문단이 배열이 아니다';
+    return out;
+  }
+  const txt = v => (typeof v === 'string' ? v : v && typeof v.text === 'string' ? v.text : '');
+  /** 장 형식 응답 → 화면 상태. 모양이 틀리면 실패로 접는다 — 고쳐서 통과시키지 않는다 */
+  function mmReadChapters(res) {
+    const C = CONFIG.memoir.chapters, st = res.generation_state;
+    const run = String(res.run_ref || '').slice(0, 40);
+    const notes = (Array.isArray(res.review_notes) ? res.review_notes.length : 0)
+                + (res.verification && Array.isArray(res.verification.issues) ? res.verification.issues.length : 0);
+    if (C.lack.includes(st)) return { view: 'short' };
+    if (C.partial.includes(st)) { log('자서전', `일부 장 실패 · ${run} · ${txt(res.failure && res.failure.chapter_key) || res.failure && res.failure.chapter_key || ''}`); return { view: 'partial' }; }
+    if (!C.ok.includes(st)) {
+      log('자서전', `생성 실패 · ${run} · ${(res.failure && res.failure.reason) || st || '상태 없음'}`);
+      return { view: 'fail', why: MM_FAIL.other };
+    }
+    const title = txt(res.title).trim();
+    const chs = res.chapters;
+    const okSent = x => typeof txt(x) === 'string' && txt(x).trim();
+    const shapeOk = title && Array.isArray(chs) && chs.length && chs.every(c => c && txt(c.title).trim()
+      && Array.isArray(c.paragraphs) && c.paragraphs.every(p => Array.isArray(p) && p.every(okSent)));
+    if (!shapeOk) { log('자서전', `장 형식이 규격과 다릅니다 · ${run}`); return { view: 'fail', why: MM_FAIL.other }; }
+    if (chs.some(c => !c.paragraphs.length)) { log('자서전', `빈 장이 있습니다 · ${run}`); return { view: 'partial' }; }
+    if (notes) log('자서전', `검토 메모 · 검증 지적 ${notes}건 — 본문에는 넣지 않습니다`);
+    const style = CONFIG.style.names[res.style] ? res.style : CONFIG.style.default;
+    const ver = (res.verification && res.verification.state) || 'not_run';
+    return { view: 'result', title, chapters: chs, run, ver, style };
   }
 
   /** 응답을 화면 상태로. 모양이 틀리면 원 JSON 을 쏟지 않고 실패로 접는다. */
   function mmRead(res) {
+    if (res && typeof res === 'object' && ('chapters' in res || 'generation_state' in res)) return mmReadChapters(res);
     if (res && res.status === 'insufficient_material') return { view: 'short' };
     if (res && res.status === 'ready'
         && typeof res.title === 'string' && res.title.trim()
@@ -3924,8 +4160,50 @@
     return MM_FAIL[e && e.status] || MM_FAIL.other;           // 응답 없음 · 파싱 실패 · 그 밖의 상태
   }
 
+  /** 장 읽기 — 제목 · 목차 · 장 제목 · 문단. 목차를 누르면 그 장으로 간다 */
+  function mmPaintChapters(out) {
+    $('#mmTitle').textContent = out.title;
+    const box = $('#mmBody'), toc = $('#mmTocList');
+    box.replaceChildren(); toc.replaceChildren();
+    out.chapters.forEach((c, i) => {
+      const sec = document.createElement('section');
+      sec.className = 'mm-ch';
+      sec.id = `mmCh${i + 1}`;
+      const h = document.createElement('h3');
+      const no = document.createElement('small');
+      no.textContent = `${i + 1}장`;
+      h.append(no, document.createTextNode(txt(c.title).trim()));
+      sec.append(h);
+      c.paragraphs.forEach(p => {
+        const el = document.createElement('p');
+        el.textContent = p.map(x => txt(x).trim()).join(' ');    // 문장은 바꾸지 않고 한 문단으로 잇기만 한다
+        sec.append(el);
+      });
+      box.append(sec);
+      const li = document.createElement('li'), b = document.createElement('button');
+      b.type = 'button'; b.textContent = txt(c.title).trim();
+      b.addEventListener('click', () => sec.scrollIntoView({ behavior: reducedMotion() ? 'auto' : 'smooth', block: 'start' }));
+      li.append(b); toc.append(li);
+    });
+    $('#mmToc').hidden = false;
+  }
+  /** 결과 위 표시 — 어디서 온 글인지 · 초안인지 (MEM-FE-04 · 05). 숨기지 않는다 */
+  function mmMark(origin, out) {
+    const o = $('#mmOrigin');
+    o.hidden = false;
+    o.textContent = origin === 'file' ? `독립 실행 결과 파일 — 서비스 생성 아님${out.run ? ` · ${out.run}` : ''}`
+                  : origin === 'mock' ? '예시(합성) 결과 — 실제 생성이 아닙니다'
+                  : out.chapters ? `서버 응답 · 장 형식${out.run ? ` · ${out.run}` : ''}` : '서버 응답';
+    const d = $('#mmDraft');
+    d.hidden = false;
+    d.textContent = out.chapters && out.ver !== 'pass'
+      ? '자서전 초안이에요. 아직 검증과 사람의 확인을 거치지 않았어요.'
+      : '자서전 초안이에요. 아직 사람의 확인을 거치지 않았어요.';
+  }
+
   function mmPaint(title, body) {
     $('#mmTitle').textContent = title;
+    $('#mmToc').hidden = true;
     const box = $('#mmBody');
     box.replaceChildren();
     // 한 줄이 한 문장이다 (자서전.md). 회차 5개면 15~40문장까지 온다 — 자르지 않는다.
@@ -3964,7 +4242,8 @@
 
     if (my !== mmReq) { log('자서전', '늦게 온 응답을 버립니다'); return; }
     if (out.view === 'result') {
-      mmPaint(out.title, out.body);
+      if (out.chapters) mmPaintChapters(out); else mmPaint(out.title, out.body);
+      mmMark(kind ? 'mock' : 'server', out);
       const tag = $('#mmStyleTag');
       tag.hidden = !CONFIG.style.pick;
       tag.textContent = `문체: ${CONFIG.style.names[out.style]}` +
@@ -3974,6 +4253,32 @@
     mmShow(out.view);
     log('자서전', out.view === 'result' ? `완성 · ${kind ? '예시 응답' : '실제 응답'}` : out.view);
   }
+
+  /* 대원 님 독립 실행 결과(JSON 파일)를 같은 읽기 화면에 띄운다 (MEM-FE-04).
+     파일은 이 브라우저 안에서만 읽는다 — 서버로 올리거나 저장하지 않는다.
+     화면 위에 「독립 실행 결과 파일 — 서비스 생성 아님」 이 붙는다. */
+  $('#devMemFile').addEventListener('click', () => $('#devMemInput').click());
+  $('#devMemInput').addEventListener('change', async (e) => {
+    const f = e.target.files && e.target.files[0];
+    e.target.value = '';
+    if (!f) return;
+    let res;
+    try { res = JSON.parse(await f.text()); }
+    catch (_) { log('자서전', `결과 파일을 JSON 으로 읽지 못했습니다 · ${f.name}`); toast('결과 파일을 읽지 못했어요'); return; }
+    mmReq++;                                           // 앞에서 기다리던 요청이 이 글을 덮지 않게
+    $('#dev').classList.remove('show');
+    show('memoir');
+    const out = mmRead(res);
+    if (out.view === 'result') {
+      if (out.chapters) mmPaintChapters(out); else mmPaint(out.title, out.body);
+      mmMark('file', out);
+      $('#mmStyleTag').hidden = true;
+    }
+    if (out.view === 'fail') $('#mmFailMsg').textContent = out.why;
+    mmShow(out.view);
+    $('#mmSample').hidden = true;
+    log('자서전', `결과 파일 · ${f.name} · ${out.view}`);
+  });
 
   $('#arMemoir').addEventListener('click', () => void openMemoir());
   $('#mmMain').addEventListener('click', () => {
@@ -4096,9 +4401,16 @@
        · 화면 시계와 비교하지 않는다 — 휴대전화 시계가 어긋날 수 있다.
      ═══════════════════════════════════════════════════════════════ */
   const STYLE_UNSUPPORTED = '지원하지 않는 문체예요. 다른 문체를 골라 주세요.';
+  /** 고를 수 있는 문체 — 서버가 받는 것만 (CONFIG.style.open). ?styles=all 이면 전부 */
+  function styleOpen() {
+    const all = Object.keys(CONFIG.style.names);
+    if (new URLSearchParams(location.search).get('styles') === 'all') return all;
+    return all.filter(c => CONFIG.style.open.includes(c));
+  }
+  const stylePickable = () => CONFIG.style.pick && styleOpen().length > 1;
   function stylePicker(host, current, onPick) {
     host.replaceChildren();
-    Object.entries(CONFIG.style.names).forEach(([code, name]) => {
+    Object.entries(CONFIG.style.names).filter(([code]) => styleOpen().includes(code)).forEach(([code, name]) => {
       const b = document.createElement('button');
       b.type = 'button'; b.className = 'tab'; b.textContent = name; b.dataset.style = code;
       b.setAttribute('role', 'radio'); b.setAttribute('aria-checked', String(code === current));
@@ -4118,6 +4430,8 @@
     $('#cardStyleBox').hidden = !on;
     if (!on) return;
     $('#cardStyleTag').textContent = `문체: ${CONFIG.style.names[piece.style] || CONFIG.style.names[CONFIG.style.default]}`;
+    // 고를 문체가 하나뿐이면 라벨만 — 다시 만들 다른 문체가 없다
+    $('#cardStyle').hidden = $('#cardRegen').hidden = !stylePickable();
     $('#cardRegen').disabled = regenBusy || cardPick === piece.style;
     $('#cardRegen').textContent = regenBusy ? `${CONFIG.style.names[cardPick]}로 만드는 중…` : `${CONFIG.style.names[cardPick]}로 다시 만들기`;
     $('#cardStyle').querySelectorAll('.tab').forEach(x => { x.disabled = regenBusy; });
@@ -4167,6 +4481,7 @@
     if (got) {
       // 서버가 준 엽서 그대로 — 라벨도 응답의 style. 문체를 모르는 서버면 구어체로 온다
       Object.assign(piece, got);
+      arStale = true;                  // 제목이 바뀌었을 수 있다 — 목록은 다음에 열 때 다시 읽는다
       renderPostcard(piece);
       $('#cardStyleMsg').textContent = got.style === want ? `${name(want)}로 다시 만들었어요.`
         : `${name(want)}로 오지 않고 ${name(got.style)}로 왔어요. (서버가 아직 문체를 고르지 못할 수 있어요)`;
