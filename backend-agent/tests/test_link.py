@@ -13,6 +13,7 @@
     [진행]     기기 쿠키로 진행 · 본문의 session_id 는 무시
     [A6 · A7]  링크 권한과 자녀 권한이 섞이지 않는다
     [종료]     끝난 뒤 읽기 전용 대화 · 0번 조각 없음 · 끊김
+    [엽서]     링크로 마친 회차는 발급한 자녀가 굽는다 · 다른 자녀 404 · 어르신 기기 401
     [A4]       만료 · 회수 · 재발급 · 진행 중에는 만료되지 않는다
     [상한]     꽉 찼으면 링크를 소모하지 않는다
 """
@@ -430,6 +431,40 @@ def run():
         r = dev.get("/api/i/session")
         check("메모리에서 빠진 끝난 회차의 진행 경로 → 409 ended", r.status_code == 409
               and r.json().get("code") == "ended", r.text[:80])
+
+        # 링크로 마친 회차의 엽서 — 발급한 자녀가 자기 로그인으로 굽는다.
+        # 회차 행의 주인은 컨트롤러가 링크에서 받은 user_id 다 (DB 에도 그 값이 들어간다).
+        # 모델 · 그림은 _make 를 바꿔 끼워 건너뛰고, 주인 · 닫힘 · 말씀 검사는 진짜 make 가 본다.
+        print("\n[엽서] 링크로 마친 회차를 자녀가 굽는다")
+        from app.session import postcard
+        me_a = a.get("/api/auth/me").json()["user"]["user_id"]
+        check("링크 회차의 주인은 링크를 발급한 자녀", ctl.user_id == me_a, f"{ctl.user_id} / {me_a}")
+        fl.saved[sid] = {"session_id": sid, "user_id": ctl.user_id, "closed_at": _now(),
+                         "created_at": _now(), "photo_id": None, "closing_decision": None,
+                         "fragments": list(ctl.fragments)}
+        baked: list[tuple[str, list]] = []
+
+        async def _fake_make(rec, said, style):
+            baked.append((rec["session_id"], [f["answer"] for f in said]))
+            return {"storage_key": f"postcards/{rec['session_id']}/x.jpg", "title": "",
+                    "text": "모의 엽서", "caption": "", "width": 1500, "height": 1000,
+                    "bytes": 1, "style": style, "created_at": _now().isoformat()}
+
+        real_make = postcard._make
+        postcard._make = _fake_make
+        try:
+            r = dev.post(f"/api/sessions/{sid}/postcard", json={})
+            check("어르신 기기(mlink)로는 여전히 401", r.status_code == 401, str(r.status_code))
+            r = b.post(f"/api/sessions/{sid}/postcard", json={})
+            check("다른 자녀(B)는 404 — 회차가 있는지도 알려 주지 않는다", r.status_code == 404, r.text[:80])
+            check("거절한 요청은 굽지 않았다", baked == [], str(baked))
+            r = a.post(f"/api/sessions/{sid}/postcard", json={})
+            check("발급한 자녀(A)는 자기 로그인으로 굽는다 · 200 · style spoken",
+                  r.status_code == 200 and r.json().get("style") == "spoken", r.text[:120])
+            check("구운 자료는 링크로 받은 어르신의 말씀",
+                  baked == [(sid, ["1996년에 딸이 초등학교에 들어갔어요."])], str(baked))
+        finally:
+            postcard._make = real_make
 
         # 끊김 — 시작했는데 메모리에서 사라졌고 끝난 기록이 없다 (서버 재시작)
         tok3 = _issue(a, elder_a).json()["token"]
