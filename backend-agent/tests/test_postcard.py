@@ -363,6 +363,75 @@ def test_routes():
     shutil.rmtree(TMP, ignore_errors=True)
 
 
+def test_inject():
+    """시험 서버의 실패 · 지연 주입. 모델 값 없이 화면의 busy · 실패 처리를 본다 (4-C1 §6)."""
+    print("\n[S6] 실패 · 지연 주입")
+
+    from fastapi.testclient import TestClient
+
+    from app.main import app
+
+    shutil.rmtree(TMP, ignore_errors=True)
+    kim = {"X-User-Id": "kim"}
+    url = f"/api/sessions/{SID}/postcard"
+    with _Env(AZURE_SPEECH_KEY="", PHOTO_STORE="local", PHOTO_DIR=str(TMP),
+              POSTCARD_FAIL_INJECT="off", POSTCARD_INJECT_DELAY="0"), _Fake() as fake, NoDb(), AsHeader():
+        photostore.reset()
+        with TestClient(app) as c:
+            first = c.post(url, headers=kim).json()
+            kept, writes = dict(fake.card), fake.writes
+
+            with _Env(POSTCARD_FAIL_INJECT="generation_failed"):
+                r = c.post(url, headers=kim)
+                check("generation_failed → 503", r.status_code == 503, f"{r.status_code} {r.text[:80]}")
+            with _Env(POSTCARD_FAIL_INJECT="insufficient_material"):
+                r = c.post(url, headers=kim)
+                check("insufficient_material → 409 · code insufficient_material",
+                      r.status_code == 409 and r.json().get("code") == "insufficient_material",
+                      f"{r.status_code} {r.text[:80]}")
+            check("주입한 실패는 모델을 안 부른다", fake.writes == writes, f"{fake.writes - writes}번")
+            check("주입한 실패 뒤 옛 엽서가 그대로다 (행 · 바이트)",
+                  fake.card == kept and len(_blobs()) == 1, f"{len(_blobs())}장")
+            rec = c.get(f"/api/sessions/{SID}/record", headers=kim).json()["postcard"]
+            check("기록은 옛 엽서의 created_at · 주소 · 문체를 준다",
+                  (rec["created_at"], rec["url"], rec["style"])
+                  == (first["created_at"], first["url"], "spoken"), str(rec))
+
+            with _Env(POSTCARD_FAIL_INJECT="generation_failed"):
+                r = c.post(url, json={"style": "novel"}, headers=kim)
+                check("문체 거절이 주입보다 먼저다 (400)", r.status_code == 400
+                      and r.json().get("code") == "unsupported_style", f"{r.status_code}")
+
+        async def overlap():
+            """늦추는 동안 또 누르면 busy, 첫 요청은 걸어 둔 실패로 끝난다."""
+            a = asyncio.create_task(postcard.make(SID, "kim"))
+            await asyncio.sleep(0.1)
+            try:
+                await postcard.make(SID, "kim")
+                check("늦추는 동안 또 누르면 busy", False, "두 번 들어갔다")
+            except postcard.PostcardNotReady as e:
+                check("늦추는 동안 또 누르면 busy", e.code == "busy", e.code)
+            try:
+                await a
+                check("늦춘 뒤 걸어 둔 실패로 끝난다", False, "성공했다")
+            except postcard.PostcardUnavailable:
+                check("늦춘 뒤 걸어 둔 실패로 끝난다", True)
+            check("끝나면 busy 가 풀린다", SID not in postcard._busy)
+
+        with _Env(POSTCARD_FAIL_INJECT="generation_failed", POSTCARD_INJECT_DELAY="0.4"):
+            asyncio.run(overlap())
+        check("겹친 요청도 모델을 안 부른다", fake.writes == writes, f"{fake.writes - writes}번")
+
+    with _Env(POSTCARD_FAIL_INJECT="nonsense"):
+        check("모르는 주입 값은 끈 것으로 읽는다", postcard.inject() == "")
+    for v, want in (("999", postcard.INJECT_DELAY_MAX), ("-5", 0.0), ("", 0.0)):
+        with _Env(POSTCARD_INJECT_DELAY=v):
+            check(f"늦추기 {v!r} → {want}초", postcard.inject_delay() == want, str(postcard.inject_delay()))
+
+    photostore.reset()
+    shutil.rmtree(TMP, ignore_errors=True)
+
+
 def test_auto():
     """회차가 닫히면 closed_fn 이 불린다. 서버의 closed_fn(on_closed)은 엽서를 굽지 않는다."""
     print("\n[4] 닫혀도 굽지 않는다")
@@ -642,6 +711,7 @@ def main() -> int:
     test_compose()
     test_key()
     test_routes()
+    test_inject()
     test_auto()
     test_material()
     test_checked()

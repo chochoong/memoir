@@ -868,6 +868,23 @@ Remove-Item Env:MEMOIR_FAIL_INJECT; .\run.ps1                 # 풀고 다시 �
 **시험이 끝나면 풀고 다시 띄운다.** 건 채로 두면 모든 자서전 요청이 실패한다.
 주입한 504 는 오류 경로를 본 것이지 모델이 실제로 20초를 넘긴 것이 아니다.
 
+엽서에도 같은 자리가 있다 (`POSTCARD_FAIL_INJECT` · `POSTCARD_INJECT_DELAY`). 문체를 바꿔 다시 만들 때
+화면이 busy · 실패를 어떻게 다루는지 모델 값 없이 보려는 것이다 (4-C1 §6).
+
+| 값 | 결과 |
+|---|---|
+| `POSTCARD_FAIL_INJECT` 비움 · `off` | 주입 없음 |
+| `POSTCARD_FAIL_INJECT=generation_failed` | 모델을 부르는 자리에서 503. 옛 엽서는 그대로 |
+| `POSTCARD_FAIL_INJECT=insufficient_material` | 같은 자리에서 409 `code: insufficient_material` |
+| `POSTCARD_INJECT_DELAY=초` | 모델을 부르기 전에 그만큼 쉰다 (최대 120). 그동안 또 누르면 409 `busy` |
+
+**늦추기만 걸면 쉰 뒤에 실제 모델을 부른다 — 값이 든다.** 모델 없이 「busy → 실패」를 보려면 둘을 같이 건다.
+
+```powershell
+$env:POSTCARD_FAIL_INJECT = "generation_failed"; $env:POSTCARD_INJECT_DELAY = "10"; .\run.ps1
+Remove-Item Env:POSTCARD_FAIL_INJECT, Env:POSTCARD_INJECT_DELAY; .\run.ps1
+```
+
 ### 재 본 것 (합성 자료 · 로컬)
 
 `자서전.md` v1.3 (2026-10-13) 으로 실제 모델을 28번 불렀다. 프롬프트가 바뀌면 다시 잰다.

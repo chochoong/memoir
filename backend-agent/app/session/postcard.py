@@ -64,6 +64,12 @@ NOT_FINAL = ("needs_confirmation", "needs_context")
 DEFAULT_TEXT_MODEL = "gemini-3.5-flash-lite"
 DEFAULT_TEXT_TIMEOUT = 15.0
 
+# POSTCARD_FAIL_INJECT · POSTCARD_INJECT_DELAY — 시험 서버에서만 켠다. 요청으로는
+# 고를 수 없다. 화면의 busy · 실패 처리를 모델 값 없이 재현하는 자리다 (4-C1 §6).
+INJECT_FAILED = "generation_failed"
+_INJECTS = (INJECT_FAILED, INSUFFICIENT)
+INJECT_DELAY_MAX = 120.0
+
 # v3 「분량」. 넘으면 로그만 남긴다 — 잘라 내면 말씀의 뜻이 바뀐다.
 TITLE_MAX, BODY_MAX, CAPTION_MAX = 15, 120, 20
 
@@ -162,6 +168,41 @@ class Photo:
 _busy: set[str] = set()
 
 
+def inject() -> str:
+    """지금 걸린 실패 주입. 모르는 값은 끈 것으로 읽고 로그에 남긴다 (memoir.inject 와 같다)."""
+    v = env_str("POSTCARD_FAIL_INJECT").strip().lower()
+    if v in ("", "off"):
+        return ""
+    if v not in _INJECTS:
+        log.error("POSTCARD_FAIL_INJECT=%s 는 모르는 값이다 — 끈 것으로 읽는다", v)
+        return ""
+    return v
+
+
+def inject_delay() -> float:
+    """모델을 부르기 전에 쉴 초. 굽는 중(busy)인 시간을 늘려 겹친 요청을 재현한다."""
+    return min(max(env_float("POSTCARD_INJECT_DELAY", 0.0), 0.0), INJECT_DELAY_MAX)
+
+
+async def _injected() -> None:
+    """
+    모델을 부르기 바로 전 — 회차 · 말씀 검사와 busy 표시를 지난 자리다. 그래서 늦춘
+    동안 같은 회차를 또 누르면 진짜와 같은 409 busy 가 난다.
+
+    실패를 걸면 모델도 저장소도 건드리지 않는다. 옛 엽서는 그대로 남는다.
+    늦추기만 걸면 그 뒤에 **실제 모델을 부른다** — 값이 든다.
+    """
+    delay = inject_delay()
+    if delay:
+        log.warning("POSTCARD_INJECT_DELAY — %.0f초 늦춘다", delay)
+        await asyncio.sleep(delay)
+    hook = inject()
+    if hook == INJECT_FAILED:
+        raise PostcardUnavailable("엽서 글을 만들지 못했습니다 (POSTCARD_FAIL_INJECT)")
+    if hook == INSUFFICIENT:
+        raise PostcardInsufficient()
+
+
 # ---------------------------------------------------------------- 만들기
 
 
@@ -208,6 +249,7 @@ async def _make(rec: dict, said: list[dict], style: str) -> dict:
     font_path = _font_path()                 # 모델 값을 쓰기 전에 먼저 본다
 
     photo = await _photo(rec.get("photo_id"))
+    await _injected()
     card = await write(material(rec["fragments"], photo.clues if photo else None,
                                 rec.get("closing_decision")))
     card = checked(card, {f["idx"] for f in said})
