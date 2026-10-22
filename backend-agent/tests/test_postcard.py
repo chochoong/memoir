@@ -129,6 +129,59 @@ def test_compose():
         check("POSTCARD_FONT 가 없으면 후보로 넘어간다", postcard._font_path() != "Z:/없는/글꼴.ttf")
 
 
+def test_photo_branches():
+    """
+    P5-SV-01 — 지금 _photo 가 어느 경우에 None 이 되는가. **고치는 시험이 아니라 현행을 적는 시험이다.**
+    사진이 원래 없는 것과 못 읽은 것이 같은 None 이다 — 사진 없는 회차에 그림을 붙일 때
+    None 에 그대로 걸면 읽기 실패에도 그림을 만든다. 갈라야 할 곳이 여기다 (5-C1).
+    """
+    print("\n[1b] 사진 분기 — 없음 · 못 읽음 · 깨짐 (현행)")
+    PID = "0191c0de-0000-4abc-8def-0123456789ab"
+    good = art(64, 48)
+
+    class _Ps:
+        def __init__(self, data=None, err=None):
+            self.data, self.err, self.calls = data, err, 0
+
+        async def get(self, key):
+            self.calls += 1
+            if self.err:
+                raise self.err
+            return self.data
+
+    def run(photo_id, meta=None, meta_err=None, ps=None):
+        old_load, old_cur = store.load_photo, photostore.current
+
+        async def load(pid):
+            if meta_err:
+                raise meta_err
+            return meta
+        store.load_photo = load
+        photostore.current = lambda: ps or _Ps(good)
+        try:
+            return asyncio.run(postcard._photo(photo_id))
+        finally:
+            store.load_photo, photostore.current = old_load, old_cur
+
+    meta = {"storage_key": "photos/x.png", "mime": "image/png", "clues": {"scene": "잔칫상"}}
+    p = run(PID, meta)
+    check("사진 정상 → 바이트 · 단서", p is not None and p.data == good and p.clues == {"scene": "잔칫상"})
+    check("회차에 사진 없음 (photo_id 없음) → None", run(None) is None)
+    check("사진 행 없음 → None", run(PID, None) is None)
+    check("사진 행 읽기 실패 (DB) → None — 없음과 같다",
+          run(PID, meta_err=store.StoreUnavailable("x")) is None)
+    ps = _Ps(err=photostore.PhotoStoreError("x"))
+    check("사진 바이트 읽기 실패 (저장소) → None — 없음과 같다",
+          run(PID, meta, ps=ps) is None and ps.calls == 1)
+
+    font = postcard._font_path()
+    try:
+        postcard._compose(b"not an image", CARD, "2026. 9. 24.", font)
+        check("바이트는 왔는데 깨짐 → None 이 아니라 PostcardUnavailable (503)", False, "통과했다")
+    except postcard.PostcardUnavailable:
+        check("바이트는 왔는데 깨짐 → None 이 아니라 PostcardUnavailable (503)", True)
+
+
 def test_key():
     print("\n[2] 저장 키 — 다시 구우면 바뀐다")
 
@@ -717,6 +770,7 @@ def test_all_checks_passed():
 def main() -> int:
     print("기억의 조각 — 엽서 검증")
     test_compose()
+    test_photo_branches()
     test_key()
     test_routes()
     test_inject()
