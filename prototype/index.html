@@ -1371,7 +1371,7 @@
   const CONFIG = {
     // 화면 아래와 개발용 패널에 그대로 찍힌다. 「고친 게 반영이 안 된 것 같다」는
     // 대부분 예전 파일이 열려 있는 경우라서, 눈으로 확인할 자리를 만들어 둔다.
-    version: 'v0.43 · 2026-10-26 (회차 시작 elder_id 필수 대비 · 연대기 근거 basis · 충돌 conflict 자리)',
+    version: 'v0.44 · 2026-10-26 (회차 시작 400 을 code 로 구분 — elder_required)',
 
     // 이 화면을 백엔드가 직접 서빙하면(web/ 폴더) 빈 문자열 그대로 둔다.
     // 다른 포트에서 열어 시험할 때만 'http://127.0.0.1:8010' 처럼 채운다.
@@ -2906,9 +2906,13 @@
         banner(`${e.message}${wait}`);
       } else if (e.status === 503) {
         banner('지금은 이야기를 시작할 수 없어요. 잠시 뒤에 다시 시도해 주세요.');
-      } else if (e.status === 400 && AUTH.mode === 'session') {
-        // elder_id 가 없거나 이 계정의 화자가 아니다 (회차 시작 elder_id 필수 · 최충 10-26)
+      } else if (e.status === 400 && e.code === 'elder_required') {
+        // elder_id 가 빠졌다 — 필수로 바뀐 뒤 서버가 400 {code: elder_required} 로 보낸다 (최충 10-26).
+        // 화자가 없으면 등록 화면으로. 다른 400 은 아래 일반 안내 — 「화자」 로 단정하지 않는다
         banner('누구의 이야기인지 다시 골라 주세요.');
+        if (!curElder()) show('elder');
+      } else if (e.status === 400) {
+        banner('이야기를 시작하지 못했어요. 고른 내용을 확인하고 다시 눌러 주세요.');
       } else if (e.status === 404 && AUTH.mode === 'session') {
         banner('고른 분을 찾지 못했어요. 「누구의 이야기」 에서 다시 골라 주세요.');
       } else if (e.status === 422) {
