@@ -1,5 +1,12 @@
 # Domain Entities — 단위 8P 단계별 JSON 계약
 
+> **v2 (2026-10-26) 변경** — 자세한 이유는 `../improvement-v2.md`.
+> ① 분석에 `themes[].strength` · `exclusions[{turns, requested_in, scope}]` · `not_in_events[{turns, reason}]` 추가.
+> ② 목차에 `book.structure_reason` · `chapters[].grouping_reason` · `left_out[{event_key, reason}]` 추가.
+> ④ 편집 장에 `from_chapters`(합친 목차 장 키), 편집본에 `structure_notes` 추가 · 편집본 장 키는 ch-1 부터 다시.
+> ⑤ 검증 issue 에 `category`(fact · composition), code 에 구성 6종, resolution 에 `accept_limit` 추가 · 입력에 `plan`.
+> 결과에 `metrics` · `structure_notes` · `prompt_version` 추가. 아래 본문은 v1 기준이며 위 항목이 더해진다.
+
 필드 이름은 이 실험 안에서만 쓰는 제안이다. 현재 API · DB 에 없다 (지시서 §7.1).
 **모델이 쓰는 것**(①~⑤ 출력)과 **코드가 붙이는 것**(run_ref · input_ref · 상태 · 시간)을 나눈다. 모델에게 상태 · 시간 · ID 를 쓰게 하지 않는다.
 

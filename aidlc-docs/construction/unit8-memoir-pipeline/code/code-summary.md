@@ -38,6 +38,13 @@
 - dry-run (seed A s-a,s-b,s-c) — 회차 3 · 말씀 6턴 · input_ref `2cb1cab7737f` · 호출 0
 - 실행 환경: `backend-agent/.venv` (Python 3.13.15 · requirements.txt + pytest 9.1.1). git 제외
 
+## 개선 v2 (2026-10-26T06:25Z, 미커밋)
+- 지시문 `*_v2.md` 다섯 개를 쓰고 `ROLE_FILES` 를 v2 로 바꿨다. v1 은 기준선 기록으로 남는다 (`PROMPT_VERSION`)
+- 새 함수: `excluded_turns` · `text_metrics` · `verify_plan`. 바뀐 검사: `check_analysis`(턴 덮기 · 제외 · strength) · `check_outline`(사건 배치 · 이유 · 제외) · `chapter_source`(제외 턴 빼기) · `check_final`(장 합치기 · structure_notes · 제외) · `check_verify`(category · 구성 code · accept_limit · blocker+pass)
+- 테스트 47 (기존 36 + T22~T32) · 전체 116 passed · theme-interview 사본 47 passed
+- 보완(06:39Z): `exclusion_notices` · `stage_source` 추가, exclusions 에 mode(whole · partial). 테스트 56 · 전체 125
+- 시험 격리: `tests/conftest.py` (새 파일) — `.env` 에 실제 키가 있어도 `pytest tests` 는 외부를 부르지 않는다. 기존 서버의 `question.warmup` 이 'ping' 을 보내던 원인을 막는다
+
 ## 실행
 ```
 cd backend-agent

@@ -85,5 +85,13 @@
 - [x] `--dry-run` 으로 A 3회차 입력이 만들어지는지 (호출 0)
 
 ### Step 10: 실제 모델 1회 — **사용자 확인 뒤**
-- [ ] 확인 받을 것: 변경 파일 · 테스트 결과 · 예상 호출 수 · 모델 · 설정 · 명령
-- [ ] seed A 3회차 1회 실행, run 폴더 · R1 요약 확인 (MEM-T01~T06 은 사람이 읽고 판정)
+- [x] 확인 받을 것: 변경 파일 · 테스트 결과 · 예상 호출 수 · 모델 · 설정 · 명령
+- [x] seed A 3회차 1회 실행, run 폴더 · R1 요약 확인 (MEM-T01~T06 은 사람이 읽고 판정) → 2026-10-26T06:07:37Z run 20261026T060737Z-A3-2cb1, 7회 완주, R1 문서 build-and-test/R1-20261026T060737Z-A3.md. 사람 판정: 기술 실행 성공 · 콘텐츠 품질 미승인 → 기준선
+
+### Step 11: 개선 v2 — 사용자 지시 2026-10-26 (`unit8-memoir-pipeline/improvement-v2.md`)
+- [x] 원인 분석 (지시문 · 계약 · 코드, 제외 턴 유입 · 사건 누락 발견)
+- [x] 지시문 v2 다섯 개 (`*_v2.md`, v1 은 기준선으로 남김) · `PROMPT_VERSION`
+- [x] 계약 · 코드: 분석 exclusions · not_in_events · strength · 턴 덮기 / 목차 structure_reason · grouping_reason · left_out · 사건 배치 / 장 입력에서 제외 턴 빼기 / 편집 from_chapters(합치기) · structure_notes / 검증 category · 구성 code · accept_limit · plan / text_metrics
+- [x] 테스트: 기존 36 유지(fixture 만 v2 계약으로) + T22~T32 11개 → 47 passed · 전체 116 passed · theme-interview 사본 47 passed · dry-run A3 · A5 · B · 호출 0
+- [x] 보완 (2026-10-26T06:39Z): 제외 mode(whole · partial) · `stage_source` · `exclusion_notices` · 지시문 완화 · `tests/conftest.py`(외부 호출 차단) · R1 검수 6항목 → 56 passed · 전체 125 · theme-interview 사본 56 · 막은 시도 0
+- [ ] 실제 모델 — A3 → B → A5 각 한 번, 사용자 승인 뒤
