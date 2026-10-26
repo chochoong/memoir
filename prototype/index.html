@@ -1371,7 +1371,7 @@
   const CONFIG = {
     // 화면 아래와 개발용 패널에 그대로 찍힌다. 「고친 게 반영이 안 된 것 같다」는
     // 대부분 예전 파일이 열려 있는 경우라서, 눈으로 확인할 자리를 만들어 둔다.
-    version: 'v0.42 · 2026-10-26 (태헌 님 10-26 결정 — 사진 실패 · 화자 · 한 화자 자서전 · 연대기 구역)',
+    version: 'v0.43 · 2026-10-26 (회차 시작 elder_id 필수 대비 · 연대기 근거 basis · 충돌 conflict 자리)',
 
     // 이 화면을 백엔드가 직접 서빙하면(web/ 폴더) 빈 문자열 그대로 둔다.
     // 다른 포트에서 열어 시험할 때만 'http://127.0.0.1:8010' 처럼 채운다.
@@ -1867,7 +1867,7 @@
       return r;
     };
     // 연대기 예시 — 6-C1 §3-4 의 합성 사례 r-a~r-d 에 추정 · 상대 · 대표 시점 미정을 더했다 (태헌 10-26 결정 모양)
-    const W = (kind, text, year, state) => ({ kind, text, year, state: state || (kind === 'unknown' ? 'unknown' : 'set') });
+    const W = (kind, text, year, state, basis) => ({ kind, text, year, state: state || (kind === 'unknown' ? 'unknown' : 'set'), ...(basis ? { basis } : {}) });
     const chronoRows = () => {
       const at2 = (d, h) => new Date(Date.UTC(2026, 9, d, h)).toISOString();
       const r = (n, title, d, h, when) => ({ session_id: `c${n}`.padEnd(8, '0') + `-0000-4000-8000-${String(n).padStart(12, '0')}`,
@@ -1879,11 +1879,12 @@
         r(3, '이사 가던 날', 22, 9, W('direct', '1980년대', 1980)),        // r-c 기간 → 시작점
         r(6, '결혼 뒤 첫 집', 21, 12, W('relative', '결혼 뒤', null)),
         r(2, '첫 출근', 21, 9, W('direct', '1983년', 1983)),              // r-b
-        r(5, '스무 살의 봄', 20, 12, W('estimated', '스무 살쯤', 1975)),
+        r(5, '스무 살의 봄', 20, 12, W('estimated', '스무 살쯤', 1975, 'set', 'profile')),
+        r(8, '군대 가던 날', 19, 12, W('estimated', '스물두 살 때', null, 'conflict', 'said')),
         r(1, '가게를 연 해', 20, 9, W('direct', '1997년', 1997)),         // r-a
       ];
     };
-    const CHRONO_ORDER = ['c5', 'c3', 'c2', 'c6', 'c1', 'c7', 'c4'];   // 서버가 정렬했다고 치는 순서 (오래된 → 최근 · ① · ②)
+    const CHRONO_ORDER = ['c5', 'c3', 'c2', 'c6', 'c1', 'c7', 'c4', 'c8'];   // 서버가 정렬했다고 치는 순서 (오래된 → 최근 · ① · ②)
     const rows = kind === 'chrono' ? chronoRows() : kind === 'old' ? [
       row(1, '2026-10-22 기록', true, undefined), row(2, '', true, undefined), row(3, '가족 이야기', false, undefined),
     ] : [
@@ -2775,6 +2776,8 @@
     // 1차 흐름은 테마와 주제가 있어야 연다. 버튼도 그전엔 눌리지 않는다 (renderPrep).
     // 링크로 연 인터뷰는 자녀가 이미 정해 두었다 (미리보기에서 받은 값).
     if (NEW_FLOW && !LINK.on && !(prepInfo.theme && prepInfo.topic)) { renderPrep(); return; }
+    // 로그인 모드에서는 회차 시작에 elder_id 가 필수다 (최충 10-26 — 없으면 400). 화자가 없으면 먼저 등록하게 한다
+    if (AUTH.mode === 'session' && !LINK.on && !curElder()) { toast('누구의 이야기인지 먼저 정해 주세요.'); show('elder'); return; }
     $('#startBtn').disabled = true;
 
     // 브라우저 자동재생 차단은 사용자 동작 안에서만 풀 수 있다. 지금이 그 자리다.
@@ -2903,6 +2906,11 @@
         banner(`${e.message}${wait}`);
       } else if (e.status === 503) {
         banner('지금은 이야기를 시작할 수 없어요. 잠시 뒤에 다시 시도해 주세요.');
+      } else if (e.status === 400 && AUTH.mode === 'session') {
+        // elder_id 가 없거나 이 계정의 화자가 아니다 (회차 시작 elder_id 필수 · 최충 10-26)
+        banner('누구의 이야기인지 다시 골라 주세요.');
+      } else if (e.status === 404 && AUTH.mode === 'session') {
+        banner('고른 분을 찾지 못했어요. 「누구의 이야기」 에서 다시 골라 주세요.');
       } else if (e.status === 422) {
         // C1 §1 — 모르는 테마 · 너무 긴 주제. detail 은 배열이라 그대로 띄우지 않는다
         banner('입력을 확인해 주세요. 테마를 다시 고르거나 주제를 짧게 적어 주세요.');
@@ -3993,7 +4001,10 @@
         else if (AUTH.elders.length > 1 && elderName(s.elder_id)) meta.append(el('span', 'era spk', elderName(s.elder_id)));
       }
       // 연대기순에서는 일어난 때를 따로 보인다 (기록한 날과 섞지 않는다)
-      if (arSort === 'chrono') { const t = chronoOf(s); if (t.label) meta.prepend(el('span', `era when ${t.section}`, t.label)); }
+      if (arSort === 'chrono') {
+        const t = chronoOf(s);
+        if (t.label) { const w = el('span', `era when ${t.section}`, t.label); if (t.note) w.title = t.note; meta.prepend(w); }
+      }
       text.appendChild(meta);
       b.append(thumb, text);
       list.appendChild(b);
@@ -4140,7 +4151,11 @@
        ② 시기 미상     — 배치할 근거가 없음
      둘을 합치지 않는다. 표시: 직접 · 상대 표현은 원문 그대로 (「1980년대」 · 「결혼 뒤」),
      추정은 「1975년경(추정)」, 시기 미상은 「때 모름」. 화면이 연도를 계산하지 않는다.
-     칸 모양 (안): { kind: direct | estimated | relative | unknown, text, year, state: set | undecided | unknown } */
+     칸 모양 (안): { kind: direct | estimated | relative | unknown, text, year,
+                     state: set | undecided | unknown | conflict, basis: said | profile }
+       · basis (최충 10-26 · 6-C1 §3-2) — 추정의 근거가 된 출생연도가 어르신 말씀(said)인지 자녀가 등록한 값(profile)인지.
+         profile 은 계산에만 쓰는 값이라 「말씀하신 것」 처럼 보이지 않게, 라벨은 같고 설명(title)만 다르다.
+       · conflict — 말씀과 등록 정보가 달라 서버가 계산하지 않은 것. ② 시기 미상 구역에 두되 「때 확인 필요」 로 구분한다 */
   let arChrono = [];
   const chronoField = () => CONFIG.archive.timeField || (listMock() === 'chrono' ? 'when' : '');
   const chronoReady = () => listMock() === 'chrono' || (!!CONFIG.archive.timeField && !!CONFIG.archive.chronoQuery);
@@ -4148,9 +4163,12 @@
     const t = s && s[chronoField()];
     if (!t || typeof t !== 'object') return { section: 'unknown', label: '때 모름' };
     if (t.state === 'undecided') return { section: 'undecided', label: '대표 시점 미정' };
+    if (t.state === 'conflict') return { section: 'unknown', label: '때 확인 필요', note: '말씀하신 때와 등록한 출생연도가 서로 달라요' };
     if (t.kind === 'unknown' || t.state === 'unknown') return { section: 'unknown', label: '때 모름' };
     const text = typeof t.text === 'string' ? t.text.trim() : '';
-    if (t.kind === 'estimated') return { section: 'main', label: Number.isInteger(t.year) ? `${t.year}년경(추정)` : (text || '때 모름') };
+    if (t.kind === 'estimated') return { section: 'main', label: Number.isInteger(t.year) ? `${t.year}년경(추정)` : (text || '때 모름'),
+      note: t.basis === 'profile' ? `등록한 출생연도로 계산한 때예요${text ? ` (말씀: 「${text}」)` : ''}`
+          : t.basis === 'said' ? `말씀하신 나이로 계산한 때예요${text ? ` (말씀: 「${text}」)` : ''}` : '' };
     return { section: 'main', label: text || (Number.isInteger(t.year) ? `${t.year}년` : '때 모름') };
   }
   async function arLoadChrono() {
