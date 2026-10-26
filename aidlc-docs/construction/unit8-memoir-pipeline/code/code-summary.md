@@ -1,0 +1,51 @@
+# Code Summary — 단위 8P: 자서전 5단계 독립 실행 파이프라인
+
+**저장소**: `C:\work\memoir-team` · 브랜치 `feature/memoir-pipeline` (바탕 develop `f72d6df`) · 미커밋
+**생성 위치**: 처음 `C:\work\memoir` 에서 생성 · 시험하고, 2026-10-26 사용자 지시로 같은 상대 경로에 복사했다(복사 때 8개 파일 SHA-256 일치). 그 뒤 이 저장소에서 서버 판 호환 수정으로 `tools/memoir_pipeline.py` · `tests/test_memoir_pipeline.py` 두 파일이 바뀌었다 — 원본과 이제 다르다.
+
+## 파일
+| 파일 | 종류 | 내용 |
+|---|---|---|
+| `backend-agent/app/session/memoir_pipeline.py` | 새 | 설정(`MEMOIR_PIPE_*`) · 지시문 로더 · 입력 검사 · 장 원자료 줄이기 · 단계별 검사 · 호출 · `run` · 기록 · R1 요약 |
+| `backend-agent/tools/memoir_pipeline.py` | 새 | 실행기 — `--seed`+`--aliases` / `--input` · `--out-dir` · `--dry-run` |
+| `backend-agent/첨부프롬프트_md/파이프라인/1_분석_v1.md` | 새 | 가치 · 사건 분석 |
+| `backend-agent/첨부프롬프트_md/파이프라인/2_목차_v1.md` | 새 | 목차 · 장별 focus/context 턴 |
+| `backend-agent/첨부프롬프트_md/파이프라인/3_장집필_v1.md` | 새 | 장 하나 집필 · supported/editorial |
+| `backend-agent/첨부프롬프트_md/파이프라인/4_편집_v1.md` | 새 | 통합 편집 · edit_notes |
+| `backend-agent/첨부프롬프트_md/파이프라인/5_검증_v1.md` | 새 | 장/문단/문장 위치 검증 · 출력 5키 |
+| `backend-agent/tests/test_memoir_pipeline.py` | 새 | T01~T21 · T18b~e (36개, 가짜 호출) |
+| `.gitignore` | +2줄 | `backend-agent/eval/runs/` |
+| `backend-agent/.env.example` | +19줄 | `MEMOIR_PIPE_*` 이름 · 기본값 설명 |
+
+## 함수 (`memoir_pipeline.py`)
+- 설정 · 지시문: `settings` · `common_rules`(자서전_v2.md `## 2.` 만) · `role_text` · `prompt` · `prompt_hashes`
+- 입력: `build_input`(memoir.merge) · `check_input` · `input_ref` · `chapter_source`(Q4)
+- 검사: `check_analysis` · `check_outline` · `check_chapter` · `check_final` · `check_verify` · `locations`
+- 호출: `CallSpec` · `Reply` · `call_model`(question._client, 한 번)
+- 실행: `run` · `Recorder` · `r1_summary`
+- 기존 모듈에서 쓰는 것: `memoir.merge` · `memoir.DEFAULT_TEXT_MODEL` · `memoir.MIN/MAX_SESSIONS` · `question._client` · `conf.env_*` · `seed_sessions.rows/check_seed/SET_IDS`. 밑줄 함수 `roledoc._sections` · `memoir._ints` 는 쓰지 않는다
+
+## 서버 판 호환 (2026-10-26T05:45Z)
+- `feature/theme-interview` 는 `memoir.MAX_SESSIONS` 상수를 없애고 `max_sessions()`(`MEMOIR_MAX_SESSIONS`, 기본 5)로 바꿨다. 실행기가 상수를 직접 읽어 그 판 위에서 테스트 29개가 깨졌다
+- `tools/memoir_pipeline.py` 에 `session_range()` — 함수가 있으면 함수, 없으면 상수, 둘 다 없으면 지어내지 않고 입력 거부. 서버 파일은 고치지 않았다
+- 회귀 방지 테스트 T18b(상수 판) · T18c(함수 판) · T18d(둘 다 없음) · T18e(두 판에 모두 있는 이름만 쓰는지 소스 검사)
+- 실행기 요약 줄에 단계별 token usage 와 `human_review=not_run — 최종 완성본이 아니다` 를 찍는다
+
+## 검증 (memoir-team, 2026-10-26T05:45Z)
+- import · 지시문 5개 로드 · 지시문 해시가 원본에서 낸 값과 같음
+- `pytest tests` — **105 passed**(기존 69 + 새 36) · 건너뜀 0. `GEMINI_API_KEY` 없이, Gemini 클라이언트 생성을 막은 상태로 실행 → 생성 시도 0
+- 최신 `feature/theme-interview`(`460b855`) 코드에 8P 파일을 얹은 scratchpad 사본 — 새 테스트 36 passed · dry-run 같은 input_ref
+- dry-run (seed A s-a,s-b,s-c) — 회차 3 · 말씀 6턴 · input_ref `2cb1cab7737f` · 호출 0
+- 실행 환경: `backend-agent/.venv` (Python 3.13.15 · requirements.txt + pytest 9.1.1). git 제외
+
+## 실행
+```
+cd backend-agent
+.venv\Scripts\python tools/memoir_pipeline.py --seed eval/memoir_seed_A.json --aliases s-a,s-b,s-c --dry-run
+.venv\Scripts\python -m pytest tests/test_memoir_pipeline.py -v
+```
+
+## 아직 하지 않은 것
+- 실제 모델 호출 (Step 10) — 사용자 확인 대기. `backend-agent/.env` 가 이 저장소에 없다 (키를 사용자가 넣어야 함)
+- 커밋 · push
+- 서비스 연결 (단위 8S)

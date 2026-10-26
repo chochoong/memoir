@@ -14,6 +14,8 @@ venv/
 backend-agent/eval/*.ids.json
 backend-agent/eval/memoir_input_*.json
 backend-agent/eval/memoir_output_*.json
+# 자서전 5단계 파이프라인 실행 기록 (단위 8P) — 원응답이 들어 있다. 팀 공유는 r1_summary.md 만 옮긴다
+backend-agent/eval/runs/
 
 # Node
 node_modules/
