@@ -45,15 +45,16 @@ from .conf import env_float, env_int, env_str
 PROMPTS = Path(__file__).resolve().parents[2] / "첨부프롬프트_md"
 COMMON_DOC = PROMPTS / "자서전_v2.md"
 ROLE_DIR = PROMPTS / "파이프라인"
-# v2 — 첫 실측(fe94baf · v1)이 원문 나열 · 사건마다 한 장 · 편집 교정뿐으로 나와 고친 판.
-# v1 파일은 기준선 기록으로 남긴다. 계약도 v2 기준이라 v1 은 fe94baf 에서만 돈다.
-PROMPT_VERSION = "v2"
+# v1 — 첫 실측(fe94baf). v2 — 구성 · 제외(9231a70). v3 — 편집 메모 작업 종류 · 장 분할 원칙 ·
+# 목차 메모 혼입 방지 · 원문에 없는 장면 금지. 옛 판 파일은 실행 기록으로 남긴다.
+# 계약은 판마다 달라 옛 판은 그 커밋에서만 돈다 (v1 = fe94baf, v2 = 9231a70).
+PROMPT_VERSION = "v3"
 ROLE_FILES = {
-    "analysis": "1_분석_v2.md",
-    "outline": "2_목차_v2.md",
-    "chapter": "3_장집필_v2.md",
-    "edit": "4_편집_v2.md",
-    "verify": "5_검증_v2.md",
+    "analysis": "1_분석_v3.md",
+    "outline": "2_목차_v3.md",
+    "chapter": "3_장집필_v3.md",
+    "edit": "4_편집_v3.md",
+    "verify": "5_검증_v3.md",
 }
 STAGES = tuple(ROLE_FILES)
 
@@ -74,7 +75,21 @@ RETRIES = 0
 GENERATED, PARTIAL, FAILED = "generated", "partial", "failed"
 INSUFFICIENT, NEEDS_CONTEXT = "insufficient_material", "needs_context"
 KINDS = ("input", "call", "timeout", "truncated", "format", "reference",
-         "context", "chapter_limit", "budget")
+         "context", "chapter_limit", "budget", "memo_leak")
+
+# 편집 메모의 작업 종류 — before 는 장 초안의 위치, after 는 편집본의 위치다.
+# 지운 문장은 편집본에 없는 것이 정상이라 before 로만 가리킨다 (v2 실측 실패의 원인).
+#             before 개수   after 개수
+EDIT_ACTIONS = {
+    "rewrite": (1, None, 1, None),     # 고쳐 쓰기 · 나누기 (after 여럿)
+    "delete":  (1, None, 0, 0),
+    "merge":   (2, None, 1, 1),        # 문장 · 장 합치기
+    "add":     (0, 0, 1, None),        # 새 사실 없는 연결 문장 등
+}
+# 독자에게 보일 문장에 섞이면 안 되는 안내문 말투 — 경고로 남기고 검증에 알린다.
+# 본문은 해요체가 기본이라 "…니다." 로 끝나는 문장(합니다체 안내문)도 함께 본다
+_META = re.compile(r"이\s?장(에서|은|는|에)|보여\s?(줍|드립)니다|이어집니다|마무리합니다|엮어\s?냅니다"
+                   r"|다룹니다|담았습니다|니다[.!?…]*\s*$")
 
 # 검증 issue 는 사실과 구성을 나눈다. code 는 자기 category 의 것만 쓴다.
 FACT_CODES = ("unsupported_claim", "source_mismatch", "time_distortion",
@@ -567,7 +582,8 @@ def check_outline(out, analysis: dict, T: set[int]) -> tuple[str, list[str]]:
     return status, c.warnings
 
 
-def check_chapter(out, chapter: dict, given: list[int], core: set[int]) -> list[str]:
+def check_chapter(out, chapter: dict, given: list[int], core: set[int],
+                  memos: list[str] | None = None) -> list[str]:
     key = chapter["chapter_key"]
     c = _Check("chapter", key)
     out = c.obj(out, ("chapter_key", "title", "paragraphs", "review_notes"))
@@ -582,6 +598,13 @@ def check_chapter(out, chapter: dict, given: list[int], core: set[int]) -> list[
                            if s["kind"] == "supported" for t in s["turns"]} - core)
     if only_context:
         c.warnings.append(f"문맥으로만 준 턴을 근거로 씀 {only_context}")
+    # 장 초안에서는 경고만 — 편집이 지울 수 있다. 편집본에 남으면 final_check 에서 실패
+    leaks = memo_leaks([out], memos or [])
+    if leaks:
+        c.warnings.append(f"목차 메모를 그대로 옮긴 문장 {leaks}")
+    meta = meta_sentences([out])
+    if meta:
+        c.warnings.append(f"안내문 말투 문장 {meta}")
     return c.warnings
 
 
@@ -616,7 +639,7 @@ def text_metrics(chapters: list[dict], data: dict) -> dict:
 
 
 def locations(edited: dict) -> set[str]:
-    """편집본에 실제로 있는 위치. 검증 · edit_notes 의 location 은 이 안이어야 한다."""
+    """편집본에 실제로 있는 위치. 검증의 location · edit_notes 의 after 는 이 안이어야 한다."""
     locs = {"artifact", "title"}
     for ch in edited.get("chapters", []):
         k = ch["chapter_key"]
@@ -627,13 +650,97 @@ def locations(edited: dict) -> set[str]:
     return locs
 
 
-def check_final(out, outline_out: dict, T: set[int], gone: set[int] = frozenset()) -> list[str]:
+def draft_locations(drafts: list[dict]) -> set[str]:
+    """장 초안에 있던 위치 (목차의 장 키 기준). edit_notes 의 before 는 이 안이어야 한다."""
+    locs = {"title"}                               # 책 제목은 목차에서 온다
+    for d in drafts:
+        k = d["chapter_key"]
+        locs |= {k, f"{k}/title"}
+        for p, para in enumerate(d["paragraphs"]):
+            locs |= {f"{k}/p{p}/s{s}" for s in range(len(para))}
+    return locs
+
+
+def outline_memos(outline_out: dict) -> list[str]:
+    """목차의 내부 메모(목적 · 묶은 이유 · 전환 · 방향) — 본문에 그대로 들어가면 안 되는 글."""
+    texts = [outline_out.get("book", {}).get(k, "") for k in ("direction", "structure_reason")]
+    for ch in outline_out.get("chapters", []):
+        texts += [ch.get(k, "") for k in ("purpose", "grouping_reason", "transition_in", "transition_out")]
+    return [m for m in (_norm(t) for t in texts if isinstance(t, str)) if len(m) >= 8]
+
+
+def memo_leaks(chapters: list[dict], memos: list[str]) -> list[str]:
+    """
+    목차 메모를 그대로 옮긴 editorial 문장의 위치. 글자(공백 · 부호 뺀)가 메모와 같거나
+    메모 안에 통째로 들어 있으면 옮긴 것으로 본다. supported 문장은 원문을 옮기는 게
+    정상이라 보지 않는다 — 그 뜻은 검증 역할이 본다.
+    """
+    out = []
+    for ch in chapters:
+        for p, para in enumerate(ch.get("paragraphs", [])):
+            for s, x in enumerate(para):
+                t = _norm(x.get("text", ""))
+                if x.get("kind") == "editorial" and len(t) >= 8 and any(t in m or m in t for m in memos):
+                    out.append(f"{ch['chapter_key']}/p{p}/s{s}")
+    return out
+
+
+def meta_sentences(chapters: list[dict]) -> list[str]:
+    """안내문 말투("이 장에서는", "…보여줍니다", "…이어집니다")가 섞인 문장의 위치."""
+    return [f"{ch['chapter_key']}/p{p}/s{s}"
+            for ch in chapters for p, para in enumerate(ch.get("paragraphs", []))
+            for s, x in enumerate(para) if _META.search(x.get("text", ""))]
+
+
+def check_edit_notes(notes, before_locs: set[str], after_locs: set[str], c: "_Check") -> None:
+    """
+    편집 메모 하나하나 — 작업 종류(action)와 before(장 초안 위치) · after(편집본 위치).
+
+        delete   before 1+ · after 0      지운 문장은 편집본에 없는 것이 정상
+        merge    before 2+ · after 1      여러 문장 · 장을 하나로
+        rewrite  before 1+ · after 1+     고쳐 쓰기 · 나누기
+        add      before 0  · after 1+     새로 넣은 연결 문장
+
+    위치가 틀리면 지금처럼 실패다 — 느슨하게 받지 않는다.
+    """
+    if not isinstance(notes, list):
+        raise c.fail("format", "edit_notes 가 목록이 아니다")
+    for i, n in enumerate(notes):
+        at = f"edit_notes[{i}]"
+        if not isinstance(n, dict):
+            raise c.fail("format", f"{at} 가 객체가 아니다")
+        action = n.get("action")
+        if action not in EDIT_ACTIONS:
+            raise c.fail("format", f"{at}.action={action!r} — {', '.join(EDIT_ACTIONS)}")
+        before, after = n.get("before"), n.get("after")
+        if not _str_list(before) or not _str_list(after):
+            raise c.fail("format", f"{at}.before · after 가 문자열 목록이 아니다")
+        b_min, b_max, a_min, a_max = EDIT_ACTIONS[action]
+        if len(before) < b_min or (b_max is not None and len(before) > b_max):
+            raise c.fail("format", f"{at} {action} 의 before {len(before)}개 — 개수가 맞지 않는다")
+        if len(after) < a_min or (a_max is not None and len(after) > a_max):
+            raise c.fail("format", f"{at} {action} 의 after {len(after)}개 — 개수가 맞지 않는다")
+        bad = [x for x in before if x not in before_locs]
+        if bad:
+            raise c.fail("reference", f"{at}.before {bad} — 장 초안에 없는 위치")
+        bad = [x for x in after if x not in after_locs]
+        if bad:
+            raise c.fail("reference", f"{at}.after {bad} — 편집본에 없는 위치")
+        for k in ("change", "reason"):
+            if not isinstance(n.get(k), str):
+                raise c.fail("format", f"{at}.{k} 가 문자열이 아니다")
+
+
+def check_final(out, outline_out: dict, T: set[int], gone: set[int] = frozenset(),
+                drafts: list[dict] | None = None) -> list[str]:
     """
     편집본의 최종 근거검사. 장이 빠지거나 생기면 검증까지 가지 않는다.
 
     편집은 **장을 합칠 수 있다** — 지나친 분할을 고치라고 했다. 대신 나누거나 순서를
     바꾸거나 목차에 없는 장을 만들 수는 없다: from_chapters 를 차례로 이으면 목차의
     장 순서와 정확히 같아야 한다. 편집본의 장 키는 ch-1 부터 다시 매긴다.
+
+    목차 메모(목적 · 전환 등)를 그대로 옮긴 editorial 문장이 남아 있으면 memo_leak 이다.
     """
     c = _Check("final_check")
     out = c.obj(out, ("title", "chapters", "structure_notes", "review_notes", "edit_notes"))
@@ -665,17 +772,16 @@ def check_final(out, outline_out: dict, T: set[int], gone: set[int] = frozenset(
     if not _str_list(out["structure_notes"]) or not any(s.strip() for s in out["structure_notes"]):
         raise c.fail("format", "structure_notes 가 비었다 — 구성을 본 기록이 없다")
     c.notes(out["review_notes"], allowed, "review_notes", outside)
-    if not isinstance(out["edit_notes"], list):
-        raise c.fail("format", "edit_notes 가 목록이 아니다")
-    locs = locations(out)
-    for i, n in enumerate(out["edit_notes"]):
-        if not isinstance(n, dict):
-            raise c.fail("format", f"edit_notes[{i}] 가 객체가 아니다")
-        if n.get("location") not in locs:
-            raise c.fail("reference", f"edit_notes[{i}].location={n.get('location')!r} — 편집본에 없는 위치")
-        for k in ("change", "reason"):
-            if not isinstance(n.get(k), str):
-                raise c.fail("format", f"edit_notes[{i}].{k} 가 문자열이 아니다")
+    before_locs = draft_locations(drafts) if drafts is not None else (
+        {"title"} | {k for k in want} | {f"{k}/title" for k in want})
+    check_edit_notes(out["edit_notes"], before_locs, locations(out) - {"artifact"}, c)
+
+    leaks = memo_leaks(out["chapters"], outline_memos(outline_out))
+    if leaks:
+        raise c.fail("memo_leak", f"목차 메모를 그대로 옮긴 문장 {leaks}")
+    meta = meta_sentences(out["chapters"])
+    if meta:
+        c.warnings.append(f"안내문 말투 문장 {meta}")
     return c.warnings
 
 
@@ -840,9 +946,15 @@ def edit_message(data: dict, outline_out: dict, chapters: list[dict],
     return _user(head, payload)
 
 
-def verify_plan(analysis: dict, outline_out: dict) -> dict:
-    """구성 검사(장 역할 중복 · 주제 모순)에 쓸 계획만. 사건 요약 · 근거 턴은 싣지 않는다."""
+def verify_plan(analysis: dict, outline_out: dict, steps: list[dict] | None = None) -> dict:
+    """
+    구성 검사(장 역할 중복 · 주제 모순 · 분할)에 쓸 계획만. 사건 요약 · 근거 턴은 싣지 않는다.
+    앞 단계의 코드 경고(예: "사건 하나마다 장 하나")를 checks 로 함께 준다 — 판정은 검증이 한다.
+    """
+    checks = [f"{s['stage']}{'/' + s['chapter_key'] if s.get('chapter_key') else ''}: {w}"
+              for s in steps or [] for w in s.get("warnings") or []]
     return {
+        "checks": checks,
         "direction": analysis.get("direction"),
         "themes": [{"theme": t["theme"], "strength": t["strength"]} for t in analysis.get("themes", [])],
         "book": {"structure_reason": outline_out["book"].get("structure_reason", "")},
@@ -1028,7 +1140,7 @@ async def run(data: dict, turn_map: list[dict], *, call: Call = call_model,
                 draft, step = await st.ask("chapter", chapter_message(
                     src, given, outline_out, ch, analysis["people"],
                     exclusion_notices(analysis, set(given))), f"03_{key}", key)
-                step["warnings"] = check_chapter(draft, ch, given, core)
+                step["warnings"] = check_chapter(draft, ch, given, core, outline_memos(outline_out))
                 step["given_turns"] = given
                 step["metrics"] = text_metrics([draft], data)
                 step["ok"] = True
@@ -1042,13 +1154,16 @@ async def run(data: dict, turn_map: list[dict], *, call: Call = call_model,
         edited, step = await st.ask("edit", edit_message(data, outline_out, drafts, analysis), "04_edited")
         step["ok"] = True
         try:
-            step["warnings"] = check_final(edited, outline_out, T, excluded_turns(analysis))
+            step["warnings"] = check_final(edited, outline_out, T, excluded_turns(analysis), drafts)
         except PipelineError as e:
             step["ok"] = False
             raise
+        actions: dict[str, int] = {}
+        for n in edited["edit_notes"]:
+            actions[n["action"]] = actions.get(n["action"], 0) + 1
         metrics = {"events": len(analysis["events"]), "outline_chapters": len(chapters_plan),
                    **text_metrics(edited["chapters"], data),
-                   "edit_notes": len(edited["edit_notes"]),
+                   "edit_notes": len(edited["edit_notes"]), "edit_actions": actions,
                    "merged_chapters": sum(1 for ch in edited["chapters"] if len(ch["from_chapters"]) > 1),
                    "draft_verbatim_ratio": text_metrics(drafts, data)["verbatim_ratio"]}
         step["metrics"] = metrics
@@ -1057,7 +1172,7 @@ async def run(data: dict, turn_map: list[dict], *, call: Call = call_model,
         locs = locations(edited)
         try:
             verdict_out, step = await st.ask(
-                "verify", verify_message(data, edited, T, verify_plan(analysis, outline_out),
+                "verify", verify_message(data, edited, T, verify_plan(analysis, outline_out, st.steps),
                                          exclusion_notices(analysis)), "05_verify")
             step["warnings"] = check_verify(verdict_out, T, locs)
             step["ok"] = True
@@ -1165,7 +1280,8 @@ def r1_summary(run_doc: dict, result: dict) -> str:
                   f"- 문장 {m.get('sentences')} · editorial {m.get('editorial_sentences')} · 여러 턴을 묶은 문장 "
                   f"{m.get('multi_turn_sentences')}",
                   f"- 원문 그대로인 문장 {m.get('verbatim_sentences')} (편집본 {m.get('verbatim_ratio')} · "
-                  f"장 초안 {m.get('draft_verbatim_ratio')}) · edit_notes {m.get('edit_notes')}"]
+                  f"장 초안 {m.get('draft_verbatim_ratio')}) · edit_notes {m.get('edit_notes')} "
+                  f"{m.get('edit_actions') or ''}"]
     if v["issues"]:
         by = {}
         for x in v["issues"]:

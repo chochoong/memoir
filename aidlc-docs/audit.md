@@ -81,3 +81,19 @@
 **Context**: CONSTRUCTION - 단위 8P v2 보완 완료, A3 실제 실행 대기
 
 ---
+
+## Build and Test 단위 8P - v2 커밋 · A3 실제 실행 (final_check 실패)
+**Timestamp**: 2026-10-26T06:44:53Z
+**User Input**: "Unit 8P v2 보완 결과를 확인했습니다. 모의 테스트와 호환성 검사를 통과했으므로 v2 A3 실제 모델 재시험 1회를 승인합니다. 단, 먼저 … 1. v2 로컬 커밋 (v2 관련 파일만, v1 · 최초 실행 결과 유지, .env · 키 · .venv · eval/runs 제외, push · PR 없음, SHA 기록) 2. A3 실제 실행 (s-a · s-b · s-c, v2, 기존 모델, 재시도 0, 장 수 강제 없음, 실패 정책대로, 한 차례만, DB · 서버 · 배포 무변경) 3. v1 · v2 비교 … 4. 최종 본문 · 장 제목 · 달라진 점, human_review=not_run 유지 5. B 일부 제외는 별도 과제, 완전 보장 보고 금지, B 실제 실행 미승인 6. 추가 호출 · push · PR · 서버 연결 금지"
+**AI Response**: "v2 관련 16개 파일만 커밋 9231a70 (v1 지시문 · eval/runs · .env · .venv 제외, push 없음). 키 형식 확인 뒤 한 번 실행(run 20261026T064453Z-A3-2cb1): 분석 · 목차 · 장 3 · 편집까지 6회 STOP, 편집본의 edit_notes[1] 이 지운 문장의 지우기 전 위치(ch-3/p0/s2)를 가리켜 final_check reference 실패 → 검증 미호출, failed. 12.8초 · 토큰 23,699. v1 대비 주제는 neutral · theme '' 로 일관되게 개선, 편집이 부적절한 editorial 2문장을 지움, 그러나 장 3 = 사건 3 · 본문 원문 그대로 7/7 은 그대로. 실패는 edit_notes 계약 빈틈(삭제 위치를 표현할 수 없음). R1 문서 R1-20261026T064453Z-A3-v2.md, 보완 후보 N-1~N-5. 재실행 · push 없음."
+**Context**: CONSTRUCTION - 단위 8P Build and Test v2 1회 완료(failed), 보완 승인 대기
+
+---
+
+## Code Generation 단위 8P - v3 보완 (N-1~N-4, 모의)
+**Timestamp**: 2026-10-26T07:01:43Z
+**User Input**: "Unit 8P v2 실제 실행 결과를 확인했습니다. 현재 v2는 기술 실행 미완료, 콘텐츠 품질 개선 일부 확인, 최종 품질 미승인으로 판단합니다. … N-1 편집 메모 위치(delete · merge · rewrite, ch-3/p0/s2 회귀) 승인 · N-2 장 분할 조건부 승인(숫자 강제 · 하드코딩 금지) · N-3 목차 메모 본문 혼입 방지 승인 · N-4 근거 없는 장 목적 보완(여섯 번째 호출 금지) · 추가 시험 · v1 · v2 결과 보존 · A3 반복 대신 풍부한 합성 자료 계획(지금은 새 seed · 실제 호출 금지) · 브랜치 유지 · fe94baf · 9231a70 유지 · 서버 · DB · 배포 무수정 · push · PR · 서버 연결 금지"
+**AI Response**: "지시문 v3 다섯 개(v1 · v2 보존). edit_notes 를 action(rewrite · delete · merge · add) + before(장 초안 위치) · after(편집본 위치)로 — 잘못된 위치는 계속 실패. 장 분할은 지시문 원칙만(한 장 먼저 검토 · 독립 역할 · 원자료 · 사건 수가 아닌 이유), 코드 경고는 검증 plan.checks 로. 목차 메모 혼입은 장 초안 경고 · 편집본 memo_leak 실패, 안내문 · 합니다체 경고. 원문에 없는 장면 규칙을 분석 · 목차 · 장 · 검증 지시문에, 코드 한계는 T43 으로 기록. 테스트 72(신규 16) · 전체 141 · 막은 시도 0 · theme-interview 사본 72 · A3 dry-run 호출 0. seed C 설계안 · 팀 결정 사항 · 시험 순서를 improvement-v3.md 에. 실제 호출 · 새 seed · 커밋 · push 없음."
+**Context**: CONSTRUCTION - 단위 8P v3 모의 완료, 실제 실행 승인 대기
+
+---

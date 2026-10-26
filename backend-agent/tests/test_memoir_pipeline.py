@@ -101,7 +101,8 @@ def edited_ok():
                           "paragraphs": [[sent("뒤의 일이에요.", [5])]]}],
             "structure_notes": ["두 장의 역할이 달라 그대로 둠"],
             "review_notes": [],
-            "edit_notes": [{"location": "ch-2/p0/s0", "change": "다듬음", "reason": "반복"}]}
+            "edit_notes": [{"action": "rewrite", "before": ["ch-2/p0/s0"], "after": ["ch-2/p0/s0"],
+                            "change": "다듬음", "reason": "반복"}]}
 
 
 def verify_ok(verdict="pass", **kw):
@@ -334,7 +335,8 @@ def test_t10_supported_needs_turns_editorial_does_not():
 @pytest.mark.parametrize("mutate", [
     lambda e: e["chapters"].pop(),
     lambda e: e["chapters"].reverse(),
-    lambda e: e["edit_notes"].append({"location": "ch-9/p0/s0", "change": "", "reason": ""}),
+    lambda e: e["edit_notes"].append({"action": "rewrite", "before": ["ch-9/p0/s0"],
+                                      "after": ["ch-1/p0/s0"], "change": "", "reason": ""}),
     lambda e: e["chapters"][0]["paragraphs"][0].append(sent("새 사실", [42])),
 ])
 def test_t11_final_check_stops_before_verify(mutate):
@@ -695,7 +697,8 @@ def test_t27_edit_may_merge_chapters_but_not_split_or_reorder():
     merged["chapters"] = [{"chapter_key": "ch-1", "from_chapters": ["ch-1", "ch-2"],
                            "title": sent("장", [], "editorial"),
                            "paragraphs": [[sent("앞의 일이에요.", [1]), sent("뒤의 일이에요.", [5])]]}]
-    merged["edit_notes"] = [{"location": "ch-1", "change": "두 장을 합침", "reason": "장마다 두 문장뿐"}]
+    merged["edit_notes"] = [{"action": "merge", "before": ["ch-1", "ch-2"], "after": ["ch-1"],
+                             "change": "두 장을 합침", "reason": "장마다 두 문장뿐"}]
     pipe.check_final(merged, outline_ok(), T)                 # 합치기는 된다
 
     fake = Fake(script(edit=merged, verify=verify_ok(reviewed_locations=["artifact", "ch-1/p0/s1"])))
@@ -765,11 +768,12 @@ def test_t30_text_metrics_show_verbatim_copy():
     assert m["verbatim_ratio"] == 0.0 and m["multi_turn_sentences"] == 1 and m["editorial_sentences"] == 1
 
 
-def test_t31_prompt_v2_in_use_and_v1_kept_as_baseline():
-    assert pipe.PROMPT_VERSION == "v2" and all(f.endswith("_v2.md") for f in pipe.ROLE_FILES.values())
+def test_t31_prompt_v3_in_use_and_earlier_versions_kept():
+    assert pipe.PROMPT_VERSION == "v3" and all(f.endswith("_v3.md") for f in pipe.ROLE_FILES.values())
     for f in pipe.ROLE_FILES.values():
-        assert (pipe.ROLE_DIR / f.replace("_v2", "_v1")).exists()  # 기준선(fe94baf) 판을 지우지 않는다
-    assert pipe.settings()["prompt_version"] == "v2"
+        for old in ("_v1", "_v2"):                          # 실행 기록(fe94baf · 9231a70) 판을 지우지 않는다
+            assert (pipe.ROLE_DIR / f.replace("_v3", old)).exists()
+    assert pipe.settings()["prompt_version"] == "v3"
 
 
 def test_t33_seed_b_turn4_mixes_kept_and_excluded_content():
@@ -875,5 +879,166 @@ def test_t38_test_guard_blocks_external_calls():
 def test_t32_r1_summary_has_metrics_and_categories(tmp_path):
     r = go(Fake(script(verify=verify_ok("pass", issues=[_issue()]))), recorder=pipe.Recorder(tmp_path))
     s = (tmp_path / "r1_summary.md").read_text(encoding="utf-8")
-    assert "비교 지표" in s and "원문 그대로인 문장" in s and "composition" in s and "지시문 판: v2" in s
-    assert r["prompt_version"] == "v2"
+    assert "비교 지표" in s and "원문 그대로인 문장" in s and "composition" in s and "지시문 판: v3" in s
+    assert r["prompt_version"] == "v3"
+
+
+# ---------------------------------------------------------------- v3 — 편집 메모 · 분할 · 메모 혼입 · 장 목적
+
+
+def _v2_failure_case():
+    """
+    v2 실측(20261026T064453Z) 재현 — 장 초안 ch-3 은 4문장(여닫는 editorial 2), 편집이 그 둘을 지웠다.
+    편집본 ch-3 은 2문장이라 초안의 ch-3/p0/s2 · s3 는 편집본에 없다.
+    """
+    o = outline_ok()
+    o["chapters"].append(chapter_plan("ch-3", ["e2"], [6]))
+    o["chapters"][1]["events"] = []                         # e2 는 ch-3 에
+    o["chapters"][1]["focus_turns"] = [5]
+    ch3 = {"chapter_key": "ch-3", "title": sent("장", [], "editorial"),
+           "paragraphs": [[sent("이어지는 기억이에요.", [], "editorial"), sent("뒤의 일이에요.", [5]),
+                           sent("마음이 뭉클했어요.", [6]), sent("이야기를 닫아요.", [], "editorial")]],
+           "review_notes": []}
+    drafts = [draft("ch-1", 1), draft("ch-2", 5), ch3]
+    e = edited_ok()
+    e["chapters"].append({"chapter_key": "ch-3", "from_chapters": ["ch-3"], "title": sent("장", [], "editorial"),
+                          "paragraphs": [[sent("뒤의 일이에요.", [5]), sent("마음이 뭉클했어요.", [6])]]})
+    e["edit_notes"] = [
+        {"action": "delete", "before": ["ch-3/p0/s0"], "after": [], "change": "도입 삭제", "reason": "안내문"},
+        {"action": "delete", "before": ["ch-3/p0/s3"], "after": [], "change": "마무리 삭제", "reason": "안내문"},
+    ]
+    return o, drafts, e
+
+
+def test_t39_deleted_sentence_is_referenced_by_draft_location():
+    data, _ = source()
+    T = {u["turn"] for u in data["utterances"]}
+    o, drafts, e = _v2_failure_case()
+    pipe.check_final(e, o, T, frozenset(), drafts)            # 지운 문장은 편집본에 없는 것이 정상
+
+    old = copy.deepcopy(e)                                    # v2 모양 — 지운 문장을 편집 뒤 위치로
+    old["edit_notes"] = [{"location": "ch-3/p0/s2", "change": "마무리 삭제", "reason": ""}]
+    with pytest.raises(pipe.PipelineError) as err:
+        pipe.check_final(old, o, T, frozenset(), drafts)
+    assert err.value.kind == "format"
+
+    for bad, kind in ((["ch-3/p0/s9"], "reference"),          # 초안에도 없는 위치는 계속 실패
+                      (["ch-4/p0/s0"], "reference")):
+        x = copy.deepcopy(e)
+        x["edit_notes"][1]["before"] = bad
+        with pytest.raises(pipe.PipelineError) as err:
+            pipe.check_final(x, o, T, frozenset(), drafts)
+        assert err.value.kind == kind
+    x = copy.deepcopy(e)
+    x["edit_notes"][1]["after"] = ["ch-3/p0/s2"]             # delete 에 after 를 달면 형식 오류
+    with pytest.raises(pipe.PipelineError, match="after"):
+        pipe.check_final(x, o, T, frozenset(), drafts)
+
+    # 사실 · 출처 검사는 그대로 — 편집본 문장의 근거가 범위 밖이면 여전히 실패
+    x = copy.deepcopy(e)
+    x["chapters"][2]["paragraphs"][0][0]["turns"] = [99]
+    with pytest.raises(pipe.PipelineError, match="99"):
+        pipe.check_final(x, o, T, frozenset(), drafts)
+
+
+@pytest.mark.parametrize("note, ok", [
+    ({"action": "merge", "before": ["ch-1/p0/s0", "ch-1/p0/s1"], "after": ["ch-1/p0/s0"]}, True),
+    ({"action": "merge", "before": ["ch-1", "ch-2"], "after": ["ch-1"]}, True),       # 장 합치기
+    ({"action": "merge", "before": ["ch-1/p0/s0"], "after": ["ch-1/p0/s0"]}, False),  # before 하나
+    ({"action": "merge", "before": ["ch-1/p0/s0", "ch-1/p0/s1"], "after": []}, False),
+    ({"action": "rewrite", "before": ["ch-1/p0/s0"], "after": ["ch-1/p0/s0"]}, True),
+    ({"action": "rewrite", "before": ["ch-1/p0/s0"], "after": ["ch-1/p3/s0"]}, False),  # 편집본에 없는 위치
+    ({"action": "rewrite", "before": ["ch-1/p0/s5"], "after": ["ch-1/p0/s0"]}, False),  # 초안에 없는 위치
+    ({"action": "rewrite", "before": [], "after": ["ch-1/p0/s0"]}, False),
+    ({"action": "add", "before": [], "after": ["ch-2/p0/s0"]}, True),
+    ({"action": "add", "before": ["ch-2/p0/s0"], "after": ["ch-2/p0/s0"]}, False),
+    ({"action": "move", "before": ["ch-1/p0/s0"], "after": ["ch-1/p0/s0"]}, False),
+    ({"action": "rewrite", "before": ["title"], "after": ["title"]}, True),             # 책 제목
+])
+def test_t40_merge_rewrite_add_locations(note, ok):
+    data, _ = source()
+    T = {u["turn"] for u in data["utterances"]}
+    drafts = [draft("ch-1", 1), draft("ch-2", 5)]
+    e = edited_ok()
+    if note["after"] == ["ch-1"] and note["before"] == ["ch-1", "ch-2"]:
+        e["chapters"] = [{"chapter_key": "ch-1", "from_chapters": ["ch-1", "ch-2"], "title": sent("장", [], "editorial"),
+                          "paragraphs": [[sent("앞의 일이에요.", [1]), sent("뒤의 일이에요.", [5])]]}]
+    e["edit_notes"] = [{**note, "change": "", "reason": ""}]
+    if ok:
+        pipe.check_final(e, outline_ok(), T, frozenset(), drafts)
+    else:
+        with pytest.raises(pipe.PipelineError):
+            pipe.check_final(e, outline_ok(), T, frozenset(), drafts)
+
+
+def test_t41_chapter_split_is_flagged_not_hardcoded():
+    data, _ = source()
+    T = {u["turn"] for u in data["utterances"]}
+    one = outline_ok()
+    one["chapters"] = [chapter_plan("ch-1", ["e1", "e2"], [1, 2, 5, 6])]
+    assert pipe.check_outline(one, analysis_ok(), T) == ("ready", [])   # 한 장 회상록 — 경고 없음
+
+    split = outline_ok()                                      # 사건마다 한 장 — 막지 않고 경고
+    status, warnings = pipe.check_outline(split, analysis_ok(), T)
+    assert status == "ready" and any("사건 하나마다" in w for w in warnings)
+
+    fake = Fake(script())                                     # 경고는 검증 역할의 plan.checks 로 간다
+    go(fake)
+    v = next(s for s in fake.specs if s.stage == "verify")
+    checks = json.loads(v.user.split("\n\n", 1)[1])["plan"]["checks"]
+    assert any("사건 하나마다" in c for c in checks)
+
+    r = go(Fake(script()))                                    # 나눠도 실행은 된다 — 하드코딩으로 합치지 않는다
+    assert r["pipeline_complete"] is True and r["metrics"]["chapters"] == 2
+
+
+def test_t42_outline_memo_must_not_leak_into_body():
+    data, _ = source()
+    T = {u["turn"] for u in data["utterances"]}
+    D = [draft("ch-1", 1), draft("ch-2", 5)]
+    o = outline_ok()
+    o["chapters"][1]["transition_in"] = "어머니와의 기억에 이어 동생과 함께 나눈 발걸음을 따라갑니다."
+    # 장 초안에 메모가 그대로 들어가면 경고만 — 편집이 지울 수 있다
+    d = draft("ch-2", 5)
+    d["paragraphs"][0].insert(0, sent("어머니와의 기억에 이어 동생과 함께 나눈 발걸음을 따라갑니다.", [], "editorial"))
+    w = pipe.check_chapter(d, o["chapters"][1], [5, 6], {5, 6}, pipe.outline_memos(o))
+    assert any("목차 메모" in x for x in w) and any("안내문 말투" in x for x in w)
+
+    # 편집본에 남으면 실패
+    e = edited_ok()
+    e["chapters"][1]["paragraphs"][0].insert(0, sent("어머니와의 기억에 이어 동생과 함께 나눈 발걸음을 따라갑니다.",
+                                                     [], "editorial"))
+    with pytest.raises(pipe.PipelineError) as err:
+        pipe.check_final(e, o, T, frozenset(), D)
+    assert err.value.kind == "memo_leak"
+
+    # 안내문 말투만 있으면(메모 복사는 아님) 경고
+    e = edited_ok()
+    e["chapters"][0]["paragraphs"][0].append(sent("이 장에서는 첫 월급 이야기를 보여줍니다.", [], "editorial"))
+    assert any("안내문 말투" in x for x in pipe.check_final(e, outline_ok(), T, frozenset(), D))
+
+    # 원문을 옮긴 supported 문장은 메모 혼입으로 보지 않는다
+    o2 = outline_ok()
+    o2["chapters"][0]["purpose"] = data["utterances"][0]["elder"]
+    e = edited_ok()
+    e["chapters"][0]["paragraphs"][0][0] = sent(data["utterances"][0]["elder"], [1])
+    pipe.check_final(e, o2, T, frozenset(), D)
+
+
+def test_t43_unsupported_purpose_is_not_caught_by_code():
+    """
+    한계 기록 — 목차 purpose 의 "입학식 날"(원문은 "입학해서")은 턴 번호가 맞으면 코드가 못 잡는다.
+    뜻의 근거는 검증 역할 · 사람 검수가 본다. 대신 purpose 는 검증의 plan 으로 넘어간다.
+    """
+    data, _ = source()
+    T = {u["turn"] for u in data["utterances"]}
+    o = outline_ok()
+    o["chapters"][1]["purpose"] = "1996년 딸의 초등학교 입학식 날 학교에 데려다준 기억"
+    assert pipe.check_outline(o, analysis_ok(), T)[0] == "ready"
+    fake = Fake(script(outline=o))
+    go(fake)
+    v = next(s for s in fake.specs if s.stage == "verify")
+    plan = json.loads(v.user.split("\n\n", 1)[1])["plan"]
+    assert "입학식" in plan["chapters"][1]["purpose"]
+    for stage in ("outline", "chapter", "verify"):            # 지시문 v3 에 규칙이 들어 있다
+        assert "입학식" in pipe.role_text(stage)

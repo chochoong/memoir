@@ -45,6 +45,12 @@
 - 보완(06:39Z): `exclusion_notices` · `stage_source` 추가, exclusions 에 mode(whole · partial). 테스트 56 · 전체 125
 - 시험 격리: `tests/conftest.py` (새 파일) — `.env` 에 실제 키가 있어도 `pytest tests` 는 외부를 부르지 않는다. 기존 서버의 `question.warmup` 이 'ping' 을 보내던 원인을 막는다
 
+## 개선 v3 (2026-10-26T07:01Z, 미커밋)
+- 지시문 `*_v3.md` 다섯 개 · `PROMPT_VERSION = "v3"` (v1 · v2 파일은 남김)
+- 새 함수: `draft_locations` · `check_edit_notes` · `outline_memos` · `memo_leaks` · `meta_sentences`. `check_final` 이 장 초안(drafts)을 받아 edit_notes 의 before 를 검사, 목차 메모 혼입은 memo_leak
+- `verify_plan` 이 앞 단계 경고를 `checks` 로 넘긴다. metrics 에 `edit_actions`
+- 테스트 72 (T39~T43 추가) · 전체 141 passed
+
 ## 실행
 ```
 cd backend-agent

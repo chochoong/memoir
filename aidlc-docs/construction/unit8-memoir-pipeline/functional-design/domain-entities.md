@@ -6,6 +6,10 @@
 > ④ 편집 장에 `from_chapters`(합친 목차 장 키), 편집본에 `structure_notes` 추가 · 편집본 장 키는 ch-1 부터 다시.
 > ⑤ 검증 issue 에 `category`(fact · composition), code 에 구성 6종, resolution 에 `accept_limit` 추가 · 입력에 `plan`.
 > 결과에 `metrics` · `structure_notes` · `prompt_version` 추가. 아래 본문은 v1 기준이며 위 항목이 더해진다.
+>
+> **v3 (2026-10-26) 변경** — `../improvement-v3.md`.
+> ④ `edit_notes[]` = `{action: rewrite|delete|merge|add, before: [장 초안 위치], after: [편집본 위치], change, reason}` (v2 의 `location` 은 없어짐). 개수 규칙은 improvement-v3 표.
+> ⑤ 검증 입력 `plan.checks`(앞 단계 코드 경고). 실패 종류에 `memo_leak`(목차 메모를 그대로 옮긴 editorial 문장이 편집본에 남음). metrics 에 `edit_actions`.
 
 필드 이름은 이 실험 안에서만 쓰는 제안이다. 현재 API · DB 에 없다 (지시서 §7.1).
 **모델이 쓰는 것**(①~⑤ 출력)과 **코드가 붙이는 것**(run_ref · input_ref · 상태 · 시간)을 나눈다. 모델에게 상태 · 시간 · ID 를 쓰게 하지 않는다.

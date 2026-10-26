@@ -94,4 +94,8 @@
 - [x] 계약 · 코드: 분석 exclusions · not_in_events · strength · 턴 덮기 / 목차 structure_reason · grouping_reason · left_out · 사건 배치 / 장 입력에서 제외 턴 빼기 / 편집 from_chapters(합치기) · structure_notes / 검증 category · 구성 code · accept_limit · plan / text_metrics
 - [x] 테스트: 기존 36 유지(fixture 만 v2 계약으로) + T22~T32 11개 → 47 passed · 전체 116 passed · theme-interview 사본 47 passed · dry-run A3 · A5 · B · 호출 0
 - [x] 보완 (2026-10-26T06:39Z): 제외 mode(whole · partial) · `stage_source` · `exclusion_notices` · 지시문 완화 · `tests/conftest.py`(외부 호출 차단) · R1 검수 6항목 → 56 passed · 전체 125 · theme-interview 사본 56 · 막은 시도 0
-- [ ] 실제 모델 — A3 → B → A5 각 한 번, 사용자 승인 뒤
+- [x] 커밋 9231a70 · A3 실제 1회 (2026-10-26T06:44:53Z) → failed(final_check, edit_notes 삭제 위치) · R1-20261026T064453Z-A3-v2.md
+- [x] 보완 N-1~N-4 (2026-10-26T07:01Z, `unit8-memoir-pipeline/improvement-v3.md`) — 지시문 v3 · 편집 메모 계약 · 메모 혼입 검사 · 테스트 T39~T43 → 72 passed · 전체 141 · theme-interview 사본 72 · A3 dry-run 호출 0
+- [ ] v3 A3 실제 1회 — 사용자 승인 뒤
+- [ ] seed C — 팀 결정(check_seed SET_IDS) 뒤
+- [ ] N-5 일부 제외 범위 지정 방식 → B (B 실제 실행 미승인)
