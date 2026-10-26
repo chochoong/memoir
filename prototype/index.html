@@ -445,6 +445,15 @@
     .dev .row { display: flex; gap: 6px; margin-top: 8px; }
     .dev input { flex: 1; min-width: 0; background: #0a1f2b; border: 1px solid #1e4257; color: #e8f1f5; border-radius: 8px; padding: 7px 9px; font-size: .74rem; }
     .dev button { background: #1e4257; color: #e8f1f5; border: 0; border-radius: 8px; padding: 7px 10px; font-size: .74rem; }
+    .dev-caps { margin-top: 8px; max-height: 210px; overflow: auto; border: 1px solid #1e4257; border-radius: 8px; }
+    .dev-caps[hidden] { display: none; }
+    .dev-caps table { width: 100%; border-collapse: collapse; font-size: .7rem; line-height: 1.35; }
+    .dev-caps td { padding: 4px 6px; border-top: 1px solid #12303f; vertical-align: top; color: #c9dbe3; }
+    .dev-caps tr:first-child td { border-top: 0; }
+    .dev-caps .cap-st { white-space: nowrap; font-weight: 700; }
+    .dev-caps .st-yes { color: #8fe0a8; } .dev-caps .st-no { color: #ffb38a; } .dev-caps .st-mock { color: #9fc8ff; }
+    .dev-caps .st-wait, .dev-caps .st-unk, .dev-caps .st-off { color: #8aa3ae; }
+    .dev-caps small { color: #8aa3ae; }
     .dev pre { margin: 8px 0 0; max-height: 108px; overflow: auto; white-space: pre-wrap; color: #9fb6c0; }
 
     @media (min-width: 520px) { body { padding: 24px 0; } .app { min-height: calc(100dvh - 48px); border-radius: 30px; } main, .screen { min-height: calc(100dvh - 120px); } }
@@ -1321,6 +1330,9 @@
     <div class="row"><button id="devLab" title="2~7차 혼자 준비하는 일(FE-01~06) 화면 시안">개발 시안 열기</button>
       <button id="devMemFile" title="대원 님 독립 실행 결과(JSON)를 읽기 화면에 띄운다. 서버로 보내지 않는다">자서전 결과 파일 열기</button>
       <input type="file" id="devMemInput" accept=".json,application/json" hidden /></div>
+    <div class="row"><button id="devCapRun" title="서버가 지금 어떤 칸 · 기능을 주는지 읽기만 해서 확인한다">연결 점검</button>
+      <button id="devCapCopy" title="점검 결과를 글로 복사 (토큰 · 쿠키는 넣지 않는다)" disabled>결과 복사</button></div>
+    <div class="dev-caps" id="devCaps" hidden></div>
     <pre id="devLog"></pre>
   </div>
 
@@ -1334,7 +1346,7 @@
   const CONFIG = {
     // 화면 아래와 개발용 패널에 그대로 찍힌다. 「고친 게 반영이 안 된 것 같다」는
     // 대부분 예전 파일이 열려 있는 경우라서, 눈으로 확인할 자리를 만들어 둔다.
-    version: 'v0.40 · 2026-10-22 (목록 100개 · 오류 code not_final · 엽서 image_kind 받을 준비)',
+    version: 'v0.41 · 2026-10-26 (개발 패널에 서버 연결 상태 점검판)',
 
     // 이 화면을 백엔드가 직접 서빙하면(web/ 폴더) 빈 문자열 그대로 둔다.
     // 다른 포트에서 열어 시험할 때만 'http://127.0.0.1:8010' 처럼 채운다.
@@ -1401,6 +1413,9 @@
       // 최충 님 확정 (feature/theme-interview 5a9fddd) — 모든 회차에 늘 있고, 엽서가 없거나 006 이전 엽서면 null.
       // 서버는 저장값 그대로 준다(공백 정리 없음). 정리는 화면이 한다.
       postcardTitleField: 'postcard_title',
+      // 아직 서버에 없는 칸 — 이름이 정해지면 여기만 고친다 (연결 점검판이 이 이름으로 찾는다)
+      cursorField: 'next_cursor',   // 「더 보기」 다음 쪽 표시 (6-C1 §4 · 정렬 작업 때)
+      timeField: '',                // 사건 시점 칸 (6-C1 §3 · 대원 님 DW-12 형식 대기) — 미정이면 빈 값
       // 서버 없이 목록 제목 규칙을 볼 때: ?listMock=title (여러 경우) · old (칸 없는 예전 응답)
       //   · empty (빈 목록) · fail (503). 예시일 때는 화면 위에 「예시 목록」 이 뜬다.
       mock: '',
@@ -4402,6 +4417,7 @@
     try {
       const style = CONFIG.style.pick ? mmStyle : '';
       const res = kind ? await mmFake(kind, ctl.signal, style, ids) : await api.memoirPreview(ids, ctl.signal, style);
+      if (!kind && res && typeof res === 'object') capSeen('memoirChapters', Array.isArray(res.chapters) && res.chapters.length > 0 && !!res.run);
       out = mmRead(res, ids);
     } catch (e) {
       out = { view: 'fail', why: mmWhy(e) };
@@ -4680,6 +4696,100 @@
   $('#devToggle').hidden = !DEV_PANEL;
   $('#devToggle').addEventListener('click', () => $('#dev').classList.toggle('show'));
   if (CONFIG.dev && DEV_PANEL) $('#dev').classList.add('show');
+  /* ═══════════════════════════════════════════════════════════════
+     연결 상태 점검판 (FE-19 준비) — 「서버가 지금 무엇을 주는가」 를 한 표로
+       · 직접 묻기: 읽기(GET)와, 서버가 저장 없이 곧바로 거절하는 요청 하나(엽서 0장 자서전 → 400)만 보낸다.
+         모델을 부르거나 기록을 바꾸는 요청은 보내지 않는다.
+       · 지켜보기: 자서전 장 구조처럼 모델을 불러야 알 수 있는 것은, 화면이 실제로 받은 응답에서 본다 (capSeen).
+       · 화면의 call() 과 따로 묻는다 — 401 이 나도 로그인 화면으로 튕기지 않는다. 모의(?listMock 등)도 거치지 않는다.
+       · 결과 복사에는 토큰 · 쿠키 · 이메일을 넣지 않는다.
+     상태: 있음 · 없음 · 모의(화면 예시로만) · 규격 대기(서버 규격이 아직 없다) · 관찰 전 · 확인 불가
+     ═══════════════════════════════════════════════════════════════ */
+  const CAP_SEEN = {};                        // 화면이 실제로 받은 응답에서 본 것 { key: {v, at} }
+  function capSeen(key, v) { CAP_SEEN[key] = { v, at: new Date().toTimeString().slice(0, 8) }; }
+  async function capFetch(path, init) {
+    try {
+      const res = await fetch(`${CONFIG.apiBase}/api${path}`, Object.assign({ credentials: 'include' }, init, {
+        headers: Object.assign({ 'Content-Type': 'application/json' }, idHeaders(path), init && init.headers) }));
+      let j = null; try { j = await res.json(); } catch (_) {}
+      return { status: res.status, j };
+    } catch (e) { return { status: 0, j: null }; }
+  }
+  let capText = '';
+  async function capRun() {
+    const btn = $('#devCapRun'); btn.disabled = true; btn.textContent = '점검 중…';
+    const rows = [];      // [항목, 업무, 상태, 근거]
+    const add = (name, work, st, why) => rows.push([name, work, st, why]);
+    const hasKey = (o, k) => !!o && typeof o === 'object' && k in o;
+
+    const h = await capFetch('/health');
+    add('서버 연결', '', h.status === 200 && h.j && h.j.ok ? 'yes' : 'no',
+        h.status === 200 ? `health 200${h.j && h.j.public ? ` · 공개 주소 ${h.j.public}` : ''}` : `health ${h.status || '연결 안 됨'}`);
+    const me = AUTH.mode === 'session' ? await capFetch('/auth/me') : null;
+    add('로그인', 'FE-14', AUTH.mode === 'dev' ? 'mock' : me.status === 200 ? 'yes' : 'no',
+        AUTH.mode === 'dev' ? '개발 모드 (X-User-Id) — 배포 서버는 로그인 모드'
+        : me.status === 200 ? '로그인됨' : `auth/me ${me.status} — 로그인하면 아래 항목을 볼 수 있다`);
+    const can = !LINK.on && (AUTH.mode === 'dev' || (me && me.status === 200));
+
+    if (!can) {
+      ['목록 엽서 제목', '엽서 있는 회차만', '더 보기 커서', '사건 시점 칸', '엽서 문체', '엽서 그림 구분', '자서전 오류 code']
+        .forEach(n => add(n, '', 'unk', LINK.on ? '어르신 링크 화면에서는 묻지 않는다' : '로그인 전'));
+    } else {
+      const L = await capFetch('/sessions?limit=1');
+      const row = L.j && Array.isArray(L.j.sessions) ? L.j.sessions[0] : null;
+      const titleKey = CONFIG.archive.postcardTitleField;
+      add('목록 엽서 제목', 'TITLE', L.status !== 200 ? 'no' : !row ? 'unk' : hasKey(row, titleKey) ? 'yes' : 'no',
+          L.status !== 200 ? `목록 ${L.status}` : !row ? '기록이 없어 확인 불가' : hasKey(row, titleKey) ? `${titleKey} 칸 있음` : `${titleKey} 칸 없음 — 예전 서버`);
+      const F = await capFetch('/sessions?limit=1&has_postcard=1');
+      const frow = F.j && Array.isArray(F.j.sessions) ? F.j.sessions[0] : null;
+      add('엽서 있는 회차만', '자서전', F.status !== 200 ? 'no' : !frow ? 'unk' : frow.has_postcard === true ? 'yes' : 'no',
+          F.status !== 200 ? `${F.status}` : !frow ? '엽서 있는 회차가 없어 확인 불가' : frow.has_postcard === true ? 'has_postcard=1 걸러 줌' : '거르지 않음 — 예전 서버');
+      const cur = CONFIG.archive.cursorField;
+      add('더 보기 커서', 'FE-11', hasKey(L.j, cur) ? 'yes' : 'wait', hasKey(L.j, cur) ? `${cur} 있음` : `${cur} 없음 — 정렬 작업 때 서버가 붙임 (이름 미정)`);
+      const tk = CONFIG.archive.timeField;
+      add('사건 시점 칸', 'FE-11', tk && row && hasKey(row, tk) ? 'yes' : 'wait',
+          tk && row && hasKey(row, tk) ? `${tk} 있음` : tk ? `${tk} 없음` : '칸 이름 미정 — 대원 님 DW-12 · 6-C1 §3 대기');
+      // 엽서 하나의 기록에서 style · image_kind
+      let rec = null;
+      if (frow && frow.has_postcard === true) { const R = await capFetch(`/sessions/${frow.session_id}/record`); rec = R.j && R.j.postcard; }
+      add('엽서 문체', 'FE-15', !rec ? 'unk' : hasKey(rec, 'style') ? 'yes' : 'no',
+          !rec ? '엽서가 없어 확인 불가' : hasKey(rec, 'style') ? `style=${rec.style} · 화면이 여는 문체 ${styleOpen().join(', ')}` : 'style 없음 — 예전 서버');
+      add('엽서 그림 구분', 'FE-10', !rec ? 'unk' : hasKey(rec, 'image_kind') ? 'yes' : 'wait',
+          !rec ? '엽서가 없어 확인 불가' : hasKey(rec, 'image_kind') ? `image_kind=${rec.image_kind}` : 'image_kind 없음 — 서버가 곧 넣는다고 함');
+      // 저장 없이 곧바로 거절되는 요청 하나
+      const M = await capFetch(CONFIG.memoir.path, { method: 'POST', body: JSON.stringify({ [CONFIG.memoir.idsField]: [] }) });
+      add('자서전 오류 code', 'MEM', M.status === 400 && M.j && M.j.code ? 'yes' : M.status === 400 ? 'no' : 'unk',
+          M.status === 400 ? (M.j && M.j.code ? `빈 선택 → 400 code=${M.j.code}` : '400 이지만 code 없음 — 예전 서버') : `빈 선택 → ${M.status}`);
+    }
+    const ch = CAP_SEEN.memoirChapters;
+    add('자서전 장 구조', 'FE-18', mmMock() ? 'mock' : ch ? (ch.v ? 'yes' : 'no') : 'unk',
+        mmMock() ? `예시 응답 (${mmMock()})` : ch ? `${ch.at} 받은 응답에 ${ch.v ? 'chapters · run 있음' : 'chapters 없음 (body)'}` : '관찰 전 — 자서전을 한 번 만들면 보인다 (모델 비용이 들어 직접 묻지 않음)');
+    add('답변 수정', 'FE-07·13', 'wait', '서버 규격 대기 — 요청서 보냄 (2-C1/A)');
+    const mocks = [listMock() && `?listMock=${listMock()}`, mmMock() && `?memoirMock=${mmMock()}`].filter(Boolean);
+    add('예시 모드', '', mocks.length ? 'mock' : 'off', mocks.length ? `${mocks.join(' · ')} — 이 항목들은 서버가 아니라 예시` : '꺼짐 — 화면은 서버 응답만 쓴다');
+
+    const label = { yes: '있음', no: '없음', mock: '모의', wait: '규격 대기', unk: '확인 불가', off: '꺼짐' };
+    const box = $('#devCaps'); box.replaceChildren();
+    const t = document.createElement('table');
+    rows.forEach(([n, w, st, why]) => {
+      const tr = t.insertRow();
+      const a = tr.insertCell(); a.textContent = n; if (w) { const sm = document.createElement('small'); sm.textContent = ` ${w}`; a.append(sm); }
+      const b = tr.insertCell(); b.className = `cap-st st-${st}`; b.textContent = label[st];
+      tr.insertCell().textContent = why;
+    });
+    box.append(t); box.hidden = false;
+    capText = [`[연결 점검] ${CONFIG.version.split(' ')[0]} · ${location.host || '파일'} · ${new Date().toLocaleString('ko-KR')}`,
+      ...rows.map(([n, w, st, why]) => `- ${n}${w ? ` (${w})` : ''}: ${label[st]} — ${why}`)].join('\n');
+    $('#devCapCopy').disabled = false;
+    btn.disabled = false; btn.textContent = '연결 점검';
+    log('점검', rows.map(r => `${r[0]} ${label[r[2]]}`).join(' · '));
+  }
+  $('#devCapRun').addEventListener('click', () => void capRun());
+  $('#devCapCopy').addEventListener('click', async () => {
+    try { await navigator.clipboard.writeText(capText); toast('점검 결과를 복사했어요'); }
+    catch (_) { log('점검', '복사하지 못했습니다 — 아래 기록을 직접 옮겨 주세요'); }
+  });
+
   $('#devSend').addEventListener('click', async () => {
     const t = $('#devText').value.trim();
     if (!t || !sessionId) return;
