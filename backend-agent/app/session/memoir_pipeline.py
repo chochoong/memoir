@@ -893,6 +893,89 @@ def context_findings(draft: dict, core: set[int]) -> list[dict]:
     return out
 
 
+_NATIVE_NUM = r"(?:열|스물|스무|서른|마흔|쉰|예순|일흔|여든|아흔)?(?:한|두|세|네|다섯|여섯|일곱|여덟|아홉)?"
+_FACT_NUM = re.compile(
+    r"(?<![가-힣\d])(\d+)\s?(?=년|살|세|시|명|월|일|번|개|층|대|주|시간|분|원|평)"   # 2010년 · 17살 · 9시
+    r"|(?<![가-힣\d])((?:19|20)\d{2})(?!\d)"                                     # 숫자만 쓴 연도
+    rf"|(?<![가-힣])((?=[열스서마쉰예일여아한두세네다])(?:{_NATIVE_NUM}))(?:\s(살|시|명|달|해|번|개|층|대)|(살))"
+)
+_PLACE = re.compile(r"(?<![가-힣])([가-힣]{2,}?)(?=\s?(?:근처|쪽)|에서|으로|에(?!요)|(?<!으)로)")
+_PLACE_STOP = {"처음", "다음", "나중", "그때", "거기", "여기", "저기", "정도", "마지막", "정말", "진짜",
+               "그대", "실제", "이쪽", "저쪽", "그쪽", "자기", "혼자", "서로", "따로", "그다음", "아니", "지난번", "한편"}
+PLACE_MAX_TURNS = 3              # 원문 전체에서 이보다 많은 턴에 나오는 말은 지명 · 장소가 아니라 흔한 말로 본다
+
+
+def _fact_tokens(text: str) -> list[tuple[str, str]]:
+    """문장의 명시적 숫자 사실 — (보이는 글, 대조할 값). 숫자 · 연도 · 나이 · 시각 · 인원."""
+    out = []
+    for m in _FACT_NUM.finditer(text or ""):
+        if m.group(1) or m.group(2):
+            d = m.group(1) or m.group(2)
+            out.append((m.group(0).strip(), d))
+        elif m.group(3):
+            unit = m.group(4) or m.group(5)
+            out.append((m.group(0).strip(), m.group(3) + "|" + unit))
+    return out
+
+
+def _num_supported(value: str, support: str, support_digits: set[str]) -> bool:
+    if "|" not in value:                                    # 아라비아 숫자 — 연도는 끝 두 자리도 같다고 본다
+        return (value in support_digits or (len(value) == 4 and value[2:] in support_digits)
+                or (len(value) == 2 and any(len(x) == 4 and x.endswith(value) for x in support_digits)))
+    num, unit = value.split("|")
+    return num + unit in support or (len(num) >= 2 and num in support)    # "열일곱에" 처럼 단위 없이 말한 나이
+
+
+def fact_findings(chapters: list[dict], data: dict) -> list[dict]:
+    """
+    **보조 검사** — 문장에 쓴 숫자 · 연도 · 나이 · 지명 같은 명시적 사실이 그 문장이 단 근거 턴
+    (질문 + 답)에 있는가. 없으면 fact_token(fix) — 다른 턴에 있으면 그 턴을 알려 준다.
+
+    - 근거 턴 표시가 빠진 것(문맥 턴의 사실을 출처 없이 씀)을 찾으려는 것이다. 문장의 뜻이 근거와
+      맞는지는 보지 않는다 — **의미상의 출처 오류를 이 검사가 다 잡지 못한다** (검증 · 사람 몫)
+    - 지명 · 장소는 원문에서 '에 · 에서 · 로 · 근처 · 쪽' 앞에 온 말 가운데 원문 PLACE_MAX_TURNS 턴
+      이하에만 나오는 말로 어림한다. 말을 바꿔 쓴 경우 잘못 걸릴 수 있어 막지 않고 경고로 둔다 —
+      편집이 kept + 이유로 두면 code_gate 가 남은 것으로 치지 않는다 (repeat_turn 과 같은 대우)
+    """
+    utts = {u["turn"]: f"{u.get('asked', '')} {u['elder']}" for u in data["utterances"]}
+    flat = {t: re.sub(r"\s+", "", s) for t, s in utts.items()}
+    digits = {t: set(re.findall(r"\d+", s)) for t, s in utts.items()}
+    seen: dict[str, set[int]] = {}
+    for t, s in utts.items():
+        for w in _PLACE.findall(s):
+            if w not in _PLACE_STOP and not re.fullmatch(_NATIVE_NUM, w):     # "열일곱에" 는 숫자 쪽에서 본다
+                seen.setdefault(w, set())
+    for w in seen:
+        seen[w] = {t for t, s in flat.items() if w in s}
+    places = {w for w, ts in seen.items() if len(ts) <= PLACE_MAX_TURNS}
+
+    out = []
+    for ch in chapters:
+        for p, para in enumerate(ch.get("paragraphs", [])):
+            for s, x in enumerate(para):
+                text = x.get("text", "")
+                cited = [t for t in x.get("turns", []) if t in utts]
+                support = "".join(flat[t] for t in cited)
+                sdig = set().union(*(digits[t] for t in cited)) if cited else set()
+                loc = f"{ch['chapter_key']}/p{p}/s{s}"
+                misses = []
+                for shown, value in _fact_tokens(text):
+                    if not _num_supported(value, support, sdig):
+                        found = [t for t in utts if _num_supported(value, flat[t], digits[t])]
+                        misses.append((shown, found))
+                flat_text = re.sub(r"\s+", "", text)
+                for w in sorted(places):
+                    if w in flat_text and w not in support:
+                        misses.append((w, sorted(seen[w])))
+                for shown, found in misses:
+                    where = f"턴 {found} 에 있다" if found else "원문 어디에도 없다"
+                    out.append({"id": f"fact_token:{loc}:{shown}", "rule": "fact_token", "severity": "fix",
+                                "location": loc, "token": shown, "found_in": found,
+                                "detail": f"'{shown}' 이(가) 근거 턴 {cited} 에 없다 — {where}. "
+                                          "근거 턴을 바로잡거나, 같은 뜻을 바꿔 쓴 것이면 kept + 이유"})
+    return out
+
+
 def check_resolutions(out: dict, checks: list[dict]) -> tuple[dict, list[str]]:
     """
     편집의 checks_resolution — 넘긴 경고(block · fix)마다 resolved / kept + 이유.
@@ -926,18 +1009,23 @@ def code_gate(final: list[dict], resolutions: dict[str, dict], draft_checks: lis
 
         blocked    block 이 하나라도 남음 — 모델이 pass 여도 사용자에게 내놓지 않는다
         attention  fix 가 남음. 단 repeat_turn 은 편집이 그 턴의 경고를 kept + 이유(의도한 회상)로
-                   처리했으면 남은 것으로 치지 않는다 — 같은 턴을 두 장이 쓴 것만으로 막지 않는다
+                   처리했으면 남은 것으로 치지 않는다 — 같은 턴을 두 장이 쓴 것만으로 막지 않는다.
+                   fact_token(보조 검사)도 편집이 그 말을 kept + 이유로 두었으면 같은 대우
         pass       block · fix 없음 (info 는 사람 검수 참고로만)
     """
-    kept_turns = {c.get("turn") for c in draft_checks or [] if c["rule"] == "repeat_turn"
-                  and resolutions.get(c["id"], {}).get("status") == "kept"}
+    def kept(rule, key):
+        return {c.get(key) for c in draft_checks or [] if c["rule"] == rule
+                and resolutions.get(c["id"], {}).get("status") == "kept"}
+    kept_turns, kept_tokens = kept("repeat_turn", "turn"), kept("fact_token", "token")
 
     def accepted(f):
-        return f["rule"] == "repeat_turn" and f.get("turn") in kept_turns
+        return ((f["rule"] == "repeat_turn" and f.get("turn") in kept_turns)
+                or (f["rule"] == "fact_token" and f.get("token") in kept_tokens))
     blocks = [f for f in final if f["severity"] == "block"]
     fixes = [f for f in final if f["severity"] == "fix" and not accepted(f)]
     state = "blocked" if blocks else "attention" if fixes else "pass"
     return {"state": state, "findings": final, "accepted_repeats": sorted(t for t in kept_turns if t is not None),
+            "accepted_facts": sorted(t for t in kept_tokens if t is not None),
             "counts": {s: sum(1 for f in final if f["severity"] == s) for s in ("block", "fix", "info")}}
 
 
@@ -1455,7 +1543,7 @@ async def run(data: dict, turn_map: list[dict], *, call: Call = call_model,
 
         # 코드 판정 ① — 장 초안에서. 편집이 고칠 곳으로 넘긴다
         draft_checks = code_findings(drafts, outline_out) + [
-            f for d, c in zip(drafts, cores) for f in context_findings(d, c)]
+            f for d, c in zip(drafts, cores) for f in context_findings(d, c)] + fact_findings(drafts, data)
         rec.json("03_checks.json", draft_checks)
 
         # ④ 전체 편집 → 최종 근거검사 → 코드 판정 ②
@@ -1469,7 +1557,8 @@ async def run(data: dict, turn_map: list[dict], *, call: Call = call_model,
             raise
         resolutions, res_warnings = check_resolutions(edited, draft_checks)
         step["warnings"] += res_warnings
-        final_findings = code_findings(edited["chapters"], outline_out) + verbatim_runs(edited["chapters"], data)
+        final_findings = (code_findings(edited["chapters"], outline_out) + fact_findings(edited["chapters"], data)
+                          + verbatim_runs(edited["chapters"], data))
         gate = code_gate(final_findings, resolutions, draft_checks)
         gate["draft_checks"] = len(draft_checks)
         gate["resolutions"] = {s: sum(1 for r in resolutions.values() if r["status"] == s) for s in CHECK_STATUSES}
@@ -1636,7 +1725,7 @@ async def run_chapter_trial(data: dict, turn_map: list[dict], spec: dict, *, cal
         step["warnings"] = check_chapter(draft, ch, given, core, outline_memos(outline_out))
         step["given_turns"] = given
         step["ok"] = True
-        findings = (code_findings([draft], outline_out) + context_findings(draft, core)
+        findings = (code_findings([draft], outline_out) + context_findings(draft, core) + fact_findings([draft], data)
                     + verbatim_runs([draft], data))
         sessions = {u["turn"]: u["session_id"] for u in data["utterances"]}
         paras = [{"paragraph": p, "sessions": sorted({sessions[t] for x in para for t in x["turns"]})}

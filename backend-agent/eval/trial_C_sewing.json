@@ -9,34 +9,34 @@
     "chapter_key": "ch-1",
     "title": {"text": "언니의 발틀", "kind": "editorial", "turns": []},
     "role": "큰언니에게서 시작된 바느질과 언니가 보낸 발틀 재봉틀이 지금까지 이어진 이야기를 한 흐름으로 엮는다",
-    "purpose": "언니에게 바느질을 배운 일, 공장 미싱 소리, 발틀이 온 일, 가게 시절, 가게 정리, 언니의 죽음, 지금의 발틀",
+    "purpose": "언니에게 바느질을 배운 일, 서울 봉제 공장, 발틀이 온 일과 가게 시절, 언니의 병과 죽음, 가게 정리, 지금의 발틀",
     "grouping_reason": "큰언니와 재봉틀이라는 같은 끈이 여러 회차에 걸쳐 나온다",
     "threads": ["t-machine", "t-sister"],
-    "events": ["e-learn", "e-factory-sound", "e-arrival", "e-shop-days", "e-close", "e-sister-death", "e-now"],
-    "focus_turns": [2, 3, 4, 11, 12, 15, 26, 27, 34, 35, 36, 38, 39],
-    "context_turns": [29],
+    "events": ["e-learn", "e-factory", "e-arrival", "e-shop-days", "e-sister-death", "e-close", "e-now"],
+    "focus_turns": [2, 3, 4, 11, 12, 14, 15, 26, 27, 29, 34, 35, 36, 38, 39],
+    "context_turns": [],
     "weight": "main",
     "transition_in": "",
     "transition_out": ""
   },
   "events": [
     {"event_key": "e-learn", "turns": [11, 12]},
-    {"event_key": "e-factory-sound", "turns": [15]},
+    {"event_key": "e-factory", "turns": [14, 15]},
     {"event_key": "e-arrival", "turns": [4, 26, 27]},
     {"event_key": "e-shop-days", "turns": [3]},
+    {"event_key": "e-sister-death", "turns": [29, 34]},
     {"event_key": "e-close", "turns": [2, 35]},
-    {"event_key": "e-sister-death", "turns": [34]},
     {"event_key": "e-now", "turns": [36, 38, 39]}
   ],
   "threads": [
     {"thread_key": "t-machine", "name": "발틀 재봉틀 · 미싱 소리", "kind": "object",
-     "events": ["e-factory-sound", "e-arrival", "e-shop-days", "e-close", "e-now"],
+     "events": ["e-factory", "e-arrival", "e-shop-days", "e-close", "e-now"],
      "turns": [3, 4, 15, 26, 27, 35, 36, 38, 39]},
     {"thread_key": "t-sister", "name": "큰언니", "kind": "person",
      "events": ["e-learn", "e-arrival", "e-sister-death", "e-now"],
-     "turns": [4, 11, 12, 26, 27, 34, 38]}
+     "turns": [4, 11, 12, 26, 27, 29, 34, 38]}
   ],
   "people": [
-    {"name": "큰언니", "relation": "큰언니", "turns": [4, 11, 12, 26, 27, 34, 38]}
+    {"name": "큰언니", "relation": "큰언니", "turns": [4, 11, 12, 26, 27, 29, 34, 38]}
   ]
 }

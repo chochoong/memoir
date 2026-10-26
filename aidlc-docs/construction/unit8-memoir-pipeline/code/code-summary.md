@@ -63,6 +63,7 @@
 - 실행기: `--chapter-trial PLAN` (호출 1회)
 - 테스트 93 · 전체 162
 - 실행 전 확인(08:13Z): `context_findings`(context_only, fix) · 장 입력에 `core_turns` · `context_only_turns` · `00_input.json` 에도 기록. 테스트 100 · 전체 169
+- 보완: `fact_findings`(fact_token, fix · kept+이유면 code_gate 통과 — `accepted_facts`) · `_fact_tokens` · `_num_supported` · `_FACT_NUM` · `_PLACE`. 장 초안 · 편집본 · 한 장 시험 모두 검사. 테스트 107 · 전체 176
 
 ## 실행
 ```

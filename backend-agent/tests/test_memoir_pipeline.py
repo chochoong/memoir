@@ -1385,7 +1385,7 @@ def test_v4_chapter_trial_makes_one_call_and_records_findings(tmp_path):
         assert (tmp_path / n).exists()
     spec = fake.specs[0]
     payload = json.loads(spec.user.split("\n\n", 1)[1])
-    assert [p["event_key"] for p in payload["event_packets"]][:3] == ["e-learn", "e-factory-sound", "e-arrival"]
+    assert [p["event_key"] for p in payload["event_packets"]][:3] == ["e-learn", "e-factory", "e-arrival"]
     assert pipe.role_text("chapter") in spec.system
 
 
@@ -1483,8 +1483,8 @@ def test_context_only_turns_are_marked_and_flagged():
     core = pipe.chapter_owned_turns(a, ch) | set(ch["context_turns"])
     msg = json.loads(pipe.chapter_message(src, given, o, ch, a["people"], None,
                                           pipe.event_packets(a, ch, given), [], core).split("\n\n", 1)[1])
-    assert set(msg["core_turns"]) == set(_trial_spec()["chapter"]["focus_turns"]) | {29}
-    assert set(msg["context_only_turns"]) == {1, 5, 10, 13, 14, 16, 25, 28, 30, 37}
+    assert set(msg["core_turns"]) == set(_trial_spec()["chapter"]["focus_turns"])
+    assert set(msg["context_only_turns"]) == {1, 5, 10, 13, 16, 25, 28, 30, 37}
     assert not set(msg["core_turns"]) & set(msg["context_only_turns"])
     assert "context_only_turns" in pipe.role_text("chapter")
 
@@ -1494,3 +1494,109 @@ def test_context_only_turns_are_marked_and_flagged():
         sent("가게를 연 해를 바로잡았다.", [25, 26])]]}              # 문맥 + 핵심 함께 — 허용
     f = pipe.context_findings(d, core)
     assert [x["location"] for x in f] == ["ch-1/p0/s0"] and f[0]["severity"] == "fix"
+
+
+# ---------------------------------------------------------------- v4 보완 — 근거 턴 · 사건 순서 · 집필 지시문
+
+# v4 한 장 시험(20261026T081430Z-C5-b9f8-trial)의 모델 출력 — p1 이 문맥 전용 턴 14 의 사실을 턴 15 만 달고 썼다
+_V4_TRIAL_SENTENCES = [
+    ("열 살쯤 큰언니에게 양말 꿰매는 걸 배웠다.", [11, 12]),
+    ("열일곱 살에 서울 동대문 근처 봉제 공장에 들어갔다.", [15]),
+    ("기숙사 한 방에 여섯 명이 썼는데, 미싱 소리가 하도 시끄러워 밤에 누우면 귀에서 웅웅 소리가 났다.", [15]),
+    ("가게를 열고 한 달쯤 지나서 부산에서 화물로 검은색 발틀 재봉틀이 왔다.", [4, 26, 27]),
+    ("아침 아홉 시에 문을 열면 저녁 여덟 시까지 거의 재봉틀 앞에 앉아 지냈다.", [3]),
+    ("무릎이 아파서 더는 앉아 있을 수 없어 2010년에 수선집 문을 닫았다.", [2, 35]),
+    ("큰언니는 2004년 봄에 돌아가셨고, 장례식에는 남동생과 함께 갔다.", [34]),
+    ("발이 예전 같지 않아 오래는 못 돌리지만, 가끔 손주 바지 단을 줄일 때 그 재봉틀을 쓴다.", [36, 38]),
+    ("애들한테 그 재봉틀을 줄지는 아직 모르겠다.", [39]),
+]
+
+
+def _one_chapter(rows):
+    return {"chapter_key": "ch-1", "title": sent("언니의 발틀", [], "editorial"),
+            "paragraphs": [[sent(text, turns) for text, turns in rows]]}
+
+
+def test_fact_check_regression_turn14_cited_as_15():
+    """14 · 15 출처 회귀 사례 — 나이 · 지명이 근거 턴 15 에 없고 14 에 있다."""
+    data, _ = _seed_c_input()
+    f = pipe.fact_findings([_one_chapter(_V4_TRIAL_SENTENCES)], data)
+    assert {x["location"] for x in f} == {"ch-1/p0/s1"}              # 다른 여덟 문장은 걸리지 않는다
+    assert {x["token"] for x in f} == {"열일곱 살", "서울", "동대문"}
+    assert all(14 in x["found_in"] and x["severity"] == "fix" for x in f)
+    fixed = [(t, [14, 15] if i == 1 else ts) for i, (t, ts) in enumerate(_V4_TRIAL_SENTENCES)]
+    assert pipe.fact_findings([_one_chapter(fixed)], data) == []     # 근거를 바로잡으면 경고 없음
+
+
+def test_fact_check_allows_natural_rewording_and_flags_editorial_facts():
+    data, _ = _seed_c_input()
+    rows = [("1985년 봄에 가게를 열었다고 바로잡았다.", [25]),        # 원문 '85년' — 연도는 끝 두 자리로 맞춘다
+            ("열일곱에 서울로 올라가 동대문 근처 공장에 들어갔다.", [14]),
+            ("큰언니는 말수가 적었지만 손이 빨랐다.", [12])]
+    assert pipe.fact_findings([_one_chapter(rows)], data) == []
+    ed = _one_chapter([("그리고 2010년이 왔다.", [])])
+    ed["paragraphs"][0][0]["kind"] = "editorial"
+    f = pipe.fact_findings([ed], data)
+    assert [x["token"] for x in f] == ["2010"] and set(f[0]["found_in"]) >= {2, 35}
+    made_up = pipe.fact_findings([_one_chapter([("스무 살에 공장에 들어갔다.", [15])])], data)
+    assert made_up and made_up[0]["found_in"] == [] and "어디에도 없다" in made_up[0]["detail"]
+
+
+def test_fact_token_kept_with_reason_is_a_warning_not_a_block():
+    data, _ = _seed_c_input()
+    ch = _one_chapter([_V4_TRIAL_SENTENCES[1]])
+    checks = pipe.fact_findings([ch], data)
+    assert checks and pipe.code_gate(checks, {}, checks)["state"] == "attention"
+    kept = {c["id"]: {"check_id": c["id"], "status": "kept", "reason": "같은 뜻을 바꿔 씀"} for c in checks}
+    g = pipe.code_gate(checks, kept, checks)
+    assert g["state"] == "pass" and set(g["accepted_facts"]) == {"열일곱 살", "서울", "동대문"}
+    style = pipe.code_findings([_one_chapter([("공장에 들어갔어요.", [14])])], outline_ok())
+    both = checks + style                                              # 문체 문제는 kept 로도 남는다
+    kept_all = {c["id"]: {"check_id": c["id"], "status": "kept", "reason": "그대로"} for c in both}
+    assert pipe.code_gate(both, kept_all, both)["state"] == "attention"
+
+
+def test_chapter_trial_records_fact_findings(tmp_path):
+    data, turn_map = _seed_c_input()
+    fake = Fake({"ch-1": {**_one_chapter([_V4_TRIAL_SENTENCES[1]]), "review_notes": []}})
+    r = asyncio.run(pipe.run_chapter_trial(data, turn_map, _trial_spec(), call=fake,
+                                           recorder=pipe.Recorder(tmp_path)))
+    assert r["calls"] == 1 and "fact_token" in {f["rule"] for f in r["code_findings"]}
+
+
+def test_run_passes_fact_findings_to_edit():
+    d1 = draft("ch-1", 1)
+    d1["paragraphs"][0].append(sent("2099년에 그 일이 있었다.", [1]))
+    fake = Fake(script(ch_1=d1))
+    go(fake)
+    edit = next(s for s in fake.specs if s.stage == "edit")
+    checks = json.loads(edit.user.split("\n\n", 1)[1])["checks"]
+    assert any(c["rule"] == "fact_token" and c["token"] == "2099" for c in checks)
+
+
+def test_trial_plan_turn14_is_core_and_events_follow_the_sister_and_machine():
+    data, turn_map = _seed_c_input()
+    T = pipe.check_input(data, turn_map)
+    spec = _trial_spec()
+    a, o = pipe.trial_plan(spec, T)
+    ch = o["chapters"][0]
+    assert ch["events"] == ["e-learn", "e-factory", "e-arrival", "e-shop-days", "e-sister-death", "e-close", "e-now"]
+    owned = pipe.chapter_owned_turns(a, ch)
+    assert {14, 15, 29, 34} <= owned and 14 in ch["focus_turns"]
+    _, given = pipe.chapter_source(data, a, ch, o)
+    assert len(given) == 24 and set(given) - owned == {1, 5, 10, 13, 16, 25, 28, 30, 37}
+    packets = pipe.event_packets(a, ch, given)
+    assert [p["event_key"] for p in packets][3:6] == ["e-shop-days", "e-sister-death", "e-close"]
+    text = json.dumps(spec, ensure_ascii=False)
+    assert not any(len(s) > pipe.TRIAL_MAX_TEXT for s in (spec["theme_use"], ch["purpose"], ch["role"]))
+    assert "paragraphs" not in text                                   # 계획에 본문 글 없음
+
+
+def test_chapter_prompt_v4_asks_for_connected_paragraphs_without_counts():
+    c, e = pipe.role_text("chapter"), pipe.role_text("edit")
+    assert "문단의 단위가 아닙니다" in c and "한 문단으로 세우지 마세요" in c
+    assert "문단 수와 문장 수는 정해져 있지 않습니다" in c
+    assert "인생 교훈" in c and "지나친 감성 표현" in c
+    assert "숫자·연도·나이·지명" in c and "그 턴을 반드시 turns에 넣으세요" in c
+    assert "fact_token" in e and "보조 검사" in e
+
