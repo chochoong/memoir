@@ -544,6 +544,55 @@ def run():
             check("동시 회차 상한 → 503 · 링크는 시작 전 그대로", r.status_code == 503
                   and rec7["session_id"] is None and link.COOKIE not in g.cookies, r.text[:80])
 
+        # ------------------------------------------------------------ 화자 연결
+        print("\n[화자] 이 기기 회차도 화자와 연결 · 미지정 회차는 자녀가 한 번 정한다")
+        start = {"title": "화자 시험", "seed": "씨앗", "pace": "fast"}
+        r = a.post("/api/sessions", json={**start, "elder_id": elder_b})
+        check("남의 화자로는 회차를 열지 않는다 → 404", r.status_code == 404, r.text[:80])
+        r = a.post("/api/sessions", json={**start, "elder_id": elder_a})
+        s_mine = r.json().get("session_id", "")
+        check("내 화자로 열면 회차에 화자가 붙는다", r.status_code == 200
+              and getattr(sc.get(s_mine), "elder_id", None) == elder_a, r.text[:80])
+        r = a.post("/api/sessions", json=start)
+        s_none = r.json().get("session_id", "")
+        check("화자 없이 열면 지금은 화자 미지정으로 연다 (화면이 보내기 전까지)",
+              r.status_code == 200 and getattr(sc.get(s_none), "elder_id", "x") is None, r.text[:80])
+
+        owner = {s_mine: ("u_A", elder_a), s_none: ("u_A", None)}
+        real_assign = store.assign_elder
+
+        async def assign(session_id, user_id, elder_id):
+            # store.assign_elder 와 같은 갈래 — 남의 회차 · 남의 화자 · 정해진 화자는 그대로
+            if session_id not in owner or owner[session_id][0] != user_id:
+                return "no_session"
+            if not await store.owns_elder(user_id, elder_id):
+                return "no_elder"
+            cur = owner[session_id][1]
+            if cur is not None:
+                return "same" if cur == elder_id else "taken"
+            owner[session_id] = (user_id, elder_id)
+            return "set"
+        store.assign_elder = assign
+        try:
+            r = b.put(f"/api/sessions/{s_none}/elder", json={"elder_id": elder_b})
+            check("남의 회차에 화자를 정할 수 없다 → 404", r.status_code == 404, r.text[:80])
+            r = a.put(f"/api/sessions/{s_none}/elder", json={"elder_id": elder_b})
+            check("남의 화자로 정할 수 없다 → 404", r.status_code == 404, r.text[:80])
+            r = a.put(f"/api/sessions/{s_none}/elder", json={"elder_id": elder_a})
+            check("미지정 회차에 내 화자 → 200", r.status_code == 200
+                  and r.json() == {"session_id": s_none, "elder_id": elder_a}, r.text[:80])
+            r = a.put(f"/api/sessions/{s_none}/elder", json={"elder_id": elder_a})
+            check("같은 화자를 다시 보내도 200", r.status_code == 200, r.text[:80])
+            other = a.post("/api/elders", json={"name": "아버지"}).json()["elder_id"]
+            r = a.put(f"/api/sessions/{s_mine}/elder", json={"elder_id": other})
+            check("정해진 화자는 바꾸지 않는다 → 409 elder_already_set", r.status_code == 409
+                  and r.json().get("code") == "elder_already_set", r.text[:80])
+            with _client() as anon:
+                r = anon.put(f"/api/sessions/{s_none}/elder", json={"elder_id": elder_a})
+                check("로그인 없이 → 401", r.status_code == 401, r.text[:80])
+        finally:
+            store.assign_elder = real_assign
+
         for s_ in list(sc._sessions):
             sc._sessions.pop(s_).release()
         for c in (a, b, dev, both, dev3, dev5):

@@ -222,6 +222,13 @@ class StartReq(BaseModel):
     max_turn: int = 0
     # 회차를 여는 사진. 없이도 연다 — 씨앗만으로 도는 것이 원래 길이다.
     photo_id: str | None = None
+    # 누구의 이야기인가 (「누구의 이야기를 남길까요?」 에서 고른 화자). 이 자녀의 화자여야 한다.
+    # 지금은 없어도 연다 — 화면이 보내기 전까지. 없으면 화자 미지정 회차가 된다.
+    elder_id: str | None = Field(None, max_length=64)
+
+
+class ElderAssignReq(BaseModel):
+    elder_id: str = Field(..., min_length=1, max_length=64)
 
 
 class SpeechReq(BaseModel):
@@ -396,10 +403,13 @@ async def create_session(req: StartReq, request: Request,
     하는지 알 수 없게 된다.
     """
     _open_checks(request, who)
+    if req.elder_id and not await link.read(store.owns_elder(who, req.elder_id)):
+        raise HTTPException(404, "화자를 찾을 수 없어요")
 
     ctl = sc.put(sc.SessionController(
         user_id=who, title=req.title, pace=req.pace, max_turn=req.max_turn,
         photo_id=req.photo_id, theme=req.theme, topic=req.topic.strip(),
+        elder_id=req.elder_id,
         question_fn=gemini_question, closed_fn=postcard.on_closed))
     await ctl.start(req.seed)
     return ctl.snapshot()
@@ -573,17 +583,41 @@ async def latency(session_id: str, who: str = Depends(auth.current_user)):
 
 @app.get("/api/sessions")
 async def list_sessions(limit: int = 20, has_postcard: bool = False,
+                        elder_id: str | None = None,
                         who: str = Depends(auth.current_user)):
     """
     지난 회차 목록. 최근 순. 회차마다 has_postcard · postcard_title 을 싣는다.
 
-    `?has_postcard=1` 이면 엽서가 있는 회차만 준다 — 자서전에 고를 회차다.
+    `?has_postcard=1` 이면 엽서가 있는 회차만 준다. `?elder_id=` 면 그 화자의 회차만.
+    회차마다 elder_id 가 실린다 — None 이면 화자 미지정이다.
 
     DB 를 못 읽으면 **빈 목록이 아니라 503 이다.** 빈 목록을 주면 화면에
     「기록이 없습니다」가 뜨고, 그건 어르신에게 조각이 사라졌다는 말이 된다.
     없는 것과 못 읽은 것은 다른 사건이라 화면도 다르게 말해야 한다.
     """
-    return {"sessions": await _read(store.list_sessions(who, _limit(limit), has_postcard))}
+    return {"sessions": await _read(store.list_sessions(who, _limit(limit), has_postcard, elder_id))}
+
+
+@app.put("/api/sessions/{session_id}/elder")
+async def assign_elder(session_id: str, req: ElderAssignReq,
+                       who: str = Depends(auth.current_user)):
+    """
+    화자 미지정 회차에 화자를 정한다. 자서전에 넣기 전에 자녀가 한 번 고른다.
+
+    화자가 한 명뿐인 계정이어도 서버가 알아서 정하지 않는다 — 화면이 그 화자를
+    미리 골라 보여 주고, 자녀가 확인하면 이 요청이 온다.
+
+    남의 회차 · 남의 화자는 404, 이미 다른 화자로 정해진 회차는 409 elder_already_set.
+    """
+    got = await _read(store.assign_elder(session_id, who, req.elder_id))
+    if got == "no_session":
+        raise HTTPException(404, "회차를 찾을 수 없습니다")
+    if got == "no_elder":
+        raise HTTPException(404, "화자를 찾을 수 없어요")
+    if got == "taken":
+        return JSONResponse({"detail": "이미 다른 분의 이야기로 정해진 기록이에요.",
+                             "code": "elder_already_set"}, status_code=409)
+    return {"session_id": session_id, "elder_id": req.elder_id}
 
 
 @app.get("/api/sessions/{session_id}/record")
@@ -758,6 +792,9 @@ async def make_postcard(session_id: str, request: Request, who: str = Depends(au
         raise HTTPException(404, "회차를 찾을 수 없습니다") from e
     except postcard.PostcardNotReady as e:
         return JSONResponse({"detail": str(e), "code": e.code}, status_code=409)
+    except postcard.PhotoUnavailable as e:
+        # 다른 503 과 화면 안내가 다르다 — 「사진을 불러오지 못했어요. 다시 만들어 주세요」
+        return JSONResponse({"detail": str(e), "code": e.code}, status_code=503)
     except postcard.PostcardUnavailable as e:
         raise HTTPException(503, str(e)) from e
     except store.StoreUnavailable as e:
@@ -834,7 +871,7 @@ _MEMOIR_SAYS = {
 # code 는 화면이 HTTP 숫자보다 먼저 보는 갈래다. 모르는 code 면 화면은 숫자로 고른다.
 # needs_confirmation · needs_context 는 화면이 나누지 않으므로 not_final 하나다.
 _MEMOIR_STATUS = (
-    (memoir.BadSelection, 400, "bad_selection"), (memoir.NotFound, 404, "not_found"),
+    (memoir.BadSelection, 400, None), (memoir.NotFound, 404, "not_found"),
     (memoir.SourceUnavailable, 422, "source_unavailable"),
     (memoir.GenerationTimeout, 504, "generation_timeout"),
     (memoir.GenerationFailed, 502, "invalid_model_output"), (memoir.NotFinal, 503, "not_final"),
@@ -867,6 +904,7 @@ async def memoir_preview(request: Request, who: str = Depends(auth.current_user)
         return await memoir.preview(ids, who, chosen)
     except memoir.MemoirError as e:
         status, code = next((s, c) for kind, s, c in _MEMOIR_STATUS if isinstance(e, kind))
+        code = code or e.code      # 400 은 갈래가 여럿이다 — bad_selection · mixed_speakers · speaker_unassigned
         log.warning("자서전 %d %s — %s", status, type(e).__name__, str(e)[:200])
         return JSONResponse({"detail": _MEMOIR_SAYS[status], "code": code}, status_code=status)
 

@@ -131,11 +131,10 @@ def test_compose():
 
 def test_photo_branches():
     """
-    P5-SV-01 — 지금 _photo 가 어느 경우에 None 이 되는가. **고치는 시험이 아니라 현행을 적는 시험이다.**
-    사진이 원래 없는 것과 못 읽은 것이 같은 None 이다 — 사진 없는 회차에 그림을 붙일 때
-    None 에 그대로 걸면 읽기 실패에도 그림을 만든다. 갈라야 할 곳이 여기다 (5-C1).
+    P5-SV-03 — None 은 「회차에 사진 없음」 하나다. 사진이 있는데 못 읽으면 종이로
+    바꿔 굽지 않고 PhotoUnavailable (503 · photo_unavailable) 이다 (태헌 결정 10-26 · 5-C1).
     """
-    print("\n[1b] 사진 분기 — 없음 · 못 읽음 · 깨짐 (현행)")
+    print("\n[1b] 사진 분기 — 없음은 종이 · 못 읽음은 실패")
     PID = "0191c0de-0000-4abc-8def-0123456789ab"
     good = art(64, 48)
 
@@ -163,23 +162,31 @@ def test_photo_branches():
         finally:
             store.load_photo, photostore.current = old_load, old_cur
 
+    def fails(**kw) -> bool:
+        try:
+            run(PID, **kw)
+        except postcard.PhotoUnavailable as e:
+            return e.code == "photo_unavailable"
+        return False
+
     meta = {"storage_key": "photos/x.png", "mime": "image/png", "clues": {"scene": "잔칫상"}}
     p = run(PID, meta)
     check("사진 정상 → 바이트 · 단서", p is not None and p.data == good and p.clues == {"scene": "잔칫상"})
-    check("회차에 사진 없음 (photo_id 없음) → None", run(None) is None)
-    check("사진 행 없음 → None", run(PID, None) is None)
-    check("사진 행 읽기 실패 (DB) → None — 없음과 같다",
-          run(PID, meta_err=store.StoreUnavailable("x")) is None)
+    check("회차에 사진 없음 (photo_id 없음) → None (종이 바탕)", run(None) is None)
+    check("사진 행 없음 → photo_unavailable", fails(meta=None))
+    check("사진 행 읽기 실패 (DB) → photo_unavailable", fails(meta_err=store.StoreUnavailable("x")))
     ps = _Ps(err=photostore.PhotoStoreError("x"))
-    check("사진 바이트 읽기 실패 (저장소) → None — 없음과 같다",
-          run(PID, meta, ps=ps) is None and ps.calls == 1)
+    check("사진 바이트 읽기 실패 (저장소) → photo_unavailable", fails(meta=meta, ps=ps) and ps.calls == 1)
+    check("바이트는 왔는데 깨짐 → photo_unavailable (모델 전에)", fails(meta=meta, ps=_Ps(b"not an image")))
+    check("PhotoUnavailable 은 PostcardUnavailable 이다 (기존 503 경로)",
+          issubclass(postcard.PhotoUnavailable, postcard.PostcardUnavailable))
 
     font = postcard._font_path()
     try:
         postcard._compose(b"not an image", CARD, "2026. 9. 24.", font)
-        check("바이트는 왔는데 깨짐 → None 이 아니라 PostcardUnavailable (503)", False, "통과했다")
-    except postcard.PostcardUnavailable:
-        check("바이트는 왔는데 깨짐 → None 이 아니라 PostcardUnavailable (503)", True)
+        check("합성에서 깨짐 → PhotoUnavailable", False, "통과했다")
+    except postcard.PhotoUnavailable:
+        check("합성에서 깨짐 → PhotoUnavailable", True)
 
 
 def test_key():
@@ -387,6 +394,22 @@ def test_routes():
             check("행을 못 넣으면 503", r3.status_code == 503, str(r3.status_code))
             check("새 바이트를 되돌린다", len(_blobs()) == 1, f"{len(_blobs())}장")
             fake.fail = False
+
+            # 사진을 못 읽으면 종이로 바꿔 굽지 않는다 — 모델 전에 멈추고 옛 엽서를 둔다.
+            real_photo, writes, kept = postcard._photo, fake.writes, dict(fake.card)
+
+            async def unreadable(photo_id):
+                raise postcard.PhotoUnavailable("회차 사진을 읽지 못했습니다")
+            postcard._photo = unreadable
+            try:
+                r = c.post(url, headers=kim)
+            finally:
+                postcard._photo = real_photo
+            check("사진을 못 읽으면 503 · code photo_unavailable",
+                  r.status_code == 503 and r.json().get("code") == "photo_unavailable",
+                  f"{r.status_code} {r.text[:80]}")
+            check("사진을 못 읽으면 모델을 안 부르고 옛 엽서가 그대로다",
+                  fake.writes == writes and fake.card == kept and len(_blobs()) == 1)
 
         async def twice():
             fake.gate = asyncio.Event()
@@ -733,7 +756,7 @@ def test_list():
     got: list[tuple] = []
     real = store.list_sessions
 
-    async def fake_list(user_id, limit=20, has_postcard=False):
+    async def fake_list(user_id, limit=20, has_postcard=False, elder_id=None):
         got.append((user_id, limit, has_postcard))
         return [r for r in rows if r["has_postcard"]] if has_postcard else rows
 

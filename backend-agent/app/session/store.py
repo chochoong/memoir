@@ -309,6 +309,9 @@ def _session_row(r: Any) -> dict:
         "title": r["title"],
         # 엽서를 그릴 때 참고로 줄 사진. 사진 없이 연 회차는 None 이다.
         "photo_id": str(r["photo_id"]) if r["photo_id"] else None,
+        # 누구의 이야기인가. 링크 회차 · 화자를 고르고 연 회차는 있고, 그 전 회차는 None
+        # (화자 미지정) 이다. 자서전은 한 화자의 회차만 묶는다 (7-C1).
+        "elder_id": r.get("elder_id"),
         "state": r["state"],
         "turn": r["turn"],
         "max_turn": r["max_turn"],
@@ -319,7 +322,8 @@ def _session_row(r: Any) -> dict:
     }
 
 
-async def list_sessions(user_id: str, limit: int = 20, has_postcard: bool = False) -> list[dict]:
+async def list_sessions(user_id: str, limit: int = 20, has_postcard: bool = False,
+                        elder_id: str | None = None) -> list[dict]:
     """
     지난 회차 목록. 최근 순. 조각 개수와 엽서가 있는지 · 엽서 제목을 같이 싣는다.
 
@@ -331,6 +335,8 @@ async def list_sessions(user_id: str, limit: int = 20, has_postcard: bool = Fals
     has_postcard 면 엽서가 있는 회차만 준다. 엽서는 이제 손으로만 굽기 때문에
     최근 회차 대부분에 엽서가 없다 — 거르지 않으면 자서전에 고를 회차가 목록
     뒤로 밀린다.
+
+    elder_id 를 주면 그 화자의 회차만 준다 (화자 미지정 회차는 빠진다).
     """
     only = "AND p.session_id IS NOT NULL" if has_postcard else ""
     pool = _need_pool()
@@ -345,10 +351,11 @@ async def list_sessions(user_id: str, limit: int = 20, has_postcard: bool = Fals
                   FROM session s
                   LEFT JOIN postcard p ON p.session_id = s.session_id
                  WHERE s.user_id = $1 {only}
+                   AND ($3::text IS NULL OR s.elder_id = $3)
                  ORDER BY s.created_at DESC
                  LIMIT $2
                 """,
-                user_id, limit)
+                user_id, limit, elder_id)
     except Exception as e:                                   # noqa: BLE001
         log.error("회차 목록 읽기 실패 (%s: %s)", type(e).__name__, str(e)[:120])
         raise StoreUnavailable("회차 목록을 읽지 못했습니다") from e
@@ -763,6 +770,41 @@ def _link_row(r: Any) -> dict:
     for k in ("photo_id", "session_id"):
         d[k] = str(d[k]) if d[k] else None
     return d
+
+
+async def assign_elder(session_id: str, user_id: str, elder_id: str) -> str:
+    """
+    화자 미지정 회차에 화자를 한 번 정한다. 결과는 set · same · taken · no_session · no_elder.
+
+    **정해진 화자는 바꾸지 않는다** (taken) — 다른 화자로 옮기면 그 화자의 자서전에
+    남의 말이 섞인다. 같은 화자를 다시 보내면 same 이다 (화면이 두 번 눌러도 된다).
+    같은 계정이라는 이유로 서버가 알아서 정하지 않는다 — 자녀가 고른 것만 적는다.
+    """
+    pool = _need_pool()
+    try:
+        sid = uuid.UUID(session_id)
+    except ValueError:
+        return "no_session"
+    try:
+        async with pool.acquire() as con:
+            async with con.transaction():
+                cur = await con.fetchrow(
+                    "SELECT elder_id FROM session WHERE session_id = $1 AND user_id = $2 FOR UPDATE",
+                    sid, user_id)
+                if cur is None:
+                    return "no_session"
+                if not await con.fetchval(
+                        "SELECT 1 FROM user_elder WHERE user_id = $1 AND elder_id = $2",
+                        user_id, elder_id):
+                    return "no_elder"
+                if cur["elder_id"] is not None:
+                    return "same" if cur["elder_id"] == elder_id else "taken"
+                await con.execute("UPDATE session SET elder_id = $2 WHERE session_id = $1",
+                                  sid, elder_id)
+                return "set"
+    except Exception as e:                                   # noqa: BLE001
+        log.error("화자 지정 실패 %s (%s: %s)", session_id, type(e).__name__, str(e)[:120])
+        raise StoreUnavailable("화자를 저장하지 못했습니다") from e
 
 
 async def owns_elder(user_id: str, elder_id: str) -> bool:

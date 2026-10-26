@@ -123,6 +123,18 @@ class PostcardUnavailable(PostcardError):
     """모델·글꼴·저장소 쪽 사정이다. 라우트가 503 으로 바꾼다."""
 
 
+class PhotoUnavailable(PostcardUnavailable):
+    """
+    회차에 사진이 있는데 읽지 못했다. 503 · code photo_unavailable.
+
+    「사진 없음」 으로 바꿔 종이 바탕으로 굽지 않는다 — 어르신이 올린 사진이 빠진
+    엽서가 나가고, 그림 생성이 붙으면 모르는 그림이 대신 들어간다. 사진과 원문은
+    그대로이므로 다시 누르면 된다.
+    """
+
+    code = "photo_unavailable"
+
+
 class PostcardInsufficient(PostcardNotReady):
     """모델이 insufficient_material 로 답했다 — 쓸 원문이 없다. 409. 실패가 아니다."""
 
@@ -331,23 +343,33 @@ async def _forget(key: str) -> None:
 
 async def _photo(photo_id: str | None) -> Photo | None:
     """
-    회차 사진의 바이트와 분석 단서. **없거나 못 읽으면 None 이다.**
+    회차 사진의 바이트와 분석 단서. **None 은 회차에 사진이 없다는 뜻 하나다.**
 
-    사진은 있으면 좋은 것이지 엽서의 조건이 아니다. 사진 없이 연 회차가 원래
-    길이고, 그때 엽서는 종이 바탕에 글만 얹는다.
+    사진 없이 연 회차가 원래 길이고, 그때 엽서는 종이 바탕에 글만 얹는다.
+    사진이 있는데 못 읽으면 (행 없음 · DB · 저장소 · 깨진 바이트) PhotoUnavailable 이다.
+    모델을 부르기 전에 여기서 걸러 실패할 엽서에 글 비용을 쓰지 않는다.
     """
     if not photo_id:
         return None
     try:
         meta = await store.load_photo(photo_id)
         if meta is None:
-            return None
+            raise PhotoUnavailable("회차 사진을 찾지 못했습니다")
         data = await photostore.current().get(meta["storage_key"])
-        return Photo(data=data, mime=meta["mime"], clues=meta.get("clues"))
+        with Image.open(io.BytesIO(data)) as im:
+            im.verify()
+    except PhotoUnavailable:
+        log.warning("회차 사진 행이 없다 %s — 엽서를 굽지 않는다", photo_id[:8])
+        raise
     except (store.StoreUnavailable, photostore.PhotoStoreError) as e:
-        log.warning("회차 사진을 못 읽었다 %s (%s) — 사진 없이 굽는다",
+        log.warning("회차 사진을 못 읽었다 %s (%s) — 엽서를 굽지 않는다",
                     photo_id[:8], type(e).__name__)
-        return None
+        raise PhotoUnavailable("회차 사진을 읽지 못했습니다") from e
+    except Exception as e:                                   # noqa: BLE001 — PIL 은 여러 예외를 낸다
+        log.warning("회차 사진이 깨졌다 %s (%s) — 엽서를 굽지 않는다",
+                    photo_id[:8], type(e).__name__)
+        raise PhotoUnavailable("회차 사진을 읽지 못했습니다") from e
+    return Photo(data=data, mime=meta["mime"], clues=meta.get("clues"))
 
 
 def _date(created_at: str) -> str:
@@ -625,7 +647,7 @@ def _mounted(photo: bytes) -> Image.Image:
             pic = ImageOps.contain(ImageOps.exif_transpose(im).convert("RGB"),
                                    box, Image.Resampling.LANCZOS)
     except Exception as e:                                   # noqa: BLE001
-        raise PostcardUnavailable("회차 사진을 읽지 못했습니다") from e
+        raise PhotoUnavailable("회차 사진을 읽지 못했습니다") from e
     return ImageOps.expand(pic, border=border, fill=MOUNT)
 
 

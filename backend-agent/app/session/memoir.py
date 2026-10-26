@@ -2,7 +2,8 @@
 자서전 초안 — 고른 회차 3~5개를 한 입력으로 합쳐 한 번 쓰게 한다 (업무지시서 01 v1.1)
 
     검사      check_selection   개수 · 중복 · 모양               → BadSelection (400)
-    조회      collect           있나 · 내 것인가 · 엽서가 있나    → NotFound (404)
+    조회      collect           있나 · 내 것인가                  → NotFound (404)
+                                말씀이 있나 · 한 화자인가          → BadSelection (400)
                                 DB 를 못 읽었다                   → SourceUnavailable (422)
     합치기    merge             전역 턴 · turn_map
     쓰기      write             자서전.md + 자료                  → GenerationFailed (502)
@@ -49,7 +50,23 @@ log = logging.getLogger("memoir")
 
 PROMPT = Path(__file__).resolve().parents[2] / "첨부프롬프트_md" / "자서전_v2.md"
 
-MIN_SESSIONS, MAX_SESSIONS = 3, 5
+MIN_SESSIONS = 3
+# 상한은 **단일 호출 구조의 임시 시험 제한**이다 (태헌 10-26). 최종 정책은 같은 화자의
+# 쓸 수 있는 기록을 전부 고르고 빼는 것이라 상수로 박지 않는다 — 다섯 단계 구조가
+# 품질 시험을 지나면 올리거나 없앤다.
+DEFAULT_MAX_SESSIONS = 5
+
+
+def max_sessions() -> int:
+    return env_int("MEMOIR_MAX_SESSIONS", DEFAULT_MAX_SESSIONS)
+
+
+def require_speaker() -> bool:
+    """
+    화자 미지정 회차를 거절하나. 화면이 화자를 정할 수 있게 될 때까지 끈다 (기본 0).
+    꺼져 있어도 **서로 다른 화자를 섞는 것은 언제나 거절한다.**
+    """
+    return env_int("MEMOIR_REQUIRE_SPEAKER", 0) == 1
 
 # 서버와 독립 실행(03)이 같은 이름 · 같은 값을 읽는다. 엽서 설정과 섞지 않는다.
 DEFAULT_TEXT_MODEL = "gemini-3.5-flash-lite"
@@ -79,11 +96,25 @@ class MemoirError(RuntimeError):
 
 
 class BadSelection(MemoirError):
-    """개수 · 중복 · 모양. 400."""
+    """개수 · 중복 · 모양 · 말씀이 없는 회차. 400."""
+
+    code = "bad_selection"
+
+
+class MixedSpeakers(BadSelection):
+    """고른 회차의 화자가 다르다. 한 자서전에는 한 사람의 이야기만 든다. 400."""
+
+    code = "mixed_speakers"
+
+
+class SpeakerUnassigned(BadSelection):
+    """화자 미지정 회차가 끼었다 (MEMOIR_REQUIRE_SPEAKER=1 일 때). 400 — 먼저 화자를 정한다."""
+
+    code = "speaker_unassigned"
 
 
 class NotFound(MemoirError):
-    """회차가 없다 · 남의 것이다 · 엽서가 없다. 404 — 셋을 구분해 알려 주지 않는다."""
+    """회차가 없다 · 남의 것이다. 404 — 둘을 구분해 알려 주지 않는다."""
 
 
 class SourceUnavailable(MemoirError):
@@ -135,8 +166,9 @@ def check_selection(session_ids) -> list[str]:
     """
     if not isinstance(session_ids, list):
         raise BadSelection("session_ids 가 목록이 아니다")
-    if not MIN_SESSIONS <= len(session_ids) <= MAX_SESSIONS:
-        raise BadSelection(f"회차 {len(session_ids)}개 — {MIN_SESSIONS}~{MAX_SESSIONS}개여야 한다")
+    top = max_sessions()
+    if not MIN_SESSIONS <= len(session_ids) <= top:
+        raise BadSelection(f"회차 {len(session_ids)}개 — {MIN_SESSIONS}~{top}개여야 한다")
     ids: list[str] = []
     for s in session_ids:
         if not isinstance(s, str):
@@ -154,8 +186,11 @@ async def collect(session_ids: list[str], user_id: str) -> list[dict]:
     """
     고른 회차의 기록을 읽는다. 고른 순서 그대로 돌려준다 — 순서는 merge 가 세운다.
 
-    하나라도 없거나 남의 것이거나 엽서가 없으면 전부 404 다. 되는 것만 골라
-    쓰지 않는다 — 고르신 것과 다른 자료로 쓴 글이 된다.
+    하나라도 없거나 남의 것이면 전부 404 다. 되는 것만 골라 쓰지 않는다 —
+    고르신 것과 다른 자료로 쓴 글이 된다.
+
+    **엽서는 조건이 아니다** (태헌 10-26). 자서전의 근거는 인터뷰 원문이므로 어르신
+    말씀이 하나라도 있으면 된다. 정정 · 제외 경로가 생기면 그것을 빼고 남은 말씀으로 본다.
     """
     recs: list[dict] = []
     for sid in session_ids:
@@ -165,9 +200,17 @@ async def collect(session_ids: list[str], user_id: str) -> list[dict]:
             raise SourceUnavailable(f"회차를 읽지 못했다 {sid}") from e
         if rec is None or rec["user_id"] != user_id:
             raise NotFound(f"회차가 없다 {sid}")
-        if not rec.get("postcard"):
-            raise NotFound(f"엽서가 없는 회차다 {sid}")
+        if not postcard.material(rec["fragments"], None, rec.get("closing_decision"))["utterances"]:
+            raise BadSelection(f"어르신 말씀이 없는 회차다 {sid}")
         recs.append(rec)
+
+    speakers = {rec.get("elder_id") for rec in recs}
+    if len(speakers - {None}) > 1:
+        raise MixedSpeakers(f"화자가 섞였다 {sorted(speakers - {None})}")
+    if None in speakers and (require_speaker() or len(speakers) > 1):
+        # 화자 있는 회차와 미지정 회차가 섞였으면 꺼져 있어도 거절한다 — 미지정 쪽이
+        # 다른 분의 이야기일 수 있다.
+        raise SpeakerUnassigned("화자 미지정 회차가 있다")
     if inject() == INJECT_SOURCE:
         raise SourceUnavailable("MEMOIR_FAIL_INJECT=source_material_unavailable")
     return recs

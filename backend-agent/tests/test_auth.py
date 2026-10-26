@@ -289,7 +289,7 @@ def test_isolation():
 
     listed = []
 
-    async def fake_list(user_id, limit=20, has_postcard=False):
+    async def fake_list(user_id, limit=20, has_postcard=False, elder_id=None):
         listed.append(user_id)
         return []
 

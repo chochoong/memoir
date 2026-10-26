@@ -462,11 +462,55 @@ def test_routes():
             check("다른 X-User-Id → 404 · not_found (S4)", r.status_code == 404 and failed(r, "not_found"),
                   f"{r.status_code}")
 
+            check("잘못 고른 요청은 모델을 부르지 않는다", fake.writes == 0, str(fake.writes))
+
+            # 엽서는 조건이 아니다 — 근거는 말씀이다 (태헌 10-26).
             fake.recs[fake.ids["s-b"]]["postcard"] = None
             r = c.post(url, json=three, headers=me)
-            check("엽서가 없는 회차 → 404 · not_found", r.status_code == 404 and failed(r, "not_found"), f"{r.status_code}")
+            check("엽서가 없어도 말씀이 있으면 200", r.status_code == 200, f"{r.status_code} {r.text[:60]}")
             fake.recs[fake.ids["s-b"]] = record(SEED_A["sessions"][1], fake.ids["s-b"])
-            check("잘못 고른 요청은 모델을 부르지 않는다", fake.writes == 0, str(fake.writes))
+
+            fake.writes = 0
+            mute = fake.recs[fake.ids["s-b"]]
+            kept_frags = mute["fragments"]
+            mute["fragments"] = [f for f in kept_frags if f["idx"] == 0]
+            r = c.post(url, json=three, headers=me)
+            check("말씀이 없는 회차 → 400 · bad_selection", r.status_code == 400 and failed(r, "bad_selection"),
+                  f"{r.status_code} {r.text[:60]}")
+            mute["fragments"] = kept_frags
+
+            # 한 자서전 = 한 사람. 화자가 섞이면 꺼져 있어도 거절한다.
+            a, b = fake.ids["s-a"], fake.ids["s-b"]
+            fake.recs[a]["elder_id"], fake.recs[b]["elder_id"] = "e_mom", "e_dad"
+            r = c.post(url, json=three, headers=me)
+            check("화자가 다르면 → 400 · mixed_speakers", r.status_code == 400 and failed(r, "mixed_speakers"),
+                  f"{r.status_code} {r.text[:60]}")
+            fake.recs[b]["elder_id"] = None
+            r = c.post(url, json=three, headers=me)
+            check("화자 있는 회차 + 미지정 회차 → 400 · speaker_unassigned",
+                  r.status_code == 400 and failed(r, "speaker_unassigned"), f"{r.status_code} {r.text[:60]}")
+            for s in three["session_ids"]:
+                fake.recs[s]["elder_id"] = "e_mom"
+            r = c.post(url, json=three, headers=me)
+            check("모두 같은 화자면 200", r.status_code == 200, f"{r.status_code}")
+            for s in three["session_ids"]:
+                fake.recs[s]["elder_id"] = None
+            r = c.post(url, json=three, headers=me)
+            check("모두 미지정이면 지금은 200 (MEMOIR_REQUIRE_SPEAKER 꺼짐)", r.status_code == 200, f"{r.status_code}")
+            with _Env(MEMOIR_REQUIRE_SPEAKER="1"):
+                r = c.post(url, json=three, headers=me)
+                check("MEMOIR_REQUIRE_SPEAKER=1 이면 미지정 → 400 · speaker_unassigned",
+                      r.status_code == 400 and failed(r, "speaker_unassigned"), f"{r.status_code}")
+            check("화자 거절은 모델을 부르지 않는다 (통과한 2번만 불렀다)", fake.writes == 2, str(fake.writes))
+
+            # 5 는 임시 시험 제한이다 — 설정으로 바뀐다.
+            r = c.post(url, json=fake.pick("s-a", "s-b", "s-c", "s-d"), headers=me)
+            with _Env(MEMOIR_MAX_SESSIONS="3"):
+                r2 = c.post(url, json=fake.pick("s-a", "s-b", "s-c", "s-d"), headers=me)
+            check("MEMOIR_MAX_SESSIONS 로 상한이 바뀐다 (4개: 기본 200 · 상한 3 이면 400)",
+                  r.status_code == 200 and r2.status_code == 400 and failed(r2, "bad_selection"),
+                  f"{r.status_code} {r2.status_code}")
+            fake.writes = 0
 
             fake.out = copy.deepcopy(EMPTY)
             r = c.post(url, json=three, headers=me)
