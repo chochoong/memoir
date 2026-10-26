@@ -312,6 +312,11 @@
     .era.none { background: #fbeede; color: #a0741e; }
     .era.pc { background: #e8f1ec; color: var(--success); }
     .era.nopc { background: #eeeeee; color: #666; }
+    .era.nospk { background: #fbeee8; color: #8a3b1e; }
+    .era.spk { background: #ece8f6; color: #4a3d78; }
+    .era.when { background: #fff4d6; color: #6b5310; }
+    .era.when.unknown, .era.when.undecided { background: #eeeeee; color: #666; }
+    .ar-sec { margin: 22px 0 10px; font-weight: 700; color: var(--muted); font-size: 1rem; }
 
     /* 「하나도 없다」와 「못 읽었다」는 다른 사건이다 (백엔드 list_sessions 주석) */
     .blank { text-align: center; padding: 56px 10px 24px; }
@@ -371,6 +376,12 @@
     .prep[hidden], .photo-label[hidden], .compose[hidden], .talk-topic[hidden], .mode-tabs[hidden], .rv-prep[hidden] { display: none; }
     .prep { margin: 4px 0 0; }
     .prep h1 { margin: 6px 0 16px; }
+    .elder-pick[hidden], .rv-elder[hidden] { display: none; }
+    .rv-elder { margin: 0 0 18px; padding: 14px 16px; border: 1px solid #f0c9b6; border-radius: 18px; background: #fdf6f2; }
+    .rv-elder-q { margin: 0 0 10px; font-weight: 700; font-size: 1.08rem; }
+    .rv-elder .tabs { margin-bottom: 10px; }
+    .elder-pick { margin: 0 0 14px; }
+    .tab.tab-add { border-style: dashed; color: var(--muted); }
     .prep-k { display: block; font-weight: 700; font-size: 1.02rem; margin: 0 0 10px; }
     .prep .tabs { margin-bottom: 20px; }
     .topic {
@@ -799,7 +810,8 @@
         <label class="prep-k" for="elderName">부르는 이름</label>
         <input class="topic" id="elderName" type="text" maxlength="30" autocomplete="off" placeholder="예: 어머니, 김순자 님" />
         <p class="prep-note" id="elderMsg" role="status" aria-live="polite"></p>
-        <div class="dock"><button class="btn btn-primary" id="elderSave" disabled>다음</button></div>
+        <div class="dock"><button class="btn btn-primary" id="elderSave" disabled>다음</button>
+          <button class="btn-ghost" id="elderBack" hidden>돌아가기</button></div>
       </section>
 
       <!-- 어르신 링크로 연 첫 화면 (3-C1 §5). 다른 기록 · 수정 · 생성 메뉴는 두지 않는다 -->
@@ -838,6 +850,10 @@
         <!-- 인터뷰 준비 (업무지시서 03 UI-02). 예전 흐름(?flow=postcard)에서는 숨는다 -->
         <div class="prep" id="prep" hidden>
           <h1>어떤 이야기를<br />나눌까요?</h1>
+          <div class="elder-pick" id="elderPick" hidden>
+            <span class="prep-k" id="elderPickLabel">누구의 이야기</span>
+            <div class="tabs" id="elderTabs" role="group" aria-labelledby="elderPickLabel"></div>
+          </div>
           <span class="prep-k" id="themeLabel">테마</span>
           <div class="tabs" id="themeTabs" role="group" aria-labelledby="themeLabel"></div>
           <label class="prep-k" for="topicInput">구체 주제</label>
@@ -1036,10 +1052,11 @@
             <div class="sum-top"><span class="sum-n" id="arCount">0</span><span class="sum-u">조각</span></div>
             <p class="sum-sub" id="arRange"></p>
           </div>
-          <button class="btn-line" id="arMemoir">엽서로 자서전 만들기</button>
+          <button class="btn-line" id="arMemoir">자서전 만들기</button>
           <div class="tabs">
             <button class="tab" aria-pressed="true" data-sort="new">최근 순</button>
             <button class="tab" aria-pressed="false" data-sort="long">이야기 많은 순</button>
+            <button class="tab" aria-pressed="false" data-sort="chrono" hidden>일어난 순</button>
           </div>
           <div id="arList"></div>
         </div>
@@ -1079,7 +1096,8 @@
         </div>
 
         <div data-mm="pick" hidden>
-          <p class="mm-guide" id="mmGuide">엽서 3~5장을 골라 주세요.</p>
+          <p class="mm-guide" id="mmGuide">이야기 3~5개를 골라 주세요.</p>
+          <p class="prep-note" id="mmUnassigned" hidden></p>
           <div class="tabs style-pick" id="mmStyle" role="radiogroup" aria-label="문체" hidden></div>
           <div id="mmList"></div>
         </div>
@@ -1087,7 +1105,7 @@
         <div data-mm="none" hidden>
           <div class="blank">
             <div class="blank-face" aria-hidden="true">&#127793;</div>
-            <h2>고를 수 있는 엽서가<br />아직 없습니다.</h2>
+            <h2>고를 수 있는 이야기가<br />아직 없습니다.</h2>
             <p>지난 이야기에서 회차를 열고<br />「엽서 만들기」를 누르면 엽서가 생깁니다.</p>
           </div>
         </div>
@@ -1095,7 +1113,7 @@
         <div data-mm="loadfail" hidden>
           <div class="blank">
             <div class="blank-face" aria-hidden="true">&#128246;</div>
-            <h2>엽서 목록을 불러오지<br />못했습니다.</h2>
+            <h2>이야기 목록을 불러오지<br />못했습니다.</h2>
             <p>저장된 이야기는 그대로 있습니다.<br />잠시 뒤 다시 눌러 주세요.</p>
           </div>
         </div>
@@ -1122,7 +1140,7 @@
           <div class="blank">
             <div class="blank-face" aria-hidden="true">&#128214;</div>
             <h2>자서전의 일부 장을<br />만들지 못했어요.</h2>
-            <p>빠진 장이 있어 완성본으로 보여드리지 않아요.<br />엽서 선택 화면으로 돌아가 주세요.</p>
+            <p>빠진 장이 있어 완성본으로 보여드리지 않아요.<br />이야기 선택 화면으로 돌아가 주세요.</p>
           </div>
         </div>
 
@@ -1165,6 +1183,13 @@
         </div>
 
         <div data-rv="list" hidden>
+          <!-- 화자 미지정 기록 — 누구의 이야기인지 자녀가 한 번 정한다 (태헌 10-26). 한 분뿐이어도 저절로 정하지 않는다 -->
+          <div class="rv-elder" id="rvElder" hidden>
+            <p class="rv-elder-q">이 기록은 누구의 이야기인가요?</p>
+            <div class="tabs" id="rvElderTabs" role="radiogroup" aria-label="누구의 이야기"></div>
+            <button class="btn-line" id="rvElderSave" type="button" disabled>정하기</button>
+            <p class="prep-note" id="rvElderMsg" role="status" aria-live="polite"></p>
+          </div>
           <p class="rv-warn" id="rvWarn" hidden>마지막 답변이 아직 저장되지 않았을 수 있어요. 잠시 뒤 「다시 불러오기」를 눌러 주세요.</p>
           <ol class="rv-list" id="rvList"></ol>
           <p class="prep-note" id="rvCardMsg" role="status" aria-live="polite" hidden></p>
@@ -1346,7 +1371,7 @@
   const CONFIG = {
     // 화면 아래와 개발용 패널에 그대로 찍힌다. 「고친 게 반영이 안 된 것 같다」는
     // 대부분 예전 파일이 열려 있는 경우라서, 눈으로 확인할 자리를 만들어 둔다.
-    version: 'v0.41 · 2026-10-26 (개발 패널에 서버 연결 상태 점검판)',
+    version: 'v0.42 · 2026-10-26 (태헌 님 10-26 결정 — 사진 실패 · 화자 · 한 화자 자서전 · 연대기 구역)',
 
     // 이 화면을 백엔드가 직접 서빙하면(web/ 폴더) 빈 문자열 그대로 둔다.
     // 다른 포트에서 열어 시험할 때만 'http://127.0.0.1:8010' 처럼 채운다.
@@ -1416,6 +1441,9 @@
       // 아직 서버에 없는 칸 — 이름이 정해지면 여기만 고친다 (연결 점검판이 이 이름으로 찾는다)
       cursorField: 'next_cursor',   // 「더 보기」 다음 쪽 표시 (6-C1 §4 · 정렬 작업 때)
       timeField: '',                // 사건 시점 칸 (6-C1 §3 · 대원 님 DW-12 형식 대기) — 미정이면 빈 값
+      // 연대기순은 서버가 정렬한다 (6-C1 §4). 그 요청을 무엇으로 하는지 (예: 'order=chrono') — 미정이면 빈 값.
+      // timeField · chronoQuery 가 둘 다 정해지면 「일어난 순」 탭이 나타난다. 미리 보기: ?listMock=chrono
+      chronoQuery: '',
       // 서버 없이 목록 제목 규칙을 볼 때: ?listMock=title (여러 경우) · old (칸 없는 예전 응답)
       //   · empty (빈 목록) · fail (503). 예시일 때는 화면 위에 「예시 목록」 이 뜬다.
       mock: '',
@@ -1453,7 +1481,8 @@
       // 예시 (7-C1 모양): ?memoirMock=chapters · partial · nodata · html · badshape · mismatch(다른 회차의 결과)
       //       (독립 실행 ② 모양): proposal · verified · badref     · code 붙은 오류: 502:invalid_model_output 등
       chapters: {
-        // 일부 장 실패(status: partial)를 보여 줄까 — 태헌 님 결정 전 (7-C1 §4).
+        // 일부 장 실패를 보여 줄까 — **태헌 님 10-26 결정: A (전체 미완료 안내)**. 서버도 장 내용 없이 503 incomplete 를 준다.
+        // B 는 비교용으로 남겨 둔다 (?memoirPartial=show). 서비스에서는 켜지 않는다.
         //   false (A · 기본) 완성본으로 열지 않고 「일부 장을 만들지 못했어요」
         //   true  (B)        만든 장만 보여 주고 위에 「○장을 만들지 못했어요. 지금 보이는 글은 자서전의 일부예요」
         // 주소 뒤 ?memoirPartial=show 로 B 를 미리 볼 수 있다
@@ -1613,7 +1642,11 @@
     mode: QS.get('auth') || (CONFIG.auth.mode === 'auto' ? autoAuthMode() : CONFIG.auth.mode),   // dev | session
     mock: QS.get('authMock') ?? CONFIG.auth.mock,
     user: null, elders: [],
+    elderId: '',            // 지금 고른 화자 — 회차 시작 · 링크 · 자서전이 이 화자로 간다 (태헌 10-26)
   };
+  /** 지금 고른 화자 { elder_id, name } 또는 null */
+  const curElder = () => AUTH.elders.find(e => e.elder_id === AUTH.elderId) || null;
+  const elderName = (id) => { const e = AUTH.elders.find(x => x.elder_id === id); return e ? e.name : ''; };
   if (AUTH.mock && AUTH.mode === 'dev') AUTH.mode = 'session';   // 모의 로그인은 로그인 모드에서만 뜻이 있다
   // 어르신 링크 https://<주소>/i#<토큰>. 토큰은 # 뒤라 서버로 가지 않는다 — 화면이 읽어 헤더로만 보낸다.
   // **토큰은 기록(⚙) · 로그 · 화면 어디에도 찍지 않는다.**
@@ -1756,8 +1789,13 @@
     // 지난 회차 목록. 빈 목록(없음)과 503(못 읽음)은 다른 사건이다.
     // ?has_postcard=1 이면 엽서 있는 회차만, DB 에서 걸러 최근 순으로 (feature/theme-interview e1efd0d).
     // 회차마다 has_postcard(true/false) 도 실린다. 이 옵션을 모르는 예전 서버는 그냥 전부 준다.
-    sessions: (limit, signal, opts) => call(`/sessions?limit=${limit || CONFIG.archive.limit}${opts && opts.hasPostcard ? '&has_postcard=1' : ''}`,
+    sessions: (limit, signal, opts) => call(`/sessions?limit=${limit || CONFIG.archive.limit}${opts && opts.hasPostcard ? '&has_postcard=1' : ''}`
+                                           + `${opts && opts.elderId ? `&elder_id=${encodeURIComponent(opts.elderId)}` : ''}`
+                                           + `${opts && opts.query ? `&${opts.query}` : ''}`,
                                            signal ? { signal } : undefined),
+    // 화자 미지정 회차에 화자를 한 번 정한다 (태헌 10-26 · a2454a9). 200 {session_id, elder_id}
+    // 이미 다른 화자 → 409 elder_already_set · 남의 회차 · 화자 → 404. 같은 화자를 다시 보내면 200
+    assignElder: (id, elderId) => call(`/sessions/${id}/elder`, { method: 'PUT', body: JSON.stringify({ elder_id: elderId }) }),
 
     // ── 사진 (main.py upload_photo · get_photo) ──
     // 본문은 바이트 그대로. 형식은 서버가 앞머리 바이트로 가린다 (HEIC 도 받는다).
@@ -1828,7 +1866,25 @@
       if (ptitle !== undefined) r[K] = ptitle;
       return r;
     };
-    const rows = kind === 'old' ? [
+    // 연대기 예시 — 6-C1 §3-4 의 합성 사례 r-a~r-d 에 추정 · 상대 · 대표 시점 미정을 더했다 (태헌 10-26 결정 모양)
+    const W = (kind, text, year, state) => ({ kind, text, year, state: state || (kind === 'unknown' ? 'unknown' : 'set') });
+    const chronoRows = () => {
+      const at2 = (d, h) => new Date(Date.UTC(2026, 9, d, h)).toISOString();
+      const r = (n, title, d, h, when) => ({ session_id: `c${n}`.padEnd(8, '0') + `-0000-4000-8000-${String(n).padStart(12, '0')}`,
+        title, has_postcard: true, [K]: title, photo_id: null, state: 'CLOSED', fragment_count: 3,
+        created_at: at2(d, h), closed_at: at2(d, h), when });
+      return [   // 작성순 (최근 작성 → 오래된 작성)
+        r(7, '아버지의 자전거', 26, 9, W('direct', '1960년대', 1960, 'undecided')),
+        r(4, '이름 모를 골목', 22, 10, W('unknown', '', null)),          // r-d
+        r(3, '이사 가던 날', 22, 9, W('direct', '1980년대', 1980)),        // r-c 기간 → 시작점
+        r(6, '결혼 뒤 첫 집', 21, 12, W('relative', '결혼 뒤', null)),
+        r(2, '첫 출근', 21, 9, W('direct', '1983년', 1983)),              // r-b
+        r(5, '스무 살의 봄', 20, 12, W('estimated', '스무 살쯤', 1975)),
+        r(1, '가게를 연 해', 20, 9, W('direct', '1997년', 1997)),         // r-a
+      ];
+    };
+    const CHRONO_ORDER = ['c5', 'c3', 'c2', 'c6', 'c1', 'c7', 'c4'];   // 서버가 정렬했다고 치는 순서 (오래된 → 최근 · ① · ②)
+    const rows = kind === 'chrono' ? chronoRows() : kind === 'old' ? [
       row(1, '2026-10-22 기록', true, undefined), row(2, '', true, undefined), row(3, '가족 이야기', false, undefined),
     ] : [
       row(1, '2026-10-22 기록', true, '처음 열었던 작은 가게', 4),      // T01 날짜형 회차 제목 + 내용형 엽서 제목
@@ -1850,6 +1906,7 @@
       await nap(400);
       if (kind === 'fail') throw new ApiError(503, '예시 503');
       if (kind === 'empty') return { sessions: [] };
+      if (opts && opts.query && kind === 'chrono') return { sessions: CHRONO_ORDER.map(p => rows.find(r => r.session_id.startsWith(p))) };
       return { sessions: rows.filter(r => !(opts && opts.hasPostcard) || r.has_postcard === true) };
     };
     api.postcardThumb = async (id) => {
@@ -2444,6 +2501,9 @@
   //   not_closed             회차가 아직 안 끝났다 — 닫히는 중일 수 있어 「다시 만들기」 를 둔다
   // code 가 없는 예전 서버에서는 문구로 가린다.
   const CARD_LACK = new Set(['insufficient_material', 'no_answers']);
+  // 503 photo_unavailable (태헌 10-26 · a2454a9) — 회차에 사진이 있는데 못 읽었다. 서버는 사진 없이 굽지 않는다.
+  // 사진 · 원문은 그대로라 다시 누르면 된다. 문구는 최충 님 요청대로
+  const PHOTO_FAIL = '사진을 불러오지 못했어요. 다시 만들어 주세요.';
   const cardWaiting = (e) => e.code === 'busy'
     || (!e.code && e.status === 409 && /기다|만드는 중|굽는 중/.test(String(e.message || '')));
   const cardFail = (e) => ({
@@ -2785,6 +2845,9 @@
       }
       log('준비', `테마 ${prepInfo.theme}(${body.theme || '-'}) · 주제 「${prepInfo.topic}」`);
     }
+
+    // 2-0) 누구의 이야기인가 (태헌 10-26). 로그인 모드에서 고른 화자. 개발 모드 · 예전 서버는 화자가 없다
+    if (AUTH.mode === 'session' && curElder()) body.elder_id = AUTH.elderId;
 
     // 2-1) 사진을 골랐다면 그 번호(photo_id)를 함께 보낸다.
     //
@@ -3272,7 +3335,8 @@
     $('#cfLead').textContent = lack
       ? '조금 더 이야기를 들려주시면 엽서로 만들 수 있어요. 나눈 이야기는 지워지지 않았어요.'
       : '나눈 이야기는 저장되어 있어요. 잠시 뒤 다시 만들어 주세요.';
-    $('#cfWhy').textContent = f.code === 'no_answers' ? '남은 말씀이 없어요'
+    $('#cfWhy').textContent = f.code === 'photo_unavailable' ? PHOTO_FAIL
+      : f.code === 'no_answers' ? '남은 말씀이 없어요'
       : lack ? '자료 부족'
       : f.code === 'not_closed' ? '인터뷰를 정리하는 중이에요'
       : f.why === 'timeout' ? '서버가 정해진 시간 안에 답하지 않았어요'
@@ -3584,6 +3648,7 @@
   let rvId = null, rvWhyClosed = '';
   let rvFromArchive = false;       // 지난 이야기에서 열었다 — 아래 버튼이 「목록으로」 가 된다
   let rvHasCard = false;           // 이 회차에 엽서가 이미 있다 — 버튼이 「엽서 보기」 가 된다
+  let rvElderPick = '';            // 화자 정하기에서 고른 분 — 「정하기」 를 눌러야 서버로 간다
   let rvCardBusy = false;
 
   function rvShow(which, stale) {
@@ -3612,6 +3677,7 @@
     $('#rvPrep').hidden = !(theme || topic);
 
     const said = frs.filter(f => f.idx > 0 && String(f.answer || '').trim());
+    rvElderDraw(rec);
     const pc = rec && rec.postcard;
     rvHasCard = !!(pc && (typeof pc.title === 'string' && pc.title.trim() || typeof pc.text === 'string' && pc.text.trim()));
     const warn = $('#rvWarn');
@@ -3728,7 +3794,8 @@
     if (got.fail) {
       btn.textContent = L.card;
       msg.hidden = false;
-      msg.textContent = got.fail === 'lack' ? '엽서에 담을 만큼 분명한 이야기가 모이지 않았어요. 나눈 이야기는 그대로 있어요.'
+      msg.textContent = got.code === 'photo_unavailable' ? PHOTO_FAIL
+        : got.fail === 'lack' ? '엽서에 담을 만큼 분명한 이야기가 모이지 않았어요. 나눈 이야기는 그대로 있어요.'
         : got.code === 'not_closed' ? '인터뷰를 정리하는 중이에요. 잠시 뒤 다시 눌러 주세요.'
         : got.why === 'timeout' ? '정해진 시간 안에 엽서를 받지 못했어요. 잠시 뒤 다시 눌러 주세요.'
         : '엽서를 만들지 못했어요. 잠시 뒤 다시 눌러 주세요.';
@@ -3748,6 +3815,59 @@
     arShowCard(rec, id);
   }
   $('#rvCard').addEventListener('click', () => void rvMakeCard());
+
+  /* 화자 정하기 — 서버가 elder_id 칸을 주고 그 값이 null(미지정)일 때만. 어르신 링크 · 개발 모드에서는 두지 않는다.
+     지금 고른 화자를 미리 골라 두되, 「○○ 님의 이야기로 정하기」 를 눌러야 PUT 이 간다 (자동 확정 X). */
+  function rvElderDraw(rec) {
+    const box = $('#rvElder');
+    const need = !!rvId && !LINK.on && AUTH.mode === 'session' && AUTH.elders.length > 0
+      && rec && typeof rec === 'object' && 'elder_id' in rec && rec.elder_id === null;
+    box.hidden = !need;
+    if (!need) return;
+    rvElderPick = AUTH.elders.some(e => e.elder_id === AUTH.elderId) ? AUTH.elderId : '';
+    $('#rvElderMsg').textContent = AUTH.elders.length === 1 ? '한 분뿐이어도 한 번 확인해 주세요. 정하면 바꿀 수 없어요.' : '정하면 바꿀 수 없어요.';
+    const tabs = $('#rvElderTabs'); tabs.replaceChildren();
+    AUTH.elders.forEach(x => {
+      const b = document.createElement('button');
+      b.type = 'button'; b.className = 'tab'; b.textContent = x.name || '이름 없음'; b.dataset.elder = x.elder_id;
+      b.setAttribute('role', 'radio'); b.setAttribute('aria-checked', String(x.elder_id === rvElderPick));
+      b.addEventListener('click', () => { rvElderPick = x.elder_id; rvElderSync(); });
+      tabs.append(b);
+    });
+    rvElderSync();
+  }
+  function rvElderSync() {
+    $$('#rvElderTabs .tab').forEach(b => b.setAttribute('aria-checked', String(b.dataset.elder === rvElderPick)));
+    const n = elderName(rvElderPick);
+    $('#rvElderSave').disabled = !n;
+    $('#rvElderSave').textContent = n ? `${n} 님의 이야기로 정하기` : '누구의 이야기인지 골라 주세요';
+  }
+  $('#rvElderSave').addEventListener('click', async () => {
+    const id = rvId, pick = rvElderPick, my = rvReq, btn = $('#rvElderSave'), msg = $('#rvElderMsg');
+    if (!id || !pick || btn.disabled) return;
+    btn.disabled = true; $$('#rvElderTabs .tab').forEach(b => { b.disabled = true; });
+    try {
+      await api.assignElder(id, pick);
+      arStale = true;                                  // 목록의 「정해 주세요」 가 바뀌었다
+      if (my !== rvReq) return;
+      $('#rvElder').hidden = true;
+      toast(`${elderName(pick)} 님의 이야기로 정했어요`);
+      log('화자', `회차 ${id.slice(0, 8)} → 「${elderName(pick)}」`);
+    } catch (e) {
+      if (my !== rvReq) return;
+      $$('#rvElderTabs .tab').forEach(b => { b.disabled = false; });
+      if (e.code === 'elder_already_set') {         // 그 사이 다른 곳에서 정해졌다 — 화면을 다시 읽는다
+        msg.textContent = '이미 다른 분의 이야기로 정해진 기록이에요.';
+        $('#rvElder').hidden = true;
+        arStale = true;
+        void openReview(id, rvWhyClosed, { fromArchive: rvFromArchive });
+      } else {
+        msg.textContent = e.status === 404 ? '이 기록이나 그 분을 찾지 못했어요. 목록에서 다시 열어 주세요.' : '저장하지 못했어요. 다시 눌러 주세요.';
+        rvElderSync();
+      }
+      log('화자', `정하지 못함 · ${e.status || ''} ${e.code || ''}`);
+    }
+  });
 
   /* ═══════════════════════════════════════════════════════════════
      보관함 — 지난 이야기
@@ -3827,7 +3947,8 @@
   function arDraw() {
     const rows = arSort === 'long'
       ? [...arRows].sort((a, b) => (b.fragment_count || 0) - (a.fragment_count || 0))
-      : arRows;                                     /* 기본은 서버가 준 최신순 그대로 */
+      : arRows;                                     /* 기본은 서버가 준 최신순 그대로 (작성순 · 최근 작성 → 오래된 작성) */
+    $('[data-sort="chrono"]').hidden = !chronoReady();
 
     // 서버에서 온 글(제목 · 본문)은 textContent 로만 넣는다. 예전에는 innerHTML 에
     // 그대로 이어 붙여서, 제목에 태그를 넣은 회차가 보관함을 여는 화면에서 실행될 수 있었다.
@@ -3839,7 +3960,13 @@
     };
     const list = $('#arList');
     list.replaceChildren();
-    rows.forEach(s => {
+    const drawRows = arSort !== 'chrono' ? rows : [
+      ...arChrono.filter(s => chronoOf(s).section === 'main'),
+      { _sec: '① 대표 시점 미정' }, ...arChrono.filter(s => chronoOf(s).section === 'undecided'),
+      { _sec: '② 시기 미상' }, ...arChrono.filter(s => chronoOf(s).section === 'unknown'),
+    ].filter((r, i, a) => !r._sec || (a[i + 1] && !a[i + 1]._sec));   // 빈 구역의 제목은 두지 않는다
+    drawRows.forEach(s => {
+      if (s._sec) { list.appendChild(el('h3', 'ar-sec', s._sec)); return; }
       const n = s.fragment_count || 0;
       const b = el('button', 'piece');
       b.dataset.id = s.session_id;
@@ -3860,6 +3987,13 @@
       // 엽서 유무 (서버가 has_postcard 를 줄 때만). 없는 회차는 누르면 「나눈 이야기」 가 열린다
       if (s.has_postcard === true) meta.append(el('span', 'era pc', '엽서 있음'));
       else if (s.has_postcard === false) meta.append(el('span', 'era nopc', '아직 엽서 없음'));
+      // 누구의 이야기인가 (서버가 elder_id 칸을 줄 때만). 미지정이면 정하라고 알린다 — 정하는 곳은 「나눈 이야기」
+      if (AUTH.mode === 'session' && 'elder_id' in s) {
+        if (s.elder_id === null) meta.append(el('span', 'era nospk', '누구의 이야기인지 정해 주세요'));
+        else if (AUTH.elders.length > 1 && elderName(s.elder_id)) meta.append(el('span', 'era spk', elderName(s.elder_id)));
+      }
+      // 연대기순에서는 일어난 때를 따로 보인다 (기록한 날과 섞지 않는다)
+      if (arSort === 'chrono') { const t = chronoOf(s); if (t.label) meta.prepend(el('span', `era when ${t.section}`, t.label)); }
       text.appendChild(meta);
       b.append(thumb, text);
       list.appendChild(b);
@@ -3992,12 +4126,46 @@
     if (arStale) void openArchive(); else show('archive');
   }, true);
 
-  $$('.tab').forEach(b => b.addEventListener('click', () => {
-    $$('.tab').forEach(x => x.setAttribute('aria-pressed', 'false'));
+  $$('[data-screen="archive"] .tabs .tab').forEach(b => b.addEventListener('click', async () => {
+    $$('[data-screen="archive"] .tabs .tab').forEach(x => x.setAttribute('aria-pressed', 'false'));
     b.setAttribute('aria-pressed', 'true');
     arSort = b.dataset.sort;
+    if (arSort === 'chrono') await arLoadChrono();
     arDraw();
   }));
+
+  /* ── 연대기순 (FE-11 · 6-C1 §3 · 태헌 10-26) ──────────────────────────
+     정렬은 서버가 한다. 화면은 받은 순서를 그대로 쓰고, 맨 아래에 두 구역을 따로 둔다:
+       ① 대표 시점 미정 — 시점 있는 사건은 여럿인데 중심을 못 고름
+       ② 시기 미상     — 배치할 근거가 없음
+     둘을 합치지 않는다. 표시: 직접 · 상대 표현은 원문 그대로 (「1980년대」 · 「결혼 뒤」),
+     추정은 「1975년경(추정)」, 시기 미상은 「때 모름」. 화면이 연도를 계산하지 않는다.
+     칸 모양 (안): { kind: direct | estimated | relative | unknown, text, year, state: set | undecided | unknown } */
+  let arChrono = [];
+  const chronoField = () => CONFIG.archive.timeField || (listMock() === 'chrono' ? 'when' : '');
+  const chronoReady = () => listMock() === 'chrono' || (!!CONFIG.archive.timeField && !!CONFIG.archive.chronoQuery);
+  function chronoOf(s) {
+    const t = s && s[chronoField()];
+    if (!t || typeof t !== 'object') return { section: 'unknown', label: '때 모름' };
+    if (t.state === 'undecided') return { section: 'undecided', label: '대표 시점 미정' };
+    if (t.kind === 'unknown' || t.state === 'unknown') return { section: 'unknown', label: '때 모름' };
+    const text = typeof t.text === 'string' ? t.text.trim() : '';
+    if (t.kind === 'estimated') return { section: 'main', label: Number.isInteger(t.year) ? `${t.year}년경(추정)` : (text || '때 모름') };
+    return { section: 'main', label: text || (Number.isInteger(t.year) ? `${t.year}년` : '때 모름') };
+  }
+  async function arLoadChrono() {
+    try {
+      const res = await api.sessions(undefined, undefined, { query: CONFIG.archive.chronoQuery || 'order=chrono' });
+      let rows = (res && res.sessions) || [];
+      if (CONFIG.archive.closedOnly) rows = rows.filter(s => s.closed_at);
+      arChrono = rows;
+      log('보관함', `연대기순 ${rows.length}개 (서버 순서)`);
+    } catch (e) {
+      arChrono = [];
+      toast('일어난 순 목록을 불러오지 못했어요');
+      log('보관함', `연대기순 실패 · ${e.status || ''}`);
+    }
+  }
 
   /* ═══════════════════════════════════════════════════════════════
      자서전 만들기 — 업무지시서 04 v1.1 · 연결 규격 C1 v1.1
@@ -4018,14 +4186,14 @@
   // 실패 안내는 HTTP 상태로 고른다 (C1 v1.1). 서버의 detail 은 화면에 내지 않는다 —
   // 문자열이 아니거나 내부 사정이 섞일 수 있다.
   const MM_FAIL = {
-    400: '선택한 엽서를 확인해 주세요. 3~5장을 고를 수 있어요.',
-    404: '선택한 엽서를 찾을 수 없어요. 목록에서 다시 골라 주세요.',
-    422: '선택한 엽서의 이야기 자료를 불러오지 못했어요.',
-    502: '자서전을 만드는 중 문제가 생겼어요. 엽서 선택 화면으로 돌아가 주세요.',
+    400: '선택한 이야기를 확인해 주세요. 3~5개를 고를 수 있고, 말씀이 없는 기록은 넣을 수 없어요.',
+    404: '선택한 이야기를 찾을 수 없어요. 목록에서 다시 골라 주세요.',
+    422: '선택한 이야기의 자료를 불러오지 못했어요.',
+    502: '자서전을 만드는 중 문제가 생겼어요. 이야기 선택 화면으로 돌아가 주세요.',
     // 모델이 「확인이 더 필요하다」(needs_confirmation · needs_context)고 답한 경우. 자서전 API 의 503 은 이것뿐이다 (2-C1 §2)
-    503: '지금은 자서전을 만들 수 없어요. 엽서 선택 화면으로 돌아가 주세요.',
-    504: '정해진 시간 안에 자서전을 받지 못했어요. 엽서 선택 화면으로 돌아가 주세요.',
-    other: '자서전을 만드는 중 문제가 생겼어요. 엽서 선택 화면으로 돌아가 주세요.',
+    503: '지금은 자서전을 만들 수 없어요. 이야기 선택 화면으로 돌아가 주세요.',
+    504: '정해진 시간 안에 자서전을 받지 못했어요. 이야기 선택 화면으로 돌아가 주세요.',
+    other: '자서전을 만드는 중 문제가 생겼어요. 이야기 선택 화면으로 돌아가 주세요.',
   };
   // 예시 응답 — 업무지시서 4절의 합성 자료 A. **실제 생성 결과가 아니다.**
   const MM_SAMPLE = {
@@ -4065,7 +4233,7 @@
     main.hidden = view === 'none';
     main.textContent = view === 'loadfail' ? '다시 불러오기'
                      : view === 'wait' ? '자서전을 쓰는 중이에요'
-                     : after ? '엽서 선택으로 돌아가기'
+                     : after ? '이야기 선택으로 돌아가기'
                      : '자서전 만들기';
     main.disabled = view === 'load' || view === 'wait';
     back.hidden = view === 'wait' || after;
@@ -4082,9 +4250,10 @@
       b.setAttribute('aria-pressed', String(i >= 0));
       b.querySelector('.pick-mark').textContent = i >= 0 ? String(i + 1) : '';
     });
-    $('#mmGuide').textContent = n === 0 ? `엽서 ${min}~${max}장을 골라 주세요.`
-      : n < min ? `${n}장 골랐어요. ${min}~${max}장을 골라 주세요.`
-      : `${n}장 골랐어요. 자서전을 만들 수 있어요.`;
+    const who = mmElder ? `${mmElder.name} 님의 이야기 중 ` : '이야기 ';
+    $('#mmGuide').textContent = n === 0 ? `${who}${min}~${max}개를 골라 주세요.`
+      : n < min ? `${n}개 골랐어요. ${min}~${max}개를 골라 주세요.`
+      : `${n}개 골랐어요. 자서전을 만들 수 있어요.`;
     if (mmView === 'pick') $('#mmMain').disabled = n < min || n > max;
   }
 
@@ -4093,7 +4262,7 @@
     const i = mmPicked.indexOf(id);
     if (i >= 0) mmPicked.splice(i, 1);
     else if (mmPicked.length >= CONFIG.memoir.max) {
-      toast(`최대 ${CONFIG.memoir.max}장까지 선택할 수 있어요.`);
+      toast(`최대 ${CONFIG.memoir.max}개까지 선택할 수 있어요.`);
       return;
     } else mmPicked.push(id);
     mmSync();
@@ -4110,9 +4279,14 @@
       b.setAttribute('aria-pressed', 'false');
       const thumb = document.createElement('span');
       thumb.className = 'thumb';
-      const img = document.createElement('img');
-      img.src = s.thumb; img.alt = '';
-      thumb.appendChild(img);
+      if (s.thumb || s.photo_id) {
+        const img = document.createElement('img');
+        img.src = s.thumb || api.photoUrl(s.photo_id); img.alt = ''; img.loading = 'lazy';
+        thumb.appendChild(img);
+      } else {
+        const no = document.createElement('span'); no.className = 'no'; no.textContent = '엽서 없음';
+        thumb.appendChild(no);
+      }
       const text = document.createElement('span');
       text.style.cssText = 'flex:1; min-width:0';
       const ttl = titleEl(s);
@@ -4148,24 +4322,37 @@
   }
 
   function mmForget() {
-    mmRows.forEach(r => URL.revokeObjectURL(r.thumb));
+    mmRows.forEach(r => r.thumb && URL.revokeObjectURL(r.thumb));
     mmRows = [];
   }
 
+  /* 자서전 고르기 목록 (태헌 10-26 · a2454a9)
+       로그인 모드 + 고른 화자가 있고 서버가 elder_id 칸을 주면 → **그 화자의 말씀 있는 회차** (엽서는 조건이 아니다)
+       그 밖(개발 모드 · 예전 서버) → 예전처럼 엽서 있는 회차
+     화자 미지정 회차는 화자별 목록에 들지 않는다 — 몇 개인지 알려 주고 「나눈 이야기」 에서 정하게 한다.
+     최종 정책은 「같은 화자 전체 선택 후 제외」 — 다섯 단계 구조가 나오면 요청이 {elder_id, exclude_session_ids} 로 바뀐다.
+     그 전까지는 지금처럼 3~5개를 고른다 (CONFIG.memoir.max · 서버 MEMOIR_MAX_SESSIONS 임시 상한). */
+  let mmElder = null;          // 화자별 목록일 때 그 화자
   async function openMemoir() {
     const my = ++mmReq;
     mmForget();
     mmPicked = [];
     show('memoir');
     mmShow('load');
+    $('#mmUnassigned').hidden = true;
     try {
-      const res = await api.sessions(CONFIG.memoir.listLimit, undefined, { hasPostcard: true });
-      // 새 서버는 엽서 있는 회차만 준다. 예전 서버는 전부 주므로 아래 「404 면 뺀다」 가 그대로 거른다.
-      // has_postcard 가 false 로 온 회차는 그림을 물어볼 것도 없이 뺀다.
-      const closed = ((res && res.sessions) || []).filter(s => s.closed_at && s.has_postcard !== false);
-      // 회차마다 엽서가 있는지 묻는다. 404 는 「엽서 없음」 이라 빼고, 그 밖의 실패가
-      // 하나라도 있으면 목록 전체를 「불러오지 못했다」 로 본다 — 숨기면 엽서가 사라진 것처럼 보인다.
-      const got = await settleLimited(closed.map(s => () => api.postcardThumb(s.session_id)), CONFIG.memoir.thumbParallel);
+      const el = AUTH.mode === 'session' && !listMock() ? curElder() : null;
+      const res = await api.sessions(CONFIG.memoir.listLimit, undefined, el ? { elderId: el.elder_id } : { hasPostcard: true });
+      const rows = (res && res.sessions) || [];
+      const byElder = !!el && rows.every(s => 'elder_id' in s);   // 화자 칸을 아는 서버
+      mmElder = byElder ? el : null;
+      const closed = byElder
+        ? rows.filter(s => s.closed_at && s.elder_id === el.elder_id && (s.fragment_count || 0) > 0)
+        : rows.filter(s => s.closed_at && s.has_postcard !== false);
+      // 엽서 그림은 엽서 있는 회차만 받는다. 화자별 목록에서는 엽서가 없어도 고를 수 있다 (그림 자리에 사진 · 「엽서 없음」).
+      // 예전 길은 404 면 「엽서 없음」 이라 빼고, 그 밖의 실패가 하나라도 있으면 목록 전체를 「불러오지 못했다」 로 본다.
+      const got = await settleLimited(closed.map(s => () => (byElder && s.has_postcard !== true) ? Promise.resolve(null)
+        : api.postcardThumb(s.session_id)), CONFIG.memoir.thumbParallel);
       const thumbs = got.map(g => (g.status === 'fulfilled' ? g.value : null));
       const broke = got.find(g => g.status === 'rejected');
       if (broke || my !== mmReq) {
@@ -4173,17 +4360,30 @@
         if (broke) throw broke.reason;
         return;
       }
-      mmRows = closed.map((s, i) => Object.assign({}, s, { thumb: thumbs[i] })).filter(s => s.thumb);
-      if (!mmRows.length) { mmShow('none'); log('자서전', '고를 엽서 없음'); return; }
+      mmRows = closed.map((s, i) => Object.assign({}, s, { thumb: thumbs[i] }));
+      if (!byElder) mmRows = mmRows.filter(s => s.thumb);
+      if (byElder) void mmCountUnassigned(my);
+      if (!mmRows.length) { mmShow('none'); log('자서전', '고를 이야기 없음'); return; }
       titleAudit('자서전', mmRows);
       mmDraw();
       mmShow('pick');
-      log('자서전', `고를 수 있는 엽서 ${mmRows.length}장`);
+      log('자서전', `고를 수 있는 이야기 ${mmRows.length}개${byElder ? ` · 「${el.name}」` : ' · 엽서 있는 회차 (예전 길)'}`);
     } catch (e) {
       if (my !== mmReq) return;
       mmShow('loadfail');
       log('자서전', `목록 실패 · ${e.status || ''} ${e.message || e}`);
     }
+  }
+  /** 화자 미지정인 말씀 있는 회차 수 — 화자별 목록에 안 들어오니 알려 준다 */
+  async function mmCountUnassigned(my) {
+    try {
+      const all = await api.sessions(CONFIG.memoir.listLimit);
+      if (my !== mmReq) return;
+      const n = ((all && all.sessions) || []).filter(s => s.closed_at && s.elder_id === null && (s.fragment_count || 0) > 0).length;
+      const p = $('#mmUnassigned');
+      p.hidden = !n;
+      p.textContent = n ? `누구의 이야기인지 정하지 않은 기록이 ${n}개 있어요. 지난 이야기에서 열어 정하면 여기에 나와요.` : '';
+    } catch (_) {}
   }
 
   /** 서버 대신 예시 응답을 낸다. 실제 생성이 아니라는 표시는 화면 위에 따로 있다. */
@@ -4328,11 +4528,17 @@
   /** 실패 안내를 고른다. 서버의 message 나 예외 내용은 화면에 내지 않는다. */
   // 7-C1 §3-4 의 code (안). 있으면 code 로, 없거나 모르는 값이면 지금처럼 HTTP 상태로 고른다
   // 최충 회신 (2026-10-22): needs_* 는 서버에서 not_final 하나로 묶는다. 예전 이름도 그대로 받는다
+  // 화자 (태헌 10-26): 서로 다른 분 · 미지정 기록이 섞이면 400. incomplete(일부 장 실패, 503)는 「일부 장」 화면으로 (A 확정)
+  const MM_SAYS = {
+    mixed_speakers: '한 분의 이야기만 골라 주세요. 서로 다른 분의 이야기는 한 자서전에 넣을 수 없어요.',
+    speaker_unassigned: '누구의 이야기인지 정하지 않은 기록이 섞여 있어요. 지난 이야기에서 그 기록을 열어 정해 주세요.',
+  };
   const MM_CODE = { bad_selection: 400, not_found: 404, source_unavailable: 422, invalid_model_output: 502,
                     not_final: 503, needs_confirmation: 503, needs_context: 503, generation_timeout: 504 };
   function mmWhy(e) {
     if (e && e.name === 'AbortError') return MM_FAIL[504];   // 화면 쪽 제한에 걸렸다
     if (e && e.code === 'unsupported_style') return STYLE_UNSUPPORTED;   // 400 이지만 「3~5장」 과 다른 뜻 (4-C1)
+    if (e && MM_SAYS[e.code]) return MM_SAYS[e.code];
     if (e && MM_CODE[e.code]) return MM_FAIL[MM_CODE[e.code]];
     return MM_FAIL[e && e.status] || MM_FAIL.other;           // 응답 없음 · 파싱 실패 · 그 밖의 상태
   }
@@ -4420,7 +4626,7 @@
       if (!kind && res && typeof res === 'object') capSeen('memoirChapters', Array.isArray(res.chapters) && res.chapters.length > 0 && !!res.run);
       out = mmRead(res, ids);
     } catch (e) {
-      out = { view: 'fail', why: mmWhy(e) };
+      out = e && e.code === 'incomplete' ? { view: 'partial' } : { view: 'fail', why: mmWhy(e) };
       log('자서전', `실패 · ${e.name === 'AbortError' ? '화면 쪽 시간 초과' : `HTTP ${e.status || '응답 없음'}`}`);
     } finally {
       clearTimeout(timer);
@@ -4675,6 +4881,7 @@
     } else {
       const lack = fail.code === 'insufficient_material' || fail.code === 'no_answers';
       $('#cardStyleMsg').textContent = fail.code === 'unsupported_style' ? STYLE_UNSUPPORTED
+        : fail.code === 'photo_unavailable' ? `${PHOTO_FAIL} 지금 엽서는 ${name(was)} 그대로예요.`
         : lack ? `엽서에 담을 이야기가 부족해 ${name(want)}로 바꾸지 못했어요. 지금 엽서는 ${name(was)} 그대로예요.`
         : `${name(want)}로 바꾸지 못했어요. 지금 엽서는 ${name(was)} 그대로예요.`;
       log('문체', `엽서 실패 · ${fail.status || ''} ${fail.code || fail.why || ''}`);
@@ -4959,9 +5166,36 @@
     AUTH.elders = (r && r.elders) || [];
     // user {user_id, name, email} · elders [{elder_id, name}] (최충 답변). elder_id 는 링크 발급에 쓴다.
     // 이메일은 화면에 내지 않는다 — 이름이 비었을 때만 대신 쓴다
-    const u = AUTH.user || {}, e = AUTH.elders[0];
+    // 고른 화자를 기억한다 (이 브라우저에만 · 편의). 없거나 사라졌으면 첫 화자
+    let keep = AUTH.elderId;
+    if (!keep) { try { keep = localStorage.getItem('memoir.elderId') || ''; } catch (_) {} }
+    AUTH.elderId = AUTH.elders.some(x => x.elder_id === keep) ? keep : ((AUTH.elders[0] && AUTH.elders[0].elder_id) || '');
+    const u = AUTH.user || {}, e = curElder();
     $('#acctName').textContent = [u.name || u.email || '로그인됨', e && e.name].filter(Boolean).join(' · ');
     $('#acct').hidden = false;
+    elderPickDraw();
+  }
+  /** 준비 화면의 「누구의 이야기」 — 화자가 둘 이상이면 고르고, 언제든 한 분 더 등록할 수 있다 */
+  function elderPickDraw() {
+    const box = $('#elderPick'); if (!box) return;
+    box.hidden = !(AUTH.mode === 'session' && AUTH.elders.length && NEW_FLOW && !LINK.on);
+    const tabs = $('#elderTabs'); tabs.replaceChildren();
+    AUTH.elders.forEach(x => {
+      const b = document.createElement('button');
+      b.type = 'button'; b.className = 'tab'; b.textContent = x.name || '이름 없음';
+      b.setAttribute('aria-pressed', String(x.elder_id === AUTH.elderId));
+      b.addEventListener('click', () => {
+        AUTH.elderId = x.elder_id;
+        try { localStorage.setItem('memoir.elderId', x.elder_id); } catch (_) {}
+        setAccount({ user: AUTH.user, elders: AUTH.elders });
+        log('화자', `「${x.name}」 의 이야기로`);
+      });
+      tabs.append(b);
+    });
+    const add = document.createElement('button');
+    add.type = 'button'; add.className = 'tab tab-add'; add.textContent = '+ 다른 분';
+    add.addEventListener('click', () => { elderMade = false; $('#elderName').value = ''; $('#elderName').readOnly = false; $('#elderSave').disabled = true; $('#elderMsg').textContent = ''; show('elder'); $('#elderName').focus(); });
+    tabs.append(add);
   }
   function afterLogin() {
     $('#app').classList.add('authed');
@@ -5061,6 +5295,10 @@
   // **부를 때마다 새 화자가 생긴다** — 연타 · Enter 반복 · 응답 기다리는 중의 재시도를 막는다.
   // 한 번 만들어졌으면(elderMade) 다시 보내지 않는다. 실패했을 때만 다시 누를 수 있다.
   let elderBusy = false, elderMade = false;
+  // 이미 화자가 있는 계정이 「+ 다른 분」 으로 왔을 때만 돌아갈 수 있다 (첫 등록은 건너뛸 수 없다)
+  new MutationObserver(() => { $('#elderBack').hidden = !AUTH.elders.length; })
+    .observe($('[data-screen="elder"]'), { attributes: true, attributeFilter: ['class'] });
+  $('#elderBack').addEventListener('click', () => show('ready'));
   $('#elderSave').addEventListener('click', async () => {
     const name = $('#elderName').value.trim();
     if (!name || elderBusy || elderMade) return;
@@ -5070,6 +5308,8 @@
     try {
       const r = await api.elderCreate(name);        // 201 {elder_id, name}
       elderMade = true;
+      AUTH.elderId = (r && r.elder_id) || AUTH.elderId;     // 방금 등록한 분의 이야기로
+      try { localStorage.setItem('memoir.elderId', AUTH.elderId); } catch (_) {}
       setAccount({ user: AUTH.user, elders: [...AUTH.elders, { elder_id: r && r.elder_id, name: (r && r.name) || name }] });
       log('화자', '만들었습니다');
       show('ready');
@@ -5104,7 +5344,7 @@
   const absUrl = (u) => !u ? '' : u.startsWith('/') ? `${location.origin}${u}` : u;
   async function linkOut() {
     if (loBusy || !(prepInfo.theme && prepInfo.topic)) return;
-    const elder = AUTH.elders[0];
+    const elder = curElder();
     if (!elder || !elder.elder_id) { toast('화자를 먼저 정해 주세요.'); return; }
     loBusy = true; renderPrep();
     try {
