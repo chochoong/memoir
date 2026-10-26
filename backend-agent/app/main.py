@@ -412,6 +412,9 @@ async def create_session(req: StartReq, request: Request,
         elder_id=req.elder_id,
         question_fn=gemini_question, closed_fn=postcard.on_closed))
     await ctl.start(req.seed)
+    if not req.elder_id:
+        # 필수로 바꾸기 전에 빠진 채 들어오는 화면이 남았는지 본다 (v0.42 부터 늘 보낸다)
+        log.info("회차 %s 화자 없이 시작", ctl.session_id[:8])
     return ctl.snapshot()
 
 

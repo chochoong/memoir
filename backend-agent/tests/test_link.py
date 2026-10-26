@@ -21,6 +21,7 @@
 from __future__ import annotations
 
 import asyncio
+import logging
 import sys
 import time
 from datetime import datetime, timedelta, timezone
@@ -47,6 +48,27 @@ H = link.HEADER
 def check(name, cond, detail=""):
     (PASS if cond else FAIL).append(name)
     print(f"  {'OK ' if cond else '!! '}{name}{'  — ' + detail if detail else ''}")
+
+
+class _ApiLog(logging.Handler):
+    """api 로거의 「화자 없이 시작」 줄을 모은다. done() 이 떼고 모은 줄을 돌려준다."""
+
+    def __init__(self):
+        super().__init__(logging.INFO)
+        self.lines: list[str] = []
+        self._log = logging.getLogger("api")
+        self._level = self._log.level
+        self._log.setLevel(logging.INFO)
+        self._log.addHandler(self)
+
+    def emit(self, record):
+        if "화자 없이" in record.getMessage():
+            self.lines.append(record.getMessage())
+
+    def done(self) -> list[str]:
+        self._log.removeHandler(self)
+        self._log.setLevel(self._level)
+        return self.lines
 
 
 def _now():
@@ -549,14 +571,17 @@ def run():
         start = {"title": "화자 시험", "seed": "씨앗", "pace": "fast"}
         r = a.post("/api/sessions", json={**start, "elder_id": elder_b})
         check("남의 화자로는 회차를 열지 않는다 → 404", r.status_code == 404, r.text[:80])
+        seen = _ApiLog()
         r = a.post("/api/sessions", json={**start, "elder_id": elder_a})
         s_mine = r.json().get("session_id", "")
         check("내 화자로 열면 회차에 화자가 붙는다", r.status_code == 200
               and getattr(sc.get(s_mine), "elder_id", None) == elder_a, r.text[:80])
         r = a.post("/api/sessions", json=start)
         s_none = r.json().get("session_id", "")
-        check("화자 없이 열면 지금은 화자 미지정으로 연다 (화면이 보내기 전까지)",
+        check("화자 없이 열면 지금은 화자 미지정으로 연다 (필수로 바꾸기 전 관찰 기간)",
               r.status_code == 200 and getattr(sc.get(s_none), "elder_id", "x") is None, r.text[:80])
+        check("화자 없이 연 회차는 로그에 한 줄 남는다 · 화자 있는 회차는 남지 않는다",
+              seen.done() == [f"회차 {s_none[:8]} 화자 없이 시작"], str(seen.lines))
 
         owner = {s_mine: ("u_A", elder_a), s_none: ("u_A", None)}
         real_assign = store.assign_elder
