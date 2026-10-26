@@ -113,3 +113,43 @@
 **Context**: CONSTRUCTION - 단위 8P Seed C 확정, v3 · C 실제 실행 승인 대기
 
 ---
+
+## Build and Test 단위 8P - v3 · Seed C 실제 실행 승인 · 실행 전 보류(과금 등급 미확인)
+**Timestamp**: 2026-10-26T07:30Z
+**User Input**: "Seed C의 최종 자료와 검사 결과를 확인했습니다. Unit 8P v3의 Seed C 실제 Gemini 생성 시험 1회를 승인합니다. … 커밋 d3deb2b · 입력 b9f8e2daea65 · v3 · gemini-3.5-flash-lite · 재시도 0 · 장 1~5 자율 · 한 번만 · 실제 API 사용량과 과금 티어를 먼저 확인하고, 유료 사용이 필요하면 실행하지 말고 보고 …"
+**AI Response**: "실행 조건 확인 — HEAD d3deb2b · 작업 트리 깨끗 · v3 · input_ref b9f8e2daea65 · 39턴 · 키 형식 정상. 지난 실측 비율로 추정 입력 약 53k · 출력 약 7k 토큰(호출 5~9회). 공개 가격표: 무료 등급은 입력 · 출력 무료, 유료 등급이면 입력 $0.30/1M · 출력 $2.50/1M 로 이번 실행은 약 $0.04. 키가 속한 프로젝트의 과금 등급(결제 계정 연결 여부)은 API 키로 조회할 수 없고 AI Studio 콘솔에서만 보인다 — 확인하지 못해 실행하지 않고 보고. 모델 호출 0."
+**Context**: CONSTRUCTION - 단위 8P v3 · C 실행 보류, 과금 등급 확인 대기
+
+---
+
+## Build and Test 단위 8P - v3 · Seed C 실제 실행
+**Timestamp**: 2026-10-26T07:30:58Z
+**User Input**: "Google AI Studio에서 해당 API 키가 속한 프로젝트의 Billing Tier가 Free인 것을 직접 확인했습니다. 추가 결제나 유료 티어 업그레이드 없이 Seed C의 v3 파이프라인 실제 실행 1회를 진행해주세요. … d3deb2ba · Seed C 5회차 39턴 · b9f8e2daea65 · gemini-3.5-flash-lite · v3 · 재시도 0 · 무료 할당량 초과 또는 API 오류 시 즉시 중단 · 다른 모델 · 유료 프로젝트 전환 금지 · 서버 · DB · 배포 무수정 · push · PR 금지 … human_review=not_run 유지"
+**AI Response**: "d3deb2b · 키 형식 확인 뒤 한 번 실행(run 20261026T073058Z-C5-b9f8). 8회 호출 모두 STOP, 33초, 토큰 입력 67,604 · 출력 11,943. generated · pipeline_complete true · 검증 pass · human_review not_run. 사건 13 → 4장(시기순), 5회차를 5장으로 나누지 않음. 정정 1985년 봄 반영 · 1986 본문 없음 · 감정 · 인물 보존. 그러나 문장 55/57 이 원문 한 턴 그대로, ch-4 는 원문 조각 나열 · 인터뷰 말투 잔존, 턴 14 · 27 이 두 장에 겹침(장 입력 앞뒤 1턴 규칙), ch-2 합니다체, 편집은 사실상 무변경, 검증은 issues 0. R1-20261026T073058Z-C5-v3.md 에 평가 9항목 제안 판정. 추가 호출 · 프롬프트 수정 · push 없음."
+**Context**: CONSTRUCTION - 단위 8P Build and Test v3 · C 1회 완료, 사람 검수 대기
+
+---
+
+## Build and Test 단위 8P - v3 · C 판정 · 구조 재점검 (분석만)
+**Timestamp**: 2026-10-26T07:42:24Z
+**User Input**: "Unit 8P v3의 Seed C 실제 실행 결과를 확인했습니다. 기술적인 5단계 실행은 성공으로 인정하지만, 콘텐츠 품질은 미승인입니다. 이번에는 프롬프트를 계속 부분 수정하는 방식보다, 전체 파이프라인의 역할과 데이터 전달 구조를 다시 점검하겠습니다. … 결과 보존 · 분석 · 목차 문제(부산 두 방문 합침 · 두 죽음 합침 · 재봉틀과 큰언니 미활용 · 4장 모음) · 사건 식별과 편집상 묶음 구분 · 집필 · 편집 방향 · 검증을 코드 판별 / 의미 판단 / 사람 판단으로 나누고 모델이 무시해도 자동 합격 금지 · 여섯 번째 호출 · 감독 에이전트 금지 · 프롬프트로 될 것과 코드 · 전달 · 계약 변경 구분 · Seed C 로 원문 나열형 vs 통합 서술형 예시 · v4 프롬프트 작성 · Gemini 호출 금지"
+**AI Response**: "기준선(d3deb2b · v3 · C 실행 20261026T073058Z-C5-b9f8 · human_review not_run) 보존. 원인: 사건 단위 미정의 + time 한 칸에 여러 시점 허용(e9 '77년쯤, 2003년', e12 '2004년 봄, 2015년'), 회차 경계를 넘어 이웃한 전역 턴(33 · 34), 주제와 사건을 잇는 계약 부재, 목차 v3 의 '시간 순서의 짧은 회상' 예시를 4장 모두 그대로 사용, 장 입력의 앞뒤 1턴 규칙이 4장 모두 경계에서 다른 장 턴(13 · 14 · 27 · 28)을 끌어와 중복, 장 입력이 인터뷰 순서로만 전달, 코드 경고를 편집에 주지 않음, v2 완화 문구가 무변경 정당화, 검증 모델 판정이 최종 판정. 검증을 A 코드 · B 의미 · C 사람으로 나누고 code_gate · overall 을 두어 approved 는 사람만. 재봉틀 thread(c1 · c4 · c5 9턴)로 나열형 vs 통합 서술형 예시. 최소 변경안 8단계(1~4 코드 · 전달 · 계약 먼저). redesign-v4-analysis.md. 코드 · 지시문 · 호출 없음."
+**Context**: CONSTRUCTION - 단위 8P v4 설계 전, 변경안 승인 대기
+
+---
+
+## Code Generation 단위 8P - v4 (수필체 · 사건과 끈 · 장 입력 · 코드 판정, 모의)
+**Timestamp**: 2026-10-26T08:05:38Z
+**User Input**: "Unit 8P redesign-v4-analysis.md의 원인 분석과 최소 변경 방향을 확인했습니다. v4 개선 작업을 승인합니다. 다만 앞서 결정한 내말싸미 자서전의 기본 문체가 담백한 1인칭 회고 수필체라는 점을 반드시 반영 … 종결은 ~다 · ~했다 … 인용은 원문 말투 가능 · 인터뷰 · 엽서 문체 무변경 · v3 해요체 전제 금지 … 인터뷰 중단 표현은 본문에서 제거(같은 발언의 사실은 사용) · 답 흔적은 뜻만 살려 서술로 … 최소 변경안 1~8 반영 … 자동 차단: 출처 · 참조 오류 · 제외 재등장 · 내부 메모 혼입 · 중단 표현 혼입, 문체 혼합은 편집 대상, 같은 턴 여러 장 사용만으로 차단 금지, 나열 비율 · 주제 · 문학성은 사람 … 모델 pass 여도 필수 코드 오류가 남으면 사용자 제공 불가 … 큰언니와 재봉틀 한 장 시험 준비, 예상 정답 수필을 프롬프트에 넣지 말 것 … 실제 Gemini 호출 · 새 호출 단계 · GraphRAG · 서버 · DB · push · PR 금지"
+**AI Response**: "지시문 v4 다섯 개(v1~v3 보존) — 1인칭 회고 수필체('나', ~다), 인용만 원문 말투, 중단 표현 · 답 흔적 규칙, 사건 = 일어난 일 하나 · 끈(threads) 분리, 장 role · threads · 책 opening/closing · theme_use, 편집은 checks 처리 기록, 검증은 뜻에 집중. 지시문 예시를 Seed C 원문과 겹치지 않게 일반 문장으로(8자 조각 일치 0). 코드: 장 입력에서 다른 장 턴 이웃 제외 · 사건 묶음 순서 · event_packets/threads 전달, code_findings(stop_phrase · memo_leak = block / style_mix · answer_trace · meta_text · repeat_turn = fix / verbatim_run = info) → 편집 입력, checks_resolution 검사, code_gate(blocked · attention · pass, repeat_turn 은 kept+이유면 통과) · overall(approved 는 사람만). memo_leak 은 파이프라인 실패 대신 block. 한 장 시험 --chapter-trial(장 집필 1회, 계획 eval/trial_C_sewing.json — 정답성 키 · 긴 글 거부). 테스트 8P 93 · 전체 162 · theme-interview 사본 93 · 막은 시도 0 · dry-run A3 · B · C · 한 장 시험 호출 0. improvement-v4.md. 실제 호출 · 커밋 · push 없음."
+**Context**: CONSTRUCTION - 단위 8P v4 모의 완료, 한 장 시험 실제 호출 승인 대기
+
+---
+
+## Code Generation 단위 8P - v4 한 장 시험 실행 전 확인
+**Timestamp**: 2026-10-26T08:13:44Z
+**User Input**: "v4 한 장 시험 실제 Gemini 호출 1회를 승인합니다. 실행 전 (1) trial_C_sewing.json 의 핵심 근거 턴과 앞뒤 문맥 턴이 명확히 구분되어 문맥 턴이 계획에 없는 사건을 본문에 끌어들이지 않는지 확인 (2) checks_resolution=kept 가 이유만 있으면 모든 품질 문제를 통과시키는 구조가 아닌지 테스트 — 해결되지 않았으면 needs_revision 유지 (3) v4 관련 파일만 로컬 커밋하고 SHA 기록, v1~v3 · Seed C v3 실행 기록 보존 … Seed C 큰언니 · 재봉틀 한 장 · v4 장 집필 · gemini-3.5-flash-lite · Free · 합성 자료 · 실제 호출 1회 · 재시도 0 · 모델 자동 전환 금지 · 전체 5단계 금지 · 서버 · DB · 배포 무수정 · push · PR 금지 … 수필 본문 전체 · 6항목 통과/부분/실패 · 문장별 근거 턴 · 코드 경고 … 실행 이후 임의로 프롬프트를 수정하거나 재호출하지 마세요."
+**AI Response**: "(1) 장 입력에 core_turns(장 소유 사건 턴 ∪ context_turns — 한 장 시험은 focus 13 + 29) · context_only_turns(이웃으로만 온 1 · 5 · 10 · 13 · 14 · 16 · 25 · 28 · 30 · 37)를 따로 싣고, 장 지시문 v4 에 '본문은 core_turns 로, context_only 에만 있는 사건 · 인물을 들이지 말 것, 근거로 달 땐 core 와 함께', 코드 검사 context_only(fix, 문맥 턴만 근거인 supported 문장) 추가 — 장 시험 · 전체 실행 모두 편집 checks 로 간다. (2) 테스트: style_mix · answer_trace · meta_text 를 kept+이유로 둬도 attention → needs_revision, stop_phrase 는 blocked, repeat_turn kept 는 그 턴만 인정(다른 턴 중복은 남음), 전체 실행에서 편집이 모든 경고를 kept 로 적고 문제를 남기면 검증 pass 여도 needs_revision, 문맥 턴 표시와 context_only 검출. 편집 지시문 v4 에 'kept 는 repeat_turn 말고는 남은 문제로 집계'. 8P 100 · 전체 169 · 실제 .env 를 둔 채 막은 시도 0 · theme-interview 460b855 사본 100 · 한 장 시험 dry-run 호출 0. (3) 커밋 뒤 SHA 기록."
+**Context**: CONSTRUCTION - 단위 8P v4 실행 전 확인 완료, 커밋 · 한 장 시험 1회
+
+---

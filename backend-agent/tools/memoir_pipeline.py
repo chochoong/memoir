@@ -170,6 +170,36 @@ def run_ref(set_id: str, n: int, data: dict) -> str:
     return f"{at}-{set_id}{n}-{pipe.input_ref(data)[:4]}"
 
 
+def chapter_trial(a, data: dict, turn_map: list[dict], meta: dict, cfg: dict) -> int:
+    """--chapter-trial — 계획 파일로 장 하나만 쓴다. 모델 호출 1회."""
+    try:
+        spec = json.loads(a.chapter_trial.read_text(encoding="utf-8"))
+        T = pipe.check_input(data, turn_map)
+        analysis, outline_out = pipe.trial_plan(spec, T)
+    except (OSError, ValueError, pipe.PipelineError) as e:
+        print(f"시험 계획 거부 — {getattr(e, 'message', e)}", file=sys.stderr)
+        return 2
+    ch = outline_out["chapters"][0]
+    _, given = pipe.chapter_source(data, analysis, ch, outline_out)
+    sessions = sorted({u["session_id"] for u in data["utterances"] if u["turn"] in given})
+    print(f"한 장 시험 {a.chapter_trial.name} — 장 {ch['chapter_key']} · 받는 턴 {len(given)}개 {given} · "
+          f"회차 {sessions} · 지시문 {pipe.PROMPT_VERSION} · 모델 {cfg['MEMOIR_PIPE_TEXT_MODEL']} · 예상 호출 1회")
+    if a.dry_run:
+        print("--dry-run — 모델을 부르지 않았다")
+        return 0
+    meta["run_ref"] += "-trial"
+    folder = a.out_dir / meta["run_ref"]
+    r = asyncio.run(pipe.run_chapter_trial(data, turn_map, spec, recorder=pipe.Recorder(folder), meta=meta))
+    m = r["metrics"]
+    print(f"결과 {r['generation_state']} · 호출 {r['calls']}회 · 문장 {m.get('sentences')} · "
+          f"여러 턴 묶은 문장 {m.get('multi_turn_sentences')} · 원문 그대로 {m.get('verbatim_ratio')} · "
+          f"코드 판정 {len(r['code_findings'])}건 · human_review={r['human_review']}")
+    if r["failure"]:
+        print(f"실패 {r['failure']['stage']} {r['failure']['kind']} — {r['failure']['message']}")
+    print(f"기록 {folder}")
+    return 0 if r["generation_state"] == pipe.GENERATED else 1
+
+
 def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(description="자서전 5단계 파이프라인을 합성 seed 로 돌린다")
     src = ap.add_mutually_exclusive_group(required=True)
@@ -178,6 +208,8 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--aliases", help="--seed 와 함께. 고를 회차 3~5개, 쉼표 (예: s-a,s-b,s-c)")
     ap.add_argument("--out-dir", type=Path, default=EVAL / "runs")
     ap.add_argument("--dry-run", action="store_true", help="입력만 만들고 모델을 부르지 않는다")
+    ap.add_argument("--chapter-trial", type=Path,
+                    help="한 장 시험 계획 파일 — 장 집필 v4 만 1회 부른다 (분석 · 목차는 계획이 대신, 편집 · 검증 없음)")
     a = ap.parse_args(argv)
 
     from dotenv import load_dotenv
@@ -202,6 +234,8 @@ def main(argv: list[str] | None = None) -> int:
     cfg = pipe.settings()
     print(f"입력 {meta['seed']} {','.join(meta['aliases'])} — 회차 {len(data['sessions'])}개 · "
           f"말씀 {len(data['utterances'])}턴 · input_ref {pipe.input_ref(data)}")
+    if a.chapter_trial:
+        return chapter_trial(a, data, turn_map, meta, cfg)
     print(f"모델 {cfg['MEMOIR_PIPE_TEXT_MODEL']} · 온도 {cfg['MEMOIR_PIPE_TEMPERATURE']} · "
           f"전체 상한 {cfg['MEMOIR_PIPE_TOTAL_TIMEOUT']:.0f}초 · 재시도 {cfg['retries']} · "
           f"예상 호출 {MIN_CALLS}~{MAX_CALLS}회 (장 수 + 4)")
@@ -218,6 +252,8 @@ def main(argv: list[str] | None = None) -> int:
               f"{s['ms']:>6}ms  출력 {s['out_chars']}자  토큰 {u.get('prompt')}/{u.get('output')}/"
               f"{u.get('thoughts')}  {s.get('finish') or ''}")
     v = result["verification"]
+    print(f"판정 code_gate={result.get('code_gate')} · model_verdict={result.get('model_verdict')} · "
+          f"human_review={result['human_review']} → overall={result.get('overall')}")
     print(f"결과 {result['generation_state']} · pipeline_complete={str(result['pipeline_complete']).lower()} · "
           f"검증 {v['state']}/{v['verdict']} · 호출 {result['calls']}회 · 장 {len(result['chapters'])}개")
     print(f"human_review={result['human_review']} — 사람 검수 전이다. 최종 완성본이 아니다")

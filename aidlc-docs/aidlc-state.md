@@ -39,5 +39,9 @@
 - **v2 커밋 · 실제 실행 (2026-10-26T06:44:53Z, 9231a70)**: 6회 호출 뒤 final_check 실패(edit_notes 가 지운 문장의 옛 위치) · 검증 미호출 · 12.8초 · 토큰 23,699. 주제 판단은 개선, 장 구성 · 나열은 그대로. 보완 후보 N-1~N-5 (R1-20261026T064453Z-A3-v2.md). B 실제 실행 미승인
 - **v3 (5ae6c1c)**: N-1 편집 메모 action/before/after · N-2 분할 원칙(지시문) · N-3 메모 혼입 방지 · N-4 장면 추가 금지. v3 A3 실제 실행은 사용자 판단으로 생략(자료가 너무 적음)
 - **Seed C (2026-10-26T07:22Z 확정 · 로컬 커밋)**: 가상 화자 5회차 39턴 `eval/memoir_seed_C.json`(input_ref `b9f8e2daea65`) · 파이프라인 전용 검사(`check_pipeline_seed`, 팀 도구 무수정) · 평가 기준 `build-and-test/seed-C-evaluation.md`(모델 입력 아님). 34 주어 최소 수정 · 출생 연도 미기재(원문상 1950~53년생 무렵). 테스트 76 / 전체 145, 실제 호출 0. 다음: 승인 뒤 v3 · C 실제 1회
+- **v3 · Seed C 실제 실행 (2026-10-26T07:30:58Z, d3deb2b, Free 티어)**: 8회 완주 · 33초 · 토큰 79,547 · generated · pipeline_complete true · 검증 pass · human_review not_run. 정정 · 사실 · 감정 · 인물 · 장 분할은 양호, 원문 나열 · 장 사이 중복 · 편집/검증 무력은 남음 — R1-20261026T073058Z-C5-v3.md. 사람 검수 대기
+- **판정 (2026-10-26)**: v3 · C 기술 실행 성공 · 콘텐츠 품질 미승인 → 기준선. 구조 재점검 `redesign-v4-analysis.md` (원인 · 검증 3갈래 · code_gate · 최소 변경안 8단계). 코드 · 지시문 무변경, 다음: 변경안 승인
+- **v4 (2026-10-26T08:05Z, 미커밋)**: 1인칭 회고 수필체 · 사건과 끈 · 장 입력(다른 장 턴 제외 · 사건 묶음) · code_findings → 편집 · checks_resolution · code_gate/model_verdict/human_review/overall · 한 장 시험 모드. 8P 93 / 전체 162, 실제 호출 0. 다음: 한 장 시험 실제 1회 승인 (`improvement-v4.md`)
+- **v4 실행 전 확인 (08:13Z)**: core_turns · context_only_turns 분리와 context_only 검사, kept 는 repeat_turn 말고 남은 문제로 집계(테스트). 8P 100 / 전체 169. v4 파일만 로컬 커밋 → 한 장 시험 실제 1회
 - **시험 격리**: `tests/conftest.py` 가 키를 비우고 클라이언트 · 외부 연결을 막는다 — `.env` 에 실제 키가 있어도 `pytest tests` 로 비용이 나지 않는다(서버의 `question.warmup` 'ping' 포함)
 - **Status**: 독립 파이프라인 구현 · 모의 시험 완료, 실제 모델 시험 전. 서버 판 호환 수정 뒤 105 passed · theme-interview 사본 36 passed · 실제 호출 0. 로컬 커밋(push 없음). `backend-agent/.env` 없음 — 실제 호출 전 사용자가 키를 로컬에만 넣는다

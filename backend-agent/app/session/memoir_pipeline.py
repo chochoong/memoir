@@ -46,15 +46,16 @@ PROMPTS = Path(__file__).resolve().parents[2] / "첨부프롬프트_md"
 COMMON_DOC = PROMPTS / "자서전_v2.md"
 ROLE_DIR = PROMPTS / "파이프라인"
 # v1 — 첫 실측(fe94baf). v2 — 구성 · 제외(9231a70). v3 — 편집 메모 작업 종류 · 장 분할 원칙 ·
-# 목차 메모 혼입 방지 · 원문에 없는 장면 금지. 옛 판 파일은 실행 기록으로 남긴다.
-# 계약은 판마다 달라 옛 판은 그 커밋에서만 돈다 (v1 = fe94baf, v2 = 9231a70).
-PROMPT_VERSION = "v3"
+# 목차 메모 혼입 방지 · 원문에 없는 장면 금지(5ae6c1c · d3deb2b). v4 — 1인칭 회고 수필체(~다) ·
+# 사건과 끈(thread) 분리 · 장 입력을 사건 묶음으로 · 코드 판정을 편집에 넘김 · code_gate/overall.
+# 옛 판 파일은 실행 기록으로 남긴다. 계약은 판마다 달라 옛 판은 그 커밋에서만 돈다.
+PROMPT_VERSION = "v4"
 ROLE_FILES = {
-    "analysis": "1_분석_v3.md",
-    "outline": "2_목차_v3.md",
-    "chapter": "3_장집필_v3.md",
-    "edit": "4_편집_v3.md",
-    "verify": "5_검증_v3.md",
+    "analysis": "1_분석_v4.md",
+    "outline": "2_목차_v4.md",
+    "chapter": "3_장집필_v4.md",
+    "edit": "4_편집_v4.md",
+    "verify": "5_검증_v4.md",
 }
 STAGES = tuple(ROLE_FILES)
 
@@ -86,10 +87,19 @@ EDIT_ACTIONS = {
     "merge":   (2, None, 1, 1),        # 문장 · 장 합치기
     "add":     (0, 0, 1, None),        # 새 사실 없는 연결 문장 등
 }
-# 독자에게 보일 문장에 섞이면 안 되는 안내문 말투 — 경고로 남기고 검증에 알린다.
-# 본문은 해요체가 기본이라 "…니다." 로 끝나는 문장(합니다체 안내문)도 함께 본다
-_META = re.compile(r"이\s?장(에서|은|는|에)|보여\s?(줍|드립)니다|이어집니다|마무리합니다|엮어\s?냅니다"
-                   r"|다룹니다|담았습니다|니다[.!?…]*\s*$")
+# 독자에게 보일 문장에 섞이면 안 되는 안내문 말투 — 글 바깥에서 설명하는 문장
+_META = re.compile(r"이\s?장(에서|은|는|에)|보여\s?(줍|드립)니다|보여\s?준다|이어집니다|마무리합니다"
+                   r"|엮어\s?냅니다|다룹니다|다룬다|담았습니다")
+
+# ---- 코드 판정 (v4) — 모델 판정과 따로 서는 규칙. severity: block 은 사용자 제공을 막고,
+# fix 는 편집이 고칠 대상, info 는 사람 검수 참고.
+# 인터뷰를 멈추거나 미루는 말 — 본문에 남으면 막는다 (같은 발언 속 사실은 써도 된다)
+_STOP = re.compile(r"그만\s?할게요|그만\s?하자|오늘은\s?여기까지|다음에\s?(할게요|얘기)|나중에\s?할게요"
+                   r"|넘어갈게요|말\s?안\s?할래요|얘기는\s?길어서|얘긴\s?(…|\.\.\.)")
+# 질문에 대한 답의 흔적 — 문장 첫머리의 답 말
+_ANSWER = re.compile(r"^\s*(아니요|아뇨|네[,.\s]|예[,.\s]|응[,.\s]|가끔요|글쎄요|그럼요|그렇죠|음\s?[…,.]|아[,.\s]\s*그거)")
+# 직접 인용 — 원문 말투가 허용되는 부분. 문체 검사에서 뺀다
+_QUOTE = re.compile(r"'[^']*'|\"[^\"]*\"|“[^”]*”|‘[^’]*’")
 
 # 검증 issue 는 사실과 구성을 나눈다. code 는 자기 category 의 것만 쓴다.
 FACT_CODES = ("unsupported_claim", "source_mismatch", "time_distortion",
@@ -100,6 +110,8 @@ COMPOSITION_CODES = ("summary_listing", "over_split", "role_overlap", "weak_tran
 ISSUE_CODES = {"fact": FACT_CODES, "composition": COMPOSITION_CODES}
 RESOLUTIONS = ("auto_fix", "ask_user", "provide_context", "accept_limit")
 STRENGTHS = ("clear", "partial", "weak")
+THREAD_KINDS = ("person", "object", "place", "theme")
+CHECK_STATUSES = ("resolved", "kept")
 
 _KEY = re.compile(r"^ch-\d{1,2}$")
 _COMMON_HEAD = re.compile(r"^## 2\.[^\n]*\n(.*?)(?=^#{1,3} |\Z)", re.S | re.M)
@@ -275,31 +287,62 @@ def stage_source(data: dict, analysis: dict) -> dict:
     }
 
 
-def chapter_source(data: dict, analysis: dict, chapter: dict) -> tuple[dict, list[int]]:
+def chapter_owned_turns(analysis: dict, chapter: dict) -> set[int]:
+    """장이 근거로 쓰기로 한 턴 — focus_turns ∪ 그 장 사건의 turns (context 는 빼고)."""
+    events = {e["event_key"]: e for e in analysis.get("events", [])}
+    owned = set(chapter.get("focus_turns") or [])
+    for k in chapter.get("events") or []:
+        owned |= set(events[k]["turns"]) if k in events else set()
+    return owned
+
+
+def event_packets(analysis: dict, chapter: dict, given: list[int] | set[int]) -> list[dict]:
+    """이 장의 사건을 목차가 놓은 순서대로, 사건마다 받은 턴. 사건 요약은 싣지 않는다(근거가 아니다)."""
+    events = {e["event_key"]: e for e in analysis.get("events", [])}
+    given = set(given)
+    return [{"event_key": k, "turns": sorted(set(events[k]["turns"]) & given)}
+            for k in chapter.get("events") or [] if k in events and set(events[k]["turns"]) & given]
+
+
+def chapter_source(data: dict, analysis: dict, chapter: dict,
+                   outline_out: dict | None = None) -> tuple[dict, list[int]]:
     """
     장 하나에 줄 원자료 (설계 Q4). 전체 원문을 장마다 주지 않는다.
 
         이 장의 focus_turns ∪ 이 장 사건의 turns ∪ 목차가 고른 context_turns
-        ∪ 그 턴들의 같은 회차 앞뒤 1턴
+        ∪ 그 턴들의 같은 회차 앞뒤 1턴 — 단, **다른 장이 근거로 쓰기로 한 턴은 앞뒤 1턴으로
+          끌어오지 않는다** (v3 실측: 4장 모두 경계에서 옆 장 턴을 받아 같은 내용을 두 번 썼다).
+          일부러 쓰려면 목차가 context_turns 에 적는다
         − 턴째로 막을 제외 범위 (앞뒤 1턴으로도 끌려 들어오지 않게)
         partial 제외 턴은 남기고, 메시지에 제외 알림을 함께 준다
 
-    항목은 merge 출력 그대로 고른다 — 번호도 글도 바꾸지 않는다.
+    항목은 merge 출력 그대로 고른다 — 번호도 글도 바꾸지 않는다. **순서는 인터뷰 순서가
+    아니라 사건 묶음 순서**다(목차가 놓은 사건 순서 → 그 밖의 턴은 번호순).
     """
     events = {e["event_key"]: e for e in analysis.get("events", [])}
     core = set(chapter["focus_turns"]) | set(chapter.get("context_turns") or [])
     for k in chapter["events"]:
         core |= set(events[k]["turns"])
+    others: set[int] = set()
+    for ch in (outline_out or {}).get("chapters", []):
+        if ch.get("chapter_key") != chapter.get("chapter_key"):
+            others |= chapter_owned_turns(analysis, ch)
     session_of = {u["turn"]: u["session_id"] for u in data["utterances"]}
     gone = excluded_turns(analysis)
     given = set(core)
     for t in core:
         for n in (t - 1, t + 1):
-            if n in session_of and session_of[n] == session_of[t]:
+            if n in session_of and session_of[n] == session_of[t] and n not in others:
                 given.add(n)
     given -= gone
     keep = sorted(given)
-    picked = [u for u in data["utterances"] if u["turn"] in given]
+    rank: dict[int, tuple[int, int]] = {}
+    for i, pk in enumerate(event_packets(analysis, chapter, given)):
+        for t in pk["turns"]:
+            rank.setdefault(t, (i, t))
+    big = len(chapter.get("events") or []) + 1
+    picked = sorted((u for u in data["utterances"] if u["turn"] in given),
+                    key=lambda u: rank.get(u["turn"], (big, u["turn"])))
     used_sessions = {u["session_id"] for u in picked}
     # partial 턴의 메모는 뺄 내용을 그대로 담을 수 있어 싣지 않는다 (원문 턴은 남긴다)
     partial = {t for x in analysis.get("exclusions") or [] if x.get("mode") == "partial"
@@ -329,6 +372,15 @@ def _int_list(v) -> list[int] | None:
 
 def _str_list(v) -> bool:
     return isinstance(v, list) and all(isinstance(x, str) for x in v)
+
+
+_YEAR = re.compile(r"(?<!\d)(?:19|20)?(\d{2})(?:년|(?=\D|$))")
+
+
+def _years(text: str) -> set[str]:
+    """시점 글에 나온 연도(끝 두 자리). "77년쯤, 2003년" → {"77", "03"}. 나이("열 살")는 세지 않는다."""
+    return {m.group(1) for m in _YEAR.finditer(text or "") if re.search(r"\d{2,4}", m.group(0))
+            and (len(m.group(0).rstrip("년")) in (2, 4))}
 
 
 class _Check:
@@ -405,12 +457,12 @@ class _Check:
 
 def check_analysis(out, T: set[int]) -> tuple[str, list[str]]:
     c = _Check("analysis")
-    out = c.obj(out, ("status", "events", "people", "themes", "direction", "exclusions",
+    out = c.obj(out, ("status", "events", "threads", "people", "themes", "direction", "exclusions",
                       "not_in_events", "unclear", "missing_context"))
     status = out["status"]
     if status not in ("ready", INSUFFICIENT, NEEDS_CONTEXT):
         raise c.fail("format", f"status={status!r}")
-    for k in ("events", "people", "themes", "exclusions", "not_in_events", "unclear"):
+    for k in ("events", "threads", "people", "themes", "exclusions", "not_in_events", "unclear"):
         if not isinstance(out[k], list):
             raise c.fail("format", f"{k} 가 목록이 아니다")
     if not _str_list(out["missing_context"]):
@@ -462,6 +514,9 @@ def check_analysis(out, T: set[int]) -> tuple[str, list[str]]:
         if bad:
             raise c.fail("reference", f"{at}.turns {bad} — 빼 달라고 한 턴을 사건 근거로 씀")
         covered |= set(ts)
+        years = _years((e.get("time") or {}).get("text", ""))
+        if len(years) > 1:
+            c.warnings.append(f"사건 {key} 의 시점이 여럿 {sorted(years)} — 별개 사건을 합쳤는지 본다")
         if not _str_list(e.get("people", [])):
             raise c.fail("format", f"{at}.people 가 문자열 목록이 아니다")
         tm = e.get("time")
@@ -497,6 +552,27 @@ def check_analysis(out, T: set[int]) -> tuple[str, list[str]]:
         c.warnings.append("clear 인 주제가 없는데 direction.neutral=false")
     c.notes(out["unclear"], T, "unclear")
 
+    # 끈(thread) — 여러 사건을 잇는 사람 · 물건 · 장소 · 주제. 사건을 합치지 않고 여기서 잇는다
+    thread_keys: list[str] = []
+    for i, th in enumerate(out["threads"]):
+        at = f"threads[{i}]"
+        if not isinstance(th, dict):
+            raise c.fail("format", f"{at} 가 객체가 아니다")
+        tk = c.text(th.get("thread_key"), f"{at}.thread_key")
+        if tk in thread_keys:
+            raise c.fail("reference", f"thread_key {tk!r} 가 겹친다")
+        thread_keys.append(tk)
+        c.text(th.get("name"), f"{at}.name")
+        if th.get("kind") not in THREAD_KINDS:
+            raise c.fail("format", f"{at}.kind={th.get('kind')!r}")
+        evs = th.get("events")
+        if not _str_list(evs):
+            raise c.fail("format", f"{at}.events 가 문자열 목록이 아니다")
+        unknown = [e for e in evs if e not in keys]
+        if unknown:
+            raise c.fail("reference", f"{at}.events {unknown} — 분석에 없는 사건")
+        c.turns(th.get("turns"), T - gone, at, nonempty=True, outside="입력에 없거나 빼 달라고 한 턴")
+
     # 빠짐없이 — 모든 발언 턴은 사건 · not_in_events · 제외 중 한 곳에 있어야 한다.
     # partial 턴은 남길 내용이 있으니 사건이나 not_in_events 에 따로 놓여야 한다
     missing = sorted(T - covered - left - gone)
@@ -522,6 +598,16 @@ def check_outline(out, analysis: dict, T: set[int]) -> tuple[str, list[str]]:
     c.sentence(book.get("title"), T, "book.title")
     c.text(book.get("structure_reason"), "book.structure_reason")
     gone = excluded_turns(analysis)
+    # 책을 어디서 열고 닫는가 — 마지막 중요 발언이 시간순 마지막 장 끝에 묻히지 않게
+    c.turns(book.get("opening_turns", []), T - gone, "book.opening", outside="입력에 없거나 빼 달라고 한 턴")
+    c.turns(book.get("closing_turns"), T - gone, "book.closing", nonempty=True,
+            outside="입력에 없거나 빼 달라고 한 턴")
+    if not isinstance(book.get("theme_use", ""), str):
+        raise c.fail("format", "book.theme_use 가 문자열이 아니다")
+    thread_keys = {th["thread_key"] for th in analysis.get("threads", [])}
+    direction = analysis.get("direction") or {}
+    if not direction.get("neutral", True) and not book.get("theme_use", "").strip():
+        c.warnings.append("분석은 뚜렷한 주제를 냈는데 목차가 그 주제를 어떻게 쓰는지(theme_use) 비었다")
     chapters = out["chapters"]
     if not isinstance(chapters, list) or not chapters:
         raise c.fail("format", "chapters 가 비었다 — 0장")
@@ -542,8 +628,15 @@ def check_outline(out, analysis: dict, T: set[int]) -> tuple[str, list[str]]:
             raise c.fail("reference", f"chapter_key {key} 가 겹친다")
         keys.append(key)
         c.sentence(ch.get("title"), T, f"{key}.title")
+        c.text(ch.get("role"), f"{key}.role")
         c.text(ch.get("purpose"), f"{key}.purpose")
         c.text(ch.get("grouping_reason"), f"{key}.grouping_reason")
+        ths = ch.get("threads", [])
+        if not _str_list(ths):
+            raise c.fail("format", f"{key}.threads 가 문자열 목록이 아니다")
+        unknown = [t for t in ths if t not in thread_keys]
+        if unknown:
+            raise c.fail("reference", f"{key}.threads {unknown} — 분석에 없는 끈")
         evs = ch.get("events")
         if not _str_list(evs):
             raise c.fail("format", f"{key}.events 가 문자열 목록이 아니다")
@@ -579,6 +672,11 @@ def check_outline(out, analysis: dict, T: set[int]) -> tuple[str, list[str]]:
     if len(chapters) > 1 and len(chapters) == len(event_keys) and all(
             len(ch["events"]) == 1 for ch in chapters):
         c.warnings.append("사건 하나마다 장 하나 — 분할 이유를 확인한다")
+    for ch in chapters:                          # 끈 없이 사건을 많이 모은 장 — "나머지 모음" 일 수 있다
+        if len(ch["events"]) >= 4 and not ch.get("threads"):
+            c.warnings.append(f"{ch['chapter_key']} 가 끈 없이 사건 {len(ch['events'])}개를 모았다 — 모음 장인지 본다")
+    if thread_keys and not any(ch.get("threads") for ch in chapters):
+        c.warnings.append("분석의 끈(threads)을 어느 장도 쓰지 않았다")
     return status, c.warnings
 
 
@@ -685,6 +783,186 @@ def memo_leaks(chapters: list[dict], memos: list[str]) -> list[str]:
     return out
 
 
+def _narration(text: str) -> str:
+    """직접 인용을 뺀 서술 부분. 인용은 원문 말투를 그대로 둘 수 있다."""
+    return _QUOTE.sub("", text or "").strip()
+
+
+def _essay_ending(text: str) -> bool:
+    """1인칭 회고 수필체 종결(~다 · ~했다)인가. 합니다체(~니다)와 해요체(~요)는 아니다."""
+    t = _narration(text).rstrip(" .!?…\"'”’)")
+    if not t:
+        return True                               # 통째로 인용인 문장
+    return t.endswith("다") and not t.endswith("니다")
+
+
+def code_findings(chapters: list[dict], outline_out: dict) -> list[dict]:
+    """
+    코드로 판별되는 문제 (설계 v4 · redesign-v4-analysis 3절 A). 모델 판정과 따로 선다.
+
+        block  stop_phrase   인터뷰를 멈추거나 미루는 말이 본문에 남음 ("오늘은 그만할게요")
+               memo_leak     목차 메모를 그대로 옮긴 editorial 문장
+        fix    style_mix     인용 밖 서술이 ~다 로 끝나지 않음 (해요체 · 합니다체 · 끊긴 문장)
+               answer_trace  질문에 대한 답 말로 시작 ("아니요," · "가끔요.")
+               meta_text     글 바깥에서 설명하는 안내문 ("이 장에서는 …")
+               repeat_turn   같은 원문 턴을 두 장 이상이 근거로 씀 — 의도한 회상인지 편집이 판단
+        info   verbatim_run  원문 한 턴을 그대로 옮긴 문장이 셋 이상 잇달음 (사람 검수 참고)
+
+    출처 · 참조 오류와 제외 턴은 여기 없다 — check_final 이 실패로 멈춘다.
+    """
+    memos = outline_memos(outline_out)
+    out: list[dict] = []
+
+    def add(rule, severity, location, detail, **extra):
+        out.append({"id": f"{rule}:{location}", "rule": rule, "severity": severity,
+                    "location": location, "detail": detail, **extra})
+
+    for ch in chapters:
+        k = ch["chapter_key"]
+        title = (ch.get("title") or {}).get("text", "")
+        if _STOP.search(title):
+            add("stop_phrase", "block", f"{k}/title", "인터뷰 진행을 멈추는 말")
+        for p, para in enumerate(ch.get("paragraphs", [])):
+            for s, x in enumerate(para):
+                loc, text = f"{k}/p{p}/s{s}", x.get("text", "")
+                if _STOP.search(text):
+                    add("stop_phrase", "block", loc, "인터뷰 진행을 멈추는 말")
+                t = _norm(text)
+                if x.get("kind") == "editorial" and len(t) >= 8 and any(t in m or m in t for m in memos):
+                    add("memo_leak", "block", loc, "목차 메모를 그대로 옮김")
+                if not _essay_ending(text):
+                    add("style_mix", "fix", loc, "인용 밖 서술이 ~다 로 끝나지 않는다")
+                if _ANSWER.search(_narration(text) or text):
+                    add("answer_trace", "fix", loc, "질문에 대한 답 말로 시작한다")
+                if _META.search(_narration(text)):
+                    add("meta_text", "fix", loc, "글 바깥에서 설명하는 안내문")
+    cited: dict[int, set[str]] = {}
+    where: dict[int, list[str]] = {}
+    for ch in chapters:
+        for p, para in enumerate(ch.get("paragraphs", [])):
+            for s, x in enumerate(para):
+                if x.get("kind") == "supported":
+                    for t in x.get("turns", []):
+                        cited.setdefault(t, set()).add(ch["chapter_key"])
+                        where.setdefault(t, []).append(f"{ch['chapter_key']}/p{p}/s{s}")
+    for t in sorted(cited):
+        if len(cited[t]) > 1:
+            add("repeat_turn", "fix", where[t][0], f"턴 {t} 을 {sorted(cited[t])} 가 함께 근거로 씀",
+                turn=t, locations=where[t])
+    return out
+
+
+def verbatim_runs(chapters: list[dict], data: dict, n: int = 3) -> list[dict]:
+    """원문 한 턴을 그대로 옮긴 문장이 n 개 이상 잇달은 곳 — info (사람 검수 참고)."""
+    utts = {u["turn"]: _norm(u["elder"]) for u in data["utterances"]}
+    out = []
+    for ch in chapters:
+        for p, para in enumerate(ch.get("paragraphs", [])):
+            run_start, run = 0, 0
+            for s, x in enumerate(para + [None]):
+                hit = (x is not None and len(x.get("turns", [])) == 1 and _norm(x["text"])
+                       and _norm(x["text"]) in utts.get(x["turns"][0], ""))
+                if hit:
+                    run_start = s if run == 0 else run_start
+                    run += 1
+                else:
+                    if run >= n:
+                        loc = f"{ch['chapter_key']}/p{p}/s{run_start}"
+                        out.append({"id": f"verbatim_run:{loc}", "rule": "verbatim_run", "severity": "info",
+                                    "location": loc, "detail": f"원문 한 턴 그대로인 문장 {run}개 잇달음"})
+                    run = 0
+    return out
+
+
+def context_findings(draft: dict, core: set[int]) -> list[dict]:
+    """
+    문맥으로만 준 턴(context_only_turns)을 근거로 단 문장 — fix. 계획에 없는 사건이 앞뒤 문맥을
+    타고 본문에 들어오는 것을 편집 · 사람에게 알린다. 이 장 근거 턴과 함께 단 문장은 보지 않는다
+    (문맥을 설명에 쓴 것은 허용 — 문맥 턴만으로 선 문장이 문제다).
+    """
+    out = []
+    k = draft["chapter_key"]
+    for p, para in enumerate(draft.get("paragraphs", [])):
+        for s, x in enumerate(para):
+            ts = set(x.get("turns", []))
+            if x.get("kind") == "supported" and ts and not ts & core:
+                loc = f"{k}/p{p}/s{s}"
+                out.append({"id": f"context_only:{loc}", "rule": "context_only", "severity": "fix",
+                            "location": loc, "detail": f"문맥으로만 준 턴 {sorted(ts)} 만으로 선 문장 — 계획에 없는 내용인지 본다",
+                            "turns": sorted(ts)})
+    return out
+
+
+def check_resolutions(out: dict, checks: list[dict]) -> tuple[dict, list[str]]:
+    """
+    편집의 checks_resolution — 넘긴 경고(block · fix)마다 resolved / kept + 이유.
+    빠진 항목은 처리하지 않은 것으로 센다(실패로 멈추지 않는다 — 최종 본문을 코드가 다시 본다).
+    """
+    warnings: list[str] = []
+    got: dict[str, dict] = {}
+    rows = out.get("checks_resolution")
+    if not isinstance(rows, list):
+        warnings.append("checks_resolution 이 없거나 목록이 아니다")
+        rows = []
+    for i, r in enumerate(rows):
+        if (not isinstance(r, dict) or r.get("status") not in CHECK_STATUSES
+                or not isinstance(r.get("check_id"), str) or not isinstance(r.get("reason", ""), str)):
+            warnings.append(f"checks_resolution[{i}] 모양이 다르다")
+            continue
+        if r["status"] == "kept" and not r.get("reason", "").strip():
+            warnings.append(f"checks_resolution[{i}] 는 kept 인데 이유가 없다")
+            continue
+        got[r["check_id"]] = r
+    needed = [c["id"] for c in checks if c["severity"] in ("block", "fix")]
+    missing = [i for i in needed if i not in got]
+    if missing:
+        warnings.append(f"처리 결과가 없는 경고 {len(missing)}개 — {missing[:5]}")
+    return got, warnings
+
+
+def code_gate(final: list[dict], resolutions: dict[str, dict], draft_checks: list[dict] | None = None) -> dict:
+    """
+    편집본 기준 코드 판정.
+
+        blocked    block 이 하나라도 남음 — 모델이 pass 여도 사용자에게 내놓지 않는다
+        attention  fix 가 남음. 단 repeat_turn 은 편집이 그 턴의 경고를 kept + 이유(의도한 회상)로
+                   처리했으면 남은 것으로 치지 않는다 — 같은 턴을 두 장이 쓴 것만으로 막지 않는다
+        pass       block · fix 없음 (info 는 사람 검수 참고로만)
+    """
+    kept_turns = {c.get("turn") for c in draft_checks or [] if c["rule"] == "repeat_turn"
+                  and resolutions.get(c["id"], {}).get("status") == "kept"}
+
+    def accepted(f):
+        return f["rule"] == "repeat_turn" and f.get("turn") in kept_turns
+    blocks = [f for f in final if f["severity"] == "block"]
+    fixes = [f for f in final if f["severity"] == "fix" and not accepted(f)]
+    state = "blocked" if blocks else "attention" if fixes else "pass"
+    return {"state": state, "findings": final, "accepted_repeats": sorted(t for t in kept_turns if t is not None),
+            "counts": {s: sum(1 for f in final if f["severity"] == s) for s in ("block", "fix", "info")}}
+
+
+def overall_state(generation_state: str, gate: dict | None, verification: dict, human: str) -> str:
+    """
+    최종 상태. **approved 는 사람만 만든다** — 코드 · 모델 판정으로는 awaiting_human 까지다.
+
+        not_generated    생성이 끝나지 않음 (failed · partial · needs_context · insufficient)
+        blocked_by_code  code_gate=blocked
+        needs_revision   code_gate=attention · 모델이 revise/ask_user · 검증이 끝나지 않음
+        awaiting_human   코드 pass · 모델 pass — 사람 검수 대기
+        approved         human_review=passed
+    """
+    if generation_state != GENERATED:
+        return "not_generated"
+    if (gate or {}).get("state") == "blocked":
+        return "blocked_by_code"
+    if human == "passed":
+        return "approved"
+    if (gate or {}).get("state") != "pass" or verification.get("state") != "completed" \
+            or verification.get("verdict") != "pass":
+        return "needs_revision"
+    return "awaiting_human"
+
+
 def meta_sentences(chapters: list[dict]) -> list[str]:
     """안내문 말투("이 장에서는", "…보여줍니다", "…이어집니다")가 섞인 문장의 위치."""
     return [f"{ch['chapter_key']}/p{p}/s{s}"
@@ -743,7 +1021,8 @@ def check_final(out, outline_out: dict, T: set[int], gone: set[int] = frozenset(
     목차 메모(목적 · 전환 등)를 그대로 옮긴 editorial 문장이 남아 있으면 memo_leak 이다.
     """
     c = _Check("final_check")
-    out = c.obj(out, ("title", "chapters", "structure_notes", "review_notes", "edit_notes"))
+    out = c.obj(out, ("title", "chapters", "structure_notes", "review_notes", "edit_notes",
+                      "checks_resolution"))
     c.sentence(out["title"], T, "title")
     want = [ch["chapter_key"] for ch in outline_out["chapters"]]
     if not isinstance(out["chapters"], list) or not out["chapters"]:
@@ -776,12 +1055,7 @@ def check_final(out, outline_out: dict, T: set[int], gone: set[int] = frozenset(
         {"title"} | {k for k in want} | {f"{k}/title" for k in want})
     check_edit_notes(out["edit_notes"], before_locs, locations(out) - {"artifact"}, c)
 
-    leaks = memo_leaks(out["chapters"], outline_memos(outline_out))
-    if leaks:
-        raise c.fail("memo_leak", f"목차 메모를 그대로 옮긴 문장 {leaks}")
-    meta = meta_sentences(out["chapters"])
-    if meta:
-        c.warnings.append(f"안내문 말투 문장 {meta}")
+    # 목차 메모 혼입 · 안내문 · 문체는 v4 부터 code_findings 가 맡는다 (memo_leak 은 block → code_gate)
     return c.warnings
 
 
@@ -918,13 +1192,31 @@ def outline_message(data: dict, analysis: dict) -> str:
     return _user(head, {"analysis": analysis, "source": stage_source(data, analysis)})
 
 
+def chapter_threads(analysis: dict, chapter: dict, given: list[int] | set[int]) -> list[dict]:
+    """이 장이 쓰는 끈 — 이름 · 종류와 이 장에 준 턴만 (끈 전체의 턴 목록은 다른 장 원문을 가리킨다)."""
+    want = set(chapter.get("threads") or [])
+    given = set(given)
+    return [{"thread_key": th["thread_key"], "name": th["name"], "kind": th["kind"],
+             "turns": sorted(set(th["turns"]) & given)}
+            for th in analysis.get("threads", []) if th["thread_key"] in want]
+
+
 def chapter_message(src: dict, given: list[int], outline_out: dict, chapter: dict,
-                    people: list, exclusions: list | None = None) -> str:
+                    people: list, exclusions: list | None = None,
+                    packets: list | None = None, threads: list | None = None,
+                    core: set[int] | None = None) -> str:
     head = (_SOURCE_HEAD + "\n이 source 는 이번 장에 필요한 원문만 남긴 것이다(given_turns). "
-            "다른 장의 원문은 일부러 뺐다. outline 은 책 전체 목차, chapter 는 이번에 쓸 장, "
-            "people 은 앞 단계가 정리한 인물이다.")
+            "다른 장의 원문은 일부러 뺐다. source.utterances 는 인터뷰 순서가 아니라 이 장의 사건 "
+            "묶음 순서로 놓았다(번호와 글은 그대로). event_packets 는 사건마다 받은 턴, threads 는 "
+            "이 장이 잇는 사람 · 물건 · 장소 · 주제다. core_turns 는 이 장 본문의 근거 턴이고, "
+            "context_only_turns 는 앞뒤 사정을 이해하라고 붙인 문맥일 뿐 이 장에서 다룰 사건이 아니다. "
+            "outline 은 책 전체 목차, chapter 는 이번에 쓸 장, people 은 앞 단계가 정리한 인물이다.")
+    core = set(core) if core is not None else set(given)
     payload = {"outline": {"book": outline_out["book"], "chapters": outline_out["chapters"]},
-               "chapter": chapter, "people": people, "given_turns": given}
+               "chapter": chapter, "people": people, "given_turns": given,
+               "core_turns": sorted(set(given) & core),
+               "context_only_turns": sorted(set(given) - core),
+               "event_packets": packets or [], "threads": threads or []}
     if exclusions:
         head += _EXCLUSION_HEAD
         payload["exclusions"] = exclusions
@@ -933,11 +1225,12 @@ def chapter_message(src: dict, given: list[int], outline_out: dict, chapter: dic
 
 
 def edit_message(data: dict, outline_out: dict, chapters: list[dict],
-                 analysis: dict | None = None) -> str:
+                 analysis: dict | None = None, checks: list | None = None) -> str:
     head = (_SOURCE_HEAD + "\noutline 은 목차, chapters 는 장마다 따로 쓴 초안이다. "
-            "초안은 사실 근거가 아니다 — source 와 다시 대조한다.")
+            "초안은 사실 근거가 아니다 — source 와 다시 대조한다. checks 는 코드가 초안에서 찾은 "
+            "고칠 곳이다(location 은 초안 위치). 하나하나 checks_resolution 에 처리 결과를 적는다.")
     payload = {"outline": {"book": outline_out["book"], "chapters": outline_out["chapters"]},
-               "chapters": chapters}
+               "chapters": chapters, "checks": checks or []}
     analysis = analysis or {}
     if analysis.get("exclusions"):
         head += _EXCLUSION_HEAD
@@ -1066,19 +1359,26 @@ class _Run:
 
 def _result(state: str, *, failure: PipelineError | None = None, edited: dict | None = None,
             verification: dict | None = None, complete: bool = False, calls: int = 0,
-            metrics: dict | None = None) -> dict:
+            metrics: dict | None = None, gate: dict | None = None) -> dict:
     edited = edited if state == GENERATED else None
+    verification = verification or {"state": "not_run", "verdict": None, "issues": [],
+                                    "reviewed_locations": [], "missing_context": []}
+    human = "not_run"                            # 코드는 늘 not_run 으로 쓴다 — 사람이 R1 에 적는다
+    gate = gate or {"state": "not_run", "findings": [], "counts": {}}
     return {
         "generation_state": state,
         "pipeline_complete": complete,
-        "human_review": "not_run",
+        "code_gate": gate["state"],
+        "model_verdict": verification.get("verdict"),
+        "human_review": human,
+        "overall": overall_state(state, gate if gate["state"] != "not_run" else None, verification, human),
         "failure": failure.as_dict() if failure else None,
         "title": edited["title"] if edited else None,
         "chapters": edited["chapters"] if edited else [],
         "structure_notes": edited.get("structure_notes", []) if edited else [],
         "review_notes": edited["review_notes"] if edited else [],
-        "verification": verification or {"state": "not_run", "verdict": None, "issues": [],
-                                         "reviewed_locations": [], "missing_context": []},
+        "verification": verification,
+        "code_findings": gate.get("findings", []),
         "metrics": metrics or {},
         "calls": calls,
         "prompt_version": PROMPT_VERSION,
@@ -1131,15 +1431,17 @@ async def run(data: dict, turn_map: list[dict], *, call: Call = call_model,
 
         # ③ 장별 집필 — 순서대로, 첫 실패에서 멈춘다
         drafts: list[dict] = []
+        cores: list[set[int]] = []
         for ch in chapters_plan:
             key = ch["chapter_key"]
-            src, given = chapter_source(data, analysis, ch)
-            core = set(ch["focus_turns"]) | {t for e in analysis["events"]
-                                             if e["event_key"] in ch["events"] for t in e["turns"]}
+            src, given = chapter_source(data, analysis, ch, outline_out)
+            core = chapter_owned_turns(analysis, ch) | set(ch.get("context_turns") or [])
             try:
                 draft, step = await st.ask("chapter", chapter_message(
                     src, given, outline_out, ch, analysis["people"],
-                    exclusion_notices(analysis, set(given))), f"03_{key}", key)
+                    exclusion_notices(analysis, set(given)),
+                    event_packets(analysis, ch, given), chapter_threads(analysis, ch, given), core),
+                    f"03_{key}", key)
                 step["warnings"] = check_chapter(draft, ch, given, core, outline_memos(outline_out))
                 step["given_turns"] = given
                 step["metrics"] = text_metrics([draft], data)
@@ -1149,15 +1451,29 @@ async def run(data: dict, turn_map: list[dict], *, call: Call = call_model,
                 result = _result(PARTIAL, failure=e, calls=st.calls)
                 return result
             drafts.append(draft)
+            cores.append(core)
 
-        # ④ 전체 편집 → 최종 근거검사
-        edited, step = await st.ask("edit", edit_message(data, outline_out, drafts, analysis), "04_edited")
+        # 코드 판정 ① — 장 초안에서. 편집이 고칠 곳으로 넘긴다
+        draft_checks = code_findings(drafts, outline_out) + [
+            f for d, c in zip(drafts, cores) for f in context_findings(d, c)]
+        rec.json("03_checks.json", draft_checks)
+
+        # ④ 전체 편집 → 최종 근거검사 → 코드 판정 ②
+        edited, step = await st.ask("edit", edit_message(data, outline_out, drafts, analysis, draft_checks),
+                                    "04_edited")
         step["ok"] = True
         try:
             step["warnings"] = check_final(edited, outline_out, T, excluded_turns(analysis), drafts)
         except PipelineError as e:
             step["ok"] = False
             raise
+        resolutions, res_warnings = check_resolutions(edited, draft_checks)
+        step["warnings"] += res_warnings
+        final_findings = code_findings(edited["chapters"], outline_out) + verbatim_runs(edited["chapters"], data)
+        gate = code_gate(final_findings, resolutions, draft_checks)
+        gate["draft_checks"] = len(draft_checks)
+        gate["resolutions"] = {s: sum(1 for r in resolutions.values() if r["status"] == s) for s in CHECK_STATUSES}
+        rec.json("04_code_gate.json", gate)
         actions: dict[str, int] = {}
         for n in edited["edit_notes"]:
             actions[n["action"]] = actions.get(n["action"], 0) + 1
@@ -1170,15 +1486,16 @@ async def run(data: dict, turn_map: list[dict], *, call: Call = call_model,
 
         # ⑤ 검증 — 실패해도 편집본은 생성된 것이다. 완성 실행은 아니다
         locs = locations(edited)
+        plan = verify_plan(analysis, outline_out, st.steps)
+        plan["code_findings"] = [{k: f[k] for k in ("rule", "severity", "location")} for f in final_findings]
         try:
             verdict_out, step = await st.ask(
-                "verify", verify_message(data, edited, T, verify_plan(analysis, outline_out, st.steps),
-                                         exclusion_notices(analysis)), "05_verify")
+                "verify", verify_message(data, edited, T, plan, exclusion_notices(analysis)), "05_verify")
             step["warnings"] = check_verify(verdict_out, T, locs)
             step["ok"] = True
         except PipelineError as e:
             st.steps[-1]["error"] = e.as_dict()
-            result = _result(GENERATED, failure=e, edited=edited, calls=st.calls, metrics=metrics,
+            result = _result(GENERATED, failure=e, edited=edited, calls=st.calls, metrics=metrics, gate=gate,
                              verification={"state": "failed", "verdict": None, "issues": [],
                                            "reviewed_locations": [], "missing_context": []})
             return result
@@ -1187,7 +1504,7 @@ async def run(data: dict, turn_map: list[dict], *, call: Call = call_model,
                         "reviewed_locations": verdict_out["reviewed_locations"],
                         "missing_context": verdict_out["missing_context"]}
         result = _result(GENERATED, edited=edited, verification=verification, calls=st.calls,
-                         complete=verdict_out["review_status"] == "completed", metrics=metrics)
+                         complete=verdict_out["review_status"] == "completed", metrics=metrics, gate=gate)
         return result
 
     except PipelineError as e:
@@ -1206,6 +1523,7 @@ async def run(data: dict, turn_map: list[dict], *, call: Call = call_model,
                    "steps": st.steps if st else [],
                    "generation_state": result["generation_state"],
                    "pipeline_complete": result["pipeline_complete"],
+                   "code_gate": result.get("code_gate"), "overall": result.get("overall"),
                    "failure": result["failure"], "calls": result["calls"]}
         rec.json("run.json", run_doc)
         rec.text("r1_summary.md", r1_summary(run_doc, result))
@@ -1216,6 +1534,132 @@ def _safe_hashes() -> dict:
         return prompt_hashes()
     except PipelineError as e:
         return {"error": e.message}
+
+
+# ---------------------------------------------------------------- 한 장 시험 (v4)
+
+# 시험 계획에 들어오면 안 되는 것 — 예상 정답 글. 모델에게 정답을 보여 주면 시험이 아니다
+_TRIAL_FORBIDDEN_KEYS = re.compile(r"expected|answer|sample|essay|reference_text|정답|예시글|모범")
+TRIAL_MAX_TEXT = 160
+
+
+def trial_plan(spec, T: set[int]) -> tuple[dict, dict]:
+    """
+    한 장 시험 계획 → (분석 모양, 목차 모양). 계획은 **턴 배치 · 사건 묶음 · 끈 · 장 역할** 뿐이다.
+
+    예상 정답 수필은 받지 않는다 — 그런 키가 있거나 글이 길면(TRIAL_MAX_TEXT 자 초과) 거부한다.
+    사건 요약은 비운 채 넘긴다(장 집필은 원문만 근거로 쓴다).
+    """
+    def bad(why):
+        return PipelineError("input", "input", f"시험 계획: {why}")
+
+    if not isinstance(spec, dict):
+        raise bad("객체가 아니다")
+
+    def walk(v, path="spec"):
+        if isinstance(v, dict):
+            for k, x in v.items():
+                if _TRIAL_FORBIDDEN_KEYS.search(str(k)):
+                    raise bad(f"{path}.{k} — 예상 정답 글은 계획에 넣지 않는다")
+                walk(x, f"{path}.{k}")
+        elif isinstance(v, list):
+            for i, x in enumerate(v):
+                walk(x, f"{path}[{i}]")
+        elif isinstance(v, str) and len(v) > TRIAL_MAX_TEXT:
+            raise bad(f"{path} 가 {len(v)}자 — 계획 메모는 짧게, 본문 같은 글은 넣지 않는다")
+    walk(spec)
+
+    for k in ("chapter", "events", "threads", "people"):
+        if k not in spec:
+            raise bad(f"{k} 가 없다")
+    events = []
+    for i, e in enumerate(spec["events"]):
+        ts = _int_list((e or {}).get("turns"))
+        if not isinstance(e, dict) or not isinstance(e.get("event_key"), str) or not ts:
+            raise bad(f"events[{i}] 모양이 다르다")
+        if set(ts) - T:
+            raise bad(f"events[{i}] 의 턴 {sorted(set(ts) - T)} 이 입력에 없다")
+        events.append({"event_key": e["event_key"], "summary": "", "turns": ts, "people": [],
+                       "time": {"text": "", "certainty": "unknown"}, "said_feelings": []})
+    keys = {e["event_key"] for e in events}
+    for i, th in enumerate(spec["threads"]):
+        if (not isinstance(th, dict) or th.get("kind") not in THREAD_KINDS
+                or not isinstance(th.get("thread_key"), str) or not _str_list(th.get("events"))
+                or set(th["events"]) - keys or not _int_list(th.get("turns")) or set(th["turns"]) - T):
+            raise bad(f"threads[{i}] 모양이 다르다")
+    analysis = {"events": events, "threads": spec["threads"], "people": spec["people"], "exclusions": [],
+                "direction": spec.get("direction") or {"theme": "", "reason": "", "neutral": True}}
+    ch = spec["chapter"]
+    outline_out = {"status": "ready",
+                   "book": {"title": {"text": "한 장 시험", "kind": "editorial", "turns": []},
+                            "direction": "", "structure_reason": "한 장 시험",
+                            "opening_turns": [], "closing_turns": (ch.get("focus_turns") or [])[-1:],
+                            "theme_use": spec.get("theme_use", "")},
+                   "chapters": [ch], "left_out": [], "missing_context": []}
+    check_outline(outline_out, analysis, T)
+    return analysis, outline_out
+
+
+async def run_chapter_trial(data: dict, turn_map: list[dict], spec: dict, *, call: Call = call_model,
+                            recorder: Recorder | None = None, meta: dict | None = None) -> dict:
+    """
+    장 하나만 쓰는 작은 시험 — 모델 호출 **1회**(장 집필 v4). 분석 · 목차는 계획 파일이 대신하고,
+    편집 · 검증은 부르지 않는다. 결과는 코드 판정 · 지표와 함께 남기고 사람이 읽고 판단한다.
+    """
+    rec = recorder or Recorder()
+    cfg = settings()
+    meta = dict(meta or {})
+    started_at = datetime.now(timezone.utc).isoformat(timespec="seconds")
+    st: _Run | None = None
+    result: dict = {"mode": "chapter_trial", "generation_state": FAILED, "human_review": "not_run",
+                    "failure": None, "draft": None, "code_findings": [], "metrics": {}, "calls": 0,
+                    "prompt_version": PROMPT_VERSION}
+    try:
+        T = check_input(data, turn_map)
+        meta["input_ref"] = input_ref(data)
+        analysis, outline_out = trial_plan(spec, T)
+        rec.json("00_trial_plan.json", spec)
+        ch = outline_out["chapters"][0]
+        src, given = chapter_source(data, analysis, ch, outline_out)
+        core_turns = chapter_owned_turns(analysis, ch) | set(ch.get("context_turns") or [])
+        rec.json("00_input.json", {"input_ref": meta["input_ref"], "given_turns": given,
+                                   "core_turns": sorted(set(given) & core_turns),
+                                   "context_only_turns": sorted(set(given) - core_turns),
+                                   "event_packets": event_packets(analysis, ch, given)})
+        st = _Run(data, T, call, rec, cfg)
+        st.max_calls = 1
+        core = chapter_owned_turns(analysis, ch) | set(ch.get("context_turns") or [])
+        draft, step = await st.ask("chapter", chapter_message(
+            src, given, outline_out, ch, analysis["people"], None,
+            event_packets(analysis, ch, given), chapter_threads(analysis, ch, given), core),
+            f"03_{ch['chapter_key']}", ch["chapter_key"])
+        step["warnings"] = check_chapter(draft, ch, given, core, outline_memos(outline_out))
+        step["given_turns"] = given
+        step["ok"] = True
+        findings = (code_findings([draft], outline_out) + context_findings(draft, core)
+                    + verbatim_runs([draft], data))
+        sessions = {u["turn"]: u["session_id"] for u in data["utterances"]}
+        paras = [{"paragraph": p, "sessions": sorted({sessions[t] for x in para for t in x["turns"]})}
+                 for p, para in enumerate(draft["paragraphs"])]
+        result.update(generation_state=GENERATED, draft=draft, code_findings=findings, calls=st.calls,
+                      metrics={**text_metrics([draft], data), "given_turns": len(given),
+                               "cited_turns": len({t for para in draft["paragraphs"] for x in para
+                                                   for t in x["turns"]}),
+                               "paragraph_sessions": paras})
+        return result
+    except PipelineError as e:
+        if st is not None and st.steps and st.steps[-1]["error"] is None:
+            st.steps[-1]["error"] = e.as_dict()
+        result.update(failure=e.as_dict(), calls=st.calls if st else 0)
+        return result
+    finally:
+        result.update({k: meta[k] for k in ("run_ref", "input_ref") if k in meta})
+        rec.json("result.json", result)
+        rec.json("run.json", {**meta, "mode": "chapter_trial", "started_at": started_at,
+                              "finished_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
+                              "settings": cfg, "prompts": _safe_hashes(),
+                              "steps": st.steps if st else [], "calls": result["calls"],
+                              "generation_state": result["generation_state"], "failure": result["failure"]})
 
 
 # ---------------------------------------------------------------- R1 요약
@@ -1250,7 +1694,9 @@ def r1_summary(run_doc: dict, result: dict) -> str:
         f"- generation_state: **{result['generation_state']}** · pipeline_complete: "
         f"**{str(result['pipeline_complete']).lower()}** · 호출 {result['calls']}회",
         f"- verification: {v['state']} · verdict: {v['verdict']}",
-        f"- human_review: {result['human_review']} (사람 검수 전 — 모델 판정은 품질 승인이 아니다)",
+        f"- code_gate: **{result.get('code_gate')}** · model_verdict: {result.get('model_verdict')} · "
+        f"human_review: {result['human_review']} → **overall: {result.get('overall')}**",
+        "- approved 는 사람 검수로만 된다 — 모델 pass · 코드 pass 는 품질 승인이 아니다",
     ]
     if f:
         lines.append(f"- 실패: 단계 `{f['stage']}` · 장 `{f['chapter_key']}` · 종류 `{f['kind']}`")
@@ -1282,6 +1728,14 @@ def r1_summary(run_doc: dict, result: dict) -> str:
                   f"- 원문 그대로인 문장 {m.get('verbatim_sentences')} (편집본 {m.get('verbatim_ratio')} · "
                   f"장 초안 {m.get('draft_verbatim_ratio')}) · edit_notes {m.get('edit_notes')} "
                   f"{m.get('edit_actions') or ''}"]
+    cf = result.get("code_findings") or []
+    if cf:
+        by_rule: dict[str, int] = {}
+        for f in cf:
+            key = f"{f['rule']}({f['severity']})"
+            by_rule[key] = by_rule.get(key, 0) + 1
+        lines += ["", f"## 코드 판정 (편집본) — {by_rule}", "", "| 위치 | 규칙 | severity |", "|---|---|---|"]
+        lines += [f"| {f['location']} | {f['rule']} | {f['severity']} |" for f in cf]
     if v["issues"]:
         by = {}
         for x in v["issues"]:

@@ -56,6 +56,14 @@
 - `tools/memoir_pipeline.check_pipeline_seed` — A · B 는 팀 `check_seed` 그대로, C 는 같은 함수에 set_id 만 바꿔 끼운 사본을 넘긴다(`PIPELINE_SET_IDS = ("C",)`). `seed_sessions.py` 는 고치지 않았고 C 는 DB 에 넣지 않는다
 - 테스트 T44~T47 · 76 passed · 전체 145
 
+## v4 (2026-10-26T08:05Z, 미커밋) — `../improvement-v4.md`
+- 지시문 `*_v4.md` 다섯 개 · `PROMPT_VERSION = "v4"` (v1~v3 남김)
+- 새 함수: `chapter_owned_turns` · `event_packets` · `chapter_threads` · `code_findings` · `verbatim_runs` · `check_resolutions` · `code_gate` · `overall_state` · `trial_plan` · `run_chapter_trial` · `_years` · `_essay_ending` · `_narration`
+- 바뀐 것: `check_analysis`(threads · 다중 시점 경고) · `check_outline`(role · threads · opening/closing · theme_use · 모음 장 경고) · `chapter_source`(다른 장 턴 이웃 제외 · 사건 묶음 순서) · `chapter_message`/`edit_message`(packets · threads · checks) · `check_final`(checks_resolution 필수, memo_leak 은 code_gate 로) · `_result`(code_gate · model_verdict · overall · code_findings) · R1 요약
+- 실행기: `--chapter-trial PLAN` (호출 1회)
+- 테스트 93 · 전체 162
+- 실행 전 확인(08:13Z): `context_findings`(context_only, fix) · 장 입력에 `core_turns` · `context_only_turns` · `00_input.json` 에도 기록. 테스트 100 · 전체 169
+
 ## 실행
 ```
 cd backend-agent
