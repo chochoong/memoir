@@ -76,3 +76,10 @@ cd backend-agent
 - 실제 모델 호출 (Step 10) — 사용자 확인 대기. `backend-agent/.env` 가 이 저장소에 없다 (키를 사용자가 넣어야 함)
 - 커밋 · push
 - 서비스 연결 (단위 8S)
+
+## v5 (2026-10-26, 미커밋) — `../improvement-v5.md`
+- 지시문 `*_v5.md` 다섯 개 · `PROMPT_VERSION = "v5"` (v1~v4 남김). v4 코드 · 테스트는 `84c2f11`
+- 계약: 분석 facts · units · corrections / 목차 책 설계도(center · experience · paragraphs · reorder · omit) / 장 문장 `{text, kind, facts}` (turns 는 코드가 펼침) / 편집 diagnosis · chapters · omitted / 검증 + quality Q1~Q6
+- 새 함수: `turn_marks` · `ledger` · `must_keep` · `fact_turns` · `expand_turns` · `plan_facts` · `listing_signals` · `voice_findings` · `time_findings` · `keep_findings` · `all_findings` · `edit_trace` · `adjust_quality`. 없앤 것: 사건 · 끈 장 입력(`event_packets` · `chapter_owned_turns` · `context_findings`), `check_edit_notes`, 한 장 시험 계획(`trial_plan` · `run_chapter_trial`)
+- 실행기: `--chapter-trial` → `--focus 소재`(5호출). 새 도구 `tools/memoir_blind.py`
+- 테스트 8P 85 · 전체 154

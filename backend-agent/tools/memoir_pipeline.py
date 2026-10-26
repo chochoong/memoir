@@ -4,6 +4,7 @@
     python tools/memoir_pipeline.py --seed eval/memoir_seed_A.json --aliases s-a,s-b,s-c
     python tools/memoir_pipeline.py --input eval/memoir_input_A3.json
     python tools/memoir_pipeline.py --seed eval/memoir_seed_A.json --aliases s-a,s-b,s-c --dry-run
+    python tools/memoir_pipeline.py --seed eval/memoir_seed_C.json --aliases c1,c2,c3,c4,c5 --focus "소재"
 
 **받는 자료는 합성 seed A · B · C 에서 만든 입력뿐이다** (설계 Q3). C 는 이 실행기 전용
 합성 세트다(팀 seed 도구로 DB 에 넣지 않는다 — check_pipeline_seed). --input 은
@@ -14,6 +15,9 @@ tools/memoir_input.py 의 출력이고, 그 안의 말씀이 모두 해당 seed 
 r1_summary.md 다 — 본문 · 원문 · 비밀값이 없다.
 
 --dry-run 은 입력만 만들어 보이고 모델을 부르지 않는다.
+
+--focus 는 한 장 시험이다 — 같은 다섯 단계를 돌되 목차 · 편집이 그 소재로 장 하나만 만든다
+(호출 5회). 소재 이름만 받는다. 예상 정답 글 · 목차는 받지 않는다(FOCUS_MAX_CHARS).
 
 종료 코드: 0 pipeline_complete · insufficient_material / 1 그 밖의 결과 / 2 입력 거부
 """
@@ -170,36 +174,6 @@ def run_ref(set_id: str, n: int, data: dict) -> str:
     return f"{at}-{set_id}{n}-{pipe.input_ref(data)[:4]}"
 
 
-def chapter_trial(a, data: dict, turn_map: list[dict], meta: dict, cfg: dict) -> int:
-    """--chapter-trial — 계획 파일로 장 하나만 쓴다. 모델 호출 1회."""
-    try:
-        spec = json.loads(a.chapter_trial.read_text(encoding="utf-8"))
-        T = pipe.check_input(data, turn_map)
-        analysis, outline_out = pipe.trial_plan(spec, T)
-    except (OSError, ValueError, pipe.PipelineError) as e:
-        print(f"시험 계획 거부 — {getattr(e, 'message', e)}", file=sys.stderr)
-        return 2
-    ch = outline_out["chapters"][0]
-    _, given = pipe.chapter_source(data, analysis, ch, outline_out)
-    sessions = sorted({u["session_id"] for u in data["utterances"] if u["turn"] in given})
-    print(f"한 장 시험 {a.chapter_trial.name} — 장 {ch['chapter_key']} · 받는 턴 {len(given)}개 {given} · "
-          f"회차 {sessions} · 지시문 {pipe.PROMPT_VERSION} · 모델 {cfg['MEMOIR_PIPE_TEXT_MODEL']} · 예상 호출 1회")
-    if a.dry_run:
-        print("--dry-run — 모델을 부르지 않았다")
-        return 0
-    meta["run_ref"] += "-trial"
-    folder = a.out_dir / meta["run_ref"]
-    r = asyncio.run(pipe.run_chapter_trial(data, turn_map, spec, recorder=pipe.Recorder(folder), meta=meta))
-    m = r["metrics"]
-    print(f"결과 {r['generation_state']} · 호출 {r['calls']}회 · 문장 {m.get('sentences')} · "
-          f"여러 턴 묶은 문장 {m.get('multi_turn_sentences')} · 원문 그대로 {m.get('verbatim_ratio')} · "
-          f"코드 판정 {len(r['code_findings'])}건 · human_review={r['human_review']}")
-    if r["failure"]:
-        print(f"실패 {r['failure']['stage']} {r['failure']['kind']} — {r['failure']['message']}")
-    print(f"기록 {folder}")
-    return 0 if r["generation_state"] == pipe.GENERATED else 1
-
-
 def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(description="자서전 5단계 파이프라인을 합성 seed 로 돌린다")
     src = ap.add_mutually_exclusive_group(required=True)
@@ -208,8 +182,7 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--aliases", help="--seed 와 함께. 고를 회차 3~5개, 쉼표 (예: s-a,s-b,s-c)")
     ap.add_argument("--out-dir", type=Path, default=EVAL / "runs")
     ap.add_argument("--dry-run", action="store_true", help="입력만 만들고 모델을 부르지 않는다")
-    ap.add_argument("--chapter-trial", type=Path,
-                    help="한 장 시험 계획 파일 — 장 집필 v4 만 1회 부른다 (분석 · 목차는 계획이 대신, 편집 · 검증 없음)")
+    ap.add_argument("--focus", help=f"한 장 시험 — 소재 이름({FOCUS_MAX_CHARS}자 이하). 다섯 단계 · 호출 5회, 장 1개")
     a = ap.parse_args(argv)
 
     from dotenv import load_dotenv
@@ -234,17 +207,22 @@ def main(argv: list[str] | None = None) -> int:
     cfg = pipe.settings()
     print(f"입력 {meta['seed']} {','.join(meta['aliases'])} — 회차 {len(data['sessions'])}개 · "
           f"말씀 {len(data['utterances'])}턴 · input_ref {pipe.input_ref(data)}")
-    if a.chapter_trial:
-        return chapter_trial(a, data, turn_map, meta, cfg)
+    focus = (a.focus or "").strip() or None
+    if focus and (len(focus) > FOCUS_MAX_CHARS or "\n" in focus):
+        print(f"입력 거부 — --focus 는 {FOCUS_MAX_CHARS}자 이하 한 줄 소재 이름만 받는다", file=sys.stderr)
+        return 2
+    calls = "5회 (장 1 + 4)" if focus else f"{MIN_CALLS}~{MAX_CALLS}회 (장 수 + 4)"
     print(f"모델 {cfg['MEMOIR_PIPE_TEXT_MODEL']} · 온도 {cfg['MEMOIR_PIPE_TEMPERATURE']} · "
-          f"전체 상한 {cfg['MEMOIR_PIPE_TOTAL_TIMEOUT']:.0f}초 · 재시도 {cfg['retries']} · "
-          f"예상 호출 {MIN_CALLS}~{MAX_CALLS}회 (장 수 + 4)")
+          f"전체 상한 {cfg['MEMOIR_PIPE_TOTAL_TIMEOUT']:.0f}초 · 재시도 {cfg['retries']} · 지시문 {pipe.PROMPT_VERSION} · "
+          f"예상 호출 {calls}" + (f" · 한 장 시험 focus「{focus}」" if focus else ""))
     if a.dry_run:
         print("--dry-run — 모델을 부르지 않았다")
         return 0
 
+    if focus:
+        meta["run_ref"] += "-focus"
     folder = a.out_dir / meta["run_ref"]
-    result = asyncio.run(pipe.run(data, turn_map, recorder=pipe.Recorder(folder), meta=meta))
+    result = asyncio.run(pipe.run(data, turn_map, recorder=pipe.Recorder(folder), meta=meta, focus=focus))
     steps = json.loads((folder / "run.json").read_text(encoding="utf-8"))["steps"]
     for s in steps:
         u = s.get("usage") or {}
@@ -252,6 +230,11 @@ def main(argv: list[str] | None = None) -> int:
               f"{s['ms']:>6}ms  출력 {s['out_chars']}자  토큰 {u.get('prompt')}/{u.get('output')}/"
               f"{u.get('thoughts')}  {s.get('finish') or ''}")
     v = result["verification"]
+    q = result.get("model_quality") or {}
+    t = result.get("edit_trace") or {}
+    print(f"편집 추적 장 {t.get('draft_chapters')}→{t.get('final_chapters')} · 문장 그대로 {t.get('kept')} · 다시 씀 "
+          f"{t.get('rewritten')} · 옮김 {t.get('moved')} · 덜어 냄 {t.get('dropped')} · 구조 변화 {t.get('structure_changed')}")
+    print(f"구성 채점(코드 보정 뒤) {q.get('scores')} · 기준 충족 {q.get('meets_bar')}")
     print(f"판정 code_gate={result.get('code_gate')} · model_verdict={result.get('model_verdict')} · "
           f"human_review={result['human_review']} → overall={result.get('overall')}")
     print(f"결과 {result['generation_state']} · pipeline_complete={str(result['pipeline_complete']).lower()} · "
@@ -266,6 +249,7 @@ def main(argv: list[str] | None = None) -> int:
 
 
 MIN_CALLS = pipe.MIN_CHAPTERS + 4
+FOCUS_MAX_CHARS = 30              # 소재 이름만 — 계획 · 정답 글이 들어오지 않게
 MAX_CALLS = pipe.MAX_CHAPTERS + 4
 
 if __name__ == "__main__":

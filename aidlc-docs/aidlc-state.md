@@ -44,5 +44,8 @@
 - **v4 (2026-10-26T08:05Z, 미커밋)**: 1인칭 회고 수필체 · 사건과 끈 · 장 입력(다른 장 턴 제외 · 사건 묶음) · code_findings → 편집 · checks_resolution · code_gate/model_verdict/human_review/overall · 한 장 시험 모드. 8P 93 / 전체 162, 실제 호출 0. 다음: 한 장 시험 실제 1회 승인 (`improvement-v4.md`)
 - **v4 실행 전 확인 (08:13Z)**: core_turns · context_only_turns 분리와 context_only 검사, kept 는 repeat_turn 말고 남은 문제로 집계(테스트). 8P 100 / 전체 169. 커밋 86c7029 → 한 장 시험 실제 1회 완료(08:14Z, 1호출 · 경고 0 · 제안 판정 통과 2 · 부분 4) — 사람 검수 대기
 - **v4 보완 (미커밋)**: 시험 계획 턴 14 · 29 core · 사건 순서, fact_token 보조 검사(경고), 장 · 편집 지시문 v4 소폭. 8P 107 / 전체 176, 호출 0. 커밋 84c2f11 → 한 장 시험 재실행 1회 완료(08:30Z, 1호출 · 경고 0 · 출처 정확 · 나열은 부분) — 사람 검수 · 전체 5단계 여부 결정 대기
+- **v4 Seed C 전체 (08:35Z)**: 6호출 · code_gate attention · model_verdict pass · overall needs_revision. 별개 사건 분리 · 장 경계 중복 해소, 나열 · 편집 · 검증은 남음. 다음: 사람 검수 · Draft PR 인계 여부 결정 (`R1-20261026T083510Z-C5-v4.md`)
+- **판정 (2026-10-26)**: v4 품질 미승인 · 인계 보류. 목표를 '책의 한 장으로 읽히는 1인칭 회고 수필'로. 구조 재설계안 `redesign-v5-book-quality.md` (계약 원인 · 5단계 재정의 · 품질 기준 Q1~Q8 · 모델 비교 시험안). 코드 · 지시문 · 호출 없음. 다음: 재설계안 승인
+- **v5 (모의, 미커밋)**: 사실 원장 · 기억 단위 · 책 설계도 · 문단 서사 · 구성 편집(edit_trace) · 사실 + 구성 채점 · --focus 한 장 시험 · 블라인드 도구. 8P 85 / 전체 154, 호출 0. 다음: 한 장 시험(5호출) 승인 (`improvement-v5.md`)
 - **시험 격리**: `tests/conftest.py` 가 키를 비우고 클라이언트 · 외부 연결을 막는다 — `.env` 에 실제 키가 있어도 `pytest tests` 로 비용이 나지 않는다(서버의 `question.warmup` 'ping' 포함)
 - **Status**: 독립 파이프라인 구현 · 모의 시험 완료, 실제 모델 시험 전. 서버 판 호환 수정 뒤 105 passed · theme-interview 사본 36 passed · 실제 호출 0. 로컬 커밋(push 없음). `backend-agent/.env` 없음 — 실제 호출 전 사용자가 키를 로컬에만 넣는다
