@@ -96,6 +96,8 @@
 - [x] 보완 (2026-10-26T06:39Z): 제외 mode(whole · partial) · `stage_source` · `exclusion_notices` · 지시문 완화 · `tests/conftest.py`(외부 호출 차단) · R1 검수 6항목 → 56 passed · 전체 125 · theme-interview 사본 56 · 막은 시도 0
 - [x] 커밋 9231a70 · A3 실제 1회 (2026-10-26T06:44:53Z) → failed(final_check, edit_notes 삭제 위치) · R1-20261026T064453Z-A3-v2.md
 - [x] 보완 N-1~N-4 (2026-10-26T07:01Z, `unit8-memoir-pipeline/improvement-v3.md`) — 지시문 v3 · 편집 메모 계약 · 메모 혼입 검사 · 테스트 T39~T43 → 72 passed · 전체 141 · theme-interview 사본 72 · A3 dry-run 호출 0
-- [ ] v3 A3 실제 1회 — 사용자 승인 뒤
-- [ ] seed C — 팀 결정(check_seed SET_IDS) 뒤
+- [x] v3 커밋 5ae6c1c · v3 A3 실제 실행은 생략 (사용자 판단 — A3 는 자료가 너무 적다)
+- [x] seed C (2026-10-26T07:12Z) — `eval/memoir_seed_C.json` 39턴 · `check_pipeline_seed`(팀 도구 무수정) · 평가 기준 문서 · T44~T46 → 75 passed · 전체 144 · dry-run 호출 0
+- [x] seed C 재검토 (2026-10-26T07:22Z) — 34 주어 최소 수정 · 연대기 기준 · 정정 판정 분리 · T47 → 76 passed · 전체 145 · input_ref b9f8e2daea65 · 로컬 커밋
+- [ ] v3 · seed C 실제 1회 — 사용자 승인 뒤
 - [ ] N-5 일부 제외 범위 지정 방식 → B (B 실제 실행 미승인)

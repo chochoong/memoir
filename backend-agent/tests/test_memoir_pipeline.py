@@ -1025,6 +1025,98 @@ def test_t42_outline_memo_must_not_leak_into_body():
     pipe.check_final(e, o2, T, frozenset(), D)
 
 
+SEED_C_PATH = ROOT / "eval" / "memoir_seed_C.json"
+
+
+def test_t44_seed_c_uses_pipeline_only_check_without_touching_team_tool():
+    from tools import seed_sessions as seed
+    doc = json.loads(SEED_C_PATH.read_text(encoding="utf-8"))
+    assert seed.SET_IDS == ("A", "B")                         # 팀 도구는 그대로
+    assert seed.check_seed(doc) == ["set_id 는 A · B 중 하나여야 한다 (지금 'C')"]
+    assert cli.check_pipeline_seed(doc) == []
+    assert cli.check_pipeline_seed(SEED_A) == [] and cli.check_pipeline_seed(SEED_B) == []
+
+    for bad, why in ((dict(doc, synthetic=False), "synthetic"),
+                     (dict(doc, set_id="D"), "set_id"),
+                     (dict(doc, schema_version="x"), "schema_version")):
+        assert any(why in m for m in cli.check_pipeline_seed(bad)), why
+    renamed = copy.deepcopy(doc)
+    renamed["sessions"][0]["title"] = "[A] 수선집 하루"
+    assert any("[C] " in m for m in cli.check_pipeline_seed(renamed))
+    broken = copy.deepcopy(doc)
+    broken["sessions"][2]["turns"][1]["idx"] = 9                # 팀 검사의 나머지 규칙도 그대로 돈다
+    assert any("idx" in m for m in cli.check_pipeline_seed(broken))
+
+
+def test_t45_seed_c_merges_into_39_global_turns_without_loss():
+    doc = cli._seed_doc(SEED_C_PATH)
+    aliases = [s["alias"] for s in doc["sessions"]]
+    assert [len(s["turns"]) for s in doc["sessions"]] == [8, 10, 6, 9, 6]
+    data, turn_map = pipe.build_input(cli.records_from_seed(doc, aliases))
+    T = pipe.check_input(data, turn_map)
+    assert sorted(T) == list(range(1, 40))
+    want = [t["answer"].strip() for s in sorted(doc["sessions"], key=lambda s: s["recorded_order"])
+            for t in s["turns"]]
+    assert [u["elder"] for u in data["utterances"]] == want   # 빠짐 · 바뀜 없음
+    starts = {m["session_id"]: m["global_turn"] for m in reversed(turn_map)}
+    assert starts == {"c1": 1, "c2": 9, "c3": 19, "c4": 25, "c5": 34}
+    assert all(m["turn"] == m["global_turn"] - starts[m["session_id"]] + 1 for m in turn_map)
+    # 회차를 넘는 정정은 merge 가 하지 않는다 — c3 의 1986 메모가 남고, 정정은 c4 원문(턴 25)에 있다
+    assert any("1986" in f for f in data["shared_state"]["confirmed_facts"])
+    assert "85년" in data["utterances"][24]["elder"]
+
+
+def test_t47_seed_c_timeline_people_and_correction_are_consistent():
+    """
+    Seed C 원문끼리의 연대기 · 인물 관계. 출생 연도는 원문에 없고, 원문이 정하는 범위 안에서 맞물린다.
+    전역 턴 번호로 짚는다 (c1 1~8 · c2 9~18 · c3 19~24 · c4 25~33 · c5 34~39).
+    """
+    import re
+    doc = cli._seed_doc(SEED_C_PATH)
+    t = {}
+    g = 0
+    for s in sorted(doc["sessions"], key=lambda s: s["recorded_order"]):
+        for x in s["turns"]:
+            g += 1
+            t[g] = x["answer"]
+    assert len(t) == 39
+    all_text = " ".join(t.values())
+    assert not re.search(r"(19|20)\d\d년생|태어난 해|\d+살 때 태어", all_text)   # 출생 연도를 정하지 않는다
+
+    # 딸 — 83년에 네 살(19), 85년에 여섯 살(25) → 같은 해에 태어났다
+    assert "딸이 네 살" in t[19] and "83년" in t[19]
+    assert "여섯 살" in t[25] and "85년" in t[25]
+    assert 1983 - 4 == 1985 - 6
+    # 아들 — 돌 지나고 77년쯤(28). 상경 열일곱(14) + 한 육 년(18) 뒤 결혼 → 출생 1953년 이전이어야 성립
+    assert "아들 돌" in t[28] and "77년" in t[28]
+    assert "열일곱" in t[14] and "육 년" in t[18]
+    assert (1977 - 1) - 6 - 17 <= 1953
+    # 수선집 — 85년 봄(25) ~ 2010년(2 · 35), "한 이십오 년"(2)
+    assert "이십오 년" in t[2] and "2010" in t[2] and "2010" in t[35]
+    assert 2010 - 1985 == 25
+    # 정정은 시험 항목으로 남는다 — 21 은 86년, 25 가 85년 봄으로 고친다
+    assert "86년" in t[21] and "86년" in t[25] and "85년 봄" in t[25]
+    # 큰언니 — 2003 병문안(29) → 그다음 해 2004 별세(34). 34 는 주어 · 기준을 발언 안에 갖는다
+    assert "2003" in t[29] and "병원" in t[29]
+    assert "큰언니" in t[34] and "병원" in t[34] and "그다음 해" in t[34] and "2004" in t[34]
+    # 33 은 남편(2015), 34 는 큰언니(2004) — 바로 붙어 있어도 다른 사람
+    assert "남편" in t[33] and "2015" in t[33] and "남편" not in t[34]
+    # 큰언니와 공장 "재단하는 언니들"은 다른 사람
+    assert "재단하는 언니들" in t[17] and "큰언니" not in t[17]
+
+
+def test_t46_seed_c_input_file_is_accepted_and_eval_doc_is_not_model_input(tmp_path):
+    doc = cli._seed_doc(SEED_C_PATH)
+    data, turn_map = pipe.build_input(cli.records_from_seed(doc, [s["alias"] for s in doc["sessions"]]))
+    p = _memoir_input_file(tmp_path, data, turn_map, set_id="C", aliases=["c1", "c2", "c3", "c4", "c5"])
+    got, _, meta = cli.load_input(p)
+    assert got == data and meta["seed"] == "memoir_seed_C.json"
+    # 평가 기준 문서는 지시문 폴더 밖에 있고, 어느 단계의 시스템 지시에도 들어가지 않는다
+    for stage in pipe.STAGES:
+        assert "seed-C-evaluation" not in pipe.prompt(stage)
+    assert not list(pipe.ROLE_DIR.glob("*evaluation*"))
+
+
 def test_t43_unsupported_purpose_is_not_caught_by_code():
     """
     한계 기록 — 목차 purpose 의 "입학식 날"(원문은 "입학해서")은 턴 번호가 맞으면 코드가 못 잡는다.

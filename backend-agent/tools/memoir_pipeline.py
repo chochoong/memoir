@@ -5,7 +5,8 @@
     python tools/memoir_pipeline.py --input eval/memoir_input_A3.json
     python tools/memoir_pipeline.py --seed eval/memoir_seed_A.json --aliases s-a,s-b,s-c --dry-run
 
-**받는 자료는 합성 seed A/B 에서 만든 입력뿐이다** (설계 Q3). --input 은
+**받는 자료는 합성 seed A · B · C 에서 만든 입력뿐이다** (설계 Q3). C 는 이 실행기 전용
+합성 세트다(팀 seed 도구로 DB 에 넣지 않는다 — check_pipeline_seed). --input 은
 tools/memoir_input.py 의 출력이고, 그 안의 말씀이 모두 해당 seed 원문과 글자까지
 같을 때만 받는다. 실제 사용자 자료는 이 도구로 모델에 보내지 않는다.
 
@@ -39,9 +40,45 @@ from tools import seed_sessions as seed                                   # noqa
 
 EVAL = ROOT / "eval"
 
+# 이 실행기에서만 쓰는 합성 세트. 팀 seed 도구(seed_sessions.SET_IDS = A · B)는 DB 에 넣는
+# 도구라 넓히지 않는다 — C 는 DB 에 들어가지 않고 이 실행기로만 돈다.
+PIPELINE_SET_IDS = ("C",)
+
 
 class InputRejected(ValueError):
     """이 도구가 받지 않는 입력. 모델을 부르지 않는다."""
+
+
+def check_pipeline_seed(doc) -> list[str]:
+    """
+    seed 검사. A · B 는 팀 도구의 check_seed 그대로다.
+
+    파이프라인 전용 세트(C)는 **같은 check_seed 를 그대로 쓰되** set_id 규칙만 바꿔 끼운다 —
+    set_id 를 팀 세트 이름으로, 제목 접두어 「[C] 」를 그에 맞춰 바꾼 사본을 넘긴다. 그
+    밖의 검사(schema · user_id · alias · recorded_order · seed · idx · answer · facts)는 한
+    줄도 다시 쓰지 않는다. 대신 「합성 자료」 표시(synthetic: true)를 요구한다.
+    """
+    if not isinstance(doc, dict):
+        return ["최상위가 객체가 아니다"]
+    set_id = doc.get("set_id")
+    if set_id in seed.SET_IDS:
+        return seed.check_seed(doc)
+    if set_id not in PIPELINE_SET_IDS:
+        return [f"set_id 는 {' · '.join(seed.SET_IDS + PIPELINE_SET_IDS)} 중 하나여야 한다 (지금 {set_id!r})"]
+    bad = [] if doc.get("synthetic") is True else ["파이프라인 전용 seed 는 synthetic: true 여야 한다"]
+    sessions = doc.get("sessions")
+    if not isinstance(sessions, list):
+        return bad + seed.check_seed(doc)
+    stand_in, mine, theirs = seed.SET_IDS[0], f"[{set_id}] ", f"[{seed.SET_IDS[0]}] "
+    probe_sessions = []
+    for s in sessions:
+        if isinstance(s, dict) and isinstance(s.get("title"), str):
+            if not s["title"].startswith(mine):
+                bad.append(f"{s.get('alias')} 제목이 「{mine}」로 시작하지 않는다")
+            s = {**s, "title": theirs + s["title"][len(mine):]} if s["title"].startswith(mine) else s
+        probe_sessions.append(s)
+    probe = {**doc, "set_id": stand_in, "sessions": probe_sessions}
+    return bad + [m.replace(theirs, mine) for m in seed.check_seed(probe)]
 
 
 def _seed_doc(path: Path) -> dict:
@@ -49,7 +86,7 @@ def _seed_doc(path: Path) -> dict:
         doc = json.loads(path.read_text(encoding="utf-8"))
     except (OSError, ValueError) as e:
         raise InputRejected(f"seed 를 읽지 못했다: {path.name} ({e})") from e
-    bad = seed.check_seed(doc)
+    bad = check_pipeline_seed(doc)
     if bad:
         raise InputRejected("합성 seed 가 아니다: " + "; ".join(bad[:5]))
     return doc
@@ -113,8 +150,8 @@ def load_input(path: Path) -> tuple[dict, list[dict], dict]:
         raise InputRejected(f"입력을 읽지 못했다: {path.name} ({e})") from e
     if not isinstance(doc, dict) or not {"set_id", "aliases", "input", "turn_map"} <= set(doc):
         raise InputRejected("memoir_input.py 출력 모양이 아니다 (set_id · aliases · input · turn_map)")
-    if doc["set_id"] not in seed.SET_IDS:
-        raise InputRejected(f"set_id={doc['set_id']!r} — 합성 seed {seed.SET_IDS} 만 받는다")
+    if doc["set_id"] not in seed.SET_IDS + PIPELINE_SET_IDS:
+        raise InputRejected(f"set_id={doc['set_id']!r} — 합성 seed {seed.SET_IDS + PIPELINE_SET_IDS} 만 받는다")
     src = _seed_doc(EVAL / f"memoir_seed_{doc['set_id']}.json")
     said = {t["answer"].strip() for s in src["sessions"] for t in s["turns"]}
     try:

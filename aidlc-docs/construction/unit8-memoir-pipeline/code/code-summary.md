@@ -51,6 +51,11 @@
 - `verify_plan` 이 앞 단계 경고를 `checks` 로 넘긴다. metrics 에 `edit_actions`
 - 테스트 72 (T39~T43 추가) · 전체 141 passed
 
+## Seed C (2026-10-26, 07:22Z 확정)
+- `eval/memoir_seed_C.json` — 가상 화자 · 5회차 · 39턴 · `synthetic: true` · input_ref `b9f8e2daea65` (턴 34 주어 수정 뒤)
+- `tools/memoir_pipeline.check_pipeline_seed` — A · B 는 팀 `check_seed` 그대로, C 는 같은 함수에 set_id 만 바꿔 끼운 사본을 넘긴다(`PIPELINE_SET_IDS = ("C",)`). `seed_sessions.py` 는 고치지 않았고 C 는 DB 에 넣지 않는다
+- 테스트 T44~T47 · 76 passed · 전체 145
+
 ## 실행
 ```
 cd backend-agent
