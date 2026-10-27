@@ -1301,4 +1301,8 @@ if (_web / "index.html").exists():
         """
         if full_path.startswith("api/") or full_path == "api":
             raise HTTPException(404, "없는 API 경로입니다")
-        return FileResponse(_web / "index.html")
+        # **화면은 늘 새로 받게 한다.** Cache-Control 이 없으면 브라우저가 Last-Modified 로
+        # 스스로 신선도를 어림해 예전 화면을 다시 쓴다 — 화면을 바꾼 뒤에도 링크를 연
+        # 어르신에게 옛 버전이 뜬다(v0.45 낱말 카드가 안 나온 일). no-cache 는 저장은 하되
+        # 쓸 때마다 서버에 물어본다 — 바뀌지 않았으면 304 라 비용은 거의 없다.
+        return FileResponse(_web / "index.html", headers={"Cache-Control": "no-cache"})
