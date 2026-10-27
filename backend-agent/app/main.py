@@ -15,22 +15,24 @@
 from __future__ import annotations
 
 import asyncio
+import json
 import logging
 import os
 import re
 import sys
 from contextlib import asynccontextmanager
 from pathlib import Path
+from typing import Literal
 
 from dotenv import load_dotenv
 from fastapi import FastAPI, Header, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse, Response, StreamingResponse
+from fastapi.responses import FileResponse, JSONResponse, Response, StreamingResponse
 from fastapi.staticfiles import StaticFiles
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from app.session import controller as sc
-from app.session import limits, photo, photostore, postcard, prompt, store, stt, tts
+from app.session import limits, memoir, photo, photostore, postcard, prompt, store, stt, tts
 from app.session.conf import env_flag, env_int, env_str
 from app.session.machine import TransitionError
 from app.session.question import gemini_question, warmup
@@ -234,7 +236,13 @@ async def mirror_uid(request: Request, call_next):
 
 class StartReq(BaseModel):
     title: str
-    seed: str
+    # 가족이 적은 설명. **어르신의 말씀이 아니다** — 0번 조각에 남지만 대화 기록에
+    # 「어르신:」으로 실리지 않고 [시작 자료]로 따로 간다 (question._start_material).
+    seed: str = ""
+    # 시작 자료 (C1). 가족이 고른 테마와 구체 주제 하나. 둘 다 없어도 연다 —
+    # 지금 화면은 seed 만 보낸다. 모르는 테마·너무 긴 주제는 422 로 돌려보낸다.
+    theme: Literal["family", "self", "hobby"] | None = None
+    topic: str = Field("", max_length=100)
     pace: str = "normal"          # fast(3초) / normal(5초) / slow(7초)
     # 0 = 제한 없음. 대화가 어디서 끝날지는 AI 의 close 판단이 정한다.
     # 양을 미리 묶고 싶은 쪽(시험 도구 등)이 값을 준다.
@@ -339,8 +347,8 @@ async def create_session(req: StartReq, request: Request,
 
     ctl = sc.put(sc.SessionController(
         user_id=x_user_id, title=req.title, pace=req.pace, max_turn=req.max_turn,
-        photo_id=req.photo_id, question_fn=gemini_question,
-        closed_fn=postcard.auto))
+        photo_id=req.photo_id, theme=req.theme, topic=req.topic.strip(),
+        question_fn=gemini_question, closed_fn=postcard.on_closed))
     await ctl.start(req.seed)
     return ctl.snapshot()
 
@@ -517,15 +525,18 @@ async def latency(session_id: str):
 
 
 @app.get("/api/sessions")
-async def list_sessions(limit: int = 20, x_user_id: str = Header(default="dev-user")):
+async def list_sessions(limit: int = 20, has_postcard: bool = False,
+                        x_user_id: str = Header(default="dev-user")):
     """
-    지난 회차 목록. 최근 순.
+    지난 회차 목록. 최근 순. 회차마다 has_postcard 를 싣는다.
+
+    `?has_postcard=1` 이면 엽서가 있는 회차만 준다 — 자서전에 고를 회차다.
 
     DB 를 못 읽으면 **빈 목록이 아니라 503 이다.** 빈 목록을 주면 화면에
     「기록이 없습니다」가 뜨고, 그건 어르신에게 조각이 사라졌다는 말이 된다.
     없는 것과 못 읽은 것은 다른 사건이라 화면도 다르게 말해야 한다.
     """
-    return {"sessions": await _read(store.list_sessions(x_user_id, _limit(limit)))}
+    return {"sessions": await _read(store.list_sessions(x_user_id, _limit(limit), has_postcard))}
 
 
 @app.get("/api/sessions/{session_id}/record")
@@ -673,14 +684,15 @@ async def make_postcard(session_id: str, request: Request):
     화면은 그동안 「그리는 중」을 띄우면 된다.
 
     409 는 어르신이 다른 것을 하면 되는 경우(회차가 안 끝났다 · 말씀이 없다 ·
-    이미 굽는 중), 503 은 서버 쪽 사정이다. 화면이 둘을 다르게 말해야 한다.
+    이미 굽는 중 · 담을 말씀이 부족하다), 503 은 서버 쪽 사정이다. 화면이 둘을
+    다르게 말해야 한다. 409 의 네 원인은 본문의 code 로 가른다.
     """
     try:
         rec = await postcard.make(session_id, uid(request))
     except LookupError as e:
         raise HTTPException(404, "회차를 찾을 수 없습니다") from e
     except postcard.PostcardNotReady as e:
-        raise HTTPException(409, str(e)) from e
+        return JSONResponse({"detail": str(e), "code": e.code}, status_code=409)
     except postcard.PostcardUnavailable as e:
         raise HTTPException(503, str(e)) from e
     except store.StoreUnavailable as e:
@@ -731,6 +743,51 @@ def _postcard_url(session_id: str, rec: dict) -> str:
     묻지도 않고 옛 엽서를 보여 준다. 다시 구운 뒤에는 주소 자체가 달라야 한다.
     """
     return f"/api/sessions/{session_id}/postcard?v={postcard.version(rec['storage_key'])}"
+
+
+# ---------------------------------------------------------------- 자서전
+#
+# 엽서가 있는 회차 3~5개를 골라 초안 하나를 받는다. 저장하지 않는다 — 다시 보려면
+# 다시 만든다. 무엇을 하는지는 memoir.py 머리에 있다.
+
+# 화면이 그대로 보여 주는 말이다 (해요체). 안쪽 사정은 로그에만 남긴다.
+_MEMOIR_SAYS = {
+    400: "선택한 엽서를 확인해 주세요. 3~5장을 고를 수 있어요.",
+    404: "선택한 엽서를 찾을 수 없어요. 목록에서 다시 골라 주세요.",
+    422: "선택한 엽서의 이야기 자료를 불러오지 못했어요.",
+    502: "자서전을 만드는 중 문제가 생겼어요. 엽서 선택 화면으로 돌아가 주세요.",
+    503: "지금은 자서전을 만들 수 없어요. 엽서 선택 화면으로 돌아가 주세요.",
+    504: "정해진 시간 안에 자서전을 받지 못했어요. 엽서 선택 화면으로 돌아가 주세요.",
+}
+_MEMOIR_STATUS = (
+    (memoir.BadSelection, 400), (memoir.NotFound, 404), (memoir.SourceUnavailable, 422),
+    (memoir.GenerationTimeout, 504), (memoir.GenerationFailed, 502), (memoir.NotFinal, 503),
+)
+
+
+@app.post("/api/memoirs/preview")
+async def memoir_preview(request: Request):
+    """
+    고른 회차로 자서전 초안을 쓴다. **기다리는 요청이다** — 다 쓰거나 실패해야 답이 간다.
+
+    본문은 `{"session_ids": [...]}` 뿐이다. 누구의 요청인지는 X-User-Id 로 받는다
+    (uid). 본문을 pydantic 으로 받지 않는 것은 모양이 틀렸을 때 FastAPI 가 422 를
+    내기 때문이다 — 여기서 422 는 「자료를 못 읽었다」는 다른 뜻이다.
+
+    자료 부족은 200 의 insufficient_material 이고 실패가 아니다. 실패는 상태 코드와
+    `{"detail": 안내}` 로만 나간다. 둘을 서로 바꿔 내보내지 않는다.
+    """
+    try:
+        body = json.loads(await _body_capped(request, 16 * 1024) or b"null")
+    except ValueError:
+        body = None
+    ids = body.get("session_ids") if isinstance(body, dict) else None
+    try:
+        return await memoir.preview(ids, uid(request))
+    except memoir.MemoirError as e:
+        code = next(c for kind, c in _MEMOIR_STATUS if isinstance(e, kind))
+        log.warning("자서전 %d %s — %s", code, type(e).__name__, str(e)[:200])
+        raise HTTPException(code, _MEMOIR_SAYS[code]) from e
 
 
 # ---------------------------------------------------------------- 보조

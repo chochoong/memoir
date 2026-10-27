@@ -4,8 +4,8 @@
     DB 기록 ─→ 자료 묶기 ─→ 카드 작성 (Gemini 글, CardAgent v3) ─→ 검사 ─→ 굽기 (Pillow) ─→ 저장
                사실·발화·사진분석   title · body · caption · sources     출처    회차 사진 + 글
 
-**프롬프트는 `첨부프롬프트_md/엽서.md` 다.** 팀 문서의 한 절을 그대로 둔
-파일이라, 코드는 그 안의 ``` 블록만 읽는다. 새 판이 오면 파일만 바꾸면 된다.
+**프롬프트는 `첨부프롬프트_md/엽서_v2.md` 다.** 실행할 절(§2 · §5 · §5-1 · §7-4 ·
+§8-2)만 담긴 문서를 roledoc 이 잇는다. 새 판이 오면 파일만 바꾸면 된다.
 
 **그림은 그리지 않는다.** 회차를 연 사진이 있으면 그 사진을 얹고, 없으면 종이
 바탕에 글만 얹는다. v3 는 「사진 속 인물 · 촬영 시점을 추측하지 않는다」를
@@ -22,9 +22,10 @@ confirmed_facts 를 다시 세운다 (shared.merge 와 같은 규칙).
 **모델의 출처(sources)를 믿지 않고 한 번 더 본다.** v3 는 「근거를 댈 수 없는 문장은
 쓰지 않는다」가 원칙이다. 출처가 없거나 없는 턴을 가리키는 문장은 여기서 뺀다.
 
-**회차가 닫히면 저절로 굽는다** (auto ← controller.closed_fn). 기록 화면의
-「엽서 만들기」는 다시 굽거나, 자동으로 굽지 않은 회차를 구울 때 쓴다.
-수정 요청(v3 의 revision_request)은 아직 받지 않는다.
+**회차가 닫혀도 굽지 않는다.** 기록 화면의 「엽서 만들기」(make)로만 굽는다.
+고친 내용을 반영했거나 고칠 것이 없다고 확인한 뒤에 굽는다는 합의다 (P2-SV-01) —
+닫히자마자 구우면 고치기 전 원문으로 만든 엽서가 먼저 저장된다.
+수정 요청(revision_request)은 아직 받지 않는다.
 
 **Pillow 는 to_thread 로 나간다.** photo.py 머리의 이유와 같다 — 이벤트 루프
 하나가 모든 회차의 타이머를 돈다.
@@ -45,14 +46,20 @@ from pathlib import Path
 
 from PIL import Image, ImageDraw, ImageFont, ImageOps
 
-from . import photostore, store
+from . import photostore, roledoc, store
 from .conf import env_float, env_str
 from .question import _client
 from .shared import _facts
 
 log = logging.getLogger("postcard")
 
-PROMPT = Path(__file__).resolve().parents[2] / "첨부프롬프트_md" / "엽서.md"
+PROMPT = Path(__file__).resolve().parents[2] / "첨부프롬프트_md" / "엽서_v2.md"
+
+# 엽서.md §8-2 — 작성 공통 7키에 caption.
+KEYS = ("status", "title", "body", "sources", "to_confirm",
+        "missing_context", "coverage_notes", "caption")
+READY, INSUFFICIENT = "ready", "insufficient_material"
+NOT_FINAL = ("needs_confirmation", "needs_context")
 
 DEFAULT_TEXT_MODEL = "gemini-3.5-flash-lite"
 DEFAULT_TEXT_TIMEOUT = 15.0
@@ -93,11 +100,42 @@ class PostcardError(RuntimeError):
 
 
 class PostcardNotReady(PostcardError):
-    """회차가 엽서를 만들 상태가 아니다. 라우트가 409 로 바꾼다."""
+    """
+    회차가 엽서를 만들 상태가 아니다. 라우트가 409 로 바꾼다.
+
+    409 는 원인이 넷이라 화면이 code 로 가른다 — not_closed · no_answers · busy ·
+    insufficient_material(자서전과 같은 이름).
+    """
+
+    def __init__(self, message: str, code: str):
+        super().__init__(message)
+        self.code = code
 
 
 class PostcardUnavailable(PostcardError):
     """모델·글꼴·저장소 쪽 사정이다. 라우트가 503 으로 바꾼다."""
+
+
+class PostcardInsufficient(PostcardNotReady):
+    """모델이 insufficient_material 로 답했다 — 쓸 원문이 없다. 409. 실패가 아니다."""
+
+    def __init__(self):
+        super().__init__("엽서에 담을 만큼 확실한 말씀이 없습니다", INSUFFICIENT)
+
+
+class PostcardNotFinal(PostcardUnavailable):
+    """
+    모델이 needs_confirmation · needs_context 로 답했다. 저장하지 않는다.
+
+    화면에는 503 하나로 나가지만 안에서는 둘을 가른다 — status 와 사유(to_confirm ·
+    missing_context)를 들고 다니며 로그에 남긴다. needs_confirmation 이어도 다시
+    묻지 않는다.
+    """
+
+    def __init__(self, status: str, reasons: list):
+        super().__init__("엽서 글을 만들지 못했습니다")
+        self.status = status
+        self.reasons = reasons
 
 
 @dataclass(frozen=True)
@@ -137,14 +175,14 @@ async def make(session_id: str, user_id: str) -> dict:
     if rec is None or rec["user_id"] != user_id:
         raise LookupError(session_id)
     if not rec["closed_at"]:
-        raise PostcardNotReady("회차를 마친 뒤에 엽서를 만들 수 있습니다")
+        raise PostcardNotReady("회차를 마친 뒤에 엽서를 만들 수 있습니다", "not_closed")
 
     said = [f for f in rec["fragments"] if f["idx"] > 0 and f["answer"].strip()]
     if not said:
-        raise PostcardNotReady("남은 말씀이 없어 엽서를 만들 수 없습니다")
+        raise PostcardNotReady("남은 말씀이 없어 엽서를 만들 수 없습니다", "no_answers")
 
     if session_id in _busy:
-        raise PostcardNotReady("엽서를 만드는 중입니다. 잠시 기다려 주세요")
+        raise PostcardNotReady("엽서를 만드는 중입니다. 잠시 기다려 주세요", "busy")
     _busy.add(session_id)
     try:
         return await _make(rec, said)
@@ -152,33 +190,15 @@ async def make(session_id: str, user_id: str) -> dict:
         _busy.discard(session_id)
 
 
-# 닫혀도 엽서를 굽지 않는 사유.
-#   expired    어르신이 떠나신 회차다. 아무도 보지 않을 엽서에 값을 쓰지 않는다.
-#   sensitive  힘든 기억에서 멈추신 회차다. 그 이야기를 엽서로 먼저 내밀지 않는다.
-# 둘 다 기록 화면의 「엽서 만들기」로는 여전히 구울 수 있다.
-AUTO_SKIP = ("expired", "sensitive")
-
-
-async def auto(session_id: str, user_id: str, reason: str) -> None:
+async def on_closed(session_id: str, user_id: str, reason: str) -> None:
     """
-    회차가 닫히면 엽서를 굽는다 (controller.closed_fn). **예외를 올리지 않는다.**
+    회차가 닫혔다 (controller.closed_fn). **엽서는 굽지 않는다** — 머리 주석 참조.
 
-    기다리는 사람이 없는 배경 일이라 실패는 로그로만 남는다. 못 구운 엽서는
-    기록 화면에서 다시 누르면 된다.
+    그래도 이 자리를 비우지 않는 것은 controller 가 closed_fn 이 있을 때만 마지막
+    말씀의 판단을 회차 행에 남기기 때문이다 (_wrap_up). 그 판단이 있어야 나중에
+    「엽서 만들기」가 마지막 말씀을 쓴다.
     """
-    if reason in AUTO_SKIP:
-        log.info("엽서 %s — %s 로 닫혀 굽지 않는다", session_id[:8], reason)
-        return
-    try:
-        await make(session_id, user_id)
-    except PostcardNotReady as e:
-        log.info("엽서 %s — 굽지 않는다 (%s)", session_id[:8], e)
-    except LookupError:
-        log.warning("엽서 %s — 회차 기록이 없다 (DB 없이 도는 중?)", session_id[:8])
-    except (PostcardError, store.StoreUnavailable) as e:
-        log.warning("엽서 %s — 자동 굽기 실패 (%s: %s)", session_id[:8], type(e).__name__, e)
-    except Exception as e:                                   # noqa: BLE001
-        log.error("엽서 %s — 자동 굽기 중 예외 (%s: %s)", session_id[:8], type(e).__name__, e)
+    log.info("엽서 %s — %s 로 닫혔다. 「엽서 만들기」를 누를 때 굽는다", session_id[:8], reason)
 
 
 async def _make(rec: dict, said: list[dict]) -> dict:
@@ -343,18 +363,13 @@ def _text_model() -> str:
     return env_str("POSTCARD_TEXT_MODEL") or env_str("GEMINI_MODEL", DEFAULT_TEXT_MODEL)
 
 
-_FENCE = re.compile(r"^```.*?$\n(.*?)^```", re.S | re.M)
-
-
 @lru_cache(maxsize=1)
 def _prompt() -> str:
-    """문서 한 절이 통째로 든 파일이다. ``` 블록 안이 프롬프트다. 블록이 없으면 전부."""
+    """엽서.md 에서 실행할 절만 잇는다 (roledoc). 엽서 역할 절은 §5-1."""
     try:
-        doc = PROMPT.read_text(encoding="utf-8")
-    except OSError as e:
-        raise PostcardUnavailable(f"엽서 프롬프트를 읽지 못했습니다: {PROMPT.name}") from e
-    m = _FENCE.search(doc)
-    return (m.group(1) if m else doc).strip()
+        return roledoc.assemble(PROMPT.read_text(encoding="utf-8"), "5-1")
+    except (OSError, ValueError) as e:
+        raise PostcardUnavailable(f"엽서 프롬프트를 읽지 못했습니다: {PROMPT.name} ({e})") from e
 
 
 def _input(data: dict) -> str:
@@ -364,7 +379,10 @@ def _input(data: dict) -> str:
         "나온 어르신 발화의 턴 번호다.\n"
         "utterances 의 elder 가 어르신의 원 발화이고, asked 는 인터뷰 에이전트의 질문이다. "
         "turn 이 실제 턴 번호다.\n"
-        "revision_request 는 없다. 자동 생성이다.\n\n"
+        "revision_request 는 없다.\n"
+        "승인 버전 값은 전달하지 않는다 — 버전을 비교하지 않는다. 원문이 빠졌거나 서로 "
+        "어긋날 때만 needs_context 다.\n"
+        "length_config 는 없다 — 문서의 기본 분량을 쓴다.\n\n"
         + json.dumps(data, ensure_ascii=False, indent=1)
     )
 
@@ -416,14 +434,30 @@ def _sentences(body: str) -> list[str]:
 
 
 def parse(out) -> Card:
-    """v3 의 JSON 을 카드로. 자동 생성에서 확인 요청이 오면 규칙을 어긴 것이다."""
+    """
+    엽서.md §8-2 의 8키 JSON 을 카드로. 굽는 것은 ready 뿐이다.
+
+        insufficient_material              PostcardInsufficient (409) — 쓸 원문이 없다
+        needs_confirmation · needs_context PostcardNotFinal (503) — 저장하지 않는다
+        그 밖의 값                          PostcardUnavailable (503)
+
+    키가 8개와 다르면 로그만 남긴다. 굽는 데 쓰는 키는 title · body · caption · sources 다.
+    """
     if not isinstance(out, dict):
         log.error("엽서 글 응답이 객체가 아니다: %s", str(out)[:200])
         raise PostcardUnavailable("엽서 글을 만들지 못했습니다")
+    if set(out) != set(KEYS):
+        log.warning("엽서 글 응답의 키가 §8-2 와 다르다: %s", sorted(out))
     status = _text(out.get("status"))
-    if status != "completed":
-        log.error("엽서 글이 완료되지 않았다 (status=%s) %s",
-                  status, out.get("confirmation_questions"))
+    if status == INSUFFICIENT:
+        log.info("엽서 글 — 자료 부족 %s", out.get("coverage_notes"))
+        raise PostcardInsufficient()
+    if status in NOT_FINAL:
+        reasons = out.get("to_confirm" if status == "needs_confirmation" else "missing_context")
+        log.error("엽서 글이 최종본이 아니다 (status=%s) %s", status, reasons)
+        raise PostcardNotFinal(status, reasons if isinstance(reasons, list) else [])
+    if status != READY:
+        log.error("엽서 글의 status 를 모른다: %r", status)
         raise PostcardUnavailable("엽서 글을 만들지 못했습니다")
     sources = [s for s in out.get("sources") or [] if isinstance(s, dict)]
     return Card(title=_text(out.get("title")),
@@ -441,7 +475,7 @@ def checked(card: Card, turns: set[int]) -> Card:
     본문이 비었으면 엽서를 굽지 않는다.
     """
     if not card.sentences:
-        raise PostcardNotReady("엽서에 담을 만큼 확실한 말씀이 없습니다")
+        raise PostcardInsufficient()
 
     by: dict[int, list[int]] = {}
     for s in card.sources:

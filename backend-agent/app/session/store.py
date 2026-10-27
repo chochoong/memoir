@@ -319,22 +319,29 @@ def _session_row(r: Any) -> dict:
     }
 
 
-async def list_sessions(user_id: str, limit: int = 20) -> list[dict]:
+async def list_sessions(user_id: str, limit: int = 20, has_postcard: bool = False) -> list[dict]:
     """
-    지난 회차 목록. 최근 순. 조각 개수를 같이 센다.
+    지난 회차 목록. 최근 순. 조각 개수와 엽서가 있는지를 같이 싣는다.
 
     user_id 로 거른다. 지금은 X-User-Id 헤더를 그대로 믿으므로 막아 주지는
     못하지만, 로그인이 붙으면 이 조건이 그대로 실효를 가진다.
+
+    has_postcard 면 엽서가 있는 회차만 준다. 엽서는 이제 손으로만 굽기 때문에
+    최근 회차 대부분에 엽서가 없다 — 거르지 않으면 자서전에 고를 회차가 목록
+    뒤로 밀린다.
     """
+    only = "AND p.session_id IS NOT NULL" if has_postcard else ""
     pool = _need_pool()
     try:
         async with pool.acquire() as con:
             rows = await con.fetch(
-                """
+                f"""
                 SELECT s.*, (SELECT count(*) FROM turn t
-                              WHERE t.session_id = s.session_id) AS fragment_count
+                              WHERE t.session_id = s.session_id) AS fragment_count,
+                       p.session_id IS NOT NULL AS has_postcard
                   FROM session s
-                 WHERE s.user_id = $1
+                  LEFT JOIN postcard p ON p.session_id = s.session_id
+                 WHERE s.user_id = $1 {only}
                  ORDER BY s.created_at DESC
                  LIMIT $2
                 """,
@@ -342,7 +349,8 @@ async def list_sessions(user_id: str, limit: int = 20) -> list[dict]:
     except Exception as e:                                   # noqa: BLE001
         log.error("회차 목록 읽기 실패 (%s: %s)", type(e).__name__, str(e)[:120])
         raise StoreUnavailable("회차 목록을 읽지 못했습니다") from e
-    return [{**_session_row(r), "fragment_count": r["fragment_count"]} for r in rows]
+    return [{**_session_row(r), "fragment_count": r["fragment_count"],
+             "has_postcard": r["has_postcard"]} for r in rows]
 
 
 async def load_session(session_id: str) -> dict | None:
