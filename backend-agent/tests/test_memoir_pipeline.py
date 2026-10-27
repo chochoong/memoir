@@ -1301,7 +1301,7 @@ FAILED_V5 = ROOT / "tests" / "data" / "v5_focus_analysis_20261026T093440Z.json"
 
 
 def _diag(a, data):
-    return pipe.analysis_diagnostics(a, T_of(data), pipe.turn_marks(data), pipe.source_texts(data))
+    return pipe.analysis_diagnostics(a, T_of(data), pipe.turn_marks(data), pipe.source_texts(data), pipe.source_asked(data))
 
 
 def test_failed_v5_analysis_reports_every_problem_and_stops_before_outline():
@@ -1309,7 +1309,7 @@ def test_failed_v5_analysis_reports_every_problem_and_stops_before_outline():
     data, turn_map = source_c()
     a = json.loads(FAILED_V5.read_text(encoding="utf-8"))
     with pytest.raises(pipe.PipelineError) as e:
-        pipe.check_analysis(a, T_of(data), pipe.turn_marks(data), pipe.source_texts(data))
+        pipe.check_analysis(a, T_of(data), pipe.turn_marks(data), pipe.source_texts(data), pipe.source_asked(data))
     d = " / ".join(e.value.details)
     assert e.value.kind == "reference"
     assert "사실 f30 이 기억 단위 ['m2', 'm4'] 에 함께" in d and "사실 f31 이 기억 단위 ['m2', 'm4'] 에 함께" in d
@@ -1317,14 +1317,14 @@ def test_failed_v5_analysis_reports_every_problem_and_stops_before_outline():
     assert "사실 f34 의 turns" in d                                    # 정정 기록이 정정 전 사실을 가리킴
     assert "다른 사실 f40 에도 시점" in d                              # 정정 전 f34 와 유효 f40 이 나뉨
     assert "턴 13 에 남에게 들은 이야기 말투" in d
-    assert "keep 이 사실 58개 중 42개" in d
     w = " / ".join(e.value.warnings)
+    assert "keep 이 사실 58개 중 42개" in w                           # 단순화 뒤 — keep 과다는 경고
     assert "m2(대전 수선집 운영과 삶) 가 1983~2010년" in w           # 여러 시기를 한 단위로
     assert "['그리움']" in w and "['치열']" in w                       # 원문에 없는 감정 · 서사 말
     fake = Fake({"analysis": a})
     r = asyncio.run(pipe.run(data, turn_map, call=fake))
     assert fake.order == ["analysis"] and r["generation_state"] == "failed"
-    assert len(r["failure"]["details"]) == len(e.value.details) >= 8
+    assert len(r["failure"]["details"]) == len(e.value.details) >= 7
 
 
 def _seed_c_corrected(data):
@@ -1380,7 +1380,7 @@ def test_stale_correction_value_in_body_blocks():
     assert pipe.correction_findings([], a, sent("86년의 가게", [], "editorial"))[0]["location"] == "title"
 
 
-@pytest.mark.parametrize("share, kind", [(0.6, "error"), (0.4, "warning"), (0.1, None)])
+@pytest.mark.parametrize("share, kind", [(0.6, "warning"), (0.4, "warning"), (0.1, None)])   # 단순화 뒤 경고만
 def test_keep_is_for_core_facts_only(share, kind):
     data, _ = source_c()
     a = _seed_c_corrected(data)
@@ -1473,7 +1473,7 @@ def test_explicit_correction_is_normalized_into_one_valid_fact():
     data, _ = source_c()
     a = json.loads(LITE_V5.read_text(encoding="utf-8"))
     with pytest.raises(pipe.PipelineError) as e:                       # 정정 말고 다른 위반이 남아 실패한다
-        pipe.check_analysis(a, T_of(data), pipe.turn_marks(data), pipe.source_texts(data))
+        pipe.check_analysis(a, T_of(data), pipe.turn_marks(data), pipe.source_texts(data), pipe.source_asked(data))
     assert not any("corrections" in d for d in e.value.details)        # 정정 위반은 사라졌다
     f = {x["id"]: x for x in a["facts"]}
     assert f["f25"]["turns"] == [21, 25] and f["f25"]["time"] == "1985년 봄"   # 유효 사실 하나, 두 발언 출처
@@ -1496,7 +1496,7 @@ def test_correction_normalization_is_general_not_seed_specific():
     a["units"] = [{"id": "m1", "name": "딸 입학", "facts": ["f1", "f2", "f6"], "time": "", "weight": "main"},
                   {"id": "m2", "name": "꽃집", "facts": ["f3"], "time": "", "weight": "main"}]
     a["corrections"] = [{"fact": "f1", "turns": [1, 6], "before": "1998년", "after": "1996년", "note": "입학 연도"}]
-    pipe.check_analysis(a, T_of(data), pipe.turn_marks(data), pipe.source_texts(data))
+    pipe.check_analysis(a, T_of(data), pipe.turn_marks(data), pipe.source_texts(data), pipe.source_asked(data))
     f = {x["id"]: x for x in a["facts"]}
     assert f["f6"]["turns"] == [1, 6] and a["corrections"][0]["fact"] == "f6"
     assert f["f1"]["text"] == "딸이 초등학교에 입학함" and f["f1"]["time"] == ""
@@ -1516,7 +1516,7 @@ def test_unclear_corrections_are_not_guessed(change, why):
     if why == "정뒤 둘":
         a["units"][1]["facts"].append("f40")
     with pytest.raises(pipe.PipelineError) as e:
-        pipe.check_analysis(a, T_of(data), pipe.turn_marks(data), pipe.source_texts(data))
+        pipe.check_analysis(a, T_of(data), pipe.turn_marks(data), pipe.source_texts(data), pipe.source_asked(data))
     assert a["normalized"][0]["applied"] is False, why                 # 고치지 않고
     assert any("corrections" in d for d in e.value.details), why       # 실패로 멈춘다
 
@@ -1551,17 +1551,17 @@ def test_turn16_32_38_keep_their_meaning():
     f["f32"].update(source="self", text="아들은 말이 없어 큰언니를 닮음")  # 평가를 사실로
     f["f38"].update(text="언니가 준 재봉틀 소리에 언니 생각이 남")         # 지난날 싫었던 소리를 뺌
     errors, warnings = _diag(a, data)
-    assert any("턴 16 원문의 감정 말" in x for x in errors) and not any("턴 16 에 남에게" in x for x in errors)
-    assert any("턴 32 은 화자의 평가" in x for x in errors)
-    assert any("턴 38 원문의 감정 말 ['싫음']" in x for x in errors)
-    assert any("턴 16 에서 화자가 직접 받은 말" in x for x in errors)               # 고맙다고 한 말을 뺐다
+    assert any("턴 16 원문의 감정 말" in x for x in warnings) and not any("턴 16 에 남에게" in x for x in errors)
+    assert any("턴 32 은 화자의 평가" in x for x in errors)                         # 출처 오분류 — 실패로 보호
+    assert any("턴 38 원문의 감정 말 ['싫음']" in x for x in warnings)             # 메모 뉘앙스 — 경고(원문이 뒤에 간다)
+    assert any("턴 16 에서 화자가 직접 받은 말" in x for x in warnings)
     f["f16"].update(text="힘들었지만 첫 월급을 집에 부칠 때 좋았고 엄마가 편지로 고맙다고 함")
     f["f32"].update(source="view", text="말이 없는 아들이 큰언니를 닮았다고 내가 말함")
     f["f38"].update(text="재봉틀을 아직 못 버림 · 지금은 그 소리에 언니 생각이 남")
     a["facts"].append(fact("f40", [38], "공장 다닐 때는 그 소리가 싫었음"))
     a["units"].append({"id": "m99", "name": "n", "facts": ["f40"], "time": "", "weight": "minor"})
-    errors, _ = _diag(a, data)
-    assert not any(re.search(r"턴 (16|32|38) ", x) for x in errors)
+    errors, warnings = _diag(a, data)
+    assert not any(re.search(r"턴 (16|32|38) ", x) for x in errors + warnings)
 
 
 def test_opinion_written_as_fact_is_flagged_in_body():
@@ -1576,11 +1576,14 @@ def test_unit_of_unrelated_people_and_times_is_flagged():
     data, _ = source_c()
     a = _seed_c_corrected(data)
     f = {x["id"]: x for x in a["facts"]}
-    f["f33"]["time"] = "2015년"
-    a["units"] = [u for u in a["units"] if u["facts"][0] not in ("f33", "f37")]
-    a["units"].append({"id": "m99", "name": "가족의 이별과 기록", "facts": ["f33", "f37"], "time": "", "weight": "minor"})
+    f["f33"]["time"], f["f30"]["time"] = "2015년", "2008년"
+    a["units"] = [u for u in a["units"] if u["facts"][0] not in ("f33", "f30")]
+    a["units"].append({"id": "m99", "name": "자녀 결혼과 남편과의 이별", "facts": ["f30", "f33"], "time": "", "weight": "minor"})
     _, warnings = _diag(a, data)
-    assert any("m99(가족의 이별과 기록) 의 사실들이 시기로도 끈으로도" in w for w in warnings)
+    assert any("m99(자녀 결혼과 남편과의 이별) 의 사실들이 시기로도 끈으로도" in w for w in warnings)
+    f["f30"].update(time="", text="빌린 드레스가 커서 가게에서 허리를 줄임")   # 시점이 있는 사실이 하나뿐이면 묶음을 판단하지 않는다
+    _, warnings = _diag(a, data)
+    assert not any("m99(" in w and "끈으로도" in w for w in warnings)
 
 
 def test_analysis_prompt_separates_fact_unit_thread_and_paragraph_plan():
@@ -1601,7 +1604,7 @@ def test_reported_is_a_marker_not_a_source_and_is_not_auto_converted(tmp_path):
     data, turn_map = source_c()
     a = json.loads(LITE_V5B.read_text(encoding="utf-8"))
     with pytest.raises(pipe.PipelineError) as e:
-        pipe.check_analysis(a, T_of(data), pipe.turn_marks(data), pipe.source_texts(data))
+        pipe.check_analysis(a, T_of(data), pipe.turn_marks(data), pipe.source_texts(data), pipe.source_asked(data))
     assert e.value.kind == "format" and "f56.source='reported'" in e.value.message
     assert next(f for f in a["facts"] if f["id"] == "f56")["source"] == "reported"   # 바꿔 통과시키지 않는다
     r = asyncio.run(pipe.run_analysis_only(data, turn_map, call=Fake({"analysis": json.loads(LITE_V5B.read_text(encoding="utf-8"))}),
@@ -1617,11 +1620,11 @@ def test_lite_v5b_meaning_losses_are_all_caught():
     a = json.loads(LITE_V5B.read_text(encoding="utf-8"))
     next(f for f in a["facts"] if f["id"] == "f56")["source"] = "self"
     with pytest.raises(pipe.PipelineError) as e:
-        pipe.check_analysis(a, T_of(data), pipe.turn_marks(data), pipe.source_texts(data))
-    d = " / ".join(e.value.details)
+        pipe.check_analysis(a, T_of(data), pipe.turn_marks(data), pipe.source_texts(data), pipe.source_asked(data))
+    assert any("턴 13 에 남에게 들은 이야기 말투" in x for x in e.value.details)   # 출처 오분류는 실패로 남는다
+    d = " / ".join(e.value.warnings)                                    # 메모 뉘앙스는 경고로 모두 남긴다
     for want in ("턴 2 원문의 수 · 기간 표현 ['이십오 년']",           # 운영 기간의 대략 표현
                  "턴 8 원문의 감정 말 ['뿌듯함 · 자부심']",           # 대학 보낸 자부심
-                 "턴 13 에 남에게 들은 이야기 말투",                 # 울었대요
                  "턴 16 원문의 감정 말 ['좋음 · 기쁨', '힘듦']",      # 힘들었지만 좋았다
                  "턴 29 원문의 부정 표현",                          # 바다 쪽은 쳐다보지도 않았다
                  "턴 35 에서 화자가 직접 받은 말",                   # 남들은 고물이라고 팔라고
@@ -1659,3 +1662,168 @@ def test_analysis_prompt_states_three_sources_and_meaning_preservation():
     assert "참고 표시" in a and "원문의 뜻을 메모에서 잃지 마세요" in a
     for k in ("수 · 기간 · 나이", "부정 표현", "남이 화자에게 한 말", "망설임", "자부심"):
         assert k in a, k
+
+
+# ---------------------------------------------------------------- 분석 계약 단순화 · 시험용 분석 스냅샷 · 후속 단계 시험
+
+FIXTURE_C = ROOT / "eval" / "analysis_fixture_C_v5_reviewed.json"
+
+
+def test_simplified_contract_keeps_protected_items_as_errors():
+    data, _ = source_c()
+    base = _seed_c_corrected(data)
+    cases = {
+        "heard 오분류": lambda a: next(f for f in a["facts"] if f["id"] == "f10").update(source="self"),
+        "view 오분류": lambda a: next(f for f in a["facts"] if f["id"] == "f32").update(source="self"),
+        "근거 턴 불일치": lambda a: next(f for f in a["facts"] if f["id"] == "f3").update(turns=[29]),
+        "없는 턴": lambda a: next(f for f in a["facts"] if f["id"] == "f3").update(turns=[99]),
+    }
+    for why, change in cases.items():
+        a = copy.deepcopy(base)
+        change(a)
+        with pytest.raises(pipe.PipelineError):
+            pipe.check_analysis(a, T_of(data), pipe.turn_marks(data), pipe.source_texts(data), pipe.source_asked(data))
+    a = copy.deepcopy(base)                                            # 메모 뉘앙스만 빠지면 경고
+    next(f for f in a["facts"] if f["id"] == "f29").update(text="2003년에 언니가 아파 병원에 감")
+    errors, warnings = _diag(a, data)
+    assert errors == [] and any("턴 29 원문의 부정 표현" in w for w in warnings)
+
+
+def test_body_fact_checks_are_not_relaxed():
+    """분석 메모 검사만 경고로 내렸다 — 본문의 들은 말 · 흐림 · 평가 · 숫자 검사는 그대로 fix/block."""
+    book = pipe.ledger({"facts": [fact("f10", [10], "업어 키웠다고 들음", source="heard"),
+                                  fact("f23", [23], "천 원 받았던 것 같음", certainty="uncertain")]})
+    rules = {x["rule"] for x in pipe.voice_findings([_chapter([("언니가 나를 업어 키웠다.", ["f10"]),
+                                                               ("천 원을 받았다.", ["f23"])])], book)}
+    assert rules == {"hearsay_lost", "certainty_lost"}
+    assert "hearsay_lost" not in pipe.KEPT_ACCEPTED and "certainty_lost" not in pipe.KEPT_ACCEPTED
+
+
+def test_reviewed_fixture_is_valid_marked_and_reproducible():
+    import importlib.util
+    data, turn_map = source_c()
+    fx = json.loads(FIXTURE_C.read_text(encoding="utf-8"))
+    assert fx["analysis_source"] == "reviewed_fixture" and fx["synthetic"] is True and "원본이 아니다" in fx["note"]
+    assert fx["input_ref"] == "b9f8e2daea65" and fx["based_on"]["run_ref"] == "20261027T010241Z-C5-b9f8-analysis"
+    a = pipe.load_analysis_fixture(fx, data, pipe.check_input(data, turn_map))
+    f = {x["id"]: x for x in a["facts"]}
+    assert f["f34"]["turns"] == [21, 25] and f["f34"]["time"] == "1985년 봄"              # 개업 정정
+    assert not any(re.search(r"86\s?년", x["text"] + x["time"]) for x in a["facts"])     # 1986 은 이력에만
+    assert a["corrections"][0]["before"] == "1986년"
+    assert f["f21"]["source"] == "heard" and f["f61"]["turns"] == [13] and f["f61"]["source"] == "self"   # 턴 13
+    for fid in ("f62", "f63", "f64", "f65", "f66"):                    # 덧붙인 사실은 모두 그 턴 원문의 말
+        assert fid in f and set(f[fid]["turns"]) <= T_of(data)
+    for e in fx["edits"]:
+        assert e["reason"] and e["turns"] and "after" in e and "before" in e   # 고친 것을 모두 기록
+    spec = importlib.util.spec_from_file_location("bf", ROOT / "eval" / "build_analysis_fixture_C_v5.py")
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    assert mod.build() == fx                                            # 만드는 스크립트로 같은 결과가 나온다
+    base = (ROOT / fx["based_on"]["file"]).read_bytes()
+    import hashlib
+    assert hashlib.sha256(base).hexdigest()[:16] == fx["based_on"]["sha256"]       # 바탕은 모델 원본 그대로
+
+
+@pytest.mark.parametrize("change, why", [
+    (lambda fx: fx.update(input_ref="000000000000"), "input_ref"),
+    (lambda fx: fx.update(analysis_source="model"), "analysis_source"),
+    (lambda fx: fx.update(edits=[]), "edits"),
+    (lambda fx: fx.pop("based_on"), "based_on"),
+    (lambda fx: next(f for f in fx["analysis"]["facts"] if f["id"] == "f21").update(source="self"), "계약 위반"),
+])
+def test_fixture_is_refused_when_unmarked_or_invalid(change, why):
+    data, turn_map = source_c()
+    fx = json.loads(FIXTURE_C.read_text(encoding="utf-8"))
+    change(fx)
+    with pytest.raises(pipe.PipelineError, match=why):
+        pipe.load_analysis_fixture(fx, data, pipe.check_input(data, turn_map))
+    raw = json.loads(LITE_V5B.read_text(encoding="utf-8"))           # 모델 원본을 그대로 스냅샷으로 쓸 수 없다
+    with pytest.raises(pipe.PipelineError, match="analysis_snapshot"):
+        pipe.load_analysis_fixture(raw, data, pipe.check_input(data, turn_map))
+
+
+def test_follow_on_run_starts_at_outline_and_marks_the_source(tmp_path):
+    data, turn_map = source_c()
+    fx = json.loads(FIXTURE_C.read_text(encoding="utf-8"))
+    ids = [f["id"] for f in fx["analysis"]["facts"]]
+    use = ["f17", "f22", "f23", "f40", "f41", "f6", "f44", "f52", "f54", "f57", "f58", "f59", "f60"]
+    o = {**outline_ok(), "book": {**outline_ok()["book"], "closing_facts": ["f60"]},
+         "chapters": [chapter_plan("ch-1", [para(use)], "큰언니와 재봉틀", ["m1", "m3", "m7"])],
+         "omit": [{"facts": [i for i in ids if i not in use], "reason": "이번 장의 중심 밖"}]}
+    body = [sent("열 살쯤 큰언니에게 바느질을 배웠다.", ["f17"])]
+    d = {"chapter_key": "ch-1", "title": sent("언니의 발틀", [], "editorial"), "paragraphs": [body], "review_notes": []}
+    e = {**edited_ok(), "chapters": [{"chapter_key": "ch-1", "center": "", "title": sent("언니의 발틀", [], "editorial"),
+                                      "paragraphs": [body]}],
+         "omitted": [{"facts": [i for i in ids if i != "f17"], "reason": "시험"}]}
+    fake = Fake({"outline": o, "ch-1": d, "edit": e, "verify": verify_ok(reviewed_locations=["artifact"])})
+    r = asyncio.run(pipe.run(data, turn_map, call=fake, recorder=pipe.Recorder(tmp_path), focus="큰언니와 재봉틀",
+                             analysis_fixture=fx))
+    assert fake.order == ["outline", "ch-1", "edit", "verify"] and r["calls"] == 4    # 분석을 부르지 않는다
+    assert r["analysis_source"] == "reviewed_fixture" and r["pipeline_complete"] is True
+    assert (tmp_path / "01_analysis_fixture.json").exists() and not (tmp_path / "01_analysis.json").exists()
+    run_doc = json.loads((tmp_path / "run.json").read_text(encoding="utf-8"))
+    assert run_doc["analysis_source"] == "reviewed_fixture" and [s["stage"] for s in run_doc["steps"]][0] == "outline"
+    assert "reviewed_fixture" in (tmp_path / "r1_summary.md").read_text(encoding="utf-8")
+    out = fake.payload("outline")["analysis"]
+    assert "before" not in json.dumps(out["corrections"]) and len(out["facts"]) == len(ids)
+    r = asyncio.run(pipe.run(data, turn_map, call=Fake(script())))      # 스냅샷 없이 돌리면 출처는 model
+    assert r["analysis_source"] == "model"
+
+
+def test_cli_from_analysis_dry_run_and_refusals(capsys, tmp_path):
+    args = ["--seed", str(SEED_C_PATH), "--aliases", "c1,c2,c3,c4,c5", "--dry-run"]
+    assert cli.main(args + ["--from-analysis", str(FIXTURE_C), "--focus", "큰언니와 재봉틀"]) == 0
+    out = capsys.readouterr().out
+    assert "analysis_source=reviewed_fixture" in out and "분석 호출 없음" in out and "예상 호출 4회" in out
+    assert cli.main(args + ["--from-analysis", str(FIXTURE_C), "--analysis-only"]) == 2
+    bad = tmp_path / "raw.json"
+    bad.write_text(LITE_V5B.read_text(encoding="utf-8"), encoding="utf-8")
+    assert cli.main(args + ["--from-analysis", str(bad)]) == 2
+
+
+# ---------------------------------------------------------------- 출처 대응 — 질문(asked)은 근거가 아니다
+
+
+def _turn24_data(elder):
+    data, _ = source_c()
+    data = copy.deepcopy(data)
+    u = next(x for x in data["utterances"] if x["turn"] == 24)
+    u.update(asked="첫 천 원을 지갑에 넣고 다니셨어요?", elder=elder)
+    return data
+
+
+@pytest.mark.parametrize("elder, why", [
+    ("네.", "짧은 답뿐"),                       # 질문에 '네'만 — 질문 내용을 사실로 세울 수 없다
+    ("그럼요, 한참이요.", "질문에만 있는 내용"),  # 질문 글을 메모로 옮김 — 화자 발언과 맞지 않는다
+])
+def test_content_only_in_the_question_is_not_a_fact(elder, why):
+    data = _turn24_data(elder)
+    a = _seed_c_corrected(source_c()[0])
+    next(f for f in a["facts"] if f["id"] == "f24").update(text="첫 천 원을 지갑에 넣고 다님")
+    errors, _ = pipe.analysis_diagnostics(a, T_of(data), pipe.turn_marks(data), pipe.source_texts(data),
+                                          pipe.source_asked(data))
+    assert any("f24" in e and why in e for e in errors), errors
+
+
+def test_question_may_supply_the_referent_but_the_answer_must_carry_the_fact():
+    """턴 18 — 질문 '서울에서는 얼마나 계셨어요?' · 답 '한 육 년?' → '서울에서 약 6년 살았음' 은 답의 수가 근거라 통과."""
+    data, _ = source_c()
+    a = _seed_c_corrected(data)
+    next(f for f in a["facts"] if f["id"] == "f18").update(text="서울에서 약 6년 살았음", certainty="approx")
+    errors, _ = _diag(a, data)
+    assert not any("f18" in e for e in errors)
+    next(f for f in a["facts"] if f["id"] == "f18").update(text="서울에서 오래 지냈음")   # 답의 수도 글도 없음
+    errors, _ = _diag(a, data)
+    assert any("f18" in e and "발언과 맞지 않는다" in e for e in errors)
+
+
+def test_character_overlap_does_not_prove_meaning():
+    """한계 기록 — 글자가 닮아도 뜻이 뒤집힐 수 있다('안 왔어요' → '왔음'). 대응 검사는 통과하고, 부정 누락 경고 ·
+    검증 단계 · 사람 대조가 뜻을 본다. 대응 검사를 뜻 검증으로 쓰지 않는다."""
+    data, _ = source_c()
+    a = _seed_c_corrected(data)
+    next(f for f in a["facts"] if f["id"] == "f23").update(text="첫날은 손님이 많이 왔고 사흘째에 할머니 한 분이 바지 단 줄여 달라고 옴")
+    errors, warnings = _diag(a, data)
+    assert not any("f23" in e for e in errors)
+    assert any("턴 23 원문의 부정 표현" in w for w in warnings)
+    assert "뜻의 대조는 검증 단계와 사람이 한다" in (ROOT / "app" / "session" / "memoir_pipeline.py").read_text(encoding="utf-8")

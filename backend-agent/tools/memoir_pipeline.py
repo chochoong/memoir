@@ -213,6 +213,8 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--dry-run", action="store_true", help="입력만 만들고 모델을 부르지 않는다")
     ap.add_argument("--focus", help=f"한 장 시험 — 소재 이름({FOCUS_MAX_CHARS}자 이하). 다섯 단계 · 호출 5회, 장 1개")
     ap.add_argument("--analysis-only", action="store_true", help="분석 단계만 — 호출 1회, 기억 지도를 남긴다")
+    ap.add_argument("--from-analysis", type=Path,
+                    help="후속 단계 시험 — 검증된 시험용 분석 스냅샷(reviewed_fixture)에서 시작, 분석을 부르지 않는다")
     a = ap.parse_args(argv)
 
     from dotenv import load_dotenv
@@ -245,8 +247,24 @@ def main(argv: list[str] | None = None) -> int:
         print("입력 거부 — --focus 와 --analysis-only 는 함께 쓰지 않는다", file=sys.stderr)
         return 2
     if a.analysis_only:
+        if a.from_analysis:
+            print("입력 거부 — --analysis-only 와 --from-analysis 는 함께 쓰지 않는다", file=sys.stderr)
+            return 2
         return analysis_only(a, data, turn_map, meta, cfg)
-    calls = "5회 (장 1 + 4)" if focus else f"{MIN_CALLS}~{MAX_CALLS}회 (장 수 + 4)"
+    fixture = None
+    if a.from_analysis:
+        try:
+            fixture = json.loads(a.from_analysis.read_text(encoding="utf-8"))
+            analysis = pipe.load_analysis_fixture(fixture, data, pipe.check_input(data, turn_map))
+        except (OSError, ValueError, pipe.PipelineError) as e:
+            print(f"입력 거부 — {getattr(e, 'message', e)}", file=sys.stderr)
+            return 2
+        print(f"분석 출처: 시험용 스냅샷 {a.from_analysis.name} (analysis_source=reviewed_fixture · 바탕 "
+              f"{fixture['based_on']['run_ref']} · 고친 항목 {len(fixture['edits'])}) — 사실 {len(analysis['facts'])} · "
+              f"기억 단위 {len(analysis['units'])} · 분석 호출 없음")
+    extra = 3 if fixture is not None else 4
+    calls = (f"{1 + extra}회 (장 1 + {extra})" if focus else
+             f"{pipe.MIN_CHAPTERS + extra}~{pipe.MAX_CHAPTERS + extra}회 (장 수 + {extra})")
     print(f"모델 {cfg['MEMOIR_PIPE_TEXT_MODEL']} · 온도 {cfg['MEMOIR_PIPE_TEMPERATURE']} · "
           f"전체 상한 {cfg['MEMOIR_PIPE_TOTAL_TIMEOUT']:.0f}초 · 재시도 {cfg['retries']} · 지시문 {pipe.PROMPT_VERSION} · "
           f"예상 호출 {calls}" + (f" · 한 장 시험 focus「{focus}」" if focus else ""))
@@ -256,8 +274,11 @@ def main(argv: list[str] | None = None) -> int:
 
     if focus:
         meta["run_ref"] += "-focus"
+    if fixture is not None:
+        meta["run_ref"] += "-fixture"
     folder = a.out_dir / meta["run_ref"]
-    result = asyncio.run(pipe.run(data, turn_map, recorder=pipe.Recorder(folder), meta=meta, focus=focus))
+    result = asyncio.run(pipe.run(data, turn_map, recorder=pipe.Recorder(folder), meta=meta, focus=focus,
+                                  analysis_fixture=fixture))
     steps = json.loads((folder / "run.json").read_text(encoding="utf-8"))["steps"]
     for s in steps:
         u = s.get("usage") or {}
@@ -270,6 +291,7 @@ def main(argv: list[str] | None = None) -> int:
     print(f"편집 추적 장 {t.get('draft_chapters')}→{t.get('final_chapters')} · 문장 그대로 {t.get('kept')} · 다시 씀 "
           f"{t.get('rewritten')} · 옮김 {t.get('moved')} · 덜어 냄 {t.get('dropped')} · 구조 변화 {t.get('structure_changed')}")
     print(f"구성 채점(코드 보정 뒤) {q.get('scores')} · 기준 충족 {q.get('meets_bar')}")
+    print(f"분석 출처 {result.get('analysis_source')}")
     print(f"판정 code_gate={result.get('code_gate')} · model_verdict={result.get('model_verdict')} · "
           f"human_review={result['human_review']} → overall={result.get('overall')}")
     print(f"결과 {result['generation_state']} · pipeline_complete={str(result['pipeline_complete']).lower()} · "

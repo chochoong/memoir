@@ -326,6 +326,10 @@ def source_texts(data: dict) -> dict[int, str]:
     return {u["turn"]: u["elder"] for u in data["utterances"]}
 
 
+def source_asked(data: dict) -> dict[int, str]:
+    return {u["turn"]: u["asked"] for u in data["utterances"]}
+
+
 def excluded_turns(analysis: dict) -> set[int]:
     """
     턴째로 막을 범위 — mode=whole 로 빼 달라고 한 턴과, 그 요청을 말한 턴.
@@ -555,22 +559,34 @@ def _year_forms(text: str) -> set[str]:
     return _years(text or "")
 
 
+FACT_SOURCE_MIN_OVERLAP = 0.08  # 사실 메모의 글자 조각 가운데 근거 턴 **화자 발언**에 있는 비율 — 실측 정상 0.09 이상 · 엉뚱한 턴 0.05
+# 질문에 대한 짧은 답만 — 이것만으로는 질문의 내용을 사실로 세울 수 없다(공통 지침 3)
+_BARE_ANSWER = re.compile(r"(네|예|응|그렇죠|그럼요|맞아요|그래요|그랬죠|아마도요)[.!…\s]*")
+
+
+def _bigrams(s: str) -> set[str]:
+    s = re.sub(r"[^가-힣0-9]", "", s or "")
+    return {s[i:i + 2] for i in range(len(s) - 1)}
+
+
 def analysis_diagnostics(out: dict, T: set[int], marks: list[dict] | None = None,
-                         texts: dict[int, str] | None = None) -> tuple[list[str], list[str]]:
+                         texts: dict[int, str] | None = None, asked: dict[int, str] | None = None
+                         ) -> tuple[list[str], list[str]]:
     """
     모양 검사를 통과한 분석 출력의 뜻 검사 — **문제를 모두 모아** (errors, warnings) 로 돌려준다.
     errors 가 하나라도 있으면 check_analysis 가 실패로 멈춘다(다음 단계로 넘기지 않는다). 한 번에 여러
     문제가 있어도 첫 문제에서 멈추지 않고 전체 진단을 남긴다.
 
-        errors   빼 달라고 한 턴의 사용 · 빠진 턴 · 사실의 단위 중복 · 단위 없는 사실 · 정정 오류(정정 전 값이
-                 별개 사실 · 유효 사실에 정정 전 값 · 불명확한 정정) · 들은 이야기 표지 턴에 들은 사실 없음 ·
-                 keep 과다(사실의 절반 초과)
-        warnings 불확실 표지 턴의 사실이 모두 stated · 정정 표지 턴인데 정정 기록 없음(검토 대상) · 여러 시기를
-                 묶은 큰 기억 단위 · 원문에 없는 감정 · 희생 말로 정한 주제 · 시점이 여럿인 사실 · keep 이 많음 ·
-                 사실 하나짜리 단위가 대부분 · 주제와 방향의 앞뒤
+        errors   (보호 항목) 빼 달라고 한 턴의 사용 · 빠진 턴 · 사실 ↔ 근거 턴 불일치 · 사실의 단위 중복 ·
+                 단위 없는 사실 · 정정 오류(정정 전 값이 별개 사실 · 유효 사실에 정정 전 값 · 불명확한 정정) ·
+                 출처의 명백한 오분류(들은 이야기 표지 턴에 heard 없음 · 평가 표지 턴에 view 없음)
+        warnings 메모 뉘앙스 — 수 · 기간 · 부정 · 감정 · 직접 받은 말 · 망설임이 메모에 없음(원문 턴이 뒤 단계에
+                 함께 가므로 실패로 막지 않는다) · keep 과다 · 불확실 표지인데 stated · 정정 표지인데 기록 없음 ·
+                 큰 기억 단위 · 무관한 묶음 · 원문에 없는 감정 · 희생 말의 주제 · 시점이 여럿인 사실 · 주제와 방향의 앞뒤
     """
     errors: list[str] = []
     warnings: list[str] = []
+    asked = asked or {}
     gone = excluded_turns(out)
     facts = {f["id"]: f for f in out["facts"]}
 
@@ -585,6 +601,26 @@ def analysis_diagnostics(out: dict, T: set[int], marks: list[dict] | None = None
     missing = sorted(T - covered - left - gone)
     if missing:
         errors.append(f"턴 {missing} 이 사실 · not_in_facts · exclusions 어디에도 없다")
+
+    # 사실 ↔ 근거 턴 대응 (보조 검사) — **화자의 발언(elder)만** 근거로 센다. AI 질문(asked)은 지시대상 · 문맥을
+    # 알아보는 데만 쓰고, 질문에만 있는 내용은 사실의 근거가 아니다. 메모가 그 턴 발언과 글자 조각을 거의 나누지
+    # 않고 발언의 수 표현도 담지 않으면 다른 턴을 가리켰거나 질문 · 상상에서 온 사실이다.
+    # 글자가 닮았다고 뜻이 맞는 것은 아니다 — 뜻의 대조는 검증 단계와 사람이 한다.
+    for f in facts.values() if texts else []:
+        said = " ".join(texts.get(t, "") for t in f["turns"])
+        if all(_BARE_ANSWER.fullmatch(texts.get(t, "").strip()) for t in f["turns"]):
+            errors.append(f"사실 {f['id']} 의 근거 턴 {f['turns']} 은 질문에 대한 짧은 답뿐이다 — 질문 내용을 사실로 세우지 않는다")
+            continue
+        fb = _bigrams(f["text"])
+        if len(fb) < 3:
+            continue
+        overlap = len(fb & _bigrams(said)) / len(fb)
+        memo = re.sub(r"\s+", "", f["text"] + " " + f["time"])
+        memo_digits = set(re.findall(r"\d+", f["text"] + " " + f["time"]))
+        numbers = any(_num_supported(v, memo, memo_digits) for _, v in _fact_tokens(said))
+        if overlap < FACT_SOURCE_MIN_OVERLAP and not numbers:
+            errors.append(f"사실 {f['id']} 메모가 근거 턴 {f['turns']} 의 화자 발언과 맞지 않는다 — 다른 턴을 가리켰거나 "
+                          "질문에만 있는 내용 · 원문에 없는 사실")
 
     # 기억 단위 — 사실은 정확히 한 주 기억 단위에. 같은 사람 · 물건이 여러 단위에 나오면 끈으로 잇는다
     home: dict[str, list[str]] = {}
@@ -606,8 +642,9 @@ def analysis_diagnostics(out: dict, T: set[int], marks: list[dict] | None = None
     for u in out["units"]:
         fs = [facts[fid] for fid in u["facts"] if fid in facts]
         yrs = [_full_years(f["time"] + " " + f["text"]) for f in fs]
-        if (len(fs) >= 2 and u["id"] not in threaded and sum(1 for y in yrs if y) >= 1
-                and not any(a & b for i, a in enumerate(yrs) for b in yrs[i + 1:])):
+        dated = [y for y in yrs if y]
+        if (len(fs) >= 2 and u["id"] not in threaded and len(dated) >= 2
+                and not any(a & b for i, a in enumerate(dated) for b in dated[i + 1:])):
             warnings.append(f"기억 단위 {u['id']}({u['name']}) 의 사실들이 시기로도 끈으로도 이어지지 않는다 — "
                             "다른 사람의 다른 일을 한 묶음으로 만들었는지 본다")
     singles = sum(1 for u in out["units"] if len(u["facts"]) == 1)
@@ -675,24 +712,24 @@ def analysis_diagnostics(out: dict, T: set[int], marks: list[dict] | None = None
         if m["turn"] in skip:
             continue
         if m.get("reported") and not m["heard"] and not any(_REPORTED.search(f["text"]) for f in fs):
-            errors.append(f"턴 {m['turn']} 에서 화자가 직접 받은 말(…다고 했어요)의 내용이 사실 메모에 없다 — "
+            warnings.append(f"턴 {m['turn']} 에서 화자가 직접 받은 말(…다고 했어요)의 내용이 사실 메모에 없다 — "
                           "전언은 아니지만 그 말은 남긴다(source self)")
         if m.get("negation") and not _NEG_FACT.search(memo):
-            errors.append(f"턴 {m['turn']} 원문의 부정 표현(…지 않았다 · 안 · 못 · 없었다)이 사실 메모에 없다")
+            warnings.append(f"턴 {m['turn']} 원문의 부정 표현(…지 않았다 · 안 · 못 · 없었다)이 사실 메모에 없다")
         if m.get("doubt") and not any(f["source"] == "view" or _DOUBT_FACT.search(f["text"]) for f in fs):
-            errors.append(f"턴 {m['turn']} 원문의 망설임 · 의심(…나 싶다)이 사실 메모에 없다 — 화자의 생각(view)으로 남긴다")
+            warnings.append(f"턴 {m['turn']} 원문의 망설임 · 의심(…나 싶다)이 사실 메모에 없다 — 화자의 생각(view)으로 남긴다")
         support = re.sub(r"\s+", "", memo + " " + " ".join(f["time"] for f in fs))
         digits = set(re.findall(r"\d+", memo + " " + " ".join(f["time"] for f in fs)))
         miss = [shown for shown, value in _fact_tokens(texts.get(m["turn"], "") if texts else "")
                 if _counts_as_number(shown, value) and not _num_supported(value, support, digits)]
         if miss:
-            errors.append(f"턴 {m['turn']} 원문의 수 · 기간 표현 {miss} 이 사실 메모에 없다 — 대략의 표현도 그대로 남긴다")
+            warnings.append(f"턴 {m['turn']} 원문의 수 · 기간 표현 {miss} 이 사실 메모에 없다 — 대략의 표현도 그대로 남긴다")
         if m.get("view") and not any(f["source"] == "view" for f in fs):
             errors.append(f"턴 {m['turn']} 은 화자의 평가 · 생각(…다고 제가 그래요)인데 view 사실이 없다 — "
                           "객관적 사실로 확정하지 않는다")
         lost = [g for g in m.get("emotions", []) if not re.search(EMOTION_GROUPS[g], memo)]
         if lost:
-            errors.append(f"턴 {m['turn']} 원문의 감정 말 {lost} 이 그 턴의 사실 메모에 없다 — "
+            warnings.append(f"턴 {m['turn']} 원문의 감정 말 {lost} 이 그 턴의 사실 메모에 없다 — "
                           "복합적인 감정(지난날 싫었던 것 · 지금 떠오르는 것)은 사실을 나눠서라도 모두 남긴다")
         if m["uncertain"] and m["turn"] not in in_corr and all(f["certainty"] == "stated" for f in fs):
             warnings.append(f"턴 {m['turn']} 에 불확실 표지가 있는데 모든 사실이 stated")
@@ -700,7 +737,7 @@ def analysis_diagnostics(out: dict, T: set[int], marks: list[dict] | None = None
     # keep — 핵심 사실에만. 일반 사실을 본문에 쓸지는 목차가 정한다
     keeps = sum(1 for f in facts.values() if f["keep"])
     if facts and keeps / len(facts) > KEEP_ERROR_RATIO:
-        errors.append(f"keep 이 사실 {len(facts)}개 중 {keeps}개 — 핵심 사실에만 둔다(본문 사용 여부는 목차가 정한다)")
+        warnings.append(f"keep 이 사실 {len(facts)}개 중 {keeps}개 — 핵심 사실에만 둔다(본문 사용 여부는 목차가 정한다)")
     elif facts and keeps / len(facts) > KEEP_WARN_RATIO:
         warnings.append(f"keep 이 사실 {len(facts)}개 중 {keeps}개 — 핵심 사실인지 다시 본다")
 
@@ -782,7 +819,7 @@ def normalize_corrections(out: dict) -> list[dict]:
 
 
 def check_analysis(out, T: set[int], marks: list[dict] | None = None,
-                   texts: dict[int, str] | None = None) -> tuple[str, list[str]]:
+                   texts: dict[int, str] | None = None, asked: dict[int, str] | None = None) -> tuple[str, list[str]]:
     """
     사실 원장(facts)과 기억 단위(units)를 나눠 본다.
 
@@ -925,7 +962,7 @@ def check_analysis(out, T: set[int], marks: list[dict] | None = None,
                               + (f", {n['stripped']} 에서 정정 전 연도를 지움" if n["stripped"] else ""))
 
     # ---- 뜻 (전부 모은 뒤, 하나라도 있으면 멈춘다)
-    errors, warnings = analysis_diagnostics(out, T, marks, texts)
+    errors, warnings = analysis_diagnostics(out, T, marks, texts, asked)
     c.warnings += warnings
     if errors:
         e = c.fail("reference", f"분석 계약 위반 {len(errors)}건 — " + " | ".join(errors)[:600])
@@ -2198,10 +2235,60 @@ def _result(state: str, *, failure: PipelineError | None = None, edited: dict | 
     }
 
 
+REVIEWED_FIXTURE = "reviewed_fixture"     # 분석이 모델이 아니라 사람이 고친 시험용 스냅샷에서 왔다
+_FIXTURE_EDIT_KINDS = ("fact.set", "fact.add", "unit.set", "unit.move", "unit.split", "unit.add",
+                       "thread.set", "thread.add", "theme.set", "direction.set")
+
+
+def load_analysis_fixture(fx, data: dict, T: set[int]) -> dict:
+    """
+    후속 단계 시험용 분석 스냅샷을 받는다 — 맞지 않으면 모델을 부르지 않고 입력 거부.
+
+        fixture=analysis_snapshot · analysis_source=reviewed_fixture · synthetic=true
+        input_ref 가 지금 입력과 같다 (같은 원문)
+        edits — 모델 원본에서 고친 것을 하나하나(종류 · 대상 · 이유 · 근거 턴) 적었다. 비면 안 된다
+        based_on — 어느 모델 실행의 출력을 고쳤는지
+        analysis — 분석 계약 검사를 **오류 없이** 통과 (경고는 남긴다)
+
+    스냅샷은 시험 도구다. 서비스의 분석 단계를 대신하지 않고, 결과에는 analysis_source 로 늘 표시한다.
+    """
+    def bad(why):
+        return PipelineError("input", "input", f"분석 스냅샷: {why}")
+    if not isinstance(fx, dict) or fx.get("fixture") != "analysis_snapshot":
+        raise bad("fixture=analysis_snapshot 이 아니다")
+    if fx.get("analysis_source") != REVIEWED_FIXTURE or fx.get("synthetic") is not True:
+        raise bad("analysis_source=reviewed_fixture · synthetic=true 가 아니다")
+    if fx.get("input_ref") != input_ref(data):
+        raise bad(f"input_ref {fx.get('input_ref')!r} — 지금 입력 {input_ref(data)} 과 다르다")
+    based = fx.get("based_on")
+    if not isinstance(based, dict) or not based.get("run_ref") or not based.get("model"):
+        raise bad("based_on(고친 바탕이 된 모델 실행)이 없다")
+    edits = fx.get("edits")
+    if not isinstance(edits, list) or not edits:
+        raise bad("edits(고친 기록)가 없다")
+    for i, e in enumerate(edits):
+        if (not isinstance(e, dict) or e.get("kind") not in _FIXTURE_EDIT_KINDS or not str(e.get("reason", "")).strip()
+                or not _int_list(e.get("turns")) or set(e["turns"]) - T):
+            raise bad(f"edits[{i}] 모양이 다르다(종류 · 이유 · 근거 턴)")
+    analysis = json.loads(json.dumps(fx.get("analysis")))
+    try:
+        status, _ = check_analysis(analysis, T, turn_marks(data), source_texts(data), source_asked(data))
+    except PipelineError as e:
+        raise bad(f"분석 계약 위반 — {e.message[:300]}") from e
+    if status != "ready":
+        raise bad(f"status={status}")
+    return analysis
+
+
 async def run(data: dict, turn_map: list[dict], *, call: Call = call_model,
-              recorder: Recorder | None = None, meta: dict | None = None, focus: str | None = None) -> dict:
+              recorder: Recorder | None = None, meta: dict | None = None, focus: str | None = None,
+              analysis_fixture: dict | None = None) -> dict:
     """
     다섯 단계를 차례로. 돌려주는 것은 result (result.json 과 같은 것).
+
+    analysis_fixture 를 주면 **후속 단계 시험**이다 — 분석을 부르지 않고 검증된 시험용 스냅샷
+    (load_analysis_fixture)에서 시작해 목차 → 장 → 편집 → 검증만 부른다(호출 장 수 + 3).
+    결과 · 기록에 analysis_source=reviewed_fixture 를 남긴다.
 
     meta 는 실행 기록에 그대로 덧붙이는 식별(run_ref · seed · alias)이다. focus 를 주면 한 장
     시험이다 — 같은 다섯 단계를 돌되 목차 · 편집이 그 소재로 장 하나만 만든다(호출 5회).
@@ -2225,18 +2312,25 @@ async def run(data: dict, turn_map: list[dict], *, call: Call = call_model,
                                    "input": data, "turn_map": turn_map})
         st = _Run(data, T, call, rec, cfg)
 
-        # ① 분석 — 사실 원장 · 기억 단위
-        analysis, step = await st.ask("analysis", analysis_message(data), "01_analysis")
-        status, step["warnings"] = check_analysis(analysis, T, turn_marks(data), source_texts(data))
-        step["ok"] = True
+        # ① 분석 — 사실 원장 · 기억 단위 (또는 검증된 시험용 스냅샷)
+        if analysis_fixture is not None:
+            analysis = load_analysis_fixture(analysis_fixture, data, T)
+            rec.json("01_analysis_fixture.json", analysis_fixture)
+            status = "ready"
+        else:
+            analysis, step = await st.ask("analysis", analysis_message(data), "01_analysis")
+            status, step["warnings"] = check_analysis(analysis, T, turn_marks(data), source_texts(data),
+                                                      source_asked(data))
+            step["ok"] = True
         if status == INSUFFICIENT:
             result = _result(INSUFFICIENT, calls=st.calls, focus=focus)
             return result
         if status == NEEDS_CONTEXT:
             raise PipelineError("analysis", "context", "; ".join(analysis["missing_context"])[:300])
         book = ledger(analysis)
-        step["metrics"] = {"facts": len(analysis["facts"]), "units": len(analysis["units"]),
-                           "must_keep": len(must_keep(analysis))}
+        if analysis_fixture is None:
+            step["metrics"] = {"facts": len(analysis["facts"]), "units": len(analysis["units"]),
+                               "must_keep": len(must_keep(analysis))}
 
         # ② 목차 — 책 설계도
         outline_out, step = await st.ask("outline", outline_message(data, analysis, focus), "02_outline")
@@ -2245,7 +2339,7 @@ async def run(data: dict, turn_map: list[dict], *, call: Call = call_model,
         if status == NEEDS_CONTEXT:
             raise PipelineError("outline", "context", "; ".join(outline_out["missing_context"])[:300])
         chapters_plan = outline_out["chapters"]
-        st.max_calls = len(chapters_plan) + 4
+        st.max_calls = len(chapters_plan) + (3 if analysis_fixture is not None else 4)
         memos = outline_memos(outline_out)
 
         # ③ 장별 집필 — 순서대로, 첫 실패에서 멈춘다
@@ -2340,7 +2434,8 @@ async def run(data: dict, turn_map: list[dict], *, call: Call = call_model,
     finally:
         result.update({k: meta[k] for k in ("run_ref", "input_ref") if k in meta})
         rec.json("result.json", result)
-        run_doc = {**meta, "focus": focus, "started_at": started_at,
+        result["analysis_source"] = REVIEWED_FIXTURE if analysis_fixture is not None else "model"
+        run_doc = {**meta, "focus": focus, "analysis_source": result["analysis_source"], "started_at": started_at,
                    "finished_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
                    "settings": cfg, "prompts": _safe_hashes(),
                    "steps": st.steps if st else [],
@@ -2459,7 +2554,7 @@ async def run_analysis_only(data: dict, turn_map: list[dict], *, call: Call = ca
         st.max_calls = 1
         analysis, step = await st.ask("analysis", analysis_message(data), "01_analysis")
         try:
-            status, warnings = check_analysis(analysis, T, marks, source_texts(data))
+            status, warnings = check_analysis(analysis, T, marks, source_texts(data), source_asked(data))
             step["warnings"], step["ok"] = warnings, True
             result.update(generation_state="analyzed" if status == "ready" else status,
                           analysis_ok=status == "ready", warnings=warnings, semantic_checks="run")
@@ -2520,7 +2615,9 @@ def r1_summary(run_doc: dict, result: dict) -> str:
         "- 단계 상한: " + " · ".join(
             f"{s} {cfg.get(f'MEMOIR_PIPE_{s.upper()}_TIMEOUT')}초/"
             f"{cfg.get(f'MEMOIR_PIPE_{s.upper()}_MAX_OUTPUT_TOKENS')}" for s in STAGES),
-        f"- 지시문 판: {result.get('prompt_version')}",
+        f"- 지시문 판: {result.get('prompt_version')} · 분석 출처: **{result.get('analysis_source', 'model')}**"
+        + (" — 시험용 스냅샷(모델 원본 아님), 분석 단계를 부르지 않았다"
+           if result.get("analysis_source") == REVIEWED_FIXTURE else ""),
         "",
         "## 상태",
         f"- generation_state: **{result['generation_state']}** · pipeline_complete: "
