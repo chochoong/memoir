@@ -391,6 +391,23 @@
     .topic:focus { outline: none; border-color: var(--ink); }
     .prep-note { color: var(--muted); font-size: .92rem; line-height: 1.5; margin: 8px 0 0; }
     .photo-label { margin: 20px 0 0; }
+    /* 낱말 카드 고르기 — 이 기기에서 시작 · 어르신 링크에서 시작을 누르면 먼저 나온다 */
+    .screen[data-screen="wordpick"] { padding-bottom: calc(168px + env(safe-area-inset-bottom)); }
+    .wd-group[hidden] { display: none; }
+    .wd-group { margin: 0 0 18px; }
+    .wd-group h3 { margin: 0 0 8px; font-size: .95rem; font-weight: 700; color: var(--ink); }
+    .wd-list { list-style: none; padding: 0; margin: 0; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+    .wd-card { width: 100%; min-height: 84px; padding: 16px 12px; border-radius: 18px; border: 2px solid var(--line);
+               background: #fffaf0; color: var(--ink); font-weight: 700; font-size: 1.35rem; line-height: 1.3;
+               word-break: keep-all; overflow-wrap: anywhere; box-shadow: 0 2px 0 rgba(0,0,0,.04); }
+    .wd-card:active { border-color: var(--ink); background: var(--ink); color: #fff; }
+    /* 묶음 이름 단추 — 세 칸씩. 누른 것은 색을 뒤집는다 */
+    .wd-cats { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; margin: 4px 0 14px; }
+    .wd-cat { min-height: 52px; border-radius: 16px; border: 2px solid var(--line); background: var(--paper);
+              color: var(--ink); font-weight: 700; font-size: 1.02rem; }
+    .wd-cat small { color: var(--muted); font-weight: 600; font-size: .85rem; }
+    .wd-cat[aria-pressed="true"] { border-color: var(--ink); background: var(--ink); color: #fff; }
+    .wd-cat[aria-pressed="true"] small { color: rgba(255,255,255,.75); }
     .flow-interview .ready-copy h1, .flow-interview .ready-copy .lead { display: none; }
     .flow-interview .ready-copy { margin-top: 12px; }
     .flow-interview .photo-card { margin-top: 10px; max-height: min(30dvh, 220px); }
@@ -830,6 +847,17 @@
           <button class="btn btn-primary" id="loCopy">링크 복사</button>
           <button class="btn-line" id="loRevoke">링크 취소</button>
           <button class="btn-ghost" id="loBack">처음으로</button>
+        </div>
+      </section>
+
+      <!-- 낱말 카드 고르기 — 「이 기기에서 시작」 · 어르신 링크의 「이야기 시작하기」 뒤에 나온다.
+           카드를 누르면 그 낱말을 구체 주제로 바로 인터뷰를 연다. 버튼은 「돌아가기」 하나 -->
+      <section class="screen" data-screen="wordpick">
+        <h1>어떤 낱말 이야기를<br />들려주실래요?</h1>
+        <p class="lead" style="margin:0 0 14px">하나를 누르면 바로 이야기를 시작해요.</p>
+        <div id="wpList"></div>
+        <div class="dock">
+          <button class="btn-ghost" id="wpClose">돌아가기</button>
         </div>
       </section>
 
@@ -1371,7 +1399,7 @@
   const CONFIG = {
     // 화면 아래와 개발용 패널에 그대로 찍힌다. 「고친 게 반영이 안 된 것 같다」는
     // 대부분 예전 파일이 열려 있는 경우라서, 눈으로 확인할 자리를 만들어 둔다.
-    version: 'v0.44 · 2026-10-26 (회차 시작 400 을 code 로 구분 — elder_required)',
+    version: 'v0.45 · 2026-10-27 (낱말 카드 고르기 — 이 기기에서 시작 · 어르신 링크)',
 
     // 이 화면을 백엔드가 직접 서빙하면(web/ 폴더) 빈 문자열 그대로 둔다.
     // 다른 포트에서 열어 시험할 때만 'http://127.0.0.1:8010' 처럼 채운다.
@@ -1399,6 +1427,30 @@
     interview: {
       flow: 'interview',         // 'interview' (1차 기본) | 'postcard' (예전 흐름)
       themes: ['가족', '나', '취미'],
+      // 낱말 카드 고르기. true 면
+      //   · 「이 기기에서 시작」 → 낱말 카드 → 카드를 누르면 그 낱말로 인터뷰 시작
+      //   · 어르신이 링크를 열고 「이야기 시작하기」 → 낱말 카드 → 카드를 누르면 인터뷰 시작
+      //     고른 낱말은 POST /api/i/start 에 { topic } 으로 싣는다. **서버가 아직 이 칸을 읽지 않는다** —
+      //     읽기 전까지 링크 회차의 주제는 링크를 만들 때 적은 구체 주제다.
+      // 준비 화면에 적은 구체 주제는 「자녀가 궁금한 낱말」 맨 앞 카드로 나온다. false 면 예전처럼 바로 시작한다.
+      wordPick: true,
+      // 기본 낱말 카드. 묶음(group)마다 이름 단추가 하나씩 생기고, 누르면 그 묶음 카드가 나온다
+      wordDefaults: [
+        { group: '어린 시절',  words: ['고향', '우리 집', '골목', '동무', '첫 기억', '별명', '꾸중', '심부름'] },
+        { group: '학교',      words: ['학교 가는 길', '선생님', '도시락', '운동회', '소풍', '졸업'] },
+        { group: '젊은 날',    words: ['첫 월급', '첫 직장', '상경', '연애편지', '맞선', '결혼식'] },
+        { group: '가정',      words: ['신혼집', '첫아이', '이사', '가장', '살림', '명절'] },
+        { group: '일',        words: ['내 일터', '손재주', '고생', '보람', '동료'] },
+        { group: '요즘',      words: ['손주', '취미', '건강', '친구', '하루 일과', '소원'] },
+        { group: '살림 지혜',  words: ['음식 레시피', '바느질', '단추 달기', '뜨개질', '이불 손질', '화분 가꾸기', '텃밭 가꾸기', '얼룩 빼는 법', '옷 오래 입는 법', '장 보는 요령'] },
+        { group: '집안 내력',  words: ['집안 내력', '조상 이야기', '족보', '고향 마을', '내 부모님', '이사 다닌 곳'] },
+        { group: '물건과 사연', words: ['오래된 사진', '반지', '시계', '편지', '살림살이', '물려줄 물건'] },
+        { group: '배운 것',    words: ['돈 관리', '아끼는 법', '사람 보는 눈', '힘들 때 버틴 법', '후회되는 일', '잘한 결정', '부부로 사는 법', '자식 키우며'] },
+        { group: '말과 노래',  words: ['말버릇', '속담', '자장가', '어릴 적 노래', '고향 사투리', '아이 달래던 말'] },
+        { group: '놀이와 풍습', words: ['공기놀이', '고무줄놀이', '딱지치기', '명절 풍습', '제사', '차례', '집안 행사'] },
+        { group: '건강 습관',  words: ['민간요법', '생활 습관', '몸 관리 비결'] },
+        { group: '마음 전하기', words: ['못다 한 말', '고마웠던 순간', '손주에게 할 말', '꼭 지킬 것'] },
+      ],
       // 서버 C1 §1 의 theme 값 (feature/theme-interview 8e55163). 모르는 값은 422.
       themeCodes: { '가족': 'family', '나': 'self', '취미': 'hobby' },
       // C1 §1 의 theme · topic 칸에도 싣는다. 이 칸이 없는 예전 서버는 모르는 칸을 그냥 버리므로
@@ -1650,7 +1702,7 @@
   if (AUTH.mock && AUTH.mode === 'dev') AUTH.mode = 'session';   // 모의 로그인은 로그인 모드에서만 뜻이 있다
   // 어르신 링크 https://<주소>/i#<토큰>. 토큰은 # 뒤라 서버로 가지 않는다 — 화면이 읽어 헤더로만 보낸다.
   // **토큰은 기록(⚙) · 로그 · 화면 어디에도 찍지 않는다.**
-  const LINK = { on: false, token: '', mock: QS.get('linkMock') ?? CONFIG.link.mock, preview: null };
+  const LINK = { on: false, token: '', mock: QS.get('linkMock') ?? CONFIG.link.mock, preview: null, topic: '' };   // topic — 어르신이 낱말 카드에서 고른 낱말
   (() => {
     const atPath = location.pathname.replace(/\/+$/, '') === CONFIG.link.path;
     if (!atPath && !LINK.mock) return;
@@ -1774,7 +1826,8 @@
       : call(CONFIG.auth.elderPath, { method: 'POST', body: JSON.stringify({ name }) }),
     // ── 3차 — 어르신 링크 (3-C1 §5). 헤더 X-Interview-Token 은 call() 이 붙인다
     linkPreview: () => LINK.mock ? linkFake('preview') : call('/i/preview'),
-    linkStart: () => LINK.mock ? linkFake('start') : call('/i/start', { method: 'POST' }),
+    // 어르신이 고른 낱말(topic)을 싣는다 — 서버가 읽기 전까지는 무시된다 (CONFIG.interview.wordPick)
+    linkStart: (topic) => LINK.mock ? linkFake('start') : call('/i/start', { method: 'POST', ...(topic ? { body: JSON.stringify({ topic }) } : {}) }),
     linkTranscript: () => LINK.mock ? linkFake('transcript') : call('/i/transcript'),
     // ── 3차 — 자녀가 링크를 발급 · 회수 · 재발급 (feature/theme-interview 40551ea)
     //    발급 201 {link_id, elder_id, title, theme, topic, state, session_id, created_at, expires_at, token, url}
@@ -2590,7 +2643,7 @@
   /* ═══════════════════════════════════════════════════════════════
      화면 전환
      ═══════════════════════════════════════════════════════════════ */
-  const STEP_LABEL = { ready: '사진 고르기', talk: '', writing: '정리 중', complete: '완성', closed: '종료', cardfail: '엽서', archive: '보관함', memoir: '자서전', review: '내용 확인', lab: '개발 시안', login: '로그인', elder: '시작 준비', link: '이야기 링크', linkout: '링크 보내기', links: '보낸 링크' };
+  const STEP_LABEL = { ready: '사진 고르기', talk: '', writing: '정리 중', complete: '완성', closed: '종료', cardfail: '엽서', archive: '보관함', memoir: '자서전', review: '내용 확인', lab: '개발 시안', login: '로그인', elder: '시작 준비', link: '이야기 링크', linkout: '링크 보내기', links: '보낸 링크', wordpick: '낱말 고르기' };
 
   /**
    * 녹음 화면(대화 · 정리 중)은 휴대전화 앱 모양 그대로, 나머지는 넓은 웹 화면으로 그린다.
@@ -2605,7 +2658,7 @@
     return q !== null ? q === '1' : CONFIG.ui.bookFlip;
   })();
   // 앞으로 / 뒤로를 가르는 차례. 번호가 작아지면 뒤로 넘긴다 (예: 지난 이야기 → 준비).
-  const BOOK_ORDER = { login: -2, elder: -1, link: 0, ready: 0, linkout: 1, links: 1, talk: 1, writing: 2, review: 3, complete: 3, cardfail: 3, closed: 4, archive: 5, memoir: 6, lab: 7 };
+  const BOOK_ORDER = { login: -2, elder: -1, link: 0, ready: 0, linkout: 1, links: 1, wordpick: 1, talk: 1, writing: 2, review: 3, complete: 3, cardfail: 3, closed: 4, archive: 5, memoir: 6, lab: 7 };
   let flipTimer = null;
 
   // PC 폭이면 두 쪽 펼침으로 넘긴다. 녹음 화면(앱 모양)이 끼면 책이 아니므로 넘기지 않는다.
@@ -2778,6 +2831,8 @@
     if (NEW_FLOW && !LINK.on && !(prepInfo.theme && prepInfo.topic)) { renderPrep(); return; }
     // 로그인 모드에서는 회차 시작에 elder_id 가 필수다 (최충 10-26 — 없으면 400). 화자가 없으면 먼저 등록하게 한다
     if (AUTH.mode === 'session' && !LINK.on && !curElder()) { toast('누구의 이야기인지 먼저 정해 주세요.'); show('elder'); return; }
+    // 낱말 카드를 먼저 고른다 (CONFIG.interview.wordPick). 고르면 pickAndGo 가 다시 부른다
+    if (NEW_FLOW && !LINK.on && CONFIG.interview.wordPick) { if (!words.go) { openPick('here'); return; } words.go = ''; }
     $('#startBtn').disabled = true;
 
     // 브라우저 자동재생 차단은 사용자 동작 안에서만 풀 수 있다. 지금이 그 자리다.
@@ -2875,7 +2930,7 @@
 
     try {
       // 링크면 POST /api/i/start — 여러 번 눌러도 같은 회차가 온다 (3-C1 §5-2). 회차는 링크가 정한다
-      const s = LINK.on ? await api.linkStart() : await api.start(body);
+      const s = LINK.on ? await api.linkStart(LINK.topic) : await api.start(body);
       if (LINK.on && s && s.mock) { linkMockStarted(); return; }
       sessionId = s.session_id || 'link';     // 링크 진행 주소에는 session_id 가 없다 — 화면 안 표시용
       if (LINK.on) log('링크', '시작했습니다');
@@ -5134,6 +5189,11 @@
   let linkBusy = false;
   async function linkGo() {
     if (linkBusy) return;                 // 연속 클릭 — 서버도 같은 회차를 돌려주지만 화면에서도 한 번만
+    // 낱말 카드를 먼저 고르신다 (CONFIG.interview.wordPick). 고르시면 pickAndGo 가 다시 부른다
+    if (NEW_FLOW && CONFIG.interview.wordPick && LINK.preview && LINK.preview.state === 'ready') {
+      if (!words.go) { openPick('elder'); return; }
+      LINK.topic = words.go; words.go = '';
+    }
     linkBusy = true;
     const b = $('#linkView .btn'); if (b) b.disabled = true;
     try { await beginInterview(); } finally { linkBusy = false; if (b) b.disabled = false; }
@@ -5992,6 +6052,82 @@
   $('#abortBtn').textContent = CONFIG.ui.labels.stop;
   $('#holdBtn').textContent = CONFIG.ui.labels.pause;
   if (CONFIG.ui.download !== 'png') $('#saveBtn').hidden = true;
+
+  /* ── 낱말 카드 고르기 (CONFIG.interview.wordPick) ──
+     「이 기기에서 시작」 · 어르신 링크의 「이야기 시작하기」 를 누르면 먼저 나온다.
+     준비 화면(또는 링크)에 적은 구체 주제는 「자녀가 궁금한 낱말」 맨 앞 카드, 그 아래 기본 묶음은
+     이름 단추로 접어 둔다. 카드를 누르면 그 낱말을 구체 주제로 바로 이어 간다. */
+  // pickFor — here(이 기기에서 시작) · elder(어르신 링크). go — 고른 낱말. beginInterview · linkGo 가 한 번 읽고 비운다
+  // featured — 맨 앞에 올릴 낱말(적어 둔 구체 주제)
+  const words = { pickFor: 'here', go: '', featured: '' };
+  const wordKey = (w) => String(w).replace(/\s+/g, '');   // 띄어쓰기만 다른 낱말은 같은 카드로 본다
+
+  function wordGroups() {
+    const feat = words.featured;
+    const same = (w) => feat && wordKey(w) === wordKey(feat);
+    const out = feat ? [{ group: '자녀가 궁금한 낱말', words: [feat], mine: true }] : [];
+    for (const g of CONFIG.interview.wordDefaults) {
+      const ws = g.words.filter(w => !same(w));         // 맨 앞에 올린 낱말은 기본 묶음에서 뺀다
+      if (ws.length) out.push({ group: g.group, words: ws });
+    }
+    return out;
+  }
+  function wordCard(w) {
+    const li = document.createElement('li');
+    const b = document.createElement('button');
+    b.type = 'button'; b.className = 'wd-card'; b.textContent = w;   // 자녀가 적은 글 — textContent 로만
+    b.addEventListener('click', () => pickAndGo(w));
+    li.append(b);
+    return li;
+  }
+  function groupSection(g) {
+    const sec = document.createElement('section');
+    sec.className = 'wd-group';
+    // 기본 묶음은 단추가 이름표 노릇을 한다 — 머리글은 「자녀가 궁금한 낱말」 에만
+    if (g.mine) { const h = document.createElement('h3'); h.textContent = g.group; sec.append(h); }
+    const ol = document.createElement('ol'); ol.className = 'wd-list';
+    ol.append(...g.words.map(wordCard));
+    sec.append(ol);
+    return sec;
+  }
+  /** 단추를 누르면 그 묶음 카드가 나오고, 다시 누르면 접힌다. 한 번에 한 묶음만 편다. */
+  function renderWordPick() {
+    const box = $('#wpList');
+    const groups = wordGroups();
+    const cats = groups.filter(g => !g.mine);
+    const parts = groups.filter(g => g.mine).map(groupSection);
+    const row = document.createElement('div');
+    row.className = 'wd-cats'; row.setAttribute('role', 'group'); row.setAttribute('aria-label', '낱말 묶음');
+    const secs = cats.map(g => { const s = groupSection(g); s.hidden = true; return s; });
+    row.append(...cats.map((g, i) => {
+      const b = document.createElement('button');
+      b.type = 'button'; b.className = 'wd-cat';
+      b.append(g.group, Object.assign(document.createElement('small'), { textContent: ` ${g.words.length}` }));
+      b.setAttribute('aria-pressed', 'false');
+      b.addEventListener('click', () => {
+        const open = b.getAttribute('aria-pressed') !== 'true';
+        [...row.children].forEach((x, j) => x.setAttribute('aria-pressed', String(open && j === i)));
+        secs.forEach((s, j) => { s.hidden = !(open && j === i); });
+      });
+      return b;
+    }));
+    box.replaceChildren(...parts, row, ...secs);
+  }
+  function openPick(kind) {
+    words.pickFor = kind; words.go = '';
+    words.featured = String(prepInfo.topic || '').trim();
+    renderWordPick();
+    show('wordpick');
+  }
+  // 카드를 눌렀다 — 그 낱말을 구체 주제로 삼아 이어 간다. 누른 그 동작 안에서 불러야 마이크 · 소리 허락이 이어진다
+  function pickAndGo(w) {
+    words.go = w;
+    prepInfo.topic = w;
+    if (words.pickFor === 'here') $('#topicInput').value = w;
+    log('낱말', `${words.pickFor === 'elder' ? '어르신' : '이 기기'} · 「${w}」`);
+    if (words.pickFor === 'elder') void linkGo(); else void beginInterview();
+  }
+  $('#wpClose').addEventListener('click', () => show(words.pickFor === 'elder' ? 'link' : 'ready'));
 
   /* ── 1차 인터뷰 흐름 — 준비 화면 · 키보드 (업무지시서 03) ── */
   function renderPrep() {
