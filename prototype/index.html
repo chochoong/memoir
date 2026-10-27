@@ -396,6 +396,8 @@
     .wd-group[hidden] { display: none; }
     .wd-group { margin: 0 0 18px; }
     .link-words { margin: 18px 0 0; text-align: left; }
+    .link-words .wd-card[aria-pressed="true"] { border-color: var(--ink); background: var(--ink); color: #fff; }
+    .link-words-go { position: sticky; bottom: calc(12px + env(safe-area-inset-bottom)); margin-top: 8px; }
     .wd-group h3 { margin: 0 0 8px; font-size: .95rem; font-weight: 700; color: var(--ink); }
     .wd-list { list-style: none; padding: 0; margin: 0; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
     .wd-card { width: 100%; min-height: 84px; padding: 16px 12px; border-radius: 18px; border: 2px solid var(--line);
@@ -5240,7 +5242,7 @@
   };
   const LINK_SAYS = {
     ready:       { h: '들려주실 이야기', p: '준비되시면 아래 버튼을 눌러 주세요. 누르면 마이크를 써도 되는지 여쭤봐요.', btn: '이야기 시작하기', topic: true, friend: true,
-                   pick: '이야기하고 싶은 낱말을 하나 눌러 주세요. 누르면 마이크를 써도 되는지 여쭤봐요.' },
+                   pick: '이야기하고 싶은 낱말을 고르고 아래 「이야기 시작하기」를 눌러 주세요. 누르면 마이크를 써도 되는지 여쭤봐요.' },
     in_progress: { h: '이야기를 이어서 해요', p: '이 기기에서 하던 이야기가 남아 있어요.', btn: '이어서 하기', topic: true, friend: true },
     in_progress_elsewhere: { h: '다른 곳에서 진행 중이에요', p: '처음 시작한 기기에서 이어서 해 주세요.' },
     interrupted: { h: '연결이 끊겼어요', p: '링크를 보내 주신 분께 새 링크를 부탁해 주세요.' },
@@ -5294,11 +5296,16 @@
     const inlineWords = host.id === 'linkView' && state === 'ready' && onBtn && NEW_FLOW && CONFIG.interview.wordPick;   // 개발 시안(fe03) 은 예전 버튼 그대로
     host.append(el('p', 'lead', inlineWords ? say.pick : say.p));
     if (inlineWords) {
+      // 카드는 고르기만 한다 (자녀가 적은 주제가 처음부터 골라져 있다). 「이야기 시작하기」 를 눌러야 넘어간다
       words.pickFor = 'elder'; words.go = '';
       words.featured = String((info && info.topic) || '').trim();
+      if (!words.inline) words.inline = words.featured;   // 사진이 뒤늦게 와서 다시 그려도 고른 것은 남긴다
       const box = el('div', 'link-words');
       renderWordPick(box);
       host.append(box);
+      const b = el('button', 'btn btn-primary link-words-go', say.btn);
+      b.addEventListener('click', () => { words.go = words.inline; onBtn(); });
+      host.append(b);
     } else if (say.btn && onBtn) {
       const b = el('button', 'btn btn-primary', say.btn);
       b.addEventListener('click', onBtn);
@@ -6204,7 +6211,7 @@
      이름 단추로 접어 둔다. 카드를 누르면 그 낱말을 구체 주제로 바로 이어 간다. */
   // pickFor — here(이 기기에서 시작) · elder(어르신 링크). go — 고른 낱말. beginInterview · linkGo 가 한 번 읽고 비운다
   // featured — 맨 앞에 올릴 낱말(적어 둔 구체 주제)
-  const words = { pickFor: 'here', go: '', featured: '' };
+  const words = { pickFor: 'here', go: '', featured: '', inline: '' };   // inline — 링크 첫 화면에서 골라 둔 낱말
   const wordKey = (w) => String(w).replace(/\s+/g, '');   // 띄어쓰기만 다른 낱말은 같은 카드로 본다
 
   function wordGroups() {
@@ -6221,7 +6228,14 @@
     const li = document.createElement('li');
     const b = document.createElement('button');
     b.type = 'button'; b.className = 'wd-card'; b.textContent = w;   // 자녀가 적은 글 — textContent 로만
-    b.addEventListener('click', () => pickAndGo(w));
+    // 링크 첫 화면(들려주실 이야기) 안의 카드는 고르기만 한다 — 시작은 아래 버튼이 한다
+    b.addEventListener('click', () => {
+      if (!b.closest('.link-words')) { pickAndGo(w); return; }
+      words.inline = w;
+      b.closest('.link-words').querySelectorAll('.wd-card').forEach(x => x.setAttribute('aria-pressed', String(x === b)));
+      log('낱말', `어르신 · 「${w}」 고름`);
+    });
+    if (words.inline && wordKey(w) === wordKey(words.inline)) b.setAttribute('aria-pressed', 'true');
     li.append(b);
     return li;
   }
