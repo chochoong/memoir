@@ -396,7 +396,7 @@
     .wd-group[hidden] { display: none; }
     .wd-group { margin: 0 0 18px; }
     .link-words { margin: 18px 0 0; text-align: left; }
-    .link-words .wd-card[aria-pressed="true"] { border-color: var(--ink); background: var(--ink); color: #fff; }
+    .link-words .wd-card[aria-pressed="true"], .wd-select .wd-card[aria-pressed="true"] { border-color: var(--ink); background: var(--ink); color: #fff; }
     .link-words-go { position: sticky; bottom: calc(12px + env(safe-area-inset-bottom)); margin-top: 8px; }
     .wd-group h3 { margin: 0 0 8px; font-size: .95rem; font-weight: 700; color: var(--ink); }
     .wd-list { list-style: none; padding: 0; margin: 0; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
@@ -853,13 +853,14 @@
         </div>
       </section>
 
-      <!-- 낱말 카드 고르기 — 「이 기기에서 시작」 · 어르신 링크의 「이야기 시작하기」 뒤에 나온다.
-           카드를 누르면 그 낱말을 구체 주제로 바로 인터뷰를 연다. 버튼은 「돌아가기」 하나 -->
+      <!-- 낱말 카드 고르기 — 「이 기기에서 시작」 뒤에 나온다 (어르신 링크는 첫 화면 안에 카드가 있다).
+           카드는 고르기만 하고, 「이야기 시작하기」 를 눌러야 그 낱말을 구체 주제로 인터뷰를 연다 -->
       <section class="screen" data-screen="wordpick">
         <h1>어떤 낱말 이야기를<br />들려주실래요?</h1>
-        <p class="lead" style="margin:0 0 14px">하나를 누르면 바로 이야기를 시작해요.</p>
-        <div id="wpList"></div>
+        <p class="lead" style="margin:0 0 14px">낱말을 고르고 아래 「이야기 시작하기」를 눌러 주세요.</p>
+        <div id="wpList" class="wd-select"></div>
         <div class="dock">
+          <button class="btn btn-primary" id="wpGo">이야기 시작하기</button>
           <button class="btn-ghost" id="wpClose">돌아가기</button>
         </div>
       </section>
@@ -6228,12 +6229,13 @@
     const li = document.createElement('li');
     const b = document.createElement('button');
     b.type = 'button'; b.className = 'wd-card'; b.textContent = w;   // 자녀가 적은 글 — textContent 로만
-    // 링크 첫 화면(들려주실 이야기) 안의 카드는 고르기만 한다 — 시작은 아래 버튼이 한다
+    // 링크 첫 화면 · 낱말 화면의 카드는 고르기만 한다 — 시작은 아래 「이야기 시작하기」 가 한다
     b.addEventListener('click', () => {
-      if (!b.closest('.link-words')) { pickAndGo(w); return; }
+      const box = b.closest('.link-words, .wd-select');
+      if (!box) { pickAndGo(w); return; }
       words.inline = w;
-      b.closest('.link-words').querySelectorAll('.wd-card').forEach(x => x.setAttribute('aria-pressed', String(x === b)));
-      log('낱말', `어르신 · 「${w}」 고름`);
+      box.querySelectorAll('.wd-card').forEach(x => x.setAttribute('aria-pressed', String(x === b)));
+      log('낱말', `${words.pickFor === 'elder' ? '어르신' : '이 기기'} · 「${w}」 고름`);
     });
     if (words.inline && wordKey(w) === wordKey(words.inline)) b.setAttribute('aria-pressed', 'true');
     li.append(b);
@@ -6274,6 +6276,7 @@
   function openPick(kind) {
     words.pickFor = kind; words.go = '';
     words.featured = String(prepInfo.topic || '').trim();
+    words.inline = words.featured;          // 적어 둔 주제가 처음부터 골라져 있다
     renderWordPick();
     show('wordpick');
   }
@@ -6285,6 +6288,11 @@
     log('낱말', `${words.pickFor === 'elder' ? '어르신' : '이 기기'} · 「${w}」`);
     if (words.pickFor === 'elder') void linkGo(); else void beginInterview();
   }
+  // 고른 낱말로 시작한다. 누른 그 동작 안에서 부르므로 마이크 · 소리 허락이 이어진다
+  $('#wpGo').addEventListener('click', () => {
+    if (!words.inline) { toast('이야기하고 싶은 낱말을 하나 골라 주세요.'); return; }
+    pickAndGo(words.inline);
+  });
   $('#wpClose').addEventListener('click', () => show(words.pickFor === 'elder' ? 'link' : 'ready'));
 
   /* ── 1차 인터뷰 흐름 — 준비 화면 · 키보드 (업무지시서 03) ── */
