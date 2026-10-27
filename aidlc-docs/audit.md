@@ -353,3 +353,19 @@
 **Context**: CONSTRUCTION - 단위 8P 편집 계약 v6 준비 — v6 Pro 편집 1회 승인 대기
 
 ---
+
+## Build and Test 단위 8P - v6 Pro 편집 실제 1회
+**Timestamp**: 2026-10-27T04:32:28Z
+**User Input**: "… 기존 Pro 초안을 대상으로 Gemini 3.1 Pro Preview의 v6 편집 실제 실행 1회를 승인 … 8P 파일만 로컬 커밋 · SHA 기록 · 온도 1.0 · 32,768 · 300초 · 편집 v6만 1회 · 재시도 0 … 결과가 좋지 않아도 재호출하거나 임의로 수정하지 말고 그대로 보고 …"
+**AI Response**: "커밋 740674d. 1회(20261027T043228Z-…-edit6-31propreview): 116.4초 · 입력 18,262 · 출력 3,572 · 생각 16,510 · STOP · 약 $0.278. code_gate attention(time_reversal_undeclared p5 · edit_claim_mismatch d3, review 구어 3). 구조 초안 그대로(옮김 0 · 합침 0), 핵심 18 보존, 보조 5개 생략(f16 · f26 · f33 · f62 · f65) — f16 '기억은 안 나요' 유지 안 됨, f42 부분 반영, p6/s1 인과 흐림. 대비 · 회귀 구성 없음. v5 편집보다 책답지 않음. R1-20261027T043228Z-C5-v6-edit-pro.md · 사본 tests/data/v6_edit_pro_20261027T043228Z · 블라인드 자료 eval/runs/blind-edit-v5-v6-20261027. 재호출 · 수정 없음."
+**Context**: CONSTRUCTION - 단위 8P v6 편집 실측 — 다음 결정 대기
+
+---
+
+## Construction 단위 8P - 자유 산문형 집필 진단 실험 준비 (호출 전)
+**Timestamp**: 2026-10-27T05:00:00Z
+**User Input**: "… v7 계약이나 추가적인 자동 검사를 만들지 않겠습니다 … Gemini Pro 자유 산문형 집필 실험 1회 … 기존 JSON 문장 객체·사실 원장 메모·Pro 초안을 모델에 주지 않고 … 먼저 실험에 전달할 원문 범위와 호출 방법을 확인하고, 필요한 최소한의 준비만 … 아직 실제 호출은 하지 말고 …"
+**AI Response**: "eval/free_essay_C_prompt.md · tools/memoir_free_essay.py(호출 1회 · 재시도 0 · JSON 강제 없음) · tests/test_memoir_free_essay.py(5). 전달 턴 21개(r2 장 범위 + 28), 정정 1985년 봄, 원장 · 초안 · 예시 미전달. 경계 턴 9 · 32 · 1 결정 요청. dry-run 입력 약 1,684 토큰 · 예상 $0.05~0.20. 전체 296 통과. free-essay-experiment-C.md. 호출 · 커밋 없음."
+**Context**: CONSTRUCTION - 단위 8P 자유 산문 실험 — 1회 실행 승인 대기
+
+---
