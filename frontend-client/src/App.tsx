@@ -342,6 +342,25 @@ export default function App() {
       setVoiceNote(null)
       const t0 = performance.now()
       try {
+        // 흘려 읽는 회차는 받는 대로 튼다. 소리가 없으면(204) 아래 갈래와 같다.
+        if (snap.question_audio_stream) {
+          const res = await api.questionStream(id)
+          if (!res) {
+            logbook.warn('소리', '없음 — 글자로만 나갑니다')
+            setVoiceNote('소리 없이 글자로만 나갑니다')
+            return
+          }
+          if (cancelled) { void res.body?.cancel(); return }
+          setReading(true)
+          const t1 = performance.now()
+          const r = await speaker.playStream(res)
+          logbook.log('낭독', `${((performance.now() - t1) / 1000).toFixed(1)}초 · 요청부터 ${(
+            (performance.now() - t0) / 1000).toFixed(1)}초`)
+          // 「낭독 끝」으로 끊겼으면 그 버튼이 이미 tts-done 을 올렸다.
+          if (cancelled || !r.finished) return
+          await finishReading(id)
+          return
+        }
         const blob = await api.questionAudio(id)
         if (!blob) {
           // 소리가 없는 것은 실패가 아니다. 글자는 그대로 있고 버튼도 남아 있다.
@@ -366,7 +385,7 @@ export default function App() {
       }
     })()
     return () => { cancelled = true }
-  }, [id, snap?.state, snap?.turn, snap?.next_question, voice, finishReading])
+  }, [id, snap?.state, snap?.turn, snap?.next_question, snap?.question_audio_stream, voice, finishReading])
 
   // 열어 본 회차에 읽을 것이 하나도 없나. 질문도 답도 없는 조각만 있는 경우다 —
   // 씨앗 없이 열고 첫 말씀 전에 끝난 회차가 그렇다. 제목만 덩그러니 남기지 않는다.
