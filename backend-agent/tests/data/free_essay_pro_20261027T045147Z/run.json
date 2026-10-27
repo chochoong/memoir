@@ -1,0 +1,26 @@
+{
+  "input_ref": "b9f8e2daea65",
+  "commit": "fd94328",
+  "started_at": "2026-10-27T04:51:47+00:00",
+  "settings": {
+    "model": "gemini-3.1-pro-preview",
+    "temperature": 1.0,
+    "max_output_tokens": 32768,
+    "timeout": 300.0,
+    "retries": 0,
+    "response_mime_type": null
+  },
+  "calls": 1,
+  "ok": true,
+  "error": null,
+  "finish": "FinishReason.STOP",
+  "usage": {
+    "prompt": 2138,
+    "candidates": 674,
+    "thoughts": 5946,
+    "total": 8758
+  },
+  "out_chars": 1096,
+  "ms": 38694,
+  "finished_at": "2026-10-27T04:52:26+00:00"
+}

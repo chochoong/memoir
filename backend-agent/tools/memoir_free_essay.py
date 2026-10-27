@@ -14,6 +14,10 @@ v5 · v6 편집이 책다운 수필에 이르지 못한 까닭이 **글쓰기 �
 호출은 --run 일 때 **딱 1회**, 재시도 0. 응답은 JSON 이 아니라 글 그대로 받는다(response_mime_type 없음).
 파이프라인 코드 · 기본 모델 설정은 건드리지 않는다 — 모델 · 온도는 이 도구 안에서만 정한다.
 사실 대조는 생성 뒤 사람이 한다(검수자용 대조표).
+
+지시문 v1(04:51Z 실행)은 인터뷰를 수필체로 옮긴 받아쓰기형 글을 냈다. v2 는 같은 원문을 **재료로 수필 한 편을
+집필**하게 한다 — 중심 · 기억 선택 · 순서를 먼저 정하고 문장을 새로 쓰며, 문맥에 기대는 발언(턴 21 '몇 년 쉬다가')은
+[문맥 주의]로 알린다. 원문 범위(TURNS)는 같다.
 """
 
 from __future__ import annotations
@@ -37,7 +41,9 @@ for _stream in (sys.stdout, sys.stderr):
 from app.session import memoir_pipeline as pipe                           # noqa: E402
 from tools import memoir_pipeline as cli                                  # noqa: E402
 
-PROMPT_FILE = ROOT / "eval" / "free_essay_C_prompt.md"
+# v1 = 04:51Z 실행(인터뷰를 수필체로 — 원문 받아쓰기형이 나왔다). v2 = 재료로 수필 한 편 집필 · 기억 선택 기준 · 문맥 주의
+PROMPTS = {"v1": ROOT / "eval" / "free_essay_C_prompt.md", "v2": ROOT / "eval" / "free_essay_C_prompt_v2.md"}
+PROMPT = "v2"
 MODEL = "gemini-3.1-pro-preview"
 TEMPERATURE = 1.0
 MAX_OUTPUT_TOKENS = 32768
@@ -51,12 +57,19 @@ LEFT_OUT = {33: "남편 별세 — 어르신이 말을 멈춤", 1: "수선집 �
             7: "자녀 운동회", 8: "자녀 대학", 9: "고향 · 오 남매", 16: "첫 월급 · 엄마 편지", 18: "서울 6년 · 결혼",
             19: "좌판", 20: "좌판 실패", 22: "간판", 23: "첫 손님", 24: "첫 천 원", 30: "딸 결혼 드레스",
             31: "드레스 · 아쉬움", 32: "아들", 37: "딸의 책 제안"}
+# 문맥에 기대는 발언 — 앞 일이 재료에 없어 잘못 이어지기 쉬운 말(v2 부터 사용자 메시지 끝에 붙인다)
+CONTEXT_NOTES = (
+    "턴 21의 '몇 년 쉬다가'는 앞 사건이 이번 자료에 없다 — 다른 사건과 연결하거나 본문에 사용하지 않는다. "
+    "같은 턴의 '86년'은 턴 25에서 1985년 봄으로 바로잡았다.",
+    "공장 시절(턴 14 · 15 · 17)과 가게를 연 때(1985년 봄) 사이의 일은 재료에 없다 — 그 사이를 지어 잇지 않는다.",
+    "턴 4의 '그 얘기는 길어서, 나중에 할게요'는 인터뷰 진행 말이다.",
+)
 HEAD = ("아래는 한 어르신이 여러 날에 걸친 인터뷰에서 한 말 가운데 「큰언니와 재봉틀」에 관련된 것입니다. "
         "턴 번호와 말은 원문 그대로입니다. '질문'은 인터뷰어의 말이고, '어르신'이 실제로 한 말입니다.")
 
 
-def build(data: dict) -> tuple[str, str, list[dict]]:
-    """(시스템 지시, 사용자 메시지, 고른 턴). 원문 글자는 바꾸지 않는다."""
+def build(data: dict, prompt: str = PROMPT) -> tuple[str, str, list[dict]]:
+    """(시스템 지시, 사용자 메시지, 고른 턴). 원문 글자는 바꾸지 않는다. v2 는 끝에 [문맥 주의]를 붙인다."""
     by = {u["turn"]: u for u in data["utterances"]}
     missing = [t for t in TURNS if t not in by]
     if missing:
@@ -67,7 +80,9 @@ def build(data: dict) -> tuple[str, str, list[dict]]:
     lines = [HEAD, ""]
     for u in sel:
         lines += [f"[턴 {u['turn']} · {u['session']}회차]", f"질문: {u['asked']}", f"어르신: {u['elder']}", ""]
-    system = PROMPT_FILE.read_text(encoding="utf-8").strip()
+    if prompt != "v1":
+        lines += ["[문맥 주의]"] + [f"- {x}" for x in CONTEXT_NOTES] + [""]
+    system = PROMPTS[prompt].read_text(encoding="utf-8").strip()
     return system, "\n".join(lines).rstrip() + "\n", sel
 
 
@@ -131,17 +146,18 @@ def main(argv: list[str] | None = None) -> int:
     mode = ap.add_mutually_exclusive_group(required=True)
     mode.add_argument("--dry-run", action="store_true", help="입력만 만들고 부르지 않는다")
     mode.add_argument("--run", action="store_true", help="실제 호출 1회")
+    ap.add_argument("--prompt", choices=sorted(PROMPTS), default=PROMPT, help="지시문 판 (v1 은 04:51Z 실행 기록용)")
     a = ap.parse_args(argv)
     try:
         doc = cli._seed_doc(a.seed)
         data, _ = pipe.build_input(cli.records_from_seed(doc, [x.strip() for x in a.aliases.split(",") if x.strip()]))
-        system, user, sel = build(data)
+        system, user, sel = build(data, a.prompt)
     except (cli.InputRejected, pipe.PipelineError, ValueError, OSError) as e:
         print(f"입력 거부 — {e}", file=sys.stderr)
         return 2
     ref = pipe.input_ref(data)
     print(f"입력 {a.seed.name} — input_ref {ref} · 전달 턴 {len(sel)}개 {list(TURNS)} · 뺀 턴 {sorted(LEFT_OUT)}")
-    print(f"모델 {MODEL} · 온도 {TEMPERATURE} · 호출 1회 · 재시도 0 · JSON 강제 없음 · 지시문 {PROMPT_FILE.name}")
+    print(f"모델 {MODEL} · 온도 {TEMPERATURE} · 호출 1회 · 재시도 0 · JSON 강제 없음 · 지시문 {a.prompt} {PROMPTS[a.prompt].name}")
     print(estimate(system, user))
     if a.dry_run:
         print("--dry-run — 모델을 부르지 않았다")
@@ -151,10 +167,11 @@ def main(argv: list[str] | None = None) -> int:
 
     load_dotenv(ROOT / ".env")
     stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
-    folder = a.out_dir / f"{stamp}-C5-{ref[:4]}-free-essay-{MODEL.removeprefix('gemini-').replace('-', '').replace('.', '')}"
+    folder = a.out_dir / f"{stamp}-C5-{ref[:4]}-free-essay{'' if a.prompt == 'v1' else '-' + a.prompt}-{MODEL.removeprefix('gemini-').replace('-', '').replace('.', '')}"
     folder.mkdir(parents=True, exist_ok=True)
     settings = {"model": MODEL, "temperature": TEMPERATURE, "max_output_tokens": MAX_OUTPUT_TOKENS,
-                "timeout": TIMEOUT, "retries": 0, "response_mime_type": None}
+                "timeout": TIMEOUT, "retries": 0, "response_mime_type": None,
+                "prompt": a.prompt, "prompt_file": PROMPTS[a.prompt].name}
     (folder / "00_input.json").write_text(json.dumps(
         {"input_ref": ref, "turns": list(TURNS), "left_out": LEFT_OUT, "system": system, "user": user,
          "settings": settings}, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")

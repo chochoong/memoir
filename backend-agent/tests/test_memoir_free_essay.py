@@ -104,3 +104,33 @@ def test_real_call_config_has_no_json_mode(monkeypatch):
     assert out["text"] == "글" and seen["model"] == "gemini-3.1-pro-preview"
     assert seen["config"].response_mime_type is None and seen["config"].temperature == 1.0
     assert seen["config"].max_output_tokens == 32768
+
+
+FIRST_RUN = ROOT / "tests" / "data" / "free_essay_pro_20261027T045147Z"
+
+
+def test_v1_still_rebuilds_the_0451z_input_exactly():
+    rec = json.loads((FIRST_RUN / "00_input.json").read_text(encoding="utf-8"))
+    system, user, _ = free.build(_data(), "v1")
+    assert system == rec["system"] and user == rec["user"] and list(free.TURNS) == rec["turns"]
+
+
+def test_v2_writes_from_material_and_warns_on_context_dependent_turns():
+    data = _data()
+    system, user, sel = free.build(data, "v2")
+    _, user1, sel1 = free.build(data, "v1")
+    assert sel == sel1 and user.startswith(user1.rstrip("\n"))                  # 같은 원문 · 같은 범위
+    tail = user[len(user1.rstrip("\n")):]
+    assert "[문맥 주의]" in tail and "몇 년 쉬다가" in tail and "본문에 사용하지 않는다" in tail
+    assert "좌판" not in system + user                                         # 자료에 없는 사건을 새로 알리지 않는다
+    for want in ("글의 재료", "먼저 정하고 쓴다", "발언 하나를 문장 하나로 옮기지", "원문에 없는 시간 관계",
+                 "기억하지 못한다고 한 것은", "86년은 어디에도 쓰지"):
+        assert want in system, want
+    for text in ("언니가 남긴 소리", "언니의 발틀", "f16", "{"):
+        assert text not in system + user, text
+
+
+def test_cli_v2_dry_run(capsys):
+    assert free.main(ARGS + ["--dry-run"]) == 0
+    out = capsys.readouterr().out
+    assert "지시문 v2 free_essay_C_prompt_v2.md" in out and "전달 턴 21개" in out
