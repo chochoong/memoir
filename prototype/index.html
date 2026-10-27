@@ -1761,6 +1761,17 @@
       return blob.size ? blob : null;
     },
 
+    // 낭독을 조각으로 (서버 TTS_STREAM=1). **본문을 읽지 않고 응답째 돌려준다** — 다 받고
+    // 나서 틀면 흘려 받는 뜻이 없다. 204 면 null (소리 없음, 오류 아님). 본문은 날 PCM
+    // 16비트 모노이고 rate 는 Content-Type 에 실려 온다.
+    questionStream: async (id) => {
+      const path = `${sp(id)}/question/stream`;
+      const res = await fetch(`${CONFIG.apiBase}/api${path}`, { credentials: 'include', headers: idHeaders(path) });
+      if (res.status === 204) return null;
+      if (!res.ok || !res.body) throw new ApiError(res.status, '소리를 받지 못했습니다');
+      return res;
+    },
+
     done: (id) => call(`${sp(id)}/done`, { method: 'POST' }),
     abort: (id) => call(`${sp(id)}/abort`, { method: 'POST' }),
 
@@ -1936,6 +1947,25 @@
   const SILENCE = 'data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YQAAAAA=';
   const speaker = (function () {
     let el = null, unlocked = false, settle = null;
+    // 흘려 읽기용 (src/speaker.ts 의 playStream 을 옮긴 것). <audio> 와 따로 잠금을 풀어야
+    // 한다 — 사파리는 AudioContext 를 사용자 동작 안에서 resume 해야 소리를 낸다.
+    // 하나를 만들어 끝까지 돌려쓴다.
+    let ctx = null, streamStop = null;
+    function audioCtx() {
+      if (!ctx) ctx = new (window.AudioContext || window.webkitAudioContext)();
+      return ctx;
+    }
+    // 1표본짜리 무음 버퍼를 한 번 틀어 두는 것이 iOS 에서 확실한 방법이다.
+    async function unlockCtx() {
+      try {
+        const c = audioCtx();
+        if (c.state !== 'running') await c.resume();
+        const src = c.createBufferSource();
+        src.buffer = c.createBuffer(1, 1, 22050);
+        src.connect(c.destination);
+        src.start(0);
+      } catch (e) { log('소리', 'AudioContext 잠금 해제 실패 · ' + e); }
+    }
     function element() {
       if (!el) {
         el = new Audio();
@@ -1949,6 +1979,8 @@
       isUnlocked: () => unlocked,
       // 반드시 사용자 동작(클릭) 안에서 부른다. 브라우저 자동재생 차단을 푼다.
       async unlock() {
+        // 흘려 읽기 쪽은 매번 확인한다. 화면을 덮었다 열면 사파리가 다시 재운다.
+        if (!ctx || ctx.state !== 'running') void unlockCtx();
         if (unlocked) return true;
         const a = element();
         if (!a.paused) return unlocked;
@@ -1977,7 +2009,92 @@
           a.play().catch((e) => { log('낭독', '재생 거부 · ' + e); finish(false); });
         });
       },
-      stop() { const a = element(); try { a.pause(); } catch (_) {} if (settle) { settle(false); settle = null; } },
+      /**
+       * 흘려 오는 낭독을 받는 대로 튼다. 약속은 play() 와 같다 — **마지막 조각까지 다 틀어야**
+       * 풀린다. 받기는 재생보다 먼저 끝나므로, 그 시각에 tts-done 을 올리면 아직 말이 남았는데
+       * 수음이 열려 스피커 소리가 첫마디로 들어간다.
+       * 조각 사이가 비면(언더런) 그만큼 늦춰 이어 틀고, 몇 번 났는지 로그에 남긴다.
+       */
+      async playStream(res) {
+        if (settle) { settle(false); settle = null; }
+        if (streamStop) streamStop();
+        const c = audioCtx();
+        if (c.state !== 'running') { try { await c.resume(); } catch (_) { /* 아래에서 말한다 */ } }
+        if (c.state !== 'running') throw new Error('재생 거부 · AudioContext ' + c.state);
+
+        const m = /rate=(\d+)/.exec(res.headers.get('content-type') || '');
+        const rate = Number(m ? m[1] : 24000);
+        const reader = res.body.getReader();
+        const sources = [];
+        const LEAD = 0.06;            // 첫 조각 앞 여유(초). 스케줄이 지금보다 앞서면 앞이 잘린다
+        const t0 = performance.now();
+        let next = 0, gaps = 0, stopped = false;
+        let odd = null;               // 조각 경계가 표본 한가운데 걸리면 남는 1바이트
+        const stop = () => {
+          if (stopped) return;
+          stopped = true;
+          reader.cancel().catch(() => {});
+          for (const s of sources) { try { s.stop(); } catch (_) { /* 아직 시작 전 */ } }
+        };
+        streamStop = stop;
+
+        try {
+          for (;;) {
+            const { value, done } = await reader.read();
+            if (done || stopped) break;
+            let bytes = value;
+            if (odd) {
+              const j = new Uint8Array(odd.length + bytes.length);
+              j.set(odd); j.set(bytes, odd.length);
+              bytes = j; odd = null;
+            }
+            if (bytes.length % 2) { odd = bytes.slice(-1); bytes = bytes.subarray(0, bytes.length - 1); }
+            if (!bytes.length) continue;
+
+            const n = bytes.length / 2;
+            const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+            const buf = c.createBuffer(1, n, rate);
+            const ch = buf.getChannelData(0);
+            for (let i = 0; i < n; i++) ch[i] = view.getInt16(i * 2, true) / 32768;
+
+            const src = c.createBufferSource();
+            src.buffer = buf;
+            src.connect(c.destination);
+            const now = c.currentTime;
+            if (!next) {
+              next = now + LEAD;
+              log('낭독', `첫 소리 · 받기 시작 후 ${(performance.now() - t0).toFixed(0)}ms`
+                + ` · ${rate}Hz · ${res.headers.get('x-speech-source') || '?'}`);
+            } else if (next < now + 0.005) {
+              gaps++;
+              next = now + 0.02;
+            }
+            src.start(next);
+            next += buf.duration;
+            sources.push(src);
+          }
+        } catch (e) {
+          if (!stopped) { stop(); streamStop = null; throw new Error('받다 끊김 · ' + (e.message || e)); }
+        }
+
+        // 받기는 끝났다. 마지막 조각이 다 울릴 때까지 기다린다.
+        const last = sources[sources.length - 1];
+        if (last && !stopped) {
+          await new Promise((r) => {
+            last.onended = () => r();
+            // 끊기면(stop) onended 가 바로 온다. 혹시 안 와도 매달리지 않게 시계로 한 번 더.
+            setTimeout(r, Math.max(0, (next - c.currentTime) * 1000) + 500);
+          });
+        }
+        if (streamStop === stop) streamStop = null;
+        log('낭독', `흘려 읽기 · ${sources.length}조각${gaps ? ` · 끊김 ${gaps}번` : ''}`);
+        return { finished: !stopped };
+      },
+      stop() {
+        const a = element(); try { a.pause(); } catch (_) {}
+        if (settle) { settle(false); settle = null; }
+        if (streamStop) streamStop();
+      },
     };
   })();
 
@@ -3007,7 +3124,7 @@
     // 질문 낭독 — 새 질문이 나왔을 때 한 번만
     if (s.state === 'SPEAKING' && s.next_question && spoken !== s.next_question) {
       spoken = s.next_question;
-      void readQuestion(s.session_id, s.next_question);
+      void readQuestion(s.session_id, s.next_question, !!s.question_audio_stream);
     }
   }
 
@@ -3259,11 +3376,28 @@
    * 질문 mp3 를 받아 틀고, 다 읽으면 tts-done 을 올린다.
    * 낭독이 끝나는 시각은 서버가 알 수 없다 — 끝까지 튼 쪽이 화면이라 여기서 알린다.
    */
-  async function readQuestion(id, q) {
+  async function readQuestion(id, q, stream) {
     // 정지를 누른 뒤에는 회차가 닫히는 중이라 tts-done 이 409 로 거절된다.
     // 낭독이 정지 때문에 끊긴 것이므로 아무것도 올리지 않는다.
     const stopped = () => stopping || closing || id !== sessionId;
     try {
+      // 흘려 읽는 회차(서버 TTS_STREAM=1)는 받는 대로 튼다. 소리가 없으면(204) 아래 갈래와 같다.
+      if (stream) {
+        const t0 = performance.now();
+        const res = await api.questionStream(id);
+        if (stopped()) { if (res) void res.body.cancel(); return; }
+        if (!res) {
+          log('소리', '없음 — 글자로만 나갑니다');
+          $('#questionSub').textContent = '(소리 없이 글자로만 나갑니다)';
+          await api.ttsDone(id).then(applySnapshot);
+          return;
+        }
+        const r = await speaker.playStream(res);
+        log('낭독', `${r.finished ? '끝까지 읽었습니다' : '중간에 멈췄습니다'} · 요청부터 ${((performance.now() - t0) / 1000).toFixed(1)}초`);
+        if (stopped()) return;
+        applySnapshot(await api.ttsDone(id));
+        return;
+      }
       const blob = await api.questionAudio(id);
       if (stopped()) return;
       if (!blob) {
