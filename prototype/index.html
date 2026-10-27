@@ -338,7 +338,8 @@
     .mm-guide { font-size: 1.1rem; line-height: 1.5; margin: 4px 0 16px; }
     .mm-sample { display: inline-block; margin: 0 0 14px; padding: 6px 12px; border-radius: 12px;
                  background: #fbeede; color: #a0741e; font-size: .9rem; font-weight: 700; }
-    .mm-sample[hidden], #mmMain[hidden] { display: none; }   /* display 를 준 요소는 hidden 이 안 먹는다 */
+    .mm-sample[hidden], #mmMain[hidden] { display: none; }
+    #themeLabel[hidden], #themeTabs[hidden] { display: none; }   /* 테마 고르기를 끈 화면 (interview.themePick) */   /* display 를 준 요소는 hidden 이 안 먹는다 */
     .piece[aria-pressed="true"] { border: 3px solid var(--ink); background: #fff; }
     .pick-mark { flex: 0 0 40px; width: 40px; height: 40px; border-radius: 50%; align-self: center;
                  border: 2px solid var(--line); display: grid; place-items: center;
@@ -888,9 +889,9 @@
           </div>
           <span class="prep-k" id="themeLabel">테마</span>
           <div class="tabs" id="themeTabs" role="group" aria-labelledby="themeLabel"></div>
-          <label class="prep-k" for="topicInput">구체 주제</label>
+          <label class="prep-k" for="topicInput">궁금한 주제</label>
           <input class="topic" id="topicInput" type="text" autocomplete="off" placeholder="예: 첫 직장, 결혼식 날, 사진 찍기" />
-          <p class="prep-note" id="prepNote">테마를 고르고 주제를 적어 주세요.</p>
+          <p class="prep-note" id="prepNote">궁금한 주제를 적어 주세요.</p>
         </div>
         <span class="prep-k photo-label" id="photoLabel" hidden>보조 사진 <span style="font-weight:600;color:var(--muted)">(없어도 시작할 수 있어요)</span></span>
         <button class="photo-card" id="photoCard" type="button" aria-label="오늘의 사진 고르기">
@@ -1457,6 +1458,9 @@
       ],
       // 서버 C1 §1 의 theme 값 (feature/theme-interview 8e55163). 모르는 값은 422.
       themeCodes: { '가족': 'family', '나': 'self', '취미': 'hobby' },
+      // 준비 화면에서 테마를 고르나. false 면 「궁금한 주제」 하나만 받는다 — 서버는 theme 없이도 연다
+      // (StartReq · LinkReq 의 theme 은 선택). 회차 제목(title)은 주제를 쓴다.
+      themePick: false,
       // C1 §1 의 theme · topic 칸에도 싣는다. 이 칸이 없는 예전 서버는 모르는 칸을 그냥 버리므로
       // 켜 둬도 안전하다 (StartReq 에 extra 금지가 없음을 확인).
       sendC1: true,
@@ -2949,7 +2953,7 @@
     clearBanner();
     // 1차 흐름은 테마와 주제가 있어야 연다. 버튼도 그전엔 눌리지 않는다 (renderPrep).
     // 링크로 연 인터뷰는 자녀가 이미 정해 두었다 (미리보기에서 받은 값).
-    if (NEW_FLOW && !LINK.on && !(prepInfo.theme && prepInfo.topic)) { renderPrep(); return; }
+    if (NEW_FLOW && !LINK.on && !prepReady()) { renderPrep(); return; }
     // 로그인 모드에서는 회차 시작에 elder_id 가 필수다 (최충 10-26 — 없으면 400). 화자가 없으면 먼저 등록하게 한다
     if (AUTH.mode === 'session' && !LINK.on && !curElder()) { toast('누구의 이야기인지 먼저 정해 주세요.'); show('elder'); return; }
     // 낱말 카드를 먼저 고른다 (CONFIG.interview.wordPick). 고르면 pickAndGo 가 다시 부른다
@@ -3015,7 +3019,7 @@
     // 1차 흐름 — 고른 테마 · 주제를 싣는다. 어느 키에 싣는지는 CONFIG.interview.startKeys (C1 전 임시)
     if (NEW_FLOW) {
       const k = CONFIG.interview.startKeys;
-      body[k.theme] = prepInfo.theme;
+      body[k.theme] = prepInfo.theme || prepInfo.topic;     // 테마를 고르지 않으면 제목은 주제
       body[k.topic] = prepInfo.topic;
       // C1 §1 — 서버가 질문을 만들 때 읽는 칸 (테마는 영문 코드)
       if (CONFIG.interview.sendC1) {
@@ -3060,7 +3064,7 @@
       startVisualLoop();
       show('talk');
       if (NEW_FLOW) {
-        $('#talkTopic').textContent = `${prepInfo.theme} · ${prepInfo.topic}`;
+        $('#talkTopic').textContent = prepLine();
         $('#talkTopic').hidden = false;
       }
       applySnapshot(s);
@@ -5578,7 +5582,7 @@
   // 배포 때는 서버가 PUBLIC_ORIGIN 으로 완전한 주소(https://…/i#…)를 준다. / 로 시작할 때만 지금 주소를 붙인다
   const absUrl = (u) => !u ? '' : u.startsWith('/') ? `${location.origin}${u}` : u;
   async function linkOut() {
-    if (loBusy || !(prepInfo.theme && prepInfo.topic)) return;
+    if (loBusy || !prepReady()) return;
     const elder = curElder();
     if (!elder || !elder.elder_id) { toast('화자를 먼저 정해 주세요.'); return; }
     loBusy = true; renderPrep();
@@ -5587,12 +5591,12 @@
       if (photo.file && CONFIG.photo.upload && !photo.photo_id && photoUpload) {
         await Promise.race([photoUpload, sleep(CONFIG.photo.waitBeforeStartMs)]).catch(() => {});
       }
-      const body = { elder_id: elder.elder_id, title: prepInfo.theme, seed: prepInfo.topic,
+      const body = { elder_id: elder.elder_id, title: prepInfo.theme || prepInfo.topic, seed: prepInfo.topic,
                      theme: CONFIG.interview.themeCodes[prepInfo.theme], topic: prepInfo.topic };
       if (photo.photo_id) body.photo_id = photo.photo_id;
       const r = await api.linkCreate(body);
       lo.rec = r; lo.url = absUrl(r && r.url); lo.state = 'issued';
-      $('#loTopic').textContent = `${prepInfo.theme} · ${prepInfo.topic}`;
+      $('#loTopic').textContent = prepLine();
       $('#loMsg').textContent = '이 화면을 나가면 링크를 다시 볼 수 없어요. 잃어버리면 「링크 취소」 뒤 다시 만들 수 있어요.';
       loDraw();
       show('linkout');
@@ -6296,11 +6300,17 @@
   $('#wpClose').addEventListener('click', () => show(words.pickFor === 'elder' ? 'link' : 'ready'));
 
   /* ── 1차 인터뷰 흐름 — 준비 화면 · 키보드 (업무지시서 03) ── */
+  // 시작할 수 있나 — 테마를 고르지 않는 화면(themePick false)은 주제만 있으면 된다
+  function prepReady() { return !!prepInfo.topic && (!CONFIG.interview.themePick || !!prepInfo.theme); }
+  // 화면 위에 띄우는 한 줄 — 「가족 · 첫 직장」, 테마가 없으면 「첫 직장」
+  function prepLine() { return [prepInfo.theme, prepInfo.topic].filter(Boolean).join(' · '); }
   function renderPrep() {
     if (!NEW_FLOW) return;
-    const ok = !!(prepInfo.theme && prepInfo.topic);
+    const ok = prepReady();
     // 시작 전에 고른 값을 한 줄로 읽어 준다
-    $('#prepNote').textContent = ok ? `「${prepInfo.theme}」 테마로 「${prepInfo.topic}」 이야기를 시작해요.`
+    $('#prepNote').textContent = !CONFIG.interview.themePick
+      ? (ok ? `「${prepInfo.topic}」 이야기를 시작해요.` : '궁금한 주제를 적어 주세요.')
+      : ok ? `「${prepInfo.theme}」 테마로 「${prepInfo.topic}」 이야기를 시작해요.`
       : !prepInfo.theme ? '테마를 하나 골라 주세요.' : '이야기할 주제를 적어 주세요.';
     if (!sessionId) $('#startBtn').disabled = !ok;
     $('#linkOutBtn').disabled = !ok || loBusy;
@@ -6320,7 +6330,8 @@
     $('#photoHint').lastChild.textContent = ' 사진 넣기';
 
     const tabs = $('#themeTabs');
-    CONFIG.interview.themes.forEach(t => {
+    $('#themeLabel').hidden = tabs.hidden = !CONFIG.interview.themePick;
+    if (CONFIG.interview.themePick) CONFIG.interview.themes.forEach(t => {
       const b = document.createElement('button');
       b.type = 'button'; b.className = 'tab'; b.textContent = t;
       b.setAttribute('aria-pressed', 'false');
