@@ -56,6 +56,19 @@ PARAGRAPHS = [
      "f55", "f59", "f60"], "brief": [], "time": "2010년~지금"},
 ]
 
+# 문단마다 꼭 담아야 할 핵심 사실(core) — 나머지 facts · brief 는 골라 쓰는 보조 사실.
+# 다뤄야 할 기억 일곱 가지가 모두 핵심 사실을 하나 이상 갖는다. 문단 · 사실 · 순서는 r1 과 같다 (r2 는 표시만 더함)
+CORE = {
+    0: ["f57", "f58"],                    # 지금의 재봉틀과 소리
+    1: ["f17", "f20", "f21"],             # 바느질을 배운 일 · 시집간 날(들은 이야기)
+    2: ["f22", "f23"],                    # 상경 · 기숙사의 미싱 소리
+    3: ["f34", "f40", "f41", "f6"],       # 개업 · 발틀이 온 일 · 편지
+    4: ["f4"],                            # 재봉틀 앞의 하루
+    5: ["f44", "f52"],                    # 병문안 · 별세
+    6: ["f2", "f54", "f59", "f60"],       # 정리 · 집으로 가져옴 · 지금의 소리 · 흐린 끝말
+}
+OUT_R2 = ROOT / "eval" / "outline_fixture_C_v5_reviewed_r2.json"
+
 # 쓰지 않는 사실 — 기억 단위별 이유 (이 장의 끈인 큰언니 · 재봉틀 · 미싱 소리와 닿지 않거나 다른 장면)
 OMIT_REASONS = {
     "m1": "출신 · 나이 차 — 이 장에는 배경으로만 필요해 뺀다",
@@ -70,7 +83,8 @@ OMIT_REASONS = {
 }
 
 
-def build() -> dict:
+def build(core: bool = False) -> dict:
+    """core=False 는 2026-10-27 02:06Z 집필 시험에 쓴 r1 그대로, core=True 는 핵심 사실을 표시한 r2."""
     afx = json.loads(ANALYSIS.read_text(encoding="utf-8"))
     doc = cli._seed_doc(SEED)
     data, turn_map = pipe.build_input(cli.records_from_seed(doc, afx["aliases"]))
@@ -91,7 +105,7 @@ def build() -> dict:
             "chapter_key": "ch-1", "title": {"text": "언니의 발틀", "kind": "editorial", "facts": []},
             "center": "큰언니와 언니가 보낸 재봉틀", "experience": "한 대의 재봉틀에 여러 시기의 언니 기억이 겹쳐 있다",
             "units": ["m7", "m1", "m2", "m3", "m10"],          # m4(가게 나날)는 사실 둘만 빌려 쓴다 — 중심 단위가 아니다
-            "paragraphs": PARAGRAPHS,
+            "paragraphs": [{**p, "core": CORE[i]} for i, p in enumerate(PARAGRAPHS)] if core else PARAGRAPHS,
             "reorder": [{"paragraph": 1, "reason": "지금의 재봉틀 소리에서 시작해 언니에게 바느질을 배운 어린 시절로 돌아간다",
                          "facts": ["f58"]}],
         }],
@@ -109,6 +123,7 @@ def build() -> dict:
                                                       .encode("utf-8")).hexdigest()[:16]},
         "input_ref": afx["input_ref"],
         "reviewed": "Claude 가 원문 · 사실 원장 대조로 짬 — 사람 확인 전",
+        **({"revision": "r2 — r1 에 문단별 핵심 사실(core) 표시만 더함. 문단 · 사실 · 순서 · 메모는 같다"} if core else {}),
         "memories": [{"name": n, "facts": fs} for n, fs in MEMORIES],
         "outline": outline,
     }
@@ -121,10 +136,12 @@ def build() -> dict:
 if __name__ == "__main__":
     if hasattr(sys.stdout, "reconfigure"):
         sys.stdout.reconfigure(encoding="utf-8")
-    fx = build()
-    OUT.write_text(json.dumps(fx, ensure_ascii=False, indent=1) + "\n", encoding="utf-8")
-    ch = fx["outline"]["chapters"][0]
-    print(f"{OUT.name} — 문단 계획 {len(ch['paragraphs'])} · 쓰는 사실 "
-          f"{sum(len(p['facts']) + len(p['brief']) for p in ch['paragraphs'])} · 경고 {len(fx['check']['warnings'])}")
-    for w in fx["check"]["warnings"]:
-        print("  경고", w)
+    for out, core in ((OUT, False), (OUT_R2, True)):          # r1 은 다시 만들어도 같은 내용이다
+        fx = build(core)
+        out.write_text(json.dumps(fx, ensure_ascii=False, indent=1) + "\n", encoding="utf-8")
+        ch = fx["outline"]["chapters"][0]
+        print(f"{out.name} — 문단 계획 {len(ch['paragraphs'])} · 쓰는 사실 "
+              f"{sum(len(p['facts']) + len(p['brief']) for p in ch['paragraphs'])} · 핵심 "
+              f"{sum(len(p.get('core') or []) for p in ch['paragraphs'])} · 경고 {len(fx['check']['warnings'])}")
+        for w in fx["check"]["warnings"]:
+            print("  경고", w)

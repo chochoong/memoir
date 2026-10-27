@@ -56,5 +56,7 @@
 - **A안 (미커밋)**: 분석 계약 단순화(보호 항목만 실패) · 시험용 분석 스냅샷(reviewed_fixture, 33항목 고침) · --from-analysis 후속 단계 시험(focus 4호출). 8P 137 / 전체 206. 다음: 후속 단계 실제 1회 승인
 - **후속 단계 실제 1회 (01:44Z, e26ed25, reviewed_fixture)**: 4호출. 목차가 핵심 기억을 빼고 무관한 사실을 모음, 편집 무변경(edit_trace), 검증 만점 → 코드 보정으로 needs_revision. 창작은 없음. v4 한 장보다 나쁨. 다음: 구성 단계 모델 적합성 시험 결정
 - **집필 시험 준비 (미커밋)**: 원인별 보완(일괄 생략 · 혼입 · 편집 허위 보고 · result.json 출처), 사람 검토 목차(outline_source=reviewed_fixture), --from-outline 3호출. 8P 152 / 전체 221. 다음: 3호출 시험 승인
+- **집필 시험 (02:06Z, c276109)**: 사람 목차를 받고도 집필이 계획 사실 30 중 12만 쓰고 나열형, 편집 부분 개선 · 반복, 검증 형식 실패 · 만점. 창작 없음. 다음: 집필 · 편집 모델 재검토
+- **핵심 사실 · 장 집필 비교 준비 (미커밋)**: 740토큰은 정상 종료(상한 6,000), 핵심 사실 core · core_missing → needs_revision, 검증 위치 정규화, --chapter-only --model. 8P 166 / 전체 235. 다음: 3.1 Pro preview 장 집필 1회 승인
 - **시험 격리**: `tests/conftest.py` 가 키를 비우고 클라이언트 · 외부 연결을 막는다 — `.env` 에 실제 키가 있어도 `pytest tests` 로 비용이 나지 않는다(서버의 `question.warmup` 'ping' 포함)
 - **Status**: 독립 파이프라인 구현 · 모의 시험 완료, 실제 모델 시험 전. 서버 판 호환 수정 뒤 105 passed · theme-interview 사본 36 passed · 실제 호출 0. 로컬 커밋(push 없음). `backend-agent/.env` 없음 — 실제 호출 전 사용자가 키를 로컬에만 넣는다

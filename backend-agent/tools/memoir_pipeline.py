@@ -30,6 +30,7 @@ from __future__ import annotations
 import argparse
 import asyncio
 import json
+import re
 import sys
 from datetime import datetime, timezone
 from pathlib import Path
@@ -217,6 +218,9 @@ def main(argv: list[str] | None = None) -> int:
                     help="후속 단계 시험 — 검증된 시험용 분석 스냅샷(reviewed_fixture)에서 시작, 분석을 부르지 않는다")
     ap.add_argument("--from-outline", type=Path,
                     help="집필 시험 — --from-analysis 와 함께, 사람이 검토한 시험용 목차에서 시작(장 → 편집 → 검증)")
+    ap.add_argument("--chapter-only", action="store_true",
+                    help="장 집필 비교 — --from-analysis · --from-outline 과 함께, 장 집필만(호출 장 수만큼)")
+    ap.add_argument("--model", help="--chapter-only 와 함께만. 이 실행에만 쓰는 모델 — 기본 모델은 바꾸지 않는다")
     a = ap.parse_args(argv)
 
     from dotenv import load_dotenv
@@ -247,6 +251,13 @@ def main(argv: list[str] | None = None) -> int:
         return 2
     if focus and a.analysis_only:
         print("입력 거부 — --focus 와 --analysis-only 는 함께 쓰지 않는다", file=sys.stderr)
+        return 2
+    if a.model and not a.chapter_only:
+        print("입력 거부 — --model 은 --chapter-only(장 집필 비교)와 함께만 쓴다. 기본 모델은 바꾸지 않는다",
+              file=sys.stderr)
+        return 2
+    if a.chapter_only and not (a.from_analysis and a.from_outline):
+        print("입력 거부 — --chapter-only 는 --from-analysis · --from-outline 과 함께만 쓴다", file=sys.stderr)
         return 2
     if a.analysis_only:
         if a.from_analysis:
@@ -282,12 +293,16 @@ def main(argv: list[str] | None = None) -> int:
         n_par = sum(len(ch["paragraphs"]) for ch in outline_fx["outline"]["chapters"])
         print(f"목차 출처: 사람이 검토한 시험용 목차 {a.from_outline.name} (outline_source=reviewed_fixture) — "
               f"장 {len(outline_fx['outline']['chapters'])} · 문단 계획 {n_par} · 목차 호출 없음")
-    extra = 2 if outline_fx is not None else 3 if fixture is not None else 4
+    extra = 0 if a.chapter_only else 2 if outline_fx is not None else 3 if fixture is not None else 4
     calls = (f"{1 + extra}회 (장 1 + {extra})" if focus else
              f"{pipe.MIN_CHAPTERS + extra}~{pipe.MAX_CHAPTERS + extra}회 (장 수 + {extra})")
-    print(f"모델 {cfg['MEMOIR_PIPE_TEXT_MODEL']} · 온도 {cfg['MEMOIR_PIPE_TEMPERATURE']} · "
+    model = a.model or cfg["MEMOIR_PIPE_TEXT_MODEL"]
+    print(f"모델 {model}" + (f" (이 실행만 · 기본 {cfg['MEMOIR_PIPE_TEXT_MODEL']} 그대로)" if a.model else "")
+          + f" · 온도 {cfg['MEMOIR_PIPE_TEMPERATURE']} · "
           f"전체 상한 {cfg['MEMOIR_PIPE_TOTAL_TIMEOUT']:.0f}초 · 재시도 {cfg['retries']} · 지시문 {pipe.PROMPT_VERSION} · "
           f"예상 호출 {calls}" + (f" · 한 장 시험 focus「{focus}」" if focus else ""))
+    if a.chapter_only:
+        chapter_estimate(data, turn_map, analysis, outline_fx, fixture, model, cfg)
     if a.dry_run:
         print("--dry-run — 모델을 부르지 않았다")
         return 0
@@ -298,9 +313,12 @@ def main(argv: list[str] | None = None) -> int:
         meta["run_ref"] += "-fixture"
     if outline_fx is not None:
         meta["run_ref"] += "-outline"
+    if a.chapter_only:
+        meta["run_ref"] += "-chapter-" + re.sub(r"[^a-z0-9]+", "", model.lower().removeprefix("gemini-"))
     folder = a.out_dir / meta["run_ref"]
     result = asyncio.run(pipe.run(data, turn_map, recorder=pipe.Recorder(folder), meta=meta, focus=focus,
-                                  analysis_fixture=fixture, outline_fixture=outline_fx))
+                                  analysis_fixture=fixture, outline_fixture=outline_fx,
+                                  chapter_only=a.chapter_only, model=a.model))
     steps = json.loads((folder / "run.json").read_text(encoding="utf-8"))["steps"]
     for s in steps:
         u = s.get("usage") or {}
@@ -322,9 +340,44 @@ def main(argv: list[str] | None = None) -> int:
     if result["failure"]:
         f = result["failure"]
         print(f"실패 {f['stage']}{'/' + f['chapter_key'] if f['chapter_key'] else ''} {f['kind']} — {f['message']}")
+    for stage, pc in ((result.get("metrics") or {}).get("plan_coverage") or {}).items():
+        print(f"계획 사실 사용({stage}) 전체 {pc['planned_used']}/{pc['planned']} · 핵심 {pc['core_used']}/{pc['core']} · "
+              f"보조 {pc['support_used']}/{pc['support']} · 빠진 핵심 {pc['core_missing']}")
     print(f"기록 {folder}")
-    done = result["pipeline_complete"] or result["generation_state"] == pipe.INSUFFICIENT
+    done = (result["pipeline_complete"] or result["generation_state"] in (pipe.INSUFFICIENT, pipe.DRAFT_ONLY))
     return 0 if done else 1
+
+
+# 표준 유료 단가(USD / 100만 토큰, 입력 · 출력). 생각 토큰은 출력 단가로 센다. 프롬프트 20만 토큰 이하 기준.
+# 출처: ai.google.dev/gemini-api/docs/pricing (2026-10-27 확인). 3.1 Pro preview 는 무료 등급이 없다
+PRICES = {"gemini-3.1-pro-preview": (2.00, 12.00), "gemini-3.5-flash-lite": (0.30, 2.50)}
+# 글자 → 토큰 어림. 2026-10-27 02:06Z 집필 호출의 실측(지시문 + 자료 글자 / 입력 토큰 8,631)에서 잡았다
+CHARS_PER_TOKEN = 1.98
+# 장 집필 출력 어림(생각 포함): 보통 · 많을 때. 상한까지 쓰는 경우는 따로 적는다
+OUT_GUESS = (3000, 12000)
+
+
+def chapter_estimate(data, turn_map, analysis, outline_fx, fixture, model: str, cfg: dict) -> None:
+    """장 집필 비교의 입력 크기 · 출력 상한 · 예상 비용 — 모델을 부르지 않는다."""
+    T = pipe.check_input(data, turn_map)
+    outline, _ = pipe.load_outline_fixture(outline_fx, analysis, fixture, T)
+    sec, tok = pipe.CHAPTER_ONLY_LIMITS
+    tok = max(cfg["MEMOIR_PIPE_CHAPTER_MAX_OUTPUT_TOKENS"], tok)
+    system = pipe.prompt("chapter")
+    for ch in outline["chapters"]:
+        src, _ = pipe.chapter_source(data, analysis, ch)
+        user = pipe.chapter_message(src, analysis, outline, ch)
+        n_in = round((len(system) + len(user)) / CHARS_PER_TOKEN)
+        core = sum(len(p.get("core") or []) for p in ch["paragraphs"])
+        print(f"장 집필 {ch['chapter_key']} — 입력 약 {n_in:,} 토큰(지시문 {len(system):,}자 + 자료 {len(user):,}자) · "
+              f"핵심 사실 {core} · 출력 상한 {tok:,}(생각 포함) · 시간 상한 {max(cfg['MEMOIR_PIPE_CHAPTER_TIMEOUT'], sec):.0f}초")
+        price = PRICES.get(model)
+        if not price:
+            print(f"  예상 비용 — {model} 단가를 모른다")
+            continue
+        cost = [(n_in * price[0] + out * price[1]) / 1e6 for out in (*OUT_GUESS, tok)]
+        print(f"  예상 비용 {model} — 출력 {OUT_GUESS[0]:,} 이면 ${cost[0]:.3f} · {OUT_GUESS[1]:,} 이면 "
+              f"${cost[1]:.3f} · 상한 {tok:,} 를 다 쓰면 ${cost[2]:.3f}")
 
 
 MIN_CALLS = pipe.MIN_CHAPTERS + 4

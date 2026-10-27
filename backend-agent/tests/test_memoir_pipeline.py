@@ -1941,3 +1941,172 @@ def test_cli_from_outline_dry_run_and_refusals(capsys):
     assert cli.main(args + ["--from-outline", str(OUTLINE_C)]) == 2                     # 분석 스냅샷 없이 못 쓴다
     assert cli.main(args + ["--from-analysis", str(FIXTURE_C), "--from-outline", str(OUTLINE_C),
                             "--focus", "다른 소재"]) == 2
+
+
+# ---------------------------------------------------------------- 집필 시험(02:06Z) 회귀 — 핵심 사실 누락 · 검증 위치 · 장 집필 비교
+
+WRITING = ROOT / "tests" / "data" / "v5_writing_20261027T020620Z.json"
+OUTLINE_C2 = ROOT / "eval" / "outline_fixture_C_v5_reviewed_r2.json"
+# 02:06Z 에서 빠진 기억 — 바느질을 배운 일 · 공장의 미싱 소리 · 재봉틀 도착과 편지 · 병문안 · 집으로 가져온 재봉틀
+LOST = {"f17", "f23", "f40", "f41", "f44", "f54"}
+
+
+def _r2():
+    data, turn_map, fx, a = _fixture_analysis()
+    o = json.loads(OUTLINE_C2.read_text(encoding="utf-8"))
+    outline, _ = pipe.load_outline_fixture(o, a, fx, pipe.check_input(data, turn_map))
+    omit = {f: x["reason"] for x in outline["omit"] for f in x["facts"]}
+    return data, a, outline, omit, json.loads(WRITING.read_text(encoding="utf-8"))
+
+
+def test_draft_missing_core_memories_are_caught():
+    data, a, outline, omit, w = _r2()
+    found = pipe.all_findings([w["draft"]], outline, data, a, omit)
+    core = [f for f in found if f["rule"] == "core_missing"]
+    assert {f["fact"] for f in core} == LOST | {"f59"} and all(f["severity"] == "fix" for f in core)
+    assert {f["plan"] for f in core if f["fact"] in ("f40", "f41")} == {"ch-1/p3"}
+    cov = pipe.plan_coverage([w["draft"]], outline)
+    assert (cov["planned"], cov["planned_used"], cov["core"], cov["core_used"]) == (30, 12, 18, 11)
+
+
+def test_supporting_facts_may_be_left_out():
+    """f18 · f19 · f61 · f16 · f26 · f33 · f64 · f62 · f53 · f65 · f55 는 보조 — 빠져도 판정하지 않는다."""
+    data, a, outline, omit, w = _r2()
+    core = set(pipe.plan_core(outline))
+    flagged = {f.get("fact") for f in pipe.all_findings([w["draft"]], outline, data, a, omit)
+               if f["rule"] in ("core_missing", "must_keep_missing")}
+    assert flagged <= core and not flagged & {"f18", "f19", "f61", "f16", "f26", "f33", "f64", "f62", "f53", "f65", "f55"}
+
+
+def test_core_still_missing_after_edit_means_needs_revision():
+    data, a, outline, omit, w = _r2()
+    eo = {f: x["reason"] for x in w["edited"]["omitted"] for f in x["facts"]}
+    final = pipe.all_findings(w["edited"]["chapters"], outline, data, a, {**omit, **eo}, final=True, edit_omitted=eo)
+    assert {f["fact"] for f in final if f["rule"] == "core_missing"} == LOST          # f59 는 편집이 살렸다
+    gate = pipe.code_gate(final, {}, [])
+    assert gate["state"] == "attention"
+    verification = {"state": "completed", "verdict": "pass"}
+    assert pipe.overall_state(pipe.GENERATED, gate, verification, "not_run", {"meets_bar": True}) == "needs_revision"
+    kept = {f"core_missing:artifact:{f}": {"status": "kept", "reason": "그냥"} for f in LOST}
+    assert pipe.code_gate(final, kept, final)["state"] == "attention"                 # kept 로 넘기지 못한다
+
+
+def test_core_omitted_with_reason_by_edit_is_info_not_outline_omit():
+    data, a, outline, omit, w = _r2()
+    eo = {"f44": "병문안 대목은 화자가 다음 장에서 다루기를 원했다(사람 확인)"}
+    final = pipe.all_findings(w["edited"]["chapters"], outline, data, a, {**omit, **eo}, final=True, edit_omitted=eo)
+    by = {f["fact"]: f for f in final if f["rule"].startswith("core_")}
+    assert by["f44"]["rule"] == "core_omitted" and by["f44"]["severity"] == "info"
+    assert by["f17"]["rule"] == "core_missing"
+    # 편집의 생략 목록이 아닌 곳의 이유로는 정당한 생략이 되지 않는다
+    final = pipe.all_findings(w["edited"]["chapters"], outline, data, a, {**omit, "f44": "목차 이유"}, final=True)
+    assert next(f for f in final if f.get("fact") == "f44")["rule"] == "core_missing"
+
+
+def test_edit_receives_missing_core_with_source_and_certainty():
+    data, a, outline, omit, w = _r2()
+    checks = pipe.all_findings([w["draft"]], outline, data, a, omit)
+    msg = pipe.edit_message(data, a, outline, [w["draft"]], checks, [], "큰언니와 재봉틀")
+    payload = json.loads(msg.split("\n\n", 1)[1])
+    rows = {x["fact"]: x for x in payload["missing_core"]}
+    assert set(rows) == LOST | {"f59"}
+    assert rows["f17"]["certainty"] == "approx" and rows["f17"]["turns"] == [11]
+    assert rows["f40"]["role"].startswith("가게를 연 뒤") and rows["f41"]["check_id"] == "core_missing:artifact:f41"
+    assert "missing_core 는 장 초안이 빠뜨린" in msg and "들은 이야기 · 흐린 기억 · 감정을 그대로" in msg
+    plain = pipe.edit_message(data, a, outline, [w["draft"]], [], [], "큰언니와 재봉틀")
+    assert "missing_core" not in plain
+
+
+def test_outline_without_core_keeps_old_behaviour():
+    data, a, _, _, w = _r2()
+    o1 = json.loads(OUTLINE_C.read_text(encoding="utf-8"))["outline"]
+    assert pipe.plan_core(o1) == {}
+    assert not [f for f in pipe.all_findings([w["draft"]], o1, data, a, {}) if f["rule"].startswith("core_")]
+    assert "core 는" not in pipe.chapter_message({}, a, o1, o1["chapters"][0])
+
+
+@pytest.mark.parametrize("change, why", [
+    (lambda o: o["outline"]["chapters"][0]["paragraphs"][1]["core"].append("f16"), "핵심 사실은 그 문단 facts 안에서만"),
+    (lambda o: o["outline"]["chapters"][0]["paragraphs"][1]["core"].append("f99"), "f99"),
+    (lambda o: o["outline"]["chapters"][0]["paragraphs"][4].update(core=[]), r"핵심 사실\(core\)이 없다"),
+])
+def test_core_marks_are_checked(change, why):
+    data, turn_map, fx, a = _fixture_analysis()
+    o = json.loads(OUTLINE_C2.read_text(encoding="utf-8"))
+    change(o)
+    with pytest.raises(pipe.PipelineError, match=why):
+        pipe.load_outline_fixture(o, a, fx, pipe.check_input(data, turn_map))
+
+
+def test_r2_outline_only_adds_core_marks():
+    import importlib.util
+    spec = importlib.util.spec_from_file_location("bo2", ROOT / "eval" / "build_outline_fixture_C_v5.py")
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    r1 = json.loads(OUTLINE_C.read_text(encoding="utf-8"))
+    r2 = json.loads(OUTLINE_C2.read_text(encoding="utf-8"))
+    assert mod.build() == r1 and mod.build(core=True) == r2
+    strip = [{k: v for k, v in p.items() if k != "core"} for p in r2["outline"]["chapters"][0]["paragraphs"]]
+    assert strip == r1["outline"]["chapters"][0]["paragraphs"]
+    assert r2["analysis_fixture"] == r1["analysis_fixture"] and r2["memories"] == r1["memories"]
+
+
+def test_verify_location_aliases_are_normalized_only_when_real():
+    _, _, _, _, w = _r2()
+    T = set(range(1, 40))
+    locs = pipe.locations(w["edited"])
+    v = json.loads(json.dumps(w["verify"]))
+    warnings = pipe.check_verify(v, T, locs)                       # 02:06Z 에는 reference 실패였다
+    assert any("같은 뜻의 계약 표기로 바꿨다" in x for x in warnings)
+    assert "ch-1/p5" in v["reviewed_locations"] and not any("paragraphs" in x for x in v["reviewed_locations"])
+    assert next(q for q in v["quality"] if q["item"] == "Q4")["locations"] == []   # ch-1/omitted 는 근거가 아니다
+    bad = json.loads(json.dumps(w["verify"]))
+    bad["reviewed_locations"].append("ch-1/paragraphs/9")         # 편집본에 없는 문단 — 바꾸지 않고 막는다
+    with pytest.raises(pipe.PipelineError, match="paragraphs/9"):
+        pipe.check_verify(bad, T, locs)
+    assert pipe.normalize_location("ch-1/paragraphs/0/sentences/1", locs) == "ch-1/p0/s1"
+    assert pipe.normalize_location("ch-1/paragraphs/0/1", locs) == "ch-1/p0/s1"
+    assert pipe.normalize_location("ch-1/paragraphs/0/9", locs) == "ch-1/paragraphs/0/9"
+    assert pipe.normalize_location("ch-2/paragraphs/0", locs) == "ch-2/paragraphs/0"
+    assert pipe.normalize_location("ch-1/omitted", locs) == "ch-1/omitted"
+
+
+def test_chapter_only_run_calls_once_with_override_model(tmp_path):
+    data, turn_map, fx, _ = _fixture_analysis()
+    o = json.loads(OUTLINE_C2.read_text(encoding="utf-8"))
+    w = json.loads(WRITING.read_text(encoding="utf-8"))
+    fake = Fake({"ch-1": w["draft"]})
+    r = asyncio.run(pipe.run(data, turn_map, call=fake, recorder=pipe.Recorder(tmp_path), analysis_fixture=fx,
+                             outline_fixture=o, chapter_only=True, model="gemini-3.1-pro-preview"))
+    assert fake.order == ["ch-1"] and r["calls"] == 1
+    spec = fake.specs[0]
+    assert spec.model == "gemini-3.1-pro-preview" and spec.max_output_tokens == pipe.CHAPTER_ONLY_LIMITS[1]
+    assert "core 는 그 문단이 꼭 담아야 할 핵심 사실" in spec.user
+    assert r["generation_state"] == pipe.DRAFT_ONLY and r["overall"] == "draft_only" and r["human_review"] == "not_run"
+    assert r["code_gate"] == "attention"
+    assert r["metrics"]["plan_coverage"]["draft"]["core_missing"] == sorted(LOST | {"f59"}, key=lambda f: int(f[1:]))
+    assert len(r["chapters"]) == 1 and r["edit_trace"] is None
+    assert not (tmp_path / "04_edited.json").exists() and not (tmp_path / "05_verify.json").exists()
+    run_doc = json.loads((tmp_path / "run.json").read_text(encoding="utf-8"))
+    assert run_doc["settings"]["MEMOIR_PIPE_TEXT_MODEL"] == "gemini-3.1-pro-preview" and run_doc["settings"]["chapter_only"]
+    assert "장 집필 비교(chapter_only)" in (tmp_path / "r1_summary.md").read_text(encoding="utf-8")
+    assert pipe.settings()["MEMOIR_PIPE_TEXT_MODEL"] == "gemini-3.5-flash-lite"      # 기본 모델은 그대로
+
+
+def test_chapter_only_needs_both_snapshots(tmp_path):
+    data, turn_map, fx, _ = _fixture_analysis()
+    fake = Fake({})
+    r = asyncio.run(pipe.run(data, turn_map, call=fake, recorder=pipe.Recorder(tmp_path), analysis_fixture=fx,
+                             chapter_only=True))
+    assert fake.order == [] and r["generation_state"] == pipe.FAILED and "목차 스냅샷" in r["failure"]["message"]
+
+
+def test_cli_chapter_only_dry_run_and_refusals(capsys):
+    args = ["--seed", str(SEED_C_PATH), "--aliases", "c1,c2,c3,c4,c5", "--dry-run"]
+    fx = ["--from-analysis", str(FIXTURE_C), "--from-outline", str(OUTLINE_C2)]
+    assert cli.main(args + fx + ["--chapter-only", "--model", "gemini-3.1-pro-preview"]) == 0
+    out = capsys.readouterr().out
+    assert "예상 호출 1회" in out and "기본 gemini-3.5-flash-lite 그대로" in out and "핵심 사실 18" in out
+    assert "예상 비용 gemini-3.1-pro-preview" in out and "출력 상한 32,768" in out
+    assert cli.main(args + fx + ["--model", "gemini-3.1-pro-preview"]) == 2           # 비교 시험 밖에서는 안 된다
+    assert cli.main(args + ["--from-analysis", str(FIXTURE_C), "--chapter-only"]) == 2
