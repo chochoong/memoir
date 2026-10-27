@@ -237,8 +237,8 @@ def common_rules() -> str:
     return body
 
 
-def role_text(stage: str) -> str:
-    path = ROLE_DIR / ROLE_FILES[stage]
+def role_text(stage: str, file: str | None = None) -> str:
+    path = ROLE_DIR / (file or ROLE_FILES[stage])
     try:
         text = _FENCE.sub("", path.read_text(encoding="utf-8")).strip()
     except OSError as e:
@@ -248,13 +248,20 @@ def role_text(stage: str) -> str:
     return text
 
 
-def prompt(stage: str) -> str:
-    """시스템 지시 = 공통 지침 + 이 역할의 지시문 하나. 원문은 여기에 넣지 않는다."""
-    return common_rules() + "\n\n" + role_text(stage)
+def prompt(stage: str, file: str | None = None) -> str:
+    """시스템 지시 = 공통 지침 + 이 역할의 지시문 하나. 원문은 여기에 넣지 않는다. file 은 같은 역할의 다른 판."""
+    return common_rules() + "\n\n" + role_text(stage, file)
+
+
+def edit_prompt(contract: str = "v5") -> str:
+    """편집 지시문 — v5 는 ROLE_FILES 그대로, v6 는 문단 산문 + 근거 표현 계약(EDIT_V6_FILE)."""
+    return prompt("edit", EDIT_V6_FILE if contract == "v6" else None)
 
 
 def prompt_hashes() -> dict[str, str]:
-    return {s: "sha256:" + hashlib.sha256(prompt(s).encode("utf-8")).hexdigest()[:16] for s in STAGES}
+    h = {s: "sha256:" + hashlib.sha256(prompt(s).encode("utf-8")).hexdigest()[:16] for s in STAGES}
+    h["edit_v6"] = "sha256:" + hashlib.sha256(edit_prompt("v6").encode("utf-8")).hexdigest()[:16]
+    return h
 
 
 # ---------------------------------------------------------------- 입력
@@ -1725,7 +1732,7 @@ def code_gate(final: list[dict], resolutions: dict[str, dict], draft_checks: lis
     state = "blocked" if blocks else "attention" if fixes else "pass"
     return {"state": state, "findings": final,
             "accepted": {r: sorted(str(v) for v in vs if v is not None) for r, vs in kept.items() if vs},
-            "counts": {s: sum(1 for f in final if f["severity"] == s) for s in ("block", "fix", "info")}}
+            "counts": {s: sum(1 for f in final if f["severity"] == s) for s in ("block", "fix", "info", "review")}}
 
 
 # ---------------------------------------------------------------- 편집 추적 — 결과물끼리 견준다
@@ -1840,6 +1847,7 @@ def edit_trace(drafts: list[dict], final: list[dict], omitted: dict[str, str] | 
         or summary["paragraph_splits"])
     return {"summary": summary, "sentences": rows, "dropped": [d["loc"] for d in dropped],
             "dropped_facts": dropped_facts,
+            "draft_facts_at": {d["loc"]: sorted(d["facts"], key=_fid) for d in D},
             "unexplained_dropped_facts": [f for f in dropped_facts if not omitted.get(f, "").strip()],
             "new_facts": sorted(final_facts - draft_facts, key=lambda x: int(x[1:]) if x[1:].isdigit() else 0)}
 
@@ -1905,6 +1913,16 @@ def check_final(out, analysis: dict, T: set[int], focus: str | None = None) -> t
         c.text(ch.get("center", ""), f"{k}.center", nonempty=False)
         c.sentence(ch["title"], allowed, f"{k}/title")
         c.paragraphs(ch["paragraphs"], allowed, k)
+    omitted = _omitted(c, out, allowed)
+    cited = {f for _, _, _, x in _sentences(chapters) for f in (x.get("facts") or [])}
+    both = sorted(cited & set(omitted))
+    if both:
+        c.warnings.append(f"사실 {both} 을 본문에 쓰고 omitted 에도 적었다")
+    return omitted, c.warnings
+
+
+def _omitted(c: _Check, out: dict, allowed: set[str]) -> dict[str, str]:
+    """편집의 omitted(생략 사실 → 이유)와 notes 모양."""
     omitted: dict[str, str] = {}
     for i, x in enumerate(c.items(out["omitted"], "omitted")):
         if not isinstance(x, dict):
@@ -1914,11 +1932,488 @@ def check_final(out, analysis: dict, T: set[int], focus: str | None = None) -> t
             omitted[f] = reason
     if not _str_list(out["notes"]):
         raise c.fail("format", "notes 가 문자열 목록이 아니다")
-    cited = {f for _, _, _, x in _sentences(chapters) for f in (x.get("facts") or [])}
+    return omitted
+
+
+# ---------------------------------------------------------------- ④ 편집 v6 — 문단 산문 + 근거 표현(claims)
+#
+# v5 편집은 문장마다 {text, kind, facts} 객체를 냈다. 사실 메모 하나가 문장 하나가 되고(문장-메모 유사도
+# 초안 0.74 → 편집 0.82), 초안 문장 객체를 짝지어 복사하기 쉬웠다(edit-contract-review-v5.md).
+# v6 편집은 문단을 산문 한 덩어리(text)로 쓰고, 근거는 본문 표현(span)마다 따로 단다(claims).
+# 코드가 문단을 문장으로 나눠 **문장 · 표현 단위**로 검사한다 — 문단 단위 근거에 문장의 사실 오류가
+# 묻히지 않게. 변환한 문장 목록은 v5 와 같은 모양이라 뒤 검사(fact_token · 들은 말 · 흐림 · 핵심 사실 ·
+# edit_trace · 검증 위치)를 그대로 쓴다. 장 집필 · 검증 계약은 v5 그대로다.
+#
+#   block  span_missing          claim 의 span 이 문단 본문에 없다
+#          span_misplaced        span 이 본문에 있지만 앞 span 과 겹치거나 순서가 다르다
+#          span_crosses_sentence span 이 문장 경계를 넘는다 (넓은 span 이 문장들의 근거를 섞는다)
+#   fix    uncovered_text        span 이 덮지 않은 서술이 UNCOVERED_MAX 자 이상 — 근거 없는 주장일 수 있다
+#          link_content          사실 없는 잇는 말(link)에 감정 · 동기 · 인과가 들었다
+#          negation_lost         원문 · 사실 메모의 부정 표현이 그 사실을 쓴 표현에서 사라졌다
+#          causal_unsupported    인과 접속("때문에 · 그래서 · 덕분에 · ~니까")이 근거 턴에 없는 인과다
+#          time_reversal_undeclared  앞 문단보다 이른 시기로 가는데 composition.reorder 에 사실 · 이유가 없다
+#          edit_claim_mismatch   진단 항목의 change 가 result 위치의 실제 변화(edit_trace)와 맞지 않다
+#          composition_missing   composition 이 편집본 문단을 하나씩 덮지 않는다
+#   review (사람 확인 — 문학적 판단 · 오탐이 있을 수 있는 표면 검사. code_gate 를 바꾸지 않는다)
+#          claim_weak            span 이 인용한 사실의 근거 턴과 글자가 거의 겹치지 않는다 — 뜻이 맞는지 본다
+#          causal_suspect        "~아서/~어서" 로 두 사실을 이었는데 근거 턴에 그런 말이 없다
+#          spoken_carryover      인용 밖 서술에 원문 구어("그거 · 말이다 · ~겠어서 · 걔")가 남았다
+#          meta_suspect          글 쓰기 자체를 말하는 안내("기억을 따라가다 · 거슬러 올라가")
+#          repeat_phrase         이웃 두 문장에 같은 연도 · 같은 말 묶음이 되풀이된다
+#          time_reversal_declared  재배치를 이유와 함께 적었다 — 이유가 납득되는지 사람이 본다
+#          composition_mismatch  composition.from 이 실제로 문장이 온 초안 문단과 다르다
+#
+# 출처가 붙었다고 뜻이 맞다고 보지 않는다 — 위 검사는 표지 · 글자 · 구조만 본다. 뜻의 대조는 검증 · 사람 몫.
+
+EDIT_V6_FILE = "4_편집_v6.md"
+EDIT_CONTRACTS = ("v5", "v6")
+CLAIM_KINDS = ("claim", "link")
+EDIT_CHANGES = ("rewrite", "move", "merge", "split", "cut", "compress", "link", "fact_fix")
+UNCOVERED_MAX = 8              # span 밖 서술의 글자(공백 · 부호 뺀) — 이음말 몇 글자는 덮지 않아도 된다
+CLAIM_MIN_OVERLAP = 0.15       # span 글자 조각 중 근거 턴 화자 발언에 있는 비율 — 기준선 Pro 초안 · 편집 문장 실측 최저 0.19 · 0.20
+REWRITE_RATIO = 0.7            # rewrite 라고 적은 결과 문장의 절반 이상이 초안과 이만큼 덜 닮아야 한다
+
+_QUOTE_PAIRS = {"'": "'", '"': '"', "“": "”", "‘": "’"}
+_SENT_END = ".!?…"
+_CAUSAL_STRONG = re.compile(r"그래서|그러니|때문에|때문이|덕분에|덕분이|덕에|탓에|탓이|바람에|(?<=[가-힣])니까|므로|는\s?통에")
+_CAUSAL_SRC = re.compile(r"그래서|그러니|때문|덕분|덕에|탓|바람에|니까|므로|통에")
+_CAUSAL_WEAK = re.compile(r"([가-힣]+)서(?![가-힣])")
+_CAUSAL_WEAK_SKIP = re.compile(r"(에|에게|한테|로|으로|부터|께|에게서|그래|서|면)$")     # 「~면서」 는 동시
+_MOTIVE = re.compile(r"위해|하려고|싶어서|싶은\s?마음|마음에|생각에|결심|다짐|마음먹")
+_SPOKEN = re.compile(r"그거|이거|저거|요거|말이다|거든|더라고|더라\b|잖아|잖니|겠어서|걔|쟤|뭐랄까")
+_SPOKEN_TAIL = re.compile(r"는데\s*$")
+_META_NARRATIVE = re.compile(r"기억을\s?따라|거슬러\s?올라|이야기를\s?(시작|꺼내|하자면|해\s?보려)|되짚어\s?보"
+                             r"|돌이켜\s?보(면|니)|떠올려\s?보(면|니)|이야기(는|가)\s?(여기|이렇게)|기억(들)?을\s?더듬")
+_YEAR_EXPR = re.compile(r"(?:19|20)\d{2}\s?년")
+_LINK_FEELING = r"그리워|그리운|그리움|외로|쓸쓸|서글|애틋|안타까|가슴|마음이|설레|두려|후회|원망"
+_LINK_BAN = re.compile("|".join([*EMOTION_GROUPS.values(), _LINK_FEELING, _CAUSAL_STRONG.pattern, _MOTIVE.pattern]))
+
+
+def split_sentences(text: str) -> list[tuple[int, int]]:
+    """문단 산문을 문장 (시작, 끝) 으로. 인용부호 안의 마침표에서는 끊지 않는다."""
+    out, start, quote, i, n = [], 0, None, 0, len(text)
+
+    def close(j):
+        nonlocal start
+        if text[start:j].strip():
+            s = start + (len(text[start:j]) - len(text[start:j].lstrip()))
+            out.append((s, j))
+        while j < n and text[j].isspace():
+            j += 1
+        start = j
+        return j
+    while i < n:
+        ch = text[i]
+        if quote:
+            if ch == quote:
+                quote = None             # 인용 뒤에 서술이 이어지는 일이 많아 닫는 따옴표에서는 끊지 않는다
+        elif ch in _QUOTE_PAIRS:
+            quote = _QUOTE_PAIRS[ch]
+        elif ch in _SENT_END:
+            j = i + 1
+            while j < n and text[j] in _SENT_END + "”’)\"'":
+                j += 1
+            if j >= n or text[j].isspace():
+                i = close(j)
+                continue
+        i += 1
+    end = len(text.rstrip())
+    if start < end:
+        out.append((start, end))
+    return out
+
+
+def _v6_paragraph(para: dict, where: str) -> tuple[list[dict], list[dict]]:
+    """
+    문단 산문 → v5 모양의 문장 목록(text · kind · facts · spans). 문장의 facts 는 그 문장 안 claim 들의
+    사실 합. span 은 claims 순서대로 본문 앞에서부터 찾는다 — 없거나 겹치면 block.
+    """
+    text = para["text"]
+    findings: list[dict] = []
+    placed, cursor = [], 0
+    for k, it in enumerate(para["claims"]):
+        sp = it["span"]
+        pos = text.find(sp, cursor)
+        if pos < 0:
+            rule, why = (("span_misplaced", "앞 span 과 겹치거나 순서가 다르다") if sp in text
+                         else ("span_missing", "문단 본문에 없다"))
+            findings.append(_finding(rule, "block", where, f"claims[{k}] span 「{sp[:30]}」 이 {why}", token=f"c{k}"))
+            continue
+        placed.append({"span": sp, "kind": it["kind"], "facts": list(it["facts"]), "start": pos, "end": pos + len(sp)})
+        cursor = pos + len(sp)
+    bounds = split_sentences(text)
+    for x in placed:
+        hit = [i for i, (s, e) in enumerate(bounds) if x["start"] < e and x["end"] > s]
+        if len(hit) > 1:
+            findings.append(_finding("span_crosses_sentence", "block", f"{where}/s{hit[0]}",
+                                     f"span 「{x['span'][:30]}」 이 문장 {len(hit)}개에 걸친다 — 표현은 한 문장 안에서 단다",
+                                     token=f"x{x['start']}"))
+        x["sentences"] = hit
+    sents = []
+    for i, (s, e) in enumerate(bounds):
+        mine = [x for x in placed if i in x["sentences"]]
+        facts: list[str] = []
+        for x in mine:
+            facts += [f for f in x["facts"] if f not in facts]
+        covered = [False] * (e - s)
+        for x in mine:
+            for j in range(max(x["start"], s), min(x["end"], e)):
+                covered[j - s] = True
+        runs, cur = [], ""
+        for j, ok in enumerate(covered):
+            if ok:
+                runs.append(cur)
+                cur = ""
+            else:
+                cur += text[s + j]
+        runs.append(cur)
+        longest = max((_norm(r) for r in runs), key=len, default="")
+        if not mine:
+            findings.append(_finding("uncovered_text", "fix", f"{where}/s{i}", "근거 표현(claim · link)이 하나도 없는 문장"))
+        elif len(longest) >= UNCOVERED_MAX:
+            findings.append(_finding("uncovered_text", "fix", f"{where}/s{i}",
+                                     f"span 이 덮지 않은 서술 「{longest[:30]}」 — 사실을 말하면 claim, 아니면 link 로 단다"))
+        sents.append({"text": text[s:e], "kind": "supported" if facts else "editorial", "facts": facts,
+                      "spans": [{k: x[k] for k in ("span", "kind", "facts")} for x in mine]})
+    return sents, findings
+
+
+def check_final_v6(out, analysis: dict, T: set[int], focus: str | None = None) -> tuple[dict, dict[str, str], list[str], list[dict]]:
+    """
+    v6 편집본의 계약 검사와 변환. 모양이 틀리면 멈추고(PipelineError), 표현 위치 문제는 판정(block · fix)으로
+    남긴다 — 편집본을 사람이 볼 수 있게. 돌려주는 것은 (변환한 편집본, 생략 사실 → 이유, 경고, 판정).
+
+    변환한 편집본은 v5 편집본과 같은 키에 chapters[].paragraphs 가 문장 목록이고, 장마다 prose(문단 산문) ·
+    composition 을 덧붙인다.
+    """
+    c = _Check("final_check")
+    out = c.obj(out, ("diagnosis", "title", "chapters", "omitted", "checks_resolution", "notes"))
+    allowed = set(ledger(analysis))
+    diag = c.items(out["diagnosis"], "diagnosis")
+    if not diag:
+        raise c.fail("format", "diagnosis 가 비었다 — 원고 전체를 본 기록이 없다")
+    for i, d in enumerate(diag):
+        if not isinstance(d, dict) or not _str_list(d.get("where", [])) or not _str_list(d.get("result", [])):
+            raise c.fail("format", f"diagnosis[{i}] 모양이 다르다 (where · result 는 위치 목록)")
+        c.text(d.get("issue"), f"diagnosis[{i}].issue")
+        c.text(d.get("action", ""), f"diagnosis[{i}].action", nonempty=False)
+        if d.get("change") not in EDIT_CHANGES:
+            raise c.fail("format", f"diagnosis[{i}].change={d.get('change')!r} — {list(EDIT_CHANGES)} 중 하나")
+    c.sentence(out["title"], allowed, "title")
+    chapters = out["chapters"]
+    if not isinstance(chapters, list) or not chapters:
+        raise c.fail("format", "chapters 가 비었거나 목록이 아니다")
+    if focus and len(chapters) != 1:
+        raise c.fail("chapter_limit", f"{len(chapters)}장 — 한 장 시험(focus)은 정확히 1장")
+    if len(chapters) > MAX_CHAPTERS:
+        raise c.fail("chapter_limit", f"{len(chapters)}장 — 상한 {MAX_CHAPTERS}장")
+    keys = [ch.get("chapter_key") if isinstance(ch, dict) else None for ch in chapters]
+    if keys != [f"ch-{n}" for n in range(1, len(keys) + 1)]:
+        raise c.fail("reference", f"편집본 장 키 {keys} — ch-1 부터 차례여야 한다")
+    findings: list[dict] = []
+    converted = []
+    for ch in chapters:
+        k = ch["chapter_key"]
+        missing = [x for x in ("title", "composition", "paragraphs") if x not in ch]
+        if missing:
+            raise c.fail("format", f"{k} 에 {missing} 가 없다")
+        c.text(ch.get("center", ""), f"{k}.center", nonempty=False)
+        c.sentence(ch["title"], allowed, f"{k}/title")
+        paras = ch["paragraphs"]
+        if not isinstance(paras, list) or not paras:
+            raise c.fail("format", f"{k}.paragraphs 가 비었거나 목록이 아니다")
+        sent_paras = []
+        for p, para in enumerate(paras):
+            at = f"{k}/p{p}"
+            if not isinstance(para, dict):
+                raise c.fail("format", f"{at} 가 객체가 아니다 — {{text, claims}}")
+            c.text(para.get("text"), f"{at}.text")
+            claims = c.items(para.get("claims"), f"{at}.claims")
+            if not claims:
+                raise c.fail("format", f"{at}.claims 가 비었다")
+            for j, x in enumerate(claims):
+                w = f"{at}.claims[{j}]"
+                if not isinstance(x, dict):
+                    raise c.fail("format", f"{w} 가 객체가 아니다")
+                c.text(x.get("span"), f"{w}.span")
+                if x.get("kind") not in CLAIM_KINDS:
+                    raise c.fail("format", f"{w}.kind={x.get('kind')!r}")
+                fs = c.ids(x.get("facts"), allowed, f"{w}.facts", nonempty=x["kind"] == "claim")
+                if x["kind"] == "link" and fs:
+                    raise c.fail("reference", f"{w} 는 link 인데 facts 가 있다 — 사실이 있으면 claim")
+            sents, f = _v6_paragraph(para, at)
+            findings += f
+            if not sents:
+                raise c.fail("format", f"{at}.text 에 문장이 없다")
+            sent_paras.append(sents)
+        comp = c.items(ch["composition"], f"{k}.composition")
+        for j, e in enumerate(comp):
+            w = f"{k}.composition[{j}]"
+            if not isinstance(e, dict) or not _is_int(e.get("paragraph")) or not _str_list(e.get("from", [])):
+                raise c.fail("format", f"{w} 모양이 다르다 (paragraph 정수 · from 위치 목록)")
+            c.text(e.get("role", ""), f"{w}.role", nonempty=False)
+            c.text(e.get("after_previous", ""), f"{w}.after_previous", nonempty=False)
+            r = e.get("reorder")
+            if r is not None:
+                if not isinstance(r, dict):
+                    raise c.fail("format", f"{w}.reorder 가 객체가 아니다")
+                c.ids(r.get("facts"), allowed, f"{w}.reorder.facts", nonempty=True)
+                c.text(r.get("reason"), f"{w}.reorder.reason")
+        idx = [e["paragraph"] for e in comp]
+        if sorted(idx) != list(range(len(paras))):
+            findings.append(_finding("composition_missing", "fix", k,
+                                     f"composition 문단 {sorted(idx)} — 편집본 문단 0~{len(paras) - 1} 을 하나씩 적는다"))
+        converted.append({"chapter_key": k, "center": ch.get("center", ""), "title": ch["title"],
+                          "paragraphs": sent_paras, "prose": [p["text"] for p in paras], "composition": comp})
+    omitted = _omitted(c, out, allowed)
+    cited = {f for _, _, _, x in _sentences(converted) for f in (x.get("facts") or [])}
     both = sorted(cited & set(omitted))
     if both:
         c.warnings.append(f"사실 {both} 을 본문에 쓰고 omitted 에도 적었다")
-    return omitted, c.warnings
+    edited = {**{k: out[k] for k in ("diagnosis", "title", "omitted", "checks_resolution", "notes")},
+              "chapters": converted, "contract": "v6"}
+    return edited, omitted, c.warnings, findings
+
+
+def _span_texts(x: dict, fact: str | None = None) -> list[str]:
+    """문장에서 사실 하나를 쓴 표현들 — v6 는 그 사실을 단 span, v5 는 문장 전체."""
+    spans = x.get("spans")
+    if spans is None:
+        return [x.get("text", "")]
+    return [s["span"] for s in spans if fact is None or fact in s["facts"]]
+
+
+def negation_findings(chapters: list[dict], book: dict[str, dict], data: dict) -> list[dict]:
+    """
+    원문 화자 발언과 사실 메모에 모두 부정 표현("안 나요 · 못 · 없 · 모르")이 있는 사실을 본문이 썼는데,
+    그 사실을 쓴 표현 어디에도 부정 표현이 없다 — fix. 사실 단위로 모아 본다(같은 사실을 두 문장에 나눠 쓴 것은 된다).
+    말을 바꿔 써 부정이 사라진 것처럼 보이는 경우(오탐)는 사람이 본다.
+    """
+    elder = {u["turn"]: _ANSWER_HEAD.sub("", u["elder"]) for u in data["utterances"]}
+    uses: dict[str, list[tuple[str, str]]] = {}
+    for loc, _, _, x in _sentences(chapters):
+        for f in x.get("facts") or []:
+            uses.setdefault(f, []).extend((loc, t) for t in _span_texts(x, f))
+    out = []
+    for f, rows in sorted(uses.items(), key=lambda kv: _fid(kv[0])):
+        fact = book.get(f)
+        if not fact or not _NEG_FACT.search(fact["text"]):
+            continue
+        if not any(_NEG_FACT.search(elder.get(t, "")) for t in fact["turns"]):
+            continue
+        if not any(_NEG_FACT.search(_narration(t) + " " + t) for _, t in rows):
+            out.append(_finding("negation_lost", "fix", rows[0][0],
+                                f"사실 {f}({fact['text'][:40]}) 의 부정 표현이 본문에서 사라졌다", fact=f))
+    return out
+
+
+def causal_findings(chapters: list[dict], data: dict) -> list[dict]:
+    """인과 접속이 근거 턴에 없는 인과인가. 분명한 접속은 fix, "~아서/~어서" 는 사람 확인(review)."""
+    elder = {u["turn"]: u["elder"] for u in data["utterances"]}
+    out = []
+    for loc, _, _, x in _sentences(chapters):
+        narr = _narration(x.get("text", ""))
+        src = " ".join(elder.get(t, "") for t in x.get("turns", []))
+        strong = _CAUSAL_STRONG.search(narr)
+        if strong and not _CAUSAL_SRC.search(src):
+            out.append(_finding("causal_unsupported", "fix", loc,
+                                f"「{strong.group(0)}」 — 근거 턴 {x.get('turns', [])} 에 인과를 말한 곳이 없다"))
+            continue
+        weak = [m.group(0) for m in _CAUSAL_WEAK.finditer(narr) if not _CAUSAL_WEAK_SKIP.search(m.group(1))]
+        src_weak = [m for m in _CAUSAL_WEAK.finditer(src) if not _CAUSAL_WEAK_SKIP.search(m.group(1))]
+        if weak and len(x.get("facts") or []) >= 2 and not src_weak and not _CAUSAL_SRC.search(src):
+            out.append(_finding("causal_suspect", "review", loc,
+                                f"「{weak[0]}」 로 두 사실을 이었다 — 근거 턴에 이은 말이 없다. 인과로 읽히는지 사람이 본다"))
+    return out
+
+
+def style_review_findings(chapters: list[dict]) -> list[dict]:
+    """서술 속 원문 구어 · 글 쓰기 안내 · 이웃 문장 반복 — 모두 사람 확인(review)."""
+    out = []
+    flat = list(_sentences(chapters))
+    for loc, _, _, x in flat:
+        narr = _narration(x.get("text", ""))
+        words = [m.group(0) for m in _SPOKEN.finditer(narr)]
+        if _SPOKEN_TAIL.search(narr.rstrip(" .!?…")):
+            words.append("~는데(끝)")
+        if words:
+            out.append(_finding("spoken_carryover", "review", loc, f"서술에 구어 {words} — 인용이 아니면 수필 문장으로"))
+        if _META_NARRATIVE.search(narr) and not _META.search(narr):
+            out.append(_finding("meta_suspect", "review", loc, "글 쓰기 자체를 말하는 안내 문장일 수 있다"))
+    for (la, ca, _, a), (lb, cb, _, b) in zip(flat, flat[1:]):
+        if ca is not cb:
+            continue
+        ta, tb = _narration(a.get("text", "")), _narration(b.get("text", ""))
+        years = {re.sub(r"\s", "", y) for y in _YEAR_EXPR.findall(ta)} & {re.sub(r"\s", "", y) for y in _YEAR_EXPR.findall(tb)}
+        wa, wb = re.findall(r"[가-힣0-9]{2,}", ta), re.findall(r"[가-힣0-9]{2,}", tb)
+        pairs = set(zip(wa, wa[1:])) & set(zip(wb, wb[1:]))
+        if years or pairs:
+            what = sorted(years) + [" ".join(p) for p in sorted(pairs)]
+            out.append(_finding("repeat_phrase", "review", lb, f"앞 문장({la})과 같은 말 {what[:3]}"))
+    return out
+
+
+def reorder_findings(chapters: list[dict], book: dict[str, dict]) -> list[dict]:
+    """
+    앞 문단보다 이른 시기로 가는 문단 — 시간 표지만으로는 부족하다. 편집이 composition.reorder 에 그
+    문단의 이른 사실과 이유를 적었으면 review(이유는 사람이 본다), 아니면 fix. v5 원고는 composition 이
+    없어 모두 적지 않은 것으로 본다.
+    """
+    out = []
+    for ch in chapters:
+        comp = {e["paragraph"]: e for e in ch.get("composition") or [] if isinstance(e, dict)}
+        prev_max = None
+        for p, para in enumerate(ch.get("paragraphs", [])):
+            fs = [f for x in para for f in (x.get("facts") or [])]
+            ys = _para_years(fs, book)
+            if not ys:
+                continue
+            if prev_max is not None and min(ys) < prev_max:
+                early = {f for f in fs if any(y < prev_max for y in _full_years((book.get(f) or {}).get("time", "")))}
+                r = (comp.get(p) or {}).get("reorder") or {}
+                loc = f"{ch['chapter_key']}/p{p}"
+                if r.get("reason", "").strip() and early & set(r.get("facts") or []):
+                    out.append(_finding("time_reversal_declared", "review", loc,
+                                        f"{prev_max}년 뒤에 {min(ys)}년으로 — 이유: {r['reason'][:80]}"))
+                else:
+                    out.append(_finding("time_reversal_undeclared", "fix", loc,
+                                        f"앞 문단({prev_max}년)보다 이른 {min(ys)}년으로 돌아가는데 composition.reorder 에 "
+                                        f"사실 {sorted(early, key=_fid)} 과 이유가 없다"))
+            prev_max = max(ys) if prev_max is None else max(prev_max, max(ys))
+    return out
+
+
+def span_findings(chapters: list[dict], data: dict, book: dict[str, dict]) -> list[dict]:
+    """v6 표현 단위 — 잇는 말의 감정 · 동기 · 인과(fix), 근거 턴과 거의 안 겹치는 claim(review)."""
+    elder = {u["turn"]: u["elder"] for u in data["utterances"]}
+    out = []
+    for loc, _, _, x in _sentences(chapters):
+        for j, s in enumerate(x.get("spans") or []):
+            if s["kind"] == "link":
+                m = _LINK_BAN.search(_narration(s["span"]))
+                if m:
+                    out.append(_finding("link_content", "fix", loc,
+                                        f"잇는 말 「{s['span'][:30]}」 에 「{m.group(0)}」 — 감정 · 동기 · 인과는 근거가 있는 claim 으로만",
+                                        token=f"l{j}"))
+                continue
+            src = _bigrams(_norm(" ".join(elder.get(t, "") for t in fact_turns(s["facts"], book))))
+            mine = _bigrams(_norm(_narration(s["span"]) or s["span"]))
+            ratio = len(mine & src) / len(mine) if mine else 1.0
+            if ratio < CLAIM_MIN_OVERLAP:
+                out.append(_finding("claim_weak", "review", loc,
+                                    f"「{s['span'][:30]}」 이 사실 {s['facts']} 의 근거 턴과 {ratio:.2f} 만 겹친다 — 뜻이 맞는지 본다",
+                                    token=f"c{j}"))
+    return out
+
+
+def v6_findings(chapters: list[dict], data: dict, analysis: dict) -> list[dict]:
+    """v6 에서 더한 사실 · 문체 검사. v5 모양 원고(문장 목록)에도 돈다 — 기준선 회귀용."""
+    book = ledger(analysis)
+    return (negation_findings(chapters, book, data) + causal_findings(chapters, data)
+            + style_review_findings(chapters) + reorder_findings(chapters, book)
+            + span_findings(chapters, data, book))
+
+
+def _para_of(loc: str | None) -> str | None:
+    return loc.rsplit("/s", 1)[0] if loc else None
+
+
+def _rows_at(locs: list[str], rows: list[dict], key: str) -> tuple[list[dict], list[str]]:
+    """위치(장 · 문단 · 문장) 목록에 드는 추적 행과 해당 행이 없는 위치."""
+    got, bad = [], []
+    for loc in locs:
+        hit = [r for r in rows if r[key] and (r[key] == loc or r[key].startswith(loc + "/"))]
+        if not hit:
+            bad.append(loc)
+        got += [r for r in hit if r not in got]
+    return got, bad
+
+
+def claim_findings(edited: dict, trace: dict) -> list[dict]:
+    """
+    진단 항목마다 change 가 result(편집본 위치) · where(초안 위치)의 실제 변화와 맞는가 — 코드가 잰
+    edit_trace 로 본다. 맞지 않으면 edit_claim_mismatch(fix). 바꾼 양이 적어도 적은 대로 맞게 적었으면 걸리지 않는다.
+
+        rewrite   result 문장의 절반 이상이 새 문장이거나 초안과 REWRITE_RATIO 미만으로 닮음
+        move      result 에 순서가 바뀐(옮긴) 문장이 있음
+        merge     result 의 한 문단에 초안 두 문단 이상의 문장이 들어옴
+        split     where 의 초안 문단 하나가 편집본 두 문단 이상으로 감
+        cut · compress  where 의 초안 문장이 빠졌거나 그 사실이 편집본에서 빠짐
+        link      result 에 초안에 없던 잇는 문장(editorial)이 있음
+        fact_fix  result 에 초안 그대로가 아닌 문장이 있음
+    """
+    rows = trace.get("sentences", [])
+    kinds = {loc: x["kind"] for loc, _, _, x in _sentences(edited.get("chapters", []))}
+    draft_facts: dict[str, set] = trace.get("draft_facts_at", {})
+    dropped_facts = set(trace.get("dropped_facts", []))
+    out = []
+    for i, d in enumerate(edited.get("diagnosis", [])):
+        change, result, where = d.get("change"), d.get("result") or [], d.get("where") or []
+        res, bad_res = _rows_at(result, rows, "at")
+        why = None
+        if change in ("rewrite", "move", "merge", "link", "fact_fix") and (not result or bad_res):
+            why = f"result 위치 {bad_res or '없음'} 가 편집본에 없다"
+        elif change == "rewrite":
+            low = sum(1 for r in res if r["kind"] == "new" or r["ratio"] < REWRITE_RATIO)
+            if low * 2 < len(res):
+                why = f"다시 썼다는 문장 {len(res)}개 중 {low}개만 초안과 달라졌다"
+        elif change == "move" and not any(r["moved"] for r in res):
+            why = "result 에 옮긴 문장이 없다"
+        elif change == "merge":
+            by_para: dict[str, set] = {}
+            for r in res:
+                if r["from"]:
+                    by_para.setdefault(_para_of(r["at"]), set()).add(_para_of(r["from"]))
+            if not any(len(v) >= 2 for v in by_para.values()):
+                why = "result 의 어느 문단도 초안 두 문단 이상에서 오지 않았다"
+        elif change == "split":
+            src, bad = _rows_at(where, rows, "from")
+            to: dict[str, set] = {}
+            for r in src:
+                to.setdefault(_para_of(r["from"]), set()).add(_para_of(r["at"]))
+            if not where or not any(len(v) >= 2 for v in to.values()):
+                why = "where 의 초안 문단이 편집본 두 문단 이상으로 가지 않았다"
+        elif change in ("cut", "compress"):
+            gone = [x for x in trace.get("dropped", []) if any(x == w or x.startswith(w + "/") for w in where)]
+            lost = {f for w, fs in draft_facts.items() if any(w == x or w.startswith(x + "/") for x in where)
+                    for f in fs} & dropped_facts
+            if not where or not (gone or lost):
+                why = "where 의 초안 문장 · 사실이 빠지지 않았다"
+        elif change == "link" and not any(r["kind"] == "new" and kinds.get(r["at"]) == "editorial" for r in res):
+            why = "result 에 새 잇는 문장(editorial)이 없다"
+        elif change == "fact_fix" and not any(r["kind"] != "kept" for r in res):
+            why = "result 문장이 초안 그대로다"
+        if why:
+            out.append(_finding("edit_claim_mismatch", "fix", "artifact",
+                                f"diagnosis[{i}] change={change} — {why}. 진단: {str(d.get('issue', ''))[:60]}",
+                                token=f"d{i}"))
+    return out
+
+
+def composition_findings(edited: dict, trace: dict) -> list[dict]:
+    """composition.from 과 실제로 문장이 온 초안 문단(edit_trace) — 다르면 사람 확인(review)."""
+    actual: dict[str, set] = {}
+    for r in trace.get("sentences", []):
+        if r["from"]:
+            actual.setdefault(_para_of(r["at"]), set()).add(_para_of(r["from"]))
+    out = []
+    for ch in edited.get("chapters", []):
+        for e in ch.get("composition") or []:
+            at = f"{ch['chapter_key']}/p{e['paragraph']}"
+            said, real = set(e.get("from") or []), actual.get(at, set())
+            if said != real and (real - said or said - real):
+                out.append(_finding("composition_mismatch", "review", at,
+                                    f"composition.from {sorted(said)} · 실제 {sorted(real)} — 새 문장만 있으면 비어 있다"))
+    return out
+
+
+def composition_leaks(edited: dict) -> list[dict]:
+    """편집의 구성 메모(role · after_previous · reorder.reason)를 잇는 문장에 그대로 옮겼다 — block(memo_leak)."""
+    memos = [m for ch in edited.get("chapters", []) for e in ch.get("composition") or []
+             for m in (_norm(e.get("role", "")), _norm(e.get("after_previous", "")),
+                       _norm((e.get("reorder") or {}).get("reason", ""))) if len(m) >= 8]
+    return [_finding("memo_leak", "block", loc, "편집 구성 메모를 본문에 그대로 옮김")
+            for loc in memo_leaks(edited.get("chapters", []), memos)]
 
 
 _LOC_ALIAS = re.compile(r"^(ch-\d+)/paragraphs?/(\d+)(?:/(?:sentences?/)?(\d+))?$")
@@ -2266,6 +2761,74 @@ def edit_message(data: dict, analysis: dict, outline_out: dict, drafts: list[dic
     return _user(head, payload)
 
 
+def edit_message_v6(data: dict, analysis: dict, outline_out: dict, drafts: list[dict],
+                    checks: list[dict], signals: list[dict], focus: str | None = None,
+                    review_notes: list[dict] | None = None) -> str:
+    """
+    v6 편집 자료. v5 와 다른 것: 초안을 **문단 산문**(문단 위치 · 산문 · 그 문단의 사실 id)으로 주고 문장 객체를
+    주지 않는다. 목차는 장의 중심 · 핵심 경험과 문단의 역할 · 시기 · 핵심 사실만(문단별 facts 배열은 뺀다).
+    checks 는 block · fix 만, 초안 문장 위치에는 그 문장을 quote 로 붙인다.
+    """
+    head = (_SOURCE_HEAD + "\nbook_plan 은 목차의 장 중심 · 핵심 경험과 문단 역할 · 시기 · 핵심 사실(core)이다 — "
+            "**제안일 뿐이고 바꿀 수 있다**(core 사실은 지킨다). drafts 는 장 초안을 문단 산문으로 옮긴 것이다(location 은 "
+            "초안 문단 위치, facts 는 그 문단이 쓴 사실 id). 초안은 사실 근거가 아니다 — source · facts 와 다시 대조한다. "
+            "facts 는 전체 사실 원장이다. 원장의 text 는 사실 메모이지 문장이 아니다 — 메모의 말투를 서술에 옮기지 않는다. "
+            "core_facts 는 빠뜨리면 안 되는 핵심 사실, must_keep 은 근거 없이 빠지면 안 되는 사실, outline_omit 은 목차가 "
+            "뺀 사실이다(다시 적지 않는다). checks 는 코드가 초안에서 찾은 고칠 곳(quote 는 그 초안 문장)이고, signals 는 "
+            "발언 나열 신호다. claims 의 facts 에는 facts 의 id 만 쓴다.")
+    loc_text = {loc: x["text"] for loc, _, _, x in _sentences(drafts)}
+    plan_chapters = []
+    for ch in outline_out["chapters"]:
+        plan_chapters.append({
+            "chapter_key": ch["chapter_key"], "title": ch["title"]["text"], "center": ch.get("center", ""),
+            "experience": ch.get("experience", ""),
+            "paragraphs": [{"role": p.get("role", ""), "time": p.get("time", ""), "core": p.get("core") or []}
+                           for p in ch.get("paragraphs", [])]})
+    prose = []
+    for d in drafts:
+        paras = []
+        for p, para in enumerate(d["paragraphs"]):
+            fs: list[str] = []
+            for x in para:
+                fs += [f for f in x.get("facts") or [] if f not in fs]
+            paras.append({"location": f"{d['chapter_key']}/p{p}", "text": " ".join(x["text"] for x in para),
+                          "facts": fs})
+        prose.append({"chapter_key": d["chapter_key"], "title": d["title"]["text"], "paragraphs": paras})
+    core = plan_core(outline_out)
+    payload: dict = {
+        "book_plan": {"book": {k: outline_out["book"].get(k) for k in ("title", "center", "flow")},
+                      "chapters": plan_chapters},
+        "drafts": prose,
+        "facts": analysis.get("facts", []),
+        "core_facts": sorted(core, key=_fid),
+        "must_keep": sorted(must_keep(analysis) - set(core), key=_fid),
+        "outline_omit": outline_out.get("omit", []),
+        "checks": [{**{k: c[k] for k in ("id", "rule", "severity", "location", "detail")},
+                    **({"quote": loc_text[c["location"]]} if c["location"] in loc_text else {})}
+                   for c in checks if c["severity"] in ("block", "fix")],
+        "signals": signals,
+    }
+    missing = missing_core(checks, analysis, outline_out)
+    if missing:
+        head += ("\nmissing_core 는 장 초안이 빠뜨린 핵심 사실이다. 원문의 사실 · 들은 이야기 · 흐린 기억 · 감정을 그대로 "
+                 "지켜 본문에 되살리거나, 빼야 할 까닭이 있으면 omitted 에 이유와 함께 적는다.")
+        payload["missing_core"] = missing
+    if review_notes:
+        head += ("\nreview_notes 는 사람 검토가 초안에서 찾은 문제다(location 은 초안 위치, quote 는 그 초안 문장, turns 는 "
+                 "근거 원문 턴). 고칠 문장은 주지 않는다 — 원문 · 사실 원장과 대조해 고치고, 고친 것은 diagnosis 에 "
+                 "change \"fact_fix\" 로 적는다. 지적 목록이 구성 진단을 대신하지 않는다.")
+        payload["review_notes"] = [{**n, **({"quote": loc_text[n["location"]]} if n["location"] in loc_text else {})}
+                                   for n in review_notes]
+    if focus:
+        head += "\nfocus 는 이번 원고의 범위다 — 한 장 시험이라 편집본도 **장 하나**다(나누지 않는다)."
+        payload["focus"] = {"theme": focus, "chapters": 1}
+    if analysis.get("exclusions"):
+        head += _EXCLUSION_HEAD
+        payload["exclusions"] = exclusion_notices(analysis)
+    payload["source"] = stage_source(data, analysis)
+    return _user(head, payload)
+
+
 def missing_core(checks: list[dict], analysis: dict, outline_out: dict) -> list[dict]:
     """장 초안 판정의 core_missing → 편집에 넘길 목록. 사실 원장의 출처 · 흐림 · 턴과 문단 역할을 함께."""
     book = ledger(analysis)
@@ -2349,7 +2912,7 @@ class _Run:
     max_calls: int = 2       # 목차가 나오면 장 수 + 4 로 늘린다
 
     async def ask(self, stage: str, user: str, file_stem: str,
-                  chapter_key: str | None = None) -> tuple[Any, dict]:
+                  chapter_key: str | None = None, system: str | None = None) -> tuple[Any, dict]:
         """한 단계 한 번. 시간 · 호출 수 상한을 먼저 보고, 응답을 그대로 남긴 뒤 JSON 으로 읽는다."""
         up = stage.upper()
         limit = self.cfg[f"MEMOIR_PIPE_{up}_TIMEOUT"]
@@ -2365,7 +2928,7 @@ class _Run:
         if self.calls >= self.max_calls:
             raise PipelineError(stage, "budget", f"호출 수 상한 {self.max_calls}", chapter_key)
 
-        spec = CallSpec(stage, chapter_key, prompt(stage), user,
+        spec = CallSpec(stage, chapter_key, system or prompt(stage), user,
                         self.cfg["MEMOIR_PIPE_TEXT_MODEL"], self.cfg["MEMOIR_PIPE_TEMPERATURE"], tokens)
         wait = min(limit, left)
         self.calls += 1
@@ -2615,7 +3178,8 @@ async def run(data: dict, turn_map: list[dict], *, call: Call = call_model,
               recorder: Recorder | None = None, meta: dict | None = None, focus: str | None = None,
               analysis_fixture: dict | None = None, outline_fixture: dict | None = None,
               chapter_only: bool = False, model: str | None = None,
-              draft_fixture: dict | None = None, review_notes: dict | None = None) -> dict:
+              draft_fixture: dict | None = None, review_notes: dict | None = None,
+              edit_contract: str = "v5") -> dict:
     """
     다섯 단계를 차례로. 돌려주는 것은 result (result.json 과 같은 것).
 
@@ -2635,6 +3199,9 @@ async def run(data: dict, turn_map: list[dict], *, call: Call = call_model,
     받아 편집만 부른다(호출 1회). 초안 판정 · 편집 자료 · 최종 근거검사 · 편집 추적 · 코드 판정은 보통
     실행과 같은 함수다. 검증은 부르지 않는다(결과 edit_only). review_notes 는 사람 검토 지적
     (check_review_notes) — 편집 자료에 그대로 싣는다. 편집 단계 상한은 EDIT_ONLY_LIMITS 까지 올린다.
+
+    edit_contract "v6" 은 편집만 문단 산문 + 근거 표현(claims) 계약으로 부른다(edit_message_v6 · check_final_v6 ·
+    v6_findings · claim_findings). 편집 단독 시험에서만 받는다 — 장 집필 · 검증 계약은 v5 그대로다.
     """
     rec = recorder or Recorder()
     cfg = settings()
@@ -2647,6 +3214,8 @@ async def run(data: dict, turn_map: list[dict], *, call: Call = call_model,
             cfg[f"MEMOIR_PIPE_{stage}_MAX_OUTPUT_TOKENS"] = max(cfg[f"MEMOIR_PIPE_{stage}_MAX_OUTPUT_TOKENS"], tok)
     cfg["chapter_only"] = chapter_only
     cfg["edit_only"] = edit_only
+    cfg["edit_contract"] = edit_contract
+    v6 = edit_contract == "v6"
     draft_source: dict | None = None
     meta = dict(meta or {})
     started_at = datetime.now(timezone.utc).isoformat(timespec="seconds")
@@ -2670,6 +3239,10 @@ async def run(data: dict, turn_map: list[dict], *, call: Call = call_model,
             raise PipelineError("input", "input", "장 집필 비교와 편집 단독 시험은 함께 하지 않는다")
         if review_notes is not None and not edit_only:
             raise PipelineError("input", "input", "검토 지적은 편집 단독 시험에서만 받는다")
+        if edit_contract not in EDIT_CONTRACTS:
+            raise PipelineError("input", "input", f"편집 계약 {edit_contract!r} — {list(EDIT_CONTRACTS)} 중 하나")
+        if v6 and not edit_only:
+            raise PipelineError("input", "input", "편집 계약 v6 은 편집 단독 시험에서만 쓴다")
 
         # ① 분석 — 사실 원장 · 기억 단위 (또는 검증된 시험용 스냅샷)
         if analysis_fixture is not None:
@@ -2743,6 +3316,8 @@ async def run(data: dict, turn_map: list[dict], *, call: Call = call_model,
         # 코드 판정 ① — 장 초안에서. 편집이 고칠 곳 · 나열 신호로 넘긴다
         outline_omit = {f: x["reason"] for x in outline_out.get("omit", []) for f in x["facts"]}
         draft_checks = all_findings(drafts, outline_out, data, analysis, outline_omit)
+        if v6:
+            draft_checks += v6_findings(drafts, data, analysis)
         draft_signals = listing_signals(drafts, data)
         rec.json("03_checks.json", {"checks": draft_checks, "signals": draft_signals,
                                     "plan_coverage": plan_coverage(drafts, outline_out)})
@@ -2758,15 +3333,26 @@ async def run(data: dict, turn_map: list[dict], *, call: Call = call_model,
             return result
 
         # ④ 전체 편집 → 최종 근거검사 → 편집 추적 → 코드 판정 ②
-        edited, step = await st.ask("edit", edit_message(data, analysis, outline_out, drafts, draft_checks,
-                                                         draft_signals, focus, notes), "04_edited")
+        span_checks: list[dict] = []
+        if v6:
+            raw, step = await st.ask("edit", edit_message_v6(data, analysis, outline_out, drafts, draft_checks,
+                                                             draft_signals, focus, notes), "04_edited",
+                                     system=edit_prompt("v6"))
+        else:
+            edited, step = await st.ask("edit", edit_message(data, analysis, outline_out, drafts, draft_checks,
+                                                             draft_signals, focus, notes), "04_edited")
         step["ok"] = True
         try:
-            omitted, step["warnings"] = check_final(edited, analysis, T, focus)
+            if v6:
+                edited, omitted, step["warnings"], span_checks = check_final_v6(raw, analysis, T, focus)
+            else:
+                omitted, step["warnings"] = check_final(edited, analysis, T, focus)
         except PipelineError:
             step["ok"] = False
             raise
         expand_turns(edited["chapters"], book, edited["title"])
+        if v6:
+            rec.json("04_edited_sentences.json", edited)
         omitted_all = {**outline_omit, **omitted}
         trace = edit_trace(drafts, edited["chapters"], omitted_all)
         rec.json("04_edit_trace.json", trace)
@@ -2775,6 +3361,10 @@ async def run(data: dict, turn_map: list[dict], *, call: Call = call_model,
         final_findings = (all_findings(edited["chapters"], outline_out, data, analysis, omitted_all, final=True,
                                        edit_omitted=omitted)
                           + correction_findings([], analysis, edited["title"]) + edit_claim_findings(edited, trace))
+        if v6:
+            final_findings += (span_checks + v6_findings(edited["chapters"], data, analysis)
+                               + composition_leaks(edited) + claim_findings(edited, trace)
+                               + composition_findings(edited, trace))
         gate = code_gate(final_findings, resolutions, draft_checks)
         gate["draft_checks"] = len(draft_checks)
         gate["resolutions"] = {s: sum(1 for r in resolutions.values() if r["status"] == s) for s in CHECK_STATUSES}
@@ -2834,6 +3424,7 @@ async def run(data: dict, turn_map: list[dict], *, call: Call = call_model,
         result["outline_source"] = REVIEWED_FIXTURE if outline_fixture is not None else "model"
         if draft_source is not None:
             result["draft_source"] = draft_source
+        result["edit_contract"] = edit_contract
         rec.json("result.json", result)               # 출처 표시를 넣은 뒤에 쓴다
         run_doc = {**meta, "focus": focus, "analysis_source": result["analysis_source"],
                    "outline_source": result["outline_source"], "draft_source": draft_source,
@@ -3017,7 +3608,9 @@ def r1_summary(run_doc: dict, result: dict) -> str:
         + (" · **장 집필 비교(chapter_only) — 편집 · 검증을 부르지 않았다**" if cfg.get("chapter_only") else "")
         + (f" · **편집 단독 시험(edit_only) — 초안 {(run_doc.get('draft_source') or {}).get('run_ref')} "
            f"({(run_doc.get('draft_source') or {}).get('model')})을 편집만, 검증을 부르지 않았다**"
-           if cfg.get("edit_only") else ""),
+           if cfg.get("edit_only") else "")
+        + (" · **편집 계약 v6 — 문단 산문 + 근거 표현(claims), 지시문 4_편집_v6.md**"
+           if cfg.get("edit_contract") == "v6" else ""),
         "- 단계 상한: " + " · ".join(
             f"{s} {cfg.get(f'MEMOIR_PIPE_{s.upper()}_TIMEOUT')}초/"
             f"{cfg.get(f'MEMOIR_PIPE_{s.upper()}_MAX_OUTPUT_TOKENS')}" for s in STAGES),
@@ -3076,7 +3669,10 @@ def r1_summary(run_doc: dict, result: dict) -> str:
         for x in cf:
             key = f"{x['rule']}({x['severity']})"
             by_rule[key] = by_rule.get(key, 0) + 1
-        lines += ["", f"## 코드 판정 (편집본) — {by_rule}", "", "| 위치 | 규칙 | severity |", "|---|---|---|"]
+        lines += ["", f"## 코드 판정 (편집본) — {by_rule}", ""]
+        if any(x["severity"] == "review" for x in cf):
+            lines += ["- review 는 사람 확인 항목(문학적 판단 · 오탐 가능한 표면 검사)이다 — code_gate 에 넣지 않는다", ""]
+        lines += ["| 위치 | 규칙 | severity |", "|---|---|---|"]
         lines += [f"| {x['location']} | {x['rule']} | {x['severity']} |" for x in cf]
     if v["issues"]:
         by = {}

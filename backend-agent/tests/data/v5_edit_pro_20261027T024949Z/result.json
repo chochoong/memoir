@@ -1,0 +1,568 @@
+{
+  "generation_state": "edit_only",
+  "pipeline_complete": false,
+  "code_gate": "pass",
+  "model_verdict": null,
+  "model_quality": null,
+  "human_review": "not_run",
+  "overall": "edit_only",
+  "failure": null,
+  "focus": "큰언니와 재봉틀",
+  "title": {
+    "text": "언니의 발틀",
+    "kind": "editorial",
+    "facts": [],
+    "turns": []
+  },
+  "chapters": [
+    {
+      "chapter_key": "ch-1",
+      "center": "큰언니와 언니가 보낸 재봉틀",
+      "title": {
+        "text": "언니의 발틀",
+        "kind": "editorial",
+        "facts": [],
+        "turns": []
+      },
+      "paragraphs": [
+        [
+          {
+            "text": "언니가 준 재봉틀을 아직 못 버렸다.",
+            "kind": "supported",
+            "facts": [
+              "f57"
+            ],
+            "turns": [
+              38
+            ]
+          },
+          {
+            "text": "재봉틀 드르륵 소리가 나면 언니 생각이 난다.",
+            "kind": "supported",
+            "facts": [
+              "f58"
+            ],
+            "turns": [
+              38
+            ]
+          },
+          {
+            "text": "공장 다닐 때는 그 소리가 그렇게 싫었는데 말이다.",
+            "kind": "supported",
+            "facts": [
+              "f59"
+            ],
+            "turns": [
+              38
+            ]
+          },
+          {
+            "text": "이 재봉틀에 얽힌 기억을 따라가다 보면 어린 시절로 거슬러 올라가게 된다.",
+            "kind": "editorial",
+            "facts": [],
+            "turns": []
+          }
+        ],
+        [
+          {
+            "text": "엄마가 밭일 나가면 큰언니가 나를 업어 키웠다고 들었다.",
+            "kind": "supported",
+            "facts": [
+              "f16"
+            ],
+            "turns": [
+              10
+            ]
+          },
+          {
+            "text": "열 살쯤 큰언니에게 양말 꿰매는 걸 배웠다.",
+            "kind": "supported",
+            "facts": [
+              "f17"
+            ],
+            "turns": [
+              11
+            ]
+          },
+          {
+            "text": "큰언니는 말이 별로 없었고 손이 빨랐다.",
+            "kind": "supported",
+            "facts": [
+              "f18"
+            ],
+            "turns": [
+              12
+            ]
+          },
+          {
+            "text": "언니가 동네 사람들의 옷도 고쳐 주었다.",
+            "kind": "supported",
+            "facts": [
+              "f19"
+            ],
+            "turns": [
+              12
+            ]
+          },
+          {
+            "text": "내가 열다섯 살 즈음 되었을 때 큰언니는 부산으로 시집을 갔다.",
+            "kind": "supported",
+            "facts": [
+              "f20"
+            ],
+            "turns": [
+              13
+            ]
+          },
+          {
+            "text": "언니가 시집가던 날 내가 많이 울었다고 들었는데, 그날 버스 정류장에서의 일은 진짜 기억이 난다.",
+            "kind": "supported",
+            "facts": [
+              "f21",
+              "f61"
+            ],
+            "turns": [
+              13
+            ]
+          }
+        ],
+        [
+          {
+            "text": "시골에 있어 봐야 할 게 없어서 열일곱 살에 서울 동대문 근처 봉제 공장으로 올라갔다.",
+            "kind": "supported",
+            "facts": [
+              "f22"
+            ],
+            "turns": [
+              14
+            ]
+          },
+          {
+            "text": "기숙사에서 여섯 명이 한 방을 썼고 미싱 소리가 시끄러워 밤에 누우면 귀에서 웅웅 소리가 났다.",
+            "kind": "supported",
+            "facts": [
+              "f23"
+            ],
+            "turns": [
+              15
+            ]
+          },
+          {
+            "text": "그때 재단하는 언니들 옆에서 어깨너머로 배운 것으로 평생을 먹고살았다.",
+            "kind": "supported",
+            "facts": [
+              "f26"
+            ],
+            "turns": [
+              17
+            ]
+          }
+        ],
+        [
+          {
+            "text": "1985년 봄에 은행동 골목에 두 평짜리 가게를 얻어 수선집을 개업했다.",
+            "kind": "supported",
+            "facts": [
+              "f33",
+              "f34"
+            ],
+            "turns": [
+              21,
+              25
+            ]
+          },
+          {
+            "text": "가게를 열고 한 달쯤 뒤에 큰언니가 쓰던 검은색 발틀 재봉틀이 부산에서 화물로 왔다.",
+            "kind": "supported",
+            "facts": [
+              "f40",
+              "f6"
+            ],
+            "turns": [
+              4,
+              26
+            ]
+          },
+          {
+            "text": "편지 한 장이 같이 왔고 별말 없이 '기름 자주 쳐라' 그거 하나 적혀 있었다.",
+            "kind": "supported",
+            "facts": [
+              "f41"
+            ],
+            "turns": [
+              26,
+              27
+            ]
+          },
+          {
+            "text": "나는 그 편지가 언니다웠다고 생각한다.",
+            "kind": "supported",
+            "facts": [
+              "f64"
+            ],
+            "turns": [
+              27
+            ]
+          },
+          {
+            "text": "아침 아홉 시에 문을 열면 저녁 여덟 시까지 거의 재봉틀 앞에 있었다.",
+            "kind": "supported",
+            "facts": [
+              "f4"
+            ],
+            "turns": [
+              3
+            ]
+          },
+          {
+            "text": "수선집은 한 이십오 년쯤 했던 것 같다.",
+            "kind": "supported",
+            "facts": [
+              "f62"
+            ],
+            "turns": [
+              2
+            ]
+          }
+        ],
+        [
+          {
+            "text": "1977년쯤 아들 돌이 지나고 부산에 처음 가서 큰언니가 시집간 집에 가 보았고 바다를 처음 보았다.",
+            "kind": "supported",
+            "facts": [
+              "f42",
+              "f43"
+            ],
+            "turns": [
+              28
+            ]
+          },
+          {
+            "text": "2003년에 언니가 아프다고 해서 부산 병원으로 병문안을 갔는데, 같은 부산인데도 그때는 바다 쪽은 쳐다보지도 않았다.",
+            "kind": "supported",
+            "facts": [
+              "f44"
+            ],
+            "turns": [
+              29
+            ]
+          },
+          {
+            "text": "큰언니는 병원에 다녀온 그다음 해 봄인 2004년에 돌아가셨다.",
+            "kind": "supported",
+            "facts": [
+              "f52"
+            ],
+            "turns": [
+              34
+            ]
+          },
+          {
+            "text": "장례식에는 남동생과 같이 갔다.",
+            "kind": "supported",
+            "facts": [
+              "f53"
+            ],
+            "turns": [
+              34
+            ]
+          }
+        ],
+        [
+          {
+            "text": "무릎이 아파서 더는 못 앉아 있겠어서 2010년에 수선집을 그만두었다.",
+            "kind": "supported",
+            "facts": [
+              "f2",
+              "f3"
+            ],
+            "turns": [
+              2
+            ]
+          },
+          {
+            "text": "가게 문을 닫으면서 남들은 고물이라고 팔라고 하던 그 발틀 재봉틀은 집으로 가져왔다.",
+            "kind": "supported",
+            "facts": [
+              "f54",
+              "f65"
+            ],
+            "turns": [
+              35
+            ]
+          },
+          {
+            "text": "가끔 손주 바지 단을 줄여주지만 발이 예전 같지 않아 오래는 못 돌린다.",
+            "kind": "supported",
+            "facts": [
+              "f55"
+            ],
+            "turns": [
+              36
+            ]
+          },
+          {
+            "text": "애들한테 그 재봉틀을 줄지는 아직 모르겠고 걔들이 쓸 일이 있겠나 싶다.",
+            "kind": "supported",
+            "facts": [
+              "f60"
+            ],
+            "turns": [
+              39
+            ]
+          }
+        ]
+      ]
+    }
+  ],
+  "diagnosis": [
+    {
+      "issue": "원문 발언이 순서대로 나열되어 있고 문단 사이의 연결이 끊겨 회고 수필의 흐름이 아님",
+      "where": [
+        "ch-1"
+      ],
+      "action": "시간적 흐름과 의미를 묶어 문단을 다시 구성하고 연결 문장을 추가함"
+    },
+    {
+      "issue": "첫 문단과 마지막 문단에 나뉜 재봉틀 소리에 대한 대비가 약함",
+      "where": [
+        "ch-1/p1",
+        "ch-1/p6"
+      ],
+      "action": "공장 시절의 소리와 현재의 재봉틀 소리 관련 사실을 첫 문단으로 모아 대비를 명확히 함"
+    },
+    {
+      "issue": "2003년 병문안 때 바다 이야기를 하는데, 1977년 부산에 처음 가서 바다를 본 내용이 누락되어 맥락이 끊김",
+      "where": [
+        "ch-1/p5"
+      ],
+      "action": "1977년 부산 방문과 바다를 처음 본 사실(f42, f43)을 복원하여 자연스럽게 연결함"
+    },
+    {
+      "issue": "현재에서 과거로 넘어가는 문단에 시간 표지가 없음",
+      "where": [
+        "ch-1/p1"
+      ],
+      "action": "재봉틀에 얽힌 기억을 따라 과거로 돌아가는 표지 역할을 하는 문장을 추가함"
+    },
+    {
+      "issue": "원문에 없는 인과관계('빨라서 옷을 고쳐주었다')와 감정의 과장('참 언니다웠다', '정류장의 모습')이 들어감",
+      "where": [
+        "ch-1/p1",
+        "ch-1/p3"
+      ],
+      "action": "원문의 사실과 감정 세기에 맞게 수식어를 제거하고 문장을 분리하여 담백하게 고침"
+    }
+  ],
+  "omitted": [
+    {
+      "facts": [
+        "f14",
+        "f15"
+      ],
+      "reason": "출신 · 나이 차 — 이 장에는 배경으로만 필요해 뺀다"
+    },
+    {
+      "facts": [
+        "f56",
+        "f66"
+      ],
+      "reason": "딸의 책 제안과 화자의 망설임 — 책 전체의 머리말 · 맺음말 몫"
+    },
+    {
+      "facts": [
+        "f24",
+        "f25",
+        "f27",
+        "f28"
+      ],
+      "reason": "첫 월급 · 엄마의 편지 · 서울 생활 기간 · 결혼은 공장 소리와 다른 이야기 — 다른 장 몫"
+    },
+    {
+      "facts": [
+        "f29",
+        "f30",
+        "f31",
+        "f32",
+        "f35",
+        "f36",
+        "f37",
+        "f38",
+        "f39"
+      ],
+      "reason": "좌판 · 간판 · 첫 손님 · 첫 천 원은 가게를 연 무렵의 다른 장면 — 이 장은 재봉틀이 온 일에 집중"
+    },
+    {
+      "facts": [
+        "f1",
+        "f5",
+        "f7",
+        "f8",
+        "f9",
+        "f10",
+        "f11",
+        "f12",
+        "f13",
+        "f63"
+      ],
+      "reason": "남편의 일 · 김 사장 · 운동회 · 자녀 대학은 가게 시절의 다른 사람 이야기 — 다른 장 몫"
+    },
+    {
+      "facts": [
+        "f45",
+        "f46",
+        "f47",
+        "f48"
+      ],
+      "reason": "딸의 결혼 드레스 — 딸의 이야기, 다른 장 몫"
+    },
+    {
+      "facts": [
+        "f49",
+        "f50"
+      ],
+      "reason": "아들 이야기 — 다른 장 몫"
+    },
+    {
+      "facts": [
+        "f51"
+      ],
+      "reason": "남편의 별세 — 화자가 말을 멈춘 대목, 이 장에 넣지 않는다"
+    }
+  ],
+  "verification": {
+    "state": "not_run",
+    "verdict": null,
+    "issues": [],
+    "reviewed_locations": [],
+    "missing_context": []
+  },
+  "code_findings": [
+    {
+      "id": "must_keep_omitted:artifact:f12",
+      "rule": "must_keep_omitted",
+      "severity": "info",
+      "location": "artifact",
+      "detail": "사실 f12 을 뺐다 — 이유: 남편의 일 · 김 사장 · 운동회 · 자녀 대학은 가게 시절의 다른 사람 이야기 — 다른 장 몫",
+      "fact": "f12"
+    },
+    {
+      "id": "must_keep_omitted:artifact:f13",
+      "rule": "must_keep_omitted",
+      "severity": "info",
+      "location": "artifact",
+      "detail": "사실 f13 을 뺐다 — 이유: 남편의 일 · 김 사장 · 운동회 · 자녀 대학은 가게 시절의 다른 사람 이야기 — 다른 장 몫",
+      "fact": "f13"
+    },
+    {
+      "id": "must_keep_omitted:artifact:f48",
+      "rule": "must_keep_omitted",
+      "severity": "info",
+      "location": "artifact",
+      "detail": "사실 f48 을 뺐다 — 이유: 딸의 결혼 드레스 — 딸의 이야기, 다른 장 몫",
+      "fact": "f48"
+    },
+    {
+      "id": "must_keep_omitted:artifact:f51",
+      "rule": "must_keep_omitted",
+      "severity": "info",
+      "location": "artifact",
+      "detail": "사실 f51 을 뺐다 — 이유: 남편의 별세 — 화자가 말을 멈춘 대목, 이 장에 넣지 않는다",
+      "fact": "f51"
+    }
+  ],
+  "edit_trace": {
+    "draft_chapters": 1,
+    "final_chapters": 1,
+    "draft_sentences": 24,
+    "final_sentences": 27,
+    "kept": 12,
+    "revised": 12,
+    "rewritten": 1,
+    "new": 2,
+    "dropped": 0,
+    "moved": 2,
+    "chapter_merges": [],
+    "chapter_splits": [],
+    "paragraph_merges": 2,
+    "paragraph_splits": 1,
+    "unchanged_ratio": 0.44,
+    "structure_changed": true
+  },
+  "metrics": {
+    "facts": 66,
+    "units": 11,
+    "outline_chapters": 1,
+    "outline_omitted_facts": 36,
+    "chapters": 1,
+    "paragraphs": 6,
+    "sentences": 27,
+    "editorial_sentences": 1,
+    "multi_turn_sentences": 3,
+    "verbatim_sentences": 0,
+    "verbatim_ratio": 0.0,
+    "draft_verbatim_ratio": 0.0,
+    "signals": [
+      {
+        "chapter_key": "ch-1",
+        "sentences": 27,
+        "supported": 26,
+        "one_to_one": 0.42,
+        "order_kept": 0.8,
+        "facts_per_sentence": 1.23,
+        "links": 4,
+        "paragraphs": 6,
+        "multi_session_paragraphs": 3,
+        "listing": false
+      }
+    ],
+    "draft_signals": [
+      {
+        "chapter_key": "ch-1",
+        "sentences": 24,
+        "supported": 24,
+        "one_to_one": 0.46,
+        "order_kept": 0.83,
+        "facts_per_sentence": 1.25,
+        "links": 4,
+        "paragraphs": 7,
+        "multi_session_paragraphs": 3,
+        "listing": false
+      }
+    ],
+    "plan_coverage": {
+      "draft": {
+        "planned": 30,
+        "planned_used": 30,
+        "core": 18,
+        "core_used": 18,
+        "core_missing": [],
+        "support": 12,
+        "support_used": 12
+      },
+      "final": {
+        "planned": 30,
+        "planned_used": 30,
+        "core": 18,
+        "core_used": 18,
+        "core_missing": [],
+        "support": 12,
+        "support_used": 12
+      }
+    }
+  },
+  "calls": 1,
+  "prompt_version": "v5",
+  "analysis_source": "reviewed_fixture",
+  "outline_source": "reviewed_fixture",
+  "run_ref": "20261027T024949Z-C5-b9f8-focus-fixture-outline-edit-31propreview",
+  "input_ref": "b9f8e2daea65",
+  "draft_source": {
+    "run_ref": "20261027T023603Z-C5-b9f8-focus-fixture-outline-chapter-31propreview",
+    "model": "gemini-3.1-pro-preview",
+    "temperature": 1.0,
+    "sha256": [
+      "2cabbb3a7850def6"
+    ]
+  }
+}

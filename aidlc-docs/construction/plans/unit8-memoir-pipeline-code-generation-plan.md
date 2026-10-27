@@ -124,7 +124,12 @@
 - [x] 결정: Flash-Lite 지시문 미세 수정 중단 · 집필 역할 상위 모델 비교
 - [x] 출력 분량 점검(잘림 아님) · 핵심 사실 core · core_missing/core_omitted · 편집 missing_core · 검증 위치 정규화 · 시험용 목차 r2 · --chapter-only --model — 8P 166 · 전체 235, 호출 0
 - [x] gemini-3.1-pro-preview 장 집필 비교 1회 (02:36Z, 0919cf9, 온도 1.0, r2) — 핵심 18/18, 원문에 없는 인과 1건, 편집에 넘길 만한 초안 · `R1-20261027T023603Z-C5-v5-chapter-pro.md`
-- [ ] 다음: 원인 가르기(같은 r2 · 온도로 Flash-Lite 1회 등) · 편집 역할 모델 결정 — 결정 대기
+- [x] 결정: Pro 초안으로 편집 단독 시험
+- [x] --from-draft · --review-notes · edit_only — 8P 182 · 전체 251, 커밋 df24863
+- [x] Pro 편집 1회 (02:49Z) — 핵심 18 보존 · 사실 문제 해소 · 문장 종합은 그대로 · `R1-20261027T024949Z-C5-v5-edit-pro.md`
+- [x] 편집 계약 재검토 — `edit-contract-review-v5.md`
+- [x] 편집 계약 v6 준비(지시문 · 계약 · 검사 · 비교 도구) — 8P 222 · 전체 291, 기준선 회귀 · dry-run, `edit-contract-v6.md`
+- [ ] 다음: v6 Pro 편집 1회 승인 대기
 - [ ] 분석 통과 · 타당성 확인 뒤 나머지 단계 여부 결정
 - [ ] (선택) 무료 상위 모델 비교 — 한도 확인 뒤
 - [ ] Seed C 전체 — 한 장 판정 뒤

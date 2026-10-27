@@ -224,6 +224,8 @@ def main(argv: list[str] | None = None) -> int:
                     help="편집 단독 시험 — --from-analysis · --from-outline 과 함께, 장 집필 비교 실행 폴더의 초안을 "
                          "그대로 받아 편집만(호출 1회, 검증 없음)")
     ap.add_argument("--review-notes", type=Path, help="--from-draft 와 함께만. 사람 검토 지적(위치 · 문제 · 근거 턴)")
+    ap.add_argument("--edit-contract", choices=pipe.EDIT_CONTRACTS, default="v5",
+                    help="--from-draft 와 함께만. v6 = 문단 산문 + 근거 표현(claims) 편집 계약(지시문 4_편집_v6.md)")
     ap.add_argument("--model", help="--chapter-only · --from-draft 와 함께만. 이 실행에만 쓰는 모델 — 기본 모델은 바꾸지 않는다")
     a = ap.parse_args(argv)
 
@@ -269,6 +271,9 @@ def main(argv: list[str] | None = None) -> int:
         return 2
     if a.review_notes and not a.from_draft:
         print("입력 거부 — --review-notes 는 --from-draft 와 함께만 쓴다", file=sys.stderr)
+        return 2
+    if a.edit_contract != "v5" and not a.from_draft:
+        print("입력 거부 — --edit-contract v6 은 --from-draft(편집 단독 시험)와 함께만 쓴다", file=sys.stderr)
         return 2
     if a.analysis_only:
         if a.from_analysis:
@@ -322,7 +327,7 @@ def main(argv: list[str] | None = None) -> int:
     calls = (f"{1 + extra}회 (장 1 + {extra})" if focus else
              f"{pipe.MIN_CHAPTERS + extra}~{pipe.MAX_CHAPTERS + extra}회 (장 수 + {extra})")
     if a.from_draft:
-        calls = "1회 (편집만)"
+        calls = "1회 (편집만)" + (" · 편집 계약 v6" if a.edit_contract == "v6" else "")
     model = a.model or cfg["MEMOIR_PIPE_TEXT_MODEL"]
     print(f"모델 {model}" + (f" (이 실행만 · 기본 {cfg['MEMOIR_PIPE_TEXT_MODEL']} 그대로)" if a.model else "")
           + f" · 온도 {cfg['MEMOIR_PIPE_TEMPERATURE']} · "
@@ -331,7 +336,8 @@ def main(argv: list[str] | None = None) -> int:
     if a.chapter_only:
         chapter_estimate(data, turn_map, analysis, outline_fx, fixture, model, cfg)
     if a.from_draft:
-        edit_estimate(data, turn_map, analysis, outline_fx, fixture, draft_fx, notes_doc, focus, model, cfg)
+        edit_estimate(data, turn_map, analysis, outline_fx, fixture, draft_fx, notes_doc, focus, model, cfg,
+                      a.edit_contract)
     if a.dry_run:
         print("--dry-run — 모델을 부르지 않았다")
         return 0
@@ -343,13 +349,14 @@ def main(argv: list[str] | None = None) -> int:
     if outline_fx is not None:
         meta["run_ref"] += "-outline"
     if a.chapter_only or a.from_draft:
-        meta["run_ref"] += ("-chapter-" if a.chapter_only else "-edit-") + re.sub(
+        meta["run_ref"] += ("-chapter-" if a.chapter_only else "-edit6-" if a.edit_contract == "v6" else "-edit-") + re.sub(
             r"[^a-z0-9]+", "", model.lower().removeprefix("gemini-"))
     folder = a.out_dir / meta["run_ref"]
     result = asyncio.run(pipe.run(data, turn_map, recorder=pipe.Recorder(folder), meta=meta, focus=focus,
                                   analysis_fixture=fixture, outline_fixture=outline_fx,
                                   chapter_only=a.chapter_only, model=a.model,
-                                  draft_fixture=draft_fx, review_notes=notes_doc))
+                                  draft_fixture=draft_fx, review_notes=notes_doc,
+                                  edit_contract=a.edit_contract))
     steps = json.loads((folder / "run.json").read_text(encoding="utf-8"))["steps"]
     for s in steps:
         u = s.get("usage") or {}
@@ -401,7 +408,7 @@ def read_draft_run(folder: Path, notes_path: Path | None) -> tuple[dict, dict | 
 
 
 def edit_estimate(data, turn_map, analysis, outline_fx, fixture, draft_fx, notes_doc, focus, model: str,
-                  cfg: dict) -> None:
+                  cfg: dict, contract: str = "v5") -> None:
     """편집 단독 시험의 입력 크기 · 출력 상한 · 예상 비용 — 모델을 부르지 않는다. run 과 같은 자료를 만든다."""
     T = pipe.check_input(data, turn_map)
     outline, _ = pipe.load_outline_fixture(outline_fx, analysis, fixture, T)
@@ -410,15 +417,18 @@ def edit_estimate(data, turn_map, analysis, outline_fx, fixture, draft_fx, notes
     notes = pipe.check_review_notes(notes_doc, drafts, src["run_ref"], T) if notes_doc is not None else None
     omit = {f: x["reason"] for x in outline.get("omit", []) for f in x["facts"]}
     checks = pipe.all_findings(drafts, outline, data, analysis, omit)
-    user = pipe.edit_message(data, analysis, outline, drafts, checks, pipe.listing_signals(drafts, data), focus, notes)
-    system = pipe.prompt("edit")
+    if contract == "v6":
+        checks += pipe.v6_findings(drafts, data, analysis)
+    message = pipe.edit_message_v6 if contract == "v6" else pipe.edit_message
+    user = message(data, analysis, outline, drafts, checks, pipe.listing_signals(drafts, data), focus, notes)
+    system = pipe.edit_prompt(contract)
     sec, tok = pipe.EDIT_ONLY_LIMITS
     tok = max(cfg["MEMOIR_PIPE_EDIT_MAX_OUTPUT_TOKENS"], tok)
     n_in = round((len(system) + len(user)) / CHARS_PER_TOKEN)
     by: dict[str, int] = {}
     for c in checks:
         by[f"{c['rule']}({c['severity']})"] = by.get(f"{c['rule']}({c['severity']})", 0) + 1
-    print(f"편집 — 입력 약 {n_in:,} 토큰(지시문 {len(system):,}자 + 자료 {len(user):,}자) · 초안 판정 {by or '없음'} · "
+    print(f"편집({contract}) — 입력 약 {n_in:,} 토큰(지시문 {len(system):,}자 + 자료 {len(user):,}자) · 초안 판정 {by or '없음'} · "
           f"출력 상한 {tok:,}(생각 포함) · 시간 상한 {max(cfg['MEMOIR_PIPE_EDIT_TIMEOUT'], sec):.0f}초")
     price = PRICES.get(model)
     if not price:

@@ -329,3 +329,27 @@
 **Context**: CONSTRUCTION - 단위 8P 장 집필 비교 — Pro 초안이 핵심 기억을 모두 담음, 다음 단계 결정 대기
 
 ---
+
+## Build and Test 단위 8P - gemini-3.1-pro-preview 편집 단독 시험 실제 1회 (Pro 초안 그대로)
+**Timestamp**: 2026-10-27T02:49:49Z
+**User Input**: "… 현재 Pro 초안을 대상으로 전체 편집 역할만 독립 시험 … 0919cf9 · Pro 초안 · 출처 · Seed C · 분석 · 목차 r2 · 기본 Flash-Lite 유지 · 편집 단계만 최소 실행 · 기존 편집 함수 · 검사 재사용 · 새 AI 역할 금지 · gemini-3.1-pro-preview · 1.0 · 1회 · 재시도 0 · 분석 · 목차 · 집필 재호출 금지 · 출력 상한 · 사용량 기록 · 실패 시 중단 · 서사 구성(지금 → 과거, 기억 연결, 싫던 소리와 지금 소리의 대비, 억지 교훈 금지) · 문장 · 문단(단절 · 반복 · 발언 순서 재구성, 수필체, 새 장면 · 감정 금지) · 사실성(인과 · '참' · '정류장의 모습' · '같은 부산이어도', 전언 · 불확실성 · 부정 · 관계 · 날짜) · 핵심 18 보존 · 보조 압축 시 기록 · 보고 8가지 · 자기평가 믿지 말 것 · 준비 → 8P 커밋 → 1회 · push · PR · 충님 서버 보류"
+**AI Response**: "--from-draft(초안 스냅샷 그대로: draft_only 실행 · 같은 목차 · input_ref · 장 집필 계약 재검사) · --review-notes(위치 · 문제 · 근거 턴만, 고칠 문장 금지) · edit_only(편집 상한 300초/32,768). 기존 edit_message · check_final · edit_trace · all_findings · code_gate 그대로. 8P 182 · 전체 235→251 · theme-interview 사본 182. 커밋 df24863. 1회(20261027T024949Z-…-edit-31propreview): 95.8초 · 입력 20,358 · 출력 3,225 · 생각 13,341 · STOP · 약 $0.240. 핵심 18/18 보존. 실제 변화: 대비를 첫 문단으로 · 되돌아가는 안내 문장 1 · f42 · f43 복원으로 바다 맥락 · 문단 7→6 · 인과 · '참' · '모습' · '앉아' · '2010년에' 반복 제거. 새 창작 없음. 새 문제: f16 '기억이 안 남' 누락 · 원문 말투 되돌림 3곳 · 상투적 안내 · 1977년 되돌아감. 나열 신호 그대로(1:1 0.42 · 순서 0.80 · 사실/문장 1.23). 사실은 나아졌으나 글은 거의 그대로 — 책의 한 장으로는 아직 아니다. 검토 지적을 받은 편집. R1-20261027T024949Z-C5-v5-edit-pro.md. 실행 뒤 수정 · 재호출 · push 없음."
+**Context**: CONSTRUCTION - 단위 8P 편집 단독 시험 — 사실 개선 · 문장 종합은 그대로, 다음 결정 대기
+
+---
+
+## Construction 단위 8P - v5 편집 출력 구조 · 역할 재검토 (분석만)
+**Timestamp**: 2026-10-27T03:30:00Z
+**User Input**: "… 사실성 개선은 인정하지만, 수필의 문학적 완성도는 여전히 미승인 … 편집의 출력 구조와 역할을 재검토 … 추측이 아니라 실제 코드와 프롬프트를 기준으로 … 최소 구조 변경안만 보고 … 새 프롬프트 작성, 코드 변경, 실제 Gemini 호출은 하지 않습니다. 기존 Pro 집필 원고와 편집 결과를 기준선으로 보존 …"
+**AI Response**: "분석 문서 edit-contract-review-v5.md 작성. 측정: 문장-사실 메모 유사도 초안 0.74 → 편집 0.82(20/26 ≥0.7), 구어체 3곳 모두 메모 문구. 원인: 원장 메모가 문장 틀 · 문장 객체 복사 · 목차 문단 계획 이중 제시 · 생략 해명 비용 · checks 처리 쏠림 · 진단-결과 미연결. 변경안: 문단 산문 + span 근거 · 초안 산문 전달 · composition/reorder · 보조 사실 자유 생략 · negation_lost · spoken_carryover · meta 확장 · reorder 없는 되돌아감 · repeat_phrase · causal_unsupported · 주장별 edit_claim_mismatch · uncovered_text · claim_weak. 기준선 tests/data/v5_edit_pro_20261027T024949Z/ 복사. 코드 · 프롬프트 · 호출 · 커밋 없음."
+**Context**: CONSTRUCTION - 단위 8P 편집 계약 재검토 — 결정 대기
+
+---
+
+## Construction 단위 8P - 편집 계약 v6 준비 (호출 없음)
+**Timestamp**: 2026-10-27T04:10:00Z
+**User Input**: "… v6 편집 구조 개선 방향을 조건부 승인 … 기존 Pro 초안을 입력으로 사용하는 전체 편집 단계의 출력 계약과 지시문만 v6로 … 문단 산문과 출처 분리 … 서사 중심 편집 … composition과 edit_trace 대조 … 사실성 회귀 테스트 … 차단할 오류와 사람 판단 구분 … 비교 준비 … v6 편집 계약, 지시문, 테스트, 회귀 검증 및 dry-run까지만 … 실제 Gemini 호출은 아직 하지 않습니다 …"
+**AI Response**: "4_편집_v6.md · check_final_v6(문단 산문 → 문장 목록, span 위치 block) · edit_message_v6(초안 산문 · core/must_keep 분리 · quote) · v6_findings(negation_lost · causal_unsupported/suspect · spoken_carryover · meta_suspect · repeat_phrase · time_reversal_undeclared/declared · link_content · claim_weak) · claim_findings(진단 항목별 change ↔ edit_trace) · composition_findings · composition_leaks · severity review(게이트 밖) · --edit-contract v6(편집 단독 시험만) · memoir_blind --criteria edit. 테스트 8P 222 · 전체 291 통과. 기준선 Pro 편집본: v5 pass → v6 attention(negation_lost f16 · 1977 재배치 미기재 · 진단 0 불일치, review 10). 적게 고친 정직한 원고는 pass. dry-run 입력 약 18,242 토큰 · 예상 $0.25~0.32. edit-contract-v6.md. 커밋 · 호출 없음."
+**Context**: CONSTRUCTION - 단위 8P 편집 계약 v6 준비 — v6 Pro 편집 1회 승인 대기
+
+---

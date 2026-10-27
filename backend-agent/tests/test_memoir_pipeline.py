@@ -2254,3 +2254,363 @@ def test_cli_edit_only_dry_run_and_refusals(capsys):
     assert cli.main(args + run) == 2                                                    # 스냅샷 없이
     assert cli.main(args + fx + run + ["--chapter-only"]) == 2
     assert cli.main(args + fx + ["--review-notes", str(NOTES_C)]) == 2
+
+
+# ---------------------------------------------------------------- 편집 계약 v6 — 문단 산문 + 근거 표현(claims)
+#
+# 기준선은 02:49Z Pro 편집(tests/data/v5_edit_pro_20261027T024949Z) — v5 계약으로 나온 그대로다. v6 검사는
+# 그 원고에서 실제로 놓쳤던 문제(부정 누락 · 구어 · 1977년 되돌아감 · 안내문 · 진단과 결과 불일치)를 잡아야 하고,
+# 같은 원고를 그 문제만 고쳐(적게 바꿔도) 정직하게 적으면 통과해야 한다.
+
+PRO_EDIT = ROOT / "tests" / "data" / "v5_edit_pro_20261027T024949Z"
+
+
+def _pro_edit_v5():
+    return json.loads((PRO_EDIT / "04_edited.json").read_text(encoding="utf-8"))
+
+
+# 기준선 진단 5개를 v6 의 change · result 로 옮긴 것 — 진단 0 만 결과와 맞지 않는다(문단을 다시 썼다고 했지만 다듬음뿐)
+PRO_DIAGNOSIS_V6 = [("rewrite", ["ch-1"], ["ch-1"]), ("move", ["ch-1/p6"], ["ch-1/p0"]),
+                    ("fact_fix", ["ch-1/p5"], ["ch-1/p4"]), ("link", ["ch-1/p1"], ["ch-1/p0"]),
+                    ("fact_fix", ["ch-1/p1", "ch-1/p3"], ["ch-1/p1", "ch-1/p3"])]
+
+
+def _as_v6(e=None, diagnosis=PRO_DIAGNOSIS_V6):
+    """v5 편집본 → v6 출력 모양(문장마다 span 하나). 본문은 한 글자도 바꾸지 않는다."""
+    e = copy.deepcopy(e or _pro_edit_v5())
+    chs = []
+    for ch in e["chapters"]:
+        paras = [{"text": " ".join(x["text"] for x in para),
+                  "claims": [{"span": x["text"], "kind": "claim" if x["facts"] else "link", "facts": list(x["facts"])}
+                             for x in para]} for para in ch["paragraphs"]]
+        chs.append({"chapter_key": ch["chapter_key"], "center": ch.get("center", ""), "title": ch["title"],
+                    "composition": [{"paragraph": p, "role": "", "from": [f"ch-1/p{p}"], "after_previous": "",
+                                     "reorder": None} for p in range(len(paras))],
+                    "paragraphs": paras})
+    diag = [{**d, "change": c, "where": w, "result": r} for d, (c, w, r) in zip(e["diagnosis"], diagnosis)]
+    return {"diagnosis": diag, "title": e["title"], "chapters": chs, "omitted": e["omitted"],
+            "checks_resolution": e["checks_resolution"], "notes": e["notes"]}
+
+
+def _v6_check(out):
+    data, turn_map, _, a = _fixture_analysis()
+    return pipe.check_final_v6(out, a, pipe.check_input(data, turn_map), "큰언니와 재봉틀")
+
+
+def _rules(findings, severity=None):
+    return sorted({(f["rule"], f["location"]) for f in findings if severity in (None, f["severity"])})
+
+
+def test_split_sentences_keeps_quotes_whole():
+    t = "편지에는 '기름 자주 쳐라. 알았제.' 그 말 하나였다. 나는 웃었다!  그랬다"
+    assert [t[s:e] for s, e in pipe.split_sentences(t)] == [
+        "편지에는 '기름 자주 쳐라. 알았제.' 그 말 하나였다.", "나는 웃었다!", "그랬다"]
+    q = "언니는 '기름 자주 쳐라.' 그리고 끝이었다."
+    assert len(pipe.split_sentences(q)) == 1
+
+
+def test_v6_baseline_converts_to_the_same_sentences():
+    edited, omitted, warnings, findings = _v6_check(_as_v6())
+    v5 = _pro_edit_v5()
+    assert [[x["text"] for x in p] for p in edited["chapters"][0]["paragraphs"]] == \
+           [[x["text"] for x in p] for p in v5["chapters"][0]["paragraphs"]]
+    assert [[x["facts"] for x in p] for p in edited["chapters"][0]["paragraphs"]] == \
+           [[x["facts"] for x in p] for p in v5["chapters"][0]["paragraphs"]]
+    assert edited["contract"] == "v6" and len(edited["chapters"][0]["prose"]) == 6
+    assert findings == [] and "f51" in omitted
+
+
+@pytest.mark.parametrize("change, rule, severity", [
+    (lambda p: p["claims"][0].update(span="원문에 없는 표현"), "span_missing", "block"),
+    (lambda p: p["claims"].reverse(), "span_misplaced", "block"),
+    (lambda p: p["claims"].__setitem__(slice(0, 2), [{"span": p["claims"][0]["span"] + " " + p["claims"][1]["span"],
+                                                       "kind": "claim", "facts": ["f57", "f58"]}]),
+     "span_crosses_sentence", "block"),
+    (lambda p: p["claims"].pop(1), "uncovered_text", "fix"),
+    (lambda p: p["claims"][0].update(span="언니가"), "uncovered_text", "fix"),          # 「준 재봉틀을 아직 못 버렸다」 근거 없음
+])
+def test_v6_span_must_point_at_the_text(change, rule, severity):
+    out = _as_v6()
+    change(out["chapters"][0]["paragraphs"][0])
+    _, _, _, findings = _v6_check(out)
+    assert any(f["rule"] == rule and f["severity"] == severity for f in findings), _rules(findings)
+
+
+@pytest.mark.parametrize("change, why", [
+    (lambda o: o["chapters"][0]["paragraphs"][0]["claims"][3].update(facts=["f57"]), "link 인데 facts"),
+    (lambda o: o["chapters"][0]["paragraphs"][0]["claims"][0].update(facts=[]), "비었다"),
+    (lambda o: o["chapters"][0]["paragraphs"][0]["claims"][0].update(facts=["f99"]), "없는 사실"),
+    (lambda o: o["diagnosis"][0].update(change="improve"), "change="),
+    (lambda o: o["chapters"][0]["paragraphs"].__setitem__(0, [{"text": "옛 모양", "kind": "editorial", "facts": []}]),
+     "객체가 아니다"),
+    (lambda o: o["chapters"][0].pop("composition"), "composition"),
+    (lambda o: o["chapters"][0]["composition"][4].update(reorder={"facts": [], "reason": "왜"}), "reorder.facts"),
+])
+def test_v6_contract_shape_errors_stop(change, why):
+    out = _as_v6()
+    change(out)
+    with pytest.raises(pipe.PipelineError, match=why):
+        _v6_check(out)
+
+
+def _baseline_v6_findings():
+    data, turn_map, _, a = _fixture_analysis()
+    edited, _, _, spans = _v6_check(_as_v6())
+    pipe.expand_turns(edited["chapters"], pipe.ledger(a), edited["title"])
+    return data, a, edited, spans + pipe.v6_findings(edited["chapters"], data, a)
+
+
+def test_v6_checks_catch_what_the_pro_edit_got_past():
+    """02:49Z Pro 편집본 그대로 — v5 code_gate 는 pass(info 4)였다."""
+    data, a, edited, found = _baseline_v6_findings()
+    fix = _rules(found, "fix")
+    assert ("negation_lost", "ch-1/p1/s0") in fix                       # 턴 10 「저는 기억은 안 나요」
+    assert ("time_reversal_undeclared", "ch-1/p4") in fix               # 1985~ 가게 뒤 1977년, 이유 없음
+    review = _rules(found, "review")
+    for want in [("spoken_carryover", "ch-1/p0/s2"), ("spoken_carryover", "ch-1/p3/s2"),     # 말이다 · 그거 하나
+                 ("spoken_carryover", "ch-1/p5/s0"), ("meta_suspect", "ch-1/p0/s3")]:        # ~겠어서 · 안내문
+        assert want in review, want
+    neg = next(f for f in found if f["rule"] == "negation_lost")
+    assert neg["fact"] == "f16"
+    assert not any(f["rule"] == "negation_lost" and f["fact"] != "f16" for f in found)   # 다른 부정은 지켰다
+
+
+def test_v6_checks_on_the_pro_draft_find_its_cause_and_repeat_but_not_negation():
+    data, _, _, a = _fixture_analysis()
+    d = [json.loads((PRO_DRAFT / "03_ch-1.json").read_text(encoding="utf-8"))]
+    pipe.expand_turns(d, pipe.ledger(a))
+    found = pipe.v6_findings(d, data, a)
+    assert ("causal_suspect", "ch-1/p1/s2") in _rules(found, "review")      # 손이 빨라서 … 고쳐 주곤
+    assert ("repeat_phrase", "ch-1/p6/s1") in _rules(found, "review")       # 2010년에 … 2010년에
+    assert not [f for f in found if f["rule"] == "negation_lost"]           # 초안은 「기억하지는 못하지만」
+
+
+def _one(text, facts, a):
+    ch = _expanded([_chapter([(text, facts)])], a)
+    return ch
+
+
+def test_negation_kept_when_rephrased_with_a_negative():
+    data, _, _, a = _fixture_analysis()
+    book = pipe.ledger(a)
+    lost = _one("엄마가 밭일 나가면 큰언니가 나를 업어 키웠다고 들었다.", ["f16"], a)
+    kept = _one("엄마가 밭일을 나가면 큰언니가 나를 업어 키웠다고 들었지만, 나는 기억이 나지 않는다.", ["f16"], a)
+    assert [f["rule"] for f in pipe.negation_findings(lost, book, data)] == ["negation_lost"]
+    assert pipe.negation_findings(kept, book, data) == []
+
+
+@pytest.mark.parametrize("text, facts, rule", [
+    ("말이 별로 없었기 때문에 큰언니는 손이 빨랐다.", ["f18"], "causal_unsupported"),
+    ("말이 별로 없었던 큰언니는 손이 빨라서 동네 사람들의 옷을 다 고쳐 주곤 했다.", ["f18", "f19"], "causal_suspect"),
+    ("무릎이 아파서 더는 오래 앉아 있을 수 없어 2010년에 수선집을 그만두었다.", ["f2", "f3"], None),   # 턴 2 「아파서」
+    ("가게 문을 닫으면서 그 발틀 재봉틀을 집으로 가져왔다.", ["f54", "f65"], None),                   # ~면서 는 동시
+])
+def test_causal_findings(text, facts, rule):
+    data, _, _, a = _fixture_analysis()
+    got = [f["rule"] for f in pipe.causal_findings(_one(text, facts, a), data)]
+    assert got == ([rule] if rule else [])
+
+
+def test_link_may_not_carry_feeling_motive_or_cause_and_weak_claims_go_to_review():
+    out = _as_v6()
+    p0 = out["chapters"][0]["paragraphs"][0]
+    p0["text"] = p0["text"].replace("이 재봉틀에 얽힌 기억을 따라가다 보면 어린 시절로 거슬러 올라가게 된다.",
+                                    "그 소리가 그리워서 나는 다시 재봉틀 앞에 앉는다.")
+    p0["claims"][3]["span"] = "그 소리가 그리워서 나는 다시 재봉틀 앞에 앉는다."
+    p1 = out["chapters"][0]["paragraphs"][1]
+    p1["text"] = p1["text"].replace("열 살쯤 큰언니에게 양말 꿰매는 걸 배웠다.", "열 살쯤 나는 처음으로 우주를 꿈꾸었다.")
+    p1["claims"][1]["span"] = "열 살쯤 나는 처음으로 우주를 꿈꾸었다."
+    data, turn_map, _, a = _fixture_analysis()
+    edited, _, _, spans = _v6_check(out)
+    pipe.expand_turns(edited["chapters"], pipe.ledger(a))
+    found = pipe.span_findings(edited["chapters"], data, pipe.ledger(a))
+    assert ("link_content", "ch-1/p0/s3") in _rules(found, "fix")
+    assert ("claim_weak", "ch-1/p1/s1") in _rules(found, "review")
+    assert not [f for f in found if f["rule"] == "claim_weak" and f["location"] != "ch-1/p1/s1"]   # 기준선 문장은 걸리지 않는다
+
+
+def _baseline_trace():
+    data, a, edited, _ = _baseline_v6_findings()
+    d = [json.loads((PRO_DRAFT / "03_ch-1.json").read_text(encoding="utf-8"))]
+    pipe.expand_turns(d, pipe.ledger(a))
+    return edited, pipe.edit_trace(d, edited["chapters"])
+
+
+def test_claimed_rewrite_that_only_polished_is_a_mismatch_but_honest_small_claims_pass():
+    edited, trace = _baseline_trace()
+    found = pipe.claim_findings(edited, trace)
+    assert [f["token"] for f in found] == ["d0"]                     # 「문단을 다시 구성」 — 다시 쓴 문장 1개뿐
+    assert "다시 썼다는 문장 27개 중" in found[0]["detail"]
+
+
+@pytest.mark.parametrize("change, where, result, ok", [
+    ("merge", ["ch-1/p3", "ch-1/p4"], ["ch-1/p3"], True),            # 초안 p3 + p4 → 편집 p3
+    ("merge", ["ch-1/p1"], ["ch-1/p1"], False),
+    ("split", ["ch-1/p1"], ["ch-1/p1"], False),
+    ("cut", ["ch-1/p6"], [], False),                                  # 덜어 낸 문장 · 사실이 없다
+    ("move", ["ch-1/p1"], ["ch-1/p1"], False),
+    ("link", ["ch-1/p5"], ["ch-1/p4"], False),                       # p4 의 새 문장은 사실 문장(1977)이다
+    ("fact_fix", ["ch-1/p2"], ["ch-1/p2"], False),                   # 공장 문단은 초안 그대로
+    ("rewrite", ["ch-1/p1"], ["ch-1/p9"], False),                    # 없는 위치
+])
+def test_each_change_is_checked_against_the_trace(change, where, result, ok):
+    edited, trace = _baseline_trace()
+    edited["diagnosis"] = [{"issue": "x", "where": where, "change": change, "action": "", "result": result}]
+    assert (pipe.claim_findings(edited, trace) == []) is ok
+
+
+def test_declared_reorder_goes_to_review_and_composition_is_compared_with_the_trace():
+    out = _as_v6()
+    out["chapters"][0]["composition"][4]["reorder"] = {"facts": ["f42", "f43"],
+                                                      "reason": "2003년 병문안 때 바다를 보지 않은 일 앞에 처음 본 바다를 둔다"}
+    data, turn_map, _, a = _fixture_analysis()
+    edited, _, _, spans = _v6_check(out)
+    pipe.expand_turns(edited["chapters"], pipe.ledger(a))
+    found = pipe.reorder_findings(edited["chapters"], pipe.ledger(a))
+    assert _rules(found) == [("time_reversal_declared", "ch-1/p4")] and found[0]["severity"] == "review"
+    _, trace = _baseline_trace()
+    mism = pipe.composition_findings(edited, trace)                  # from 을 초안 같은 번호로만 적었다
+    assert ("composition_mismatch", "ch-1/p3") in _rules(mism, "review")     # 실제는 초안 p3 + p4
+    out["chapters"][0]["composition"].pop()
+    _, _, _, f2 = _v6_check(out)
+    assert ("composition_missing", "ch-1") in _rules(f2, "fix")
+
+
+def test_composition_memo_copied_into_a_link_is_blocked():
+    out = _as_v6()
+    out["chapters"][0]["composition"][0]["after_previous"] = "이 재봉틀에 얽힌 기억을 따라가다 보면 어린 시절로 거슬러 올라가게 된다"
+    edited, _, _, _ = _v6_check(out)
+    assert _rules(pipe.composition_leaks(edited)) == [("memo_leak", "ch-1/p0/s3")]
+
+
+def _small_honest_fix():
+    """기준선을 문제 셋만 고친 v6 원고 — 부정 표현 되살림 · 1977년 재배치 이유 · 진단을 사실대로."""
+    out = _as_v6(diagnosis=[("fact_fix", ["ch-1/p1"], ["ch-1/p1"])] * 5)
+    out["diagnosis"] = out["diagnosis"][:1]
+    p1 = out["chapters"][0]["paragraphs"][1]
+    old = "엄마가 밭일 나가면 큰언니가 나를 업어 키웠다고 들었다."
+    new = "엄마가 밭일을 나가면 큰언니가 나를 업어 키웠다고 들었지만, 나는 기억이 나지 않는다."
+    p1["text"] = p1["text"].replace(old, new)
+    p1["claims"][0]["span"] = new
+    out["chapters"][0]["composition"][4]["reorder"] = {"facts": ["f42", "f43"], "reason": "병문안 때의 바다 앞에 처음 본 바다를 둔다"}
+    for e, src in zip(out["chapters"][0]["composition"], (["ch-1/p0", "ch-1/p6"], ["ch-1/p1"], ["ch-1/p2"],
+                                                          ["ch-1/p3", "ch-1/p4"], ["ch-1/p5"], ["ch-1/p6"])):
+        e["from"] = src
+    return out
+
+
+def _edit_only_v6(tmp_path, edit, notes=True):
+    data, turn_map, afx, _ = _fixture_analysis()
+    o = json.loads(OUTLINE_C2.read_text(encoding="utf-8"))
+    fx, doc = _draft_fx()
+    fake = Fake({"edit": edit})
+    r = asyncio.run(pipe.run(data, turn_map, call=fake, recorder=pipe.Recorder(tmp_path), analysis_fixture=afx,
+                             outline_fixture=o, model="gemini-3.1-pro-preview", draft_fixture=fx,
+                             review_notes=doc if notes else None, edit_contract="v6"))
+    return r, fake
+
+
+def test_v6_edit_only_run_on_the_pro_baseline_needs_revision(tmp_path):
+    r, fake = _edit_only_v6(tmp_path, _as_v6())
+    assert fake.order == ["edit"] and r["calls"] == 1 and r["edit_contract"] == "v6"
+    spec = fake.specs[0]
+    assert "claims" in spec.system and "4_편집_v6" not in spec.system and spec.system != pipe.prompt("edit")
+    assert spec.system == pipe.edit_prompt("v6") and spec.max_output_tokens == pipe.EDIT_ONLY_LIMITS[1]
+    payload = fake.payload("edit")
+    d0 = payload["drafts"][0]["paragraphs"]
+    assert len(d0) == 7 and set(d0[0]) == {"location", "text", "facts"}                   # 문장 객체를 주지 않는다
+    assert d0[1]["text"].startswith("내가 기억하지는 못하지만,") and d0[1]["facts"][0] == "f16"
+    assert "facts" not in payload["book_plan"]["chapters"][0]["paragraphs"][0]            # 문단별 facts 배열은 뺀다
+    assert payload["book_plan"]["chapters"][0]["paragraphs"][1]["core"] == ["f17", "f20", "f21"]
+    assert len(payload["core_facts"]) == 18 and not set(payload["core_facts"]) & set(payload["must_keep"])
+    assert all(c["severity"] in ("block", "fix") for c in payload["checks"])
+    note = next(n for n in payload["review_notes"] if n["location"] == "ch-1/p1/s2")
+    assert note["quote"].startswith("말이 별로 없었던 큰언니는 손이 빨라서")
+    assert r["overall"] == "needs_revision" and r["code_gate"] == "attention"
+    fixes = _rules(r["code_findings"], "fix")
+    for want in [("negation_lost", "ch-1/p1/s0"), ("time_reversal_undeclared", "ch-1/p4"),
+                 ("edit_claim_mismatch", "artifact")]:
+        assert want in fixes, want
+    assert any(f["severity"] == "review" for f in r["code_findings"])
+    gate = json.loads((tmp_path / "04_code_gate.json").read_text(encoding="utf-8"))
+    assert gate["counts"]["review"] >= 5
+    for name in ("04_edited.json", "04_edited_sentences.json", "04_edit_trace.json", "04_code_gate.json"):
+        assert (tmp_path / name).exists(), name
+    assert "편집 계약 v6" in (tmp_path / "r1_summary.md").read_text(encoding="utf-8")
+    assert "review 는 사람 확인" in (tmp_path / "r1_summary.md").read_text(encoding="utf-8")
+    run_doc = json.loads((tmp_path / "run.json").read_text(encoding="utf-8"))
+    assert run_doc["settings"]["edit_contract"] == "v6" and run_doc["prompts"]["edit_v6"].startswith("sha256:")
+    assert pipe.settings()["MEMOIR_PIPE_TEXT_MODEL"] == "gemini-3.5-flash-lite"
+
+
+def test_v6_small_honest_fix_passes_the_gate_even_with_little_change(tmp_path):
+    r, _ = _edit_only_v6(tmp_path, _small_honest_fix())
+    assert [f for f in r["code_findings"] if f["severity"] in ("block", "fix")] == []
+    assert r["code_gate"] == "pass" and r["overall"] == "edit_only" and r["human_review"] == "not_run"
+    assert r["edit_trace"]["unchanged_ratio"] < 0.5
+    assert any(f["rule"] == "spoken_carryover" for f in r["code_findings"])   # 구어는 사람 확인으로 남는다
+
+
+def test_v6_span_problem_blocks_but_keeps_the_manuscript(tmp_path):
+    out = _as_v6()
+    out["chapters"][0]["paragraphs"][2]["claims"][0]["span"] = "서울로 올라갔다"
+    r, _ = _edit_only_v6(tmp_path, out)
+    assert r["code_gate"] == "blocked" and r["overall"] == "blocked_by_code"
+    assert ("span_missing", "ch-1/p2") in _rules(r["code_findings"], "block")
+    assert r["chapters"] and (tmp_path / "04_edited_sentences.json").exists()
+
+
+def test_v6_is_only_for_edit_only_and_v5_edit_is_unchanged(tmp_path):
+    data, turn_map, afx, _ = _fixture_analysis()
+    o = json.loads(OUTLINE_C2.read_text(encoding="utf-8"))
+    bad = asyncio.run(pipe.run(data, turn_map, call=Fake({}), recorder=pipe.Recorder(tmp_path / "a"),
+                               analysis_fixture=afx, outline_fixture=o, chapter_only=True, edit_contract="v6"))
+    assert bad["generation_state"] == pipe.FAILED and "편집 단독 시험에서만" in bad["failure"]["message"]
+    other = asyncio.run(pipe.run(data, turn_map, call=Fake({}), recorder=pipe.Recorder(tmp_path / "b"),
+                                 analysis_fixture=afx, outline_fixture=o, chapter_only=True, edit_contract="v7"))
+    assert "편집 계약 'v7'" in other["failure"]["message"]
+    r, fake = _edit_only(tmp_path / "c", _pro_edit())                    # 기본 v5 — 지시문 · 자료 그대로
+    assert fake.specs[0].system == pipe.prompt("edit") and r["edit_contract"] == "v5"
+    assert "drafts" in fake.payload("edit") and "text" in fake.payload("edit")["drafts"][0]["paragraphs"][0][0]
+    assert not [f for f in r["code_findings"] if f["severity"] == "review"]   # v5 실행에는 v6 검사를 더하지 않는다
+    assert pipe.ROLE_FILES["edit"] == "4_편집_v5.md" and pipe.PROMPT_VERSION == "v5"
+
+
+def test_v1_to_v5_prompts_untouched_and_v6_prompt_exists():
+    d = ROOT / "첨부프롬프트_md" / "파이프라인"
+    for n in range(1, 6):
+        assert (d / f"4_편집_v{n}.md").exists()
+    v6 = (d / pipe.EDIT_V6_FILE).read_text(encoding="utf-8")
+    for want in ('"claims"', '"composition"', '"change"', '"result"', '"reorder"', "사실 메모이지 문장이 아닙니다"):
+        assert want in v6, want
+
+
+def test_cli_v6_dry_run_and_refusal(capsys):
+    args = ["--seed", str(SEED_C_PATH), "--aliases", "c1,c2,c3,c4,c5", "--dry-run"]
+    fx = ["--from-analysis", str(FIXTURE_C), "--from-outline", str(OUTLINE_C2)]
+    run = ["--from-draft", str(PRO_DRAFT), "--review-notes", str(NOTES_C), "--model", "gemini-3.1-pro-preview"]
+    assert cli.main(args + fx + run + ["--edit-contract", "v6"]) == 0
+    out = capsys.readouterr().out
+    assert "예상 호출 1회 (편집만) · 편집 계약 v6" in out and "편집(v6) — 입력 약" in out and "출력 상한 32,768" in out
+    assert cli.main(args + fx + ["--edit-contract", "v6"]) == 2
+
+
+def test_blind_edit_comparison_uses_v6_prose_and_edit_criteria(tmp_path):
+    data, _ = source_c()
+    base = tmp_path / "base"
+    base.mkdir()
+    for name in ("result.json", "run.json", "03_review_notes.json"):
+        (base / name).write_bytes((PRO_EDIT / name).read_bytes())
+    r6, _ = _edit_only_v6(tmp_path / "v6", _small_honest_fix())
+    key = blind.make([base / "result.json", tmp_path / "v6" / "result.json"], data, tmp_path / "out",
+                     random.Random(0), blind.EDIT_CRITERIA)
+    assert {k["edit_contract"] for k in key.values()} == {None, "v6"}
+    lab6 = next(k for k, v in key.items() if v["edit_contract"] == "v6")
+    text6 = (tmp_path / "out" / "평가용" / f"글_{lab6}.md").read_text(encoding="utf-8")
+    assert "나는 기억이 나지 않는다." in text6 and not re.search(r"v[56]|f\d|claim|span", text6)
+    sheet = (tmp_path / "out" / "평가용" / "평가지.md").read_text(encoding="utf-8")
+    assert "도입과 마무리" in sheet and "책 수록" in sheet
+    scope = {v["edit_contract"]: v["scope"]["how"] for v in key.values()}
+    assert "편집 계약 v6" in scope["v6"] and "검토 지적 9개" in scope["v6"] and "편집 계약 v5" in scope[None]
+    facts = (tmp_path / "out" / "검수자용" / f"사실대조표_{lab6}.md").read_text(encoding="utf-8")
+    assert "「엄마가 밭일을 나가면" in facts and "뜻이 맞는 것이 아니다" in facts
