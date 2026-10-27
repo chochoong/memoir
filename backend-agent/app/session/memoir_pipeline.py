@@ -81,10 +81,12 @@ RETRIES = 0
 # 장 집필 비교(--chapter-only)의 장 단계 상한 — 생각 토큰도 출력 상한에 들어가는 모델이 계약 밖 이유로
 # 잘리지 않게 넉넉히 둔다(초, 출력 토큰). 기본 실행의 상한은 그대로다
 CHAPTER_ONLY_LIMITS = (240.0, 32768)
+EDIT_ONLY_LIMITS = (300.0, 32768)       # 편집 단독 시험의 편집 단계 상한 — 같은 까닭
 
 # 상태 값
 GENERATED, PARTIAL, FAILED = "generated", "partial", "failed"
 DRAFT_ONLY = "draft_only"          # 장 집필 비교 — 편집 · 검증을 부르지 않았다. 완성본이 아니다
+EDIT_ONLY = "edit_only"            # 편집 단독 시험 — 남긴 초안을 편집만 했다. 검증을 부르지 않았다
 INSUFFICIENT, NEEDS_CONTEXT = "insufficient_material", "needs_context"
 KINDS = ("input", "call", "timeout", "truncated", "format", "reference",
          "context", "chapter_limit", "budget", "memo_leak")
@@ -2064,6 +2066,8 @@ def overall_state(generation_state: str, gate: dict | None, verification: dict, 
     최종 상태. **approved 는 사람만 만든다** — 코드 · 모델 판정으로는 awaiting_human 까지다.
 
         draft_only       장 집필 비교 실행 — 편집 · 검증을 부르지 않았다(완성본이 아니다)
+        edit_only        편집 단독 시험 — 코드 판정 pass, 검증을 부르지 않았다 (blocked · attention 이면
+                         blocked_by_code · needs_revision)
         not_generated    생성이 끝나지 않음 (failed · partial · needs_context · insufficient)
         blocked_by_code  code_gate=blocked
         needs_revision   code_gate=attention · 사실 대조가 revise/ask_user · 구성 채점 기준 미달 · 검증이 끝나지 않음
@@ -2072,6 +2076,9 @@ def overall_state(generation_state: str, gate: dict | None, verification: dict, 
     """
     if generation_state == DRAFT_ONLY:
         return "draft_only"                       # 장 집필 비교 — 편집 · 검증 전이라 판정하지 않는다
+    if generation_state == EDIT_ONLY:                 # 검증 전 — 코드 판정만 본다
+        state = (gate or {}).get("state")
+        return "blocked_by_code" if state == "blocked" else "needs_revision" if state == "attention" else "edit_only"
     if generation_state != GENERATED:
         return "not_generated"
     if (gate or {}).get("state") == "blocked":
@@ -2221,7 +2228,8 @@ def chapter_message(src: dict, analysis: dict, outline_out: dict, chapter: dict)
 
 
 def edit_message(data: dict, analysis: dict, outline_out: dict, drafts: list[dict],
-                 checks: list[dict], signals: list[dict], focus: str | None = None) -> str:
+                 checks: list[dict], signals: list[dict], focus: str | None = None,
+                 review_notes: list[dict] | None = None) -> str:
     head = (_SOURCE_HEAD + "\nbook_plan 은 목차의 책 설계도다 — **제안일 뿐이고 바꿀 수 있다.** drafts 는 장마다 "
             "따로 쓴 초안이다(문장의 turns 는 코드가 facts 에서 펼친 것). 초안은 사실 근거가 아니다 — "
             "source · facts 와 다시 대조한다. facts 는 전체 사실 원장, must_keep 은 근거 없이 빠지면 안 되는 "
@@ -2244,6 +2252,10 @@ def edit_message(data: dict, analysis: dict, outline_out: dict, drafts: list[dic
                  "들은 이야기 · 흐린 기억 · 감정을 그대로 지켜 본문에 되살리거나, 빼야 할 까닭이 있으면 omitted 에 "
                  "이유와 함께 적는다. 이유 없이 빠진 채 남으면 고칠 곳으로 남는다.")
         payload["missing_core"] = missing
+    if review_notes:
+        head += ("\nreview_notes 는 사람 검토가 초안에서 찾은 문제다(location 은 초안 위치, turns 는 근거 원문 턴). "
+                 "고칠 문장은 주지 않는다 — 원문 · 사실 원장과 대조해 판단하고, 진단(diagnosis)에 반영한다.")
+        payload["review_notes"] = review_notes
     if focus:
         head += "\nfocus 는 이번 원고의 범위다 — 한 장 시험이라 편집본도 **장 하나**다(나누지 않는다)."
         payload["focus"] = {"theme": focus, "chapters": 1}
@@ -2390,7 +2402,7 @@ def _result(state: str, *, failure: PipelineError | None = None, edited: dict | 
             verification: dict | None = None, complete: bool = False, calls: int = 0,
             metrics: dict | None = None, gate: dict | None = None, quality: dict | None = None,
             trace: dict | None = None, focus: str | None = None) -> dict:
-    edited = edited if state in (GENERATED, DRAFT_ONLY) else None
+    edited = edited if state in (GENERATED, DRAFT_ONLY, EDIT_ONLY) else None
     verification = verification or {"state": "not_run", "verdict": None, "issues": [],
                                     "reviewed_locations": [], "missing_context": []}
     human = "not_run"                            # 코드는 늘 not_run 으로 쓴다 — 사람이 R1 에 적는다
@@ -2521,10 +2533,89 @@ def load_outline_fixture(fx, analysis: dict, analysis_fixture: dict, T: set[int]
 TRIAL_MAX_MEMO = 80         # 시험용 목차 메모 한 칸의 최대 글자 — 본문 같은 글이 들어오지 않게
 
 
+def load_draft_fixture(fx, outline_fixture: dict, outline: dict, analysis: dict, data: dict) -> tuple[list[dict], dict]:
+    """
+    편집 단독 시험의 입력 — 장 집필 비교(--chapter-only)가 남긴 초안을 **그대로** 받는다. 돌려주는 것은
+    (초안들, 출처). 맞지 않으면 모델을 부르지 않고 입력 거부.
+
+        fx = {"run": 그 실행의 run.json, "outline_fixture": 그 실행의 02_outline_fixture.json, "drafts": [03_ch-*.json]}
+        draft_only 실행 · 분석 · 목차 출처 reviewed_fixture · 같은 input_ref · 같은 목차 스냅샷
+        장 단계가 모두 성공했고 초안 수 · chapter_key 가 목차와 같다
+        초안마다 장 집필 계약 검사(check_chapter)를 다시 통과
+    """
+    def bad(why):
+        return PipelineError("input", "input", f"초안 스냅샷: {why}")
+    if not isinstance(fx, dict) or not isinstance(fx.get("run"), dict) or not isinstance(fx.get("drafts"), list):
+        raise bad("run · drafts 가 없다")
+    run_doc = fx["run"]
+    if run_doc.get("generation_state") != DRAFT_ONLY or not (run_doc.get("settings") or {}).get("chapter_only"):
+        raise bad("장 집필 비교(draft_only) 실행이 아니다")
+    if run_doc.get("analysis_source") != REVIEWED_FIXTURE or run_doc.get("outline_source") != REVIEWED_FIXTURE:
+        raise bad("분석 · 목차 출처가 reviewed_fixture 가 아니다")
+    if run_doc.get("input_ref") != input_ref(data):
+        raise bad(f"input_ref {run_doc.get('input_ref')!r} — 지금 입력 {input_ref(data)} 과 다르다")
+    if fx.get("outline_fixture") != outline_fixture:
+        raise bad("초안을 쓴 목차 스냅샷이 지금 받은 목차 스냅샷과 다르다")
+    keys = [ch["chapter_key"] for ch in outline["chapters"]]
+    steps = [s for s in run_doc.get("steps") or [] if s.get("stage") == "chapter"]
+    if [s.get("chapter_key") for s in steps] != keys or not all(s.get("ok") for s in steps):
+        raise bad("장 단계가 목차의 장마다 성공한 기록이 아니다")
+    drafts = json.loads(json.dumps(fx["drafts"]))
+    if [d.get("chapter_key") if isinstance(d, dict) else None for d in drafts] != keys:
+        raise bad("초안의 chapter_key 가 목차와 다르다")
+    memos = outline_memos(outline)
+    for d, ch in zip(drafts, outline["chapters"]):
+        try:
+            check_chapter(json.loads(json.dumps(d)), ch, set(plan_facts(ch)), memos)
+        except PipelineError as e:
+            raise bad(f"{ch['chapter_key']} 장 집필 계약 위반 — {e.message[:200]}") from e
+    cfg = run_doc.get("settings") or {}
+    source = {"run_ref": run_doc.get("run_ref"), "model": cfg.get("MEMOIR_PIPE_TEXT_MODEL"),
+              "temperature": cfg.get("MEMOIR_PIPE_TEMPERATURE"),
+              "sha256": [hashlib.sha256(json.dumps(d, ensure_ascii=False, sort_keys=True).encode("utf-8")).hexdigest()[:16]
+                         for d in drafts]}
+    return drafts, source
+
+
+REVIEW_NOTE_KEYS = {"location", "issue", "turns"}
+REVIEW_NOTE_MAX = 160       # 지적 한 칸의 최대 글자 — 고칠 문장 · 예상 본문이 들어오지 않게
+
+
+def check_review_notes(doc, drafts: list[dict], draft_run_ref: str | None, T: set[int]) -> list[dict]:
+    """
+    편집에 넘길 사람 검토 지적 — 초안의 어디가 왜 문제인지만. 고칠 방법 · 바꿀 문장은 받지 않는다.
+
+        based_on 이 초안 실행(run_ref)과 같다 · reviewed_by 가 있다
+        지적마다 {location, issue, turns} 만 — location 은 초안에 실제로 있는 위치, turns 는 원문 턴
+    """
+    def bad(why):
+        return PipelineError("input", "input", f"검토 지적: {why}")
+    if not isinstance(doc, dict) or doc.get("based_on") != draft_run_ref or not str(doc.get("reviewed_by", "")).strip():
+        raise bad("based_on(초안 실행) · reviewed_by 가 맞지 않다")
+    notes = doc.get("notes")
+    if not isinstance(notes, list) or not notes:
+        raise bad("notes 가 없다")
+    locs = locations({"chapters": drafts})
+    for i, n in enumerate(notes):
+        if not isinstance(n, dict) or set(n) - REVIEW_NOTE_KEYS:
+            raise bad(f"notes[{i}] 에 {sorted(set(n) - REVIEW_NOTE_KEYS) if isinstance(n, dict) else n!r} — "
+                      "위치 · 문제 · 근거 턴만 적는다(고칠 문장은 넣지 않는다)")
+        if n.get("location") not in locs:
+            raise bad(f"notes[{i}].location={n.get('location')!r} — 초안에 없는 위치")
+        issue = n.get("issue")
+        if not isinstance(issue, str) or not issue.strip() or len(issue) > REVIEW_NOTE_MAX:
+            raise bad(f"notes[{i}].issue 가 비었거나 {REVIEW_NOTE_MAX}자를 넘는다")
+        turns = n.get("turns", [])
+        if not isinstance(turns, list) or (turns and not _int_list(turns)) or set(turns) - T:
+            raise bad(f"notes[{i}].turns 가 원문 턴이 아니다")        # 장 전체 지적은 빈 목록
+    return json.loads(json.dumps(notes))
+
+
 async def run(data: dict, turn_map: list[dict], *, call: Call = call_model,
               recorder: Recorder | None = None, meta: dict | None = None, focus: str | None = None,
               analysis_fixture: dict | None = None, outline_fixture: dict | None = None,
-              chapter_only: bool = False, model: str | None = None) -> dict:
+              chapter_only: bool = False, model: str | None = None,
+              draft_fixture: dict | None = None, review_notes: dict | None = None) -> dict:
     """
     다섯 단계를 차례로. 돌려주는 것은 result (result.json 과 같은 것).
 
@@ -2539,16 +2630,24 @@ async def run(data: dict, turn_map: list[dict], *, call: Call = call_model,
     chapter_only 는 **장 집필 비교**다 — 두 스냅샷에서 장 집필만 부르고(호출 장 수만큼) 초안의 코드 판정 ·
     계획 사실 사용률을 남긴다. 결과는 draft_only(완성본이 아니다). model 은 이 실행에만 쓰는 모델이다 —
     기본 모델(settings)은 바꾸지 않는다. 장 단계 상한은 CHAPTER_ONLY_LIMITS 까지 올린다.
+
+    draft_fixture 를 주면 **편집 단독 시험**이다 — 장 집필 비교가 남긴 초안(load_draft_fixture)을 그대로
+    받아 편집만 부른다(호출 1회). 초안 판정 · 편집 자료 · 최종 근거검사 · 편집 추적 · 코드 판정은 보통
+    실행과 같은 함수다. 검증은 부르지 않는다(결과 edit_only). review_notes 는 사람 검토 지적
+    (check_review_notes) — 편집 자료에 그대로 싣는다. 편집 단계 상한은 EDIT_ONLY_LIMITS 까지 올린다.
     """
     rec = recorder or Recorder()
     cfg = settings()
+    edit_only = draft_fixture is not None
     if model:
         cfg["MEMOIR_PIPE_TEXT_MODEL"] = model
-    if chapter_only:
-        sec, tok = CHAPTER_ONLY_LIMITS
-        cfg["MEMOIR_PIPE_CHAPTER_TIMEOUT"] = max(cfg["MEMOIR_PIPE_CHAPTER_TIMEOUT"], sec)
-        cfg["MEMOIR_PIPE_CHAPTER_MAX_OUTPUT_TOKENS"] = max(cfg["MEMOIR_PIPE_CHAPTER_MAX_OUTPUT_TOKENS"], tok)
+    for on, stage, (sec, tok) in ((chapter_only, "CHAPTER", CHAPTER_ONLY_LIMITS), (edit_only, "EDIT", EDIT_ONLY_LIMITS)):
+        if on:
+            cfg[f"MEMOIR_PIPE_{stage}_TIMEOUT"] = max(cfg[f"MEMOIR_PIPE_{stage}_TIMEOUT"], sec)
+            cfg[f"MEMOIR_PIPE_{stage}_MAX_OUTPUT_TOKENS"] = max(cfg[f"MEMOIR_PIPE_{stage}_MAX_OUTPUT_TOKENS"], tok)
     cfg["chapter_only"] = chapter_only
+    cfg["edit_only"] = edit_only
+    draft_source: dict | None = None
     meta = dict(meta or {})
     started_at = datetime.now(timezone.utc).isoformat(timespec="seconds")
     st: _Run | None = None
@@ -2565,8 +2664,12 @@ async def run(data: dict, turn_map: list[dict], *, call: Call = call_model,
         rec.json("00_input.json", {"input_ref": ref, "focus": focus, "turn_marks": turn_marks(data),
                                    "input": data, "turn_map": turn_map})
         st = _Run(data, T, call, rec, cfg)
-        if chapter_only and (analysis_fixture is None or outline_fixture is None):
-            raise PipelineError("input", "input", "장 집필 비교는 분석 · 목차 스냅샷과 함께만 쓴다")
+        if (chapter_only or edit_only) and (analysis_fixture is None or outline_fixture is None):
+            raise PipelineError("input", "input", "장 집필 비교 · 편집 단독 시험은 분석 · 목차 스냅샷과 함께만 쓴다")
+        if chapter_only and edit_only:
+            raise PipelineError("input", "input", "장 집필 비교와 편집 단독 시험은 함께 하지 않는다")
+        if review_notes is not None and not edit_only:
+            raise PipelineError("input", "input", "검토 지적은 편집 단독 시험에서만 받는다")
 
         # ① 분석 — 사실 원장 · 기억 단위 (또는 검증된 시험용 스냅샷)
         if analysis_fixture is not None:
@@ -2605,13 +2708,21 @@ async def run(data: dict, turn_map: list[dict], *, call: Call = call_model,
         if status == NEEDS_CONTEXT:
             raise PipelineError("outline", "context", "; ".join(outline_out["missing_context"])[:300])
         chapters_plan = outline_out["chapters"]
-        st.max_calls = len(chapters_plan) + (0 if chapter_only else 2 if outline_fixture is not None
-                                             else 3 if analysis_fixture is not None else 4)
+        st.max_calls = (1 if edit_only else len(chapters_plan) + (0 if chapter_only else 2 if outline_fixture is not None
+                                                                  else 3 if analysis_fixture is not None else 4))
         memos = outline_memos(outline_out)
 
-        # ③ 장별 집필 — 순서대로, 첫 실패에서 멈춘다
+        # ③ 장별 집필 — 순서대로, 첫 실패에서 멈춘다 (편집 단독 시험은 남긴 초안을 받는다)
         drafts: list[dict] = []
-        for ch in chapters_plan:
+        notes = None
+        if edit_only:
+            drafts, draft_source = load_draft_fixture(draft_fixture, outline_fixture, outline_out, analysis, data)
+            rec.json("03_draft_fixture.json", {"source": draft_source, "drafts": drafts})
+            expand_turns(drafts, book)
+            if review_notes is not None:
+                notes = check_review_notes(review_notes, drafts, draft_source["run_ref"], T)
+                rec.json("03_review_notes.json", review_notes)
+        for ch in [] if edit_only else chapters_plan:
             key = ch["chapter_key"]
             src, given = chapter_source(data, analysis, ch)
             try:
@@ -2648,7 +2759,7 @@ async def run(data: dict, turn_map: list[dict], *, call: Call = call_model,
 
         # ④ 전체 편집 → 최종 근거검사 → 편집 추적 → 코드 판정 ②
         edited, step = await st.ask("edit", edit_message(data, analysis, outline_out, drafts, draft_checks,
-                                                         draft_signals, focus), "04_edited")
+                                                         draft_signals, focus, notes), "04_edited")
         step["ok"] = True
         try:
             omitted, step["warnings"] = check_final(edited, analysis, T, focus)
@@ -2677,6 +2788,10 @@ async def run(data: dict, turn_map: list[dict], *, call: Call = call_model,
                    "plan_coverage": {"draft": plan_coverage(drafts, outline_out),
                                      "final": plan_coverage(edited["chapters"], outline_out)}}
         step["metrics"] = {"edit_trace": trace["summary"]}
+        if edit_only:
+            result = _result(EDIT_ONLY, edited=edited, calls=st.calls, metrics=metrics, gate=gate, trace=trace,
+                             focus=focus)
+            return result
 
         # ⑤ 검증 — 사실 대조 + 구성 채점. 실패해도 편집본은 생성된 것이다. 완성 실행은 아니다
         locs = locations(edited)
@@ -2717,9 +2832,12 @@ async def run(data: dict, turn_map: list[dict], *, call: Call = call_model,
         result.update({k: meta[k] for k in ("run_ref", "input_ref") if k in meta})
         result["analysis_source"] = REVIEWED_FIXTURE if analysis_fixture is not None else "model"
         result["outline_source"] = REVIEWED_FIXTURE if outline_fixture is not None else "model"
+        if draft_source is not None:
+            result["draft_source"] = draft_source
         rec.json("result.json", result)               # 출처 표시를 넣은 뒤에 쓴다
         run_doc = {**meta, "focus": focus, "analysis_source": result["analysis_source"],
-                   "outline_source": result["outline_source"], "started_at": started_at,
+                   "outline_source": result["outline_source"], "draft_source": draft_source,
+                   "started_at": started_at,
                    "finished_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
                    "settings": cfg, "prompts": _safe_hashes(),
                    "steps": st.steps if st else [],
@@ -2896,7 +3014,10 @@ def r1_summary(run_doc: dict, result: dict) -> str:
         f"- 모델 `{cfg.get('MEMOIR_PIPE_TEXT_MODEL')}` · 온도 {cfg.get('MEMOIR_PIPE_TEMPERATURE')} · "
         f"전체 상한 {cfg.get('MEMOIR_PIPE_TOTAL_TIMEOUT')}초 · 재시도 {cfg.get('retries')} · "
         f"장 {cfg.get('chapters')}"
-        + (" · **장 집필 비교(chapter_only) — 편집 · 검증을 부르지 않았다**" if cfg.get("chapter_only") else ""),
+        + (" · **장 집필 비교(chapter_only) — 편집 · 검증을 부르지 않았다**" if cfg.get("chapter_only") else "")
+        + (f" · **편집 단독 시험(edit_only) — 초안 {(run_doc.get('draft_source') or {}).get('run_ref')} "
+           f"({(run_doc.get('draft_source') or {}).get('model')})을 편집만, 검증을 부르지 않았다**"
+           if cfg.get("edit_only") else ""),
         "- 단계 상한: " + " · ".join(
             f"{s} {cfg.get(f'MEMOIR_PIPE_{s.upper()}_TIMEOUT')}초/"
             f"{cfg.get(f'MEMOIR_PIPE_{s.upper()}_MAX_OUTPUT_TOKENS')}" for s in STAGES),

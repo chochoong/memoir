@@ -2110,3 +2110,147 @@ def test_cli_chapter_only_dry_run_and_refusals(capsys):
     assert "예상 비용 gemini-3.1-pro-preview" in out and "출력 상한 32,768" in out
     assert cli.main(args + fx + ["--model", "gemini-3.1-pro-preview"]) == 2           # 비교 시험 밖에서는 안 된다
     assert cli.main(args + ["--from-analysis", str(FIXTURE_C), "--chapter-only"]) == 2
+
+
+# ---------------------------------------------------------------- 편집 단독 시험 — Pro 초안(02:36Z)을 그대로 받아 편집만
+
+PRO_DRAFT = ROOT / "tests" / "data" / "v5_chapter_pro_20261027T023603Z"
+NOTES_C = ROOT / "eval" / "review_notes_C_v5_pro_draft.json"
+
+
+def _draft_fx():
+    return cli.read_draft_run(PRO_DRAFT, NOTES_C)
+
+
+def _load_drafts(fx=None, outline_fx=None):
+    data, turn_map, afx, a = _fixture_analysis()
+    o = outline_fx or json.loads(OUTLINE_C2.read_text(encoding="utf-8"))
+    outline, _ = pipe.load_outline_fixture(o, a, afx, pipe.check_input(data, turn_map))
+    return pipe.load_draft_fixture(fx or _draft_fx()[0], o, outline, a, data)
+
+
+def _pro_edit(paragraphs=None, omitted=()):
+    d = json.loads((PRO_DRAFT / "03_ch-1.json").read_text(encoding="utf-8"))
+    return {"diagnosis": [{"issue": "문단 사이가 끊긴다", "where": ["ch-1"], "action": "잇는다"}],
+            "title": d["title"],
+            "chapters": [{"chapter_key": "ch-1", "center": "큰언니와 재봉틀", "title": d["title"],
+                          "paragraphs": paragraphs if paragraphs is not None else d["paragraphs"]}],
+            "omitted": list(omitted), "checks_resolution": [], "notes": []}
+
+
+def test_pro_draft_snapshot_is_loaded_as_is():
+    drafts, src = _load_drafts()
+    assert src["run_ref"] == "20261027T023603Z-C5-b9f8-focus-fixture-outline-chapter-31propreview"
+    assert src["model"] == "gemini-3.1-pro-preview" and src["temperature"] == 1.0
+    assert src["sha256"] == ["2cabbb3a7850def6"]
+    assert drafts == [json.loads((PRO_DRAFT / "03_ch-1.json").read_text(encoding="utf-8"))]
+
+
+@pytest.mark.parametrize("change, why", [
+    (lambda fx: fx["run"].update(generation_state="generated"), "draft_only"),
+    (lambda fx: fx["run"].update(input_ref="0" * 12), "input_ref"),
+    (lambda fx: fx["run"].update(outline_source="model"), "reviewed_fixture"),
+    (lambda fx: fx["run"]["steps"][0].update(ok=False), "성공한 기록"),
+    (lambda fx: fx["drafts"][0]["paragraphs"][0][0].update(facts=["f12"]), "장 집필 계약 위반"),
+])
+def test_draft_snapshot_is_refused_when_unsafe(change, why):
+    fx = json.loads(json.dumps(_draft_fx()[0]))
+    change(fx)
+    with pytest.raises(pipe.PipelineError, match=why):
+        _load_drafts(fx)
+
+
+def test_draft_snapshot_must_come_from_the_same_outline():
+    with pytest.raises(pipe.PipelineError, match="목차 스냅샷과 다르다"):
+        _load_drafts(outline_fx=json.loads(OUTLINE_C.read_text(encoding="utf-8")))
+
+
+@pytest.mark.parametrize("change, why", [
+    (lambda d: d["notes"][0].update(fix="손이 빨랐다. 동네 옷도 고쳐 줬다."), "고칠 문장은 넣지 않는다"),
+    (lambda d: d["notes"][0].update(location="ch-1/p9"), "초안에 없는 위치"),
+    (lambda d: d["notes"][0].update(issue="가" * 200), "자를 넘는다"),
+    (lambda d: d["notes"][0].update(turns=[99]), "원문 턴이 아니다"),
+    (lambda d: d.update(based_on="다른 실행"), "based_on"),
+])
+def test_review_notes_carry_problems_only(change, why):
+    drafts, src = _load_drafts()
+    doc = json.loads(NOTES_C.read_text(encoding="utf-8"))
+    assert len(pipe.check_review_notes(doc, drafts, src["run_ref"], set(range(1, 40)))) == 9
+    change(doc)
+    with pytest.raises(pipe.PipelineError, match=why):
+        pipe.check_review_notes(doc, drafts, src["run_ref"], set(range(1, 40)))
+
+
+def _edit_only(tmp_path, edit, notes=True):
+    data, turn_map, afx, _ = _fixture_analysis()
+    o = json.loads(OUTLINE_C2.read_text(encoding="utf-8"))
+    fx, doc = _draft_fx()
+    fake = Fake({"edit": edit})
+    r = asyncio.run(pipe.run(data, turn_map, call=fake, recorder=pipe.Recorder(tmp_path), analysis_fixture=afx,
+                             outline_fixture=o, model="gemini-3.1-pro-preview", draft_fixture=fx,
+                             review_notes=doc if notes else None))
+    return r, fake
+
+
+def test_edit_only_calls_edit_once_with_the_pro_draft(tmp_path):
+    r, fake = _edit_only(tmp_path, _pro_edit())
+    assert fake.order == ["edit"] and r["calls"] == 1
+    spec = fake.specs[0]
+    assert spec.model == "gemini-3.1-pro-preview" and spec.max_output_tokens == pipe.EDIT_ONLY_LIMITS[1]
+    payload = fake.payload("edit")
+    assert len(payload["review_notes"]) == 9 and "missing_core" not in payload          # Pro 초안은 핵심을 다 썼다
+    assert payload["drafts"][0]["paragraphs"][1][2]["text"].startswith("말이 별로 없었던 큰언니는")
+    assert payload["drafts"][0]["paragraphs"][1][2]["turns"] == [12]                      # 코드가 펼친 턴
+    # 조치를 적고 아무것도 바꾸지 않은 편집 — edit_claim_mismatch 로 needs_revision (편집 자기평가를 믿지 않는다)
+    assert r["generation_state"] == pipe.EDIT_ONLY and r["overall"] == "needs_revision" and r["human_review"] == "not_run"
+    assert [f["rule"] for f in r["code_findings"] if f["severity"] == "fix"] == ["edit_claim_mismatch"]
+    assert r["draft_source"]["sha256"] == ["2cabbb3a7850def6"] and r["edit_trace"]["kept"] == 24
+    assert r["verification"]["state"] == "not_run"
+    for name in ("03_draft_fixture.json", "03_review_notes.json", "03_checks.json", "04_edited.json",
+                 "04_edit_trace.json", "04_code_gate.json"):
+        assert (tmp_path / name).exists(), name
+    assert not (tmp_path / "03_ch-1.json").exists() and not (tmp_path / "05_verify.json").exists()
+    run_doc = json.loads((tmp_path / "run.json").read_text(encoding="utf-8"))
+    assert run_doc["settings"]["edit_only"] and run_doc["draft_source"]["run_ref"].endswith("31propreview")
+    assert [s["stage"] for s in run_doc["steps"]] == ["edit"]
+    assert "편집 단독 시험(edit_only)" in (tmp_path / "r1_summary.md").read_text(encoding="utf-8")
+    assert pipe.settings()["MEMOIR_PIPE_TEXT_MODEL"] == "gemini-3.5-flash-lite"
+    quiet = {**_pro_edit(), "diagnosis": [{"issue": "고칠 곳 없음", "where": [], "action": ""}]}
+    r2, _ = _edit_only(tmp_path / "q", quiet)
+    assert r2["code_gate"] == "pass" and r2["overall"] == "edit_only"                   # 검증 전 — awaiting_human 아님
+
+
+def test_edit_only_that_drops_a_core_memory_needs_revision(tmp_path):
+    d = json.loads((PRO_DRAFT / "03_ch-1.json").read_text(encoding="utf-8"))
+    paras = json.loads(json.dumps(d["paragraphs"]))
+    del paras[1][1]                                                       # f17 바느질을 배운 일
+    r, _ = _edit_only(tmp_path, _pro_edit(paras), notes=False)
+    assert r["code_gate"] == "attention" and r["overall"] == "needs_revision"
+    assert [f["fact"] for f in r["code_findings"] if f["rule"] == "core_missing"] == ["f17"]
+    r2, _ = _edit_only(tmp_path / "b", _pro_edit(paras, [{"facts": ["f17"], "reason": "다음 장에서 다룬다"}]), notes=False)
+    assert [f["rule"] for f in r2["code_findings"] if f.get("fact") == "f17"] == ["core_omitted"]
+
+
+def test_edit_only_refusals(tmp_path):
+    data, turn_map, afx, _ = _fixture_analysis()
+    o = json.loads(OUTLINE_C2.read_text(encoding="utf-8"))
+    fx, doc = _draft_fx()
+    both = asyncio.run(pipe.run(data, turn_map, call=Fake({}), recorder=pipe.Recorder(tmp_path / "a"),
+                                analysis_fixture=afx, outline_fixture=o, chapter_only=True, draft_fixture=fx))
+    assert both["generation_state"] == pipe.FAILED and "함께 하지 않는다" in both["failure"]["message"]
+    notes = asyncio.run(pipe.run(data, turn_map, call=Fake({}), recorder=pipe.Recorder(tmp_path / "b"),
+                                 analysis_fixture=afx, outline_fixture=o, chapter_only=True, review_notes=doc))
+    assert notes["generation_state"] == pipe.FAILED and "편집 단독 시험에서만" in notes["failure"]["message"]
+
+
+def test_cli_edit_only_dry_run_and_refusals(capsys):
+    args = ["--seed", str(SEED_C_PATH), "--aliases", "c1,c2,c3,c4,c5", "--dry-run"]
+    fx = ["--from-analysis", str(FIXTURE_C), "--from-outline", str(OUTLINE_C2)]
+    run = ["--from-draft", str(PRO_DRAFT), "--review-notes", str(NOTES_C), "--model", "gemini-3.1-pro-preview"]
+    assert cli.main(args + fx + run) == 0
+    out = capsys.readouterr().out
+    assert "예상 호출 1회 (편집만)" in out and "검토 지적 9개" in out and "sha256 2cabbb3a7850def6" in out
+    assert "예상 비용 gemini-3.1-pro-preview" in out and "출력 상한 32,768" in out and "시간 상한 300초" in out
+    assert cli.main(args + run) == 2                                                    # 스냅샷 없이
+    assert cli.main(args + fx + run + ["--chapter-only"]) == 2
+    assert cli.main(args + fx + ["--review-notes", str(NOTES_C)]) == 2

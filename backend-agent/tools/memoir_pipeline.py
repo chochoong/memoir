@@ -220,7 +220,11 @@ def main(argv: list[str] | None = None) -> int:
                     help="집필 시험 — --from-analysis 와 함께, 사람이 검토한 시험용 목차에서 시작(장 → 편집 → 검증)")
     ap.add_argument("--chapter-only", action="store_true",
                     help="장 집필 비교 — --from-analysis · --from-outline 과 함께, 장 집필만(호출 장 수만큼)")
-    ap.add_argument("--model", help="--chapter-only 와 함께만. 이 실행에만 쓰는 모델 — 기본 모델은 바꾸지 않는다")
+    ap.add_argument("--from-draft", type=Path,
+                    help="편집 단독 시험 — --from-analysis · --from-outline 과 함께, 장 집필 비교 실행 폴더의 초안을 "
+                         "그대로 받아 편집만(호출 1회, 검증 없음)")
+    ap.add_argument("--review-notes", type=Path, help="--from-draft 와 함께만. 사람 검토 지적(위치 · 문제 · 근거 턴)")
+    ap.add_argument("--model", help="--chapter-only · --from-draft 와 함께만. 이 실행에만 쓰는 모델 — 기본 모델은 바꾸지 않는다")
     a = ap.parse_args(argv)
 
     from dotenv import load_dotenv
@@ -252,12 +256,19 @@ def main(argv: list[str] | None = None) -> int:
     if focus and a.analysis_only:
         print("입력 거부 — --focus 와 --analysis-only 는 함께 쓰지 않는다", file=sys.stderr)
         return 2
-    if a.model and not a.chapter_only:
-        print("입력 거부 — --model 은 --chapter-only(장 집필 비교)와 함께만 쓴다. 기본 모델은 바꾸지 않는다",
+    if a.model and not (a.chapter_only or a.from_draft):
+        print("입력 거부 — --model 은 --chapter-only(장 집필 비교) · --from-draft(편집 단독 시험)와 함께만 쓴다. "
+              "기본 모델은 바꾸지 않는다", file=sys.stderr)
+        return 2
+    if (a.chapter_only or a.from_draft) and not (a.from_analysis and a.from_outline):
+        print("입력 거부 — --chapter-only · --from-draft 는 --from-analysis · --from-outline 과 함께만 쓴다",
               file=sys.stderr)
         return 2
-    if a.chapter_only and not (a.from_analysis and a.from_outline):
-        print("입력 거부 — --chapter-only 는 --from-analysis · --from-outline 과 함께만 쓴다", file=sys.stderr)
+    if a.chapter_only and a.from_draft:
+        print("입력 거부 — --chapter-only 와 --from-draft 는 함께 쓰지 않는다", file=sys.stderr)
+        return 2
+    if a.review_notes and not a.from_draft:
+        print("입력 거부 — --review-notes 는 --from-draft 와 함께만 쓴다", file=sys.stderr)
         return 2
     if a.analysis_only:
         if a.from_analysis:
@@ -293,9 +304,25 @@ def main(argv: list[str] | None = None) -> int:
         n_par = sum(len(ch["paragraphs"]) for ch in outline_fx["outline"]["chapters"])
         print(f"목차 출처: 사람이 검토한 시험용 목차 {a.from_outline.name} (outline_source=reviewed_fixture) — "
               f"장 {len(outline_fx['outline']['chapters'])} · 문단 계획 {n_par} · 목차 호출 없음")
+    draft_fx = notes_doc = None
+    if a.from_draft:
+        try:
+            draft_fx, notes_doc = read_draft_run(a.from_draft, a.review_notes)
+            T = pipe.check_input(data, turn_map)
+            outline, _ = pipe.load_outline_fixture(outline_fx, analysis, fixture, T)
+            drafts, dsrc = pipe.load_draft_fixture(draft_fx, outline_fx, outline, analysis, data)
+            notes = pipe.check_review_notes(notes_doc, drafts, dsrc["run_ref"], T) if notes_doc is not None else None
+        except (OSError, ValueError, pipe.PipelineError) as e:
+            print(f"입력 거부 — {getattr(e, 'message', e)}", file=sys.stderr)
+            return 2
+        print(f"초안 출처: {dsrc['run_ref']} ({dsrc['model']} · 온도 {dsrc['temperature']} · sha256 "
+              f"{','.join(dsrc['sha256'])}) — 장 집필 호출 없음"
+              + (f" · 검토 지적 {len(notes)}개({a.review_notes.name})" if notes else " · 검토 지적 없음"))
     extra = 0 if a.chapter_only else 2 if outline_fx is not None else 3 if fixture is not None else 4
     calls = (f"{1 + extra}회 (장 1 + {extra})" if focus else
              f"{pipe.MIN_CHAPTERS + extra}~{pipe.MAX_CHAPTERS + extra}회 (장 수 + {extra})")
+    if a.from_draft:
+        calls = "1회 (편집만)"
     model = a.model or cfg["MEMOIR_PIPE_TEXT_MODEL"]
     print(f"모델 {model}" + (f" (이 실행만 · 기본 {cfg['MEMOIR_PIPE_TEXT_MODEL']} 그대로)" if a.model else "")
           + f" · 온도 {cfg['MEMOIR_PIPE_TEMPERATURE']} · "
@@ -303,6 +330,8 @@ def main(argv: list[str] | None = None) -> int:
           f"예상 호출 {calls}" + (f" · 한 장 시험 focus「{focus}」" if focus else ""))
     if a.chapter_only:
         chapter_estimate(data, turn_map, analysis, outline_fx, fixture, model, cfg)
+    if a.from_draft:
+        edit_estimate(data, turn_map, analysis, outline_fx, fixture, draft_fx, notes_doc, focus, model, cfg)
     if a.dry_run:
         print("--dry-run — 모델을 부르지 않았다")
         return 0
@@ -313,12 +342,14 @@ def main(argv: list[str] | None = None) -> int:
         meta["run_ref"] += "-fixture"
     if outline_fx is not None:
         meta["run_ref"] += "-outline"
-    if a.chapter_only:
-        meta["run_ref"] += "-chapter-" + re.sub(r"[^a-z0-9]+", "", model.lower().removeprefix("gemini-"))
+    if a.chapter_only or a.from_draft:
+        meta["run_ref"] += ("-chapter-" if a.chapter_only else "-edit-") + re.sub(
+            r"[^a-z0-9]+", "", model.lower().removeprefix("gemini-"))
     folder = a.out_dir / meta["run_ref"]
     result = asyncio.run(pipe.run(data, turn_map, recorder=pipe.Recorder(folder), meta=meta, focus=focus,
                                   analysis_fixture=fixture, outline_fixture=outline_fx,
-                                  chapter_only=a.chapter_only, model=a.model))
+                                  chapter_only=a.chapter_only, model=a.model,
+                                  draft_fixture=draft_fx, review_notes=notes_doc))
     steps = json.loads((folder / "run.json").read_text(encoding="utf-8"))["steps"]
     for s in steps:
         u = s.get("usage") or {}
@@ -344,7 +375,8 @@ def main(argv: list[str] | None = None) -> int:
         print(f"계획 사실 사용({stage}) 전체 {pc['planned_used']}/{pc['planned']} · 핵심 {pc['core_used']}/{pc['core']} · "
               f"보조 {pc['support_used']}/{pc['support']} · 빠진 핵심 {pc['core_missing']}")
     print(f"기록 {folder}")
-    done = (result["pipeline_complete"] or result["generation_state"] in (pipe.INSUFFICIENT, pipe.DRAFT_ONLY))
+    done = (result["pipeline_complete"]
+            or result["generation_state"] in (pipe.INSUFFICIENT, pipe.DRAFT_ONLY, pipe.EDIT_ONLY))
     return 0 if done else 1
 
 
@@ -355,6 +387,46 @@ PRICES = {"gemini-3.1-pro-preview": (2.00, 12.00), "gemini-3.5-flash-lite": (0.3
 CHARS_PER_TOKEN = 1.98
 # 장 집필 출력 어림(생각 포함): 보통 · 많을 때. 상한까지 쓰는 경우는 따로 적는다
 OUT_GUESS = (3000, 12000)
+
+
+def read_draft_run(folder: Path, notes_path: Path | None) -> tuple[dict, dict | None]:
+    """장 집필 비교 실행 폴더에서 초안 스냅샷을 읽는다 — run.json · 02_outline_fixture.json · 03_ch-*.json 그대로."""
+    run_doc = json.loads((folder / "run.json").read_text(encoding="utf-8"))
+    keys = [s["chapter_key"] for s in run_doc.get("steps", []) if s.get("stage") == "chapter"]
+    fx = {"run": run_doc,
+          "outline_fixture": json.loads((folder / "02_outline_fixture.json").read_text(encoding="utf-8")),
+          "drafts": [json.loads((folder / f"03_{k}.json").read_text(encoding="utf-8")) for k in keys]}
+    notes = json.loads(notes_path.read_text(encoding="utf-8")) if notes_path else None
+    return fx, notes
+
+
+def edit_estimate(data, turn_map, analysis, outline_fx, fixture, draft_fx, notes_doc, focus, model: str,
+                  cfg: dict) -> None:
+    """편집 단독 시험의 입력 크기 · 출력 상한 · 예상 비용 — 모델을 부르지 않는다. run 과 같은 자료를 만든다."""
+    T = pipe.check_input(data, turn_map)
+    outline, _ = pipe.load_outline_fixture(outline_fx, analysis, fixture, T)
+    drafts, src = pipe.load_draft_fixture(draft_fx, outline_fx, outline, analysis, data)
+    pipe.expand_turns(drafts, pipe.ledger(analysis))
+    notes = pipe.check_review_notes(notes_doc, drafts, src["run_ref"], T) if notes_doc is not None else None
+    omit = {f: x["reason"] for x in outline.get("omit", []) for f in x["facts"]}
+    checks = pipe.all_findings(drafts, outline, data, analysis, omit)
+    user = pipe.edit_message(data, analysis, outline, drafts, checks, pipe.listing_signals(drafts, data), focus, notes)
+    system = pipe.prompt("edit")
+    sec, tok = pipe.EDIT_ONLY_LIMITS
+    tok = max(cfg["MEMOIR_PIPE_EDIT_MAX_OUTPUT_TOKENS"], tok)
+    n_in = round((len(system) + len(user)) / CHARS_PER_TOKEN)
+    by: dict[str, int] = {}
+    for c in checks:
+        by[f"{c['rule']}({c['severity']})"] = by.get(f"{c['rule']}({c['severity']})", 0) + 1
+    print(f"편집 — 입력 약 {n_in:,} 토큰(지시문 {len(system):,}자 + 자료 {len(user):,}자) · 초안 판정 {by or '없음'} · "
+          f"출력 상한 {tok:,}(생각 포함) · 시간 상한 {max(cfg['MEMOIR_PIPE_EDIT_TIMEOUT'], sec):.0f}초")
+    price = PRICES.get(model)
+    if not price:
+        print(f"  예상 비용 — {model} 단가를 모른다")
+        return
+    cost = [(n_in * price[0] + out * price[1]) / 1e6 for out in (*OUT_GUESS, tok)]
+    print(f"  예상 비용 {model} — 출력 {OUT_GUESS[0]:,} 이면 ${cost[0]:.3f} · {OUT_GUESS[1]:,} 이면 "
+          f"${cost[1]:.3f} · 상한 {tok:,} 를 다 쓰면 ${cost[2]:.3f}")
 
 
 def chapter_estimate(data, turn_map, analysis, outline_fx, fixture, model: str, cfg: dict) -> None:
