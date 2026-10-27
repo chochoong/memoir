@@ -195,7 +195,8 @@ def analysis_only(a, data: dict, turn_map: list[dict], meta: dict, cfg: dict) ->
     mm = r.get("memory_map") or {}
     print(f"결과 {r['generation_state']} · 계약 통과 {r['analysis_ok']} · 호출 {r['calls']}회 · 사실 {mm.get('facts')} · "
           f"기억 단위 {mm.get('units')} · keep {mm.get('keep')} · 정정 {len(mm.get('corrections') or [])}")
-    print(f"계약 위반 {len(r['diagnostics'])}건 · 경고 {len(r['warnings'])}건 — 기억 지도 {folder / '01_memory_map.md'}")
+    warn = f"{len(r['warnings'])}건" if r.get("semantic_checks") == "run" else "뜻 검사 미실행"
+    print(f"계약 위반 {len(r['diagnostics'])}건 · 경고 {warn} — 기억 지도 {folder / '01_memory_map.md'}")
     for x in r["diagnostics"]:
         print(f"  위반 {x}")
     print(f"기록 {folder}")

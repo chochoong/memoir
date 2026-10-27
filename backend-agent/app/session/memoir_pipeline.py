@@ -135,6 +135,17 @@ _HEARD_SRC = re.compile(r"(?<!그러)대요|다고\s?(하더라고요|하데요|
 _REPORTED_SRC = re.compile(r"[다라자냐]고\s?(했어요|하셨어요|그러셨어요|말했어요)|그러대요|그러더라고요")
 # 화자의 평가 · 생각 — "닮았다고 제가 그래요", "…라고 생각해요". 객관적 사실로 확정하지 않는다
 _VIEW_SRC = re.compile(r"[다라]고\s?(제가|내가)\s?(그래요|그러죠|해요)|[다라]고\s?(생각해요|봐요|여겨요)")
+# 부정 표현 — "쳐다보지도 않았어요", "안 왔어요", "못 갔어요", "별말 없었어요". 사실 메모에도 부정이 남아야 한다
+_NEG_SRC = re.compile(r"지\s?(도|는)?\s?않|(?<![가-힣])안\s[가-힣]+(요|다|었|았|였|고|서)"
+                      r"|(?<![가-힣])못\s?[가-힣]|없었|없어요|없고")
+# 질문에 대한 답 말만인 첫머리("없어요." · "아니요,")는 사실의 부정이 아니다 — 부정 검사에서 뺀다
+_ANSWER_HEAD = re.compile(r"^\s*(없어요|없습니다|아니요|아뇨|네|예)[.,!…]?\s*")
+# 수 보존 검사는 시간 · 나이 · 기간 · 금액 · 넓이만 (횟수 · 인원 · 개수는 다른 사실로 드러나므로 보지 않는다)
+NUMBER_UNITS = ("년", "살", "세", "개월", "달", "해", "시", "원", "평")
+_NEG_FACT = re.compile(r"않|(?<![가-힣])안\s?[가-힣]|못|없|모르|아니")
+# 망설임 · 의심 — "대단한 게 있나 싶은데". 화자의 생각(view)으로 남기거나 메모에 그 말이 있어야 한다
+_DOUBT_SRC = re.compile(r"[나가]\s?싶|잘\s?모르겠|글쎄")
+_DOUBT_FACT = re.compile(r"싶|망설|모르|글쎄|대단|의문")
 # 직접 말한 감정 — 원문에 있으면 그 턴의 사실 메모에도 같은 무리의 말이 있어야 한다 (말을 바꿔도 된다)
 EMOTION_GROUPS = {
     "좋음 · 기쁨": r"좋았|좋더|좋아|기뻤|기쁘|기뻐|즐거",
@@ -142,7 +153,7 @@ EMOTION_GROUPS = {
     "미안함": r"미안|죄송",
     "아쉬움 · 서운함": r"아쉬|서운|섭섭",
     "고마움": r"고마|고맙|감사",
-    "뿌듯함": r"뿌듯|자랑",
+    "뿌듯함 · 자부심": r"뿌듯|자랑|자부|해냈|했다\s?싶",
     "뭉클함 · 울음": r"뭉클|울었|울어|울지|눈물",
     "그리움": r"그리웠|그립|보고\s?싶",
     "슬픔": r"슬펐|슬프|슬퍼",
@@ -303,6 +314,8 @@ def turn_marks(data: dict) -> list[dict]:
         mark = {"heard": bool(_HEARD_SRC.search(s)), "reported": bool(_REPORTED_SRC.search(s)),
                 "view": bool(_VIEW_SRC.search(s)), "uncertain": bool(_UNCERTAIN_SRC.search(s)),
                 "correction": bool(_CORRECTION_SRC.search(s)),
+                "negation": bool(_NEG_SRC.search(_ANSWER_HEAD.sub("", s))), "doubt": bool(_DOUBT_SRC.search(s)),
+                "numbers": [shown for shown, value in _fact_tokens(s) if _counts_as_number(shown, value)],
                 "emotions": [g for g, rx in EMOTION_GROUPS.items() if re.search(rx, s)]}
         if any(mark.values()):
             out.append({"turn": u["turn"], **mark})
@@ -649,20 +662,34 @@ def analysis_diagnostics(out: dict, T: set[int], marks: list[dict] | None = None
     for f in facts.values():
         for t in f["turns"]:
             by_turn.setdefault(t, []).append(f)
+    # 정정 턴(정정 전 값이 원문에 있다) · 빼 달라고 한 턴 · 일부 제외 턴은 수 · 부정 · 망설임 대조에서 뺀다
+    skip = in_corr | gone | {t for x in out["exclusions"] if x.get("mode") == "partial" for t in x.get("turns", [])}
     for m in marks or []:
         fs = by_turn.get(m["turn"], [])
         if not fs:
             continue
+        memo = " ".join(f["text"] for f in fs)
         if m["heard"] and not any(f["source"] == "heard" for f in fs):
             errors.append(f"턴 {m['turn']} 에 남에게 들은 이야기 말투가 있는데 그 턴에 heard 사실이 없다 — "
                           "들은 부분과 직접 기억을 사실로 나눈다")
+        if m["turn"] in skip:
+            continue
         if m.get("reported") and not m["heard"] and not any(_REPORTED.search(f["text"]) for f in fs):
-            warnings.append(f"턴 {m['turn']} 의 직접 들은 말(…다고 했어요)의 내용이 사실 메모에서 빠졌는지 본다 "
-                            "— 전언은 아니다")
+            errors.append(f"턴 {m['turn']} 에서 화자가 직접 받은 말(…다고 했어요)의 내용이 사실 메모에 없다 — "
+                          "전언은 아니지만 그 말은 남긴다(source self)")
+        if m.get("negation") and not _NEG_FACT.search(memo):
+            errors.append(f"턴 {m['turn']} 원문의 부정 표현(…지 않았다 · 안 · 못 · 없었다)이 사실 메모에 없다")
+        if m.get("doubt") and not any(f["source"] == "view" or _DOUBT_FACT.search(f["text"]) for f in fs):
+            errors.append(f"턴 {m['turn']} 원문의 망설임 · 의심(…나 싶다)이 사실 메모에 없다 — 화자의 생각(view)으로 남긴다")
+        support = re.sub(r"\s+", "", memo + " " + " ".join(f["time"] for f in fs))
+        digits = set(re.findall(r"\d+", memo + " " + " ".join(f["time"] for f in fs)))
+        miss = [shown for shown, value in _fact_tokens(texts.get(m["turn"], "") if texts else "")
+                if _counts_as_number(shown, value) and not _num_supported(value, support, digits)]
+        if miss:
+            errors.append(f"턴 {m['turn']} 원문의 수 · 기간 표현 {miss} 이 사실 메모에 없다 — 대략의 표현도 그대로 남긴다")
         if m.get("view") and not any(f["source"] == "view" for f in fs):
             errors.append(f"턴 {m['turn']} 은 화자의 평가 · 생각(…다고 제가 그래요)인데 view 사실이 없다 — "
                           "객관적 사실로 확정하지 않는다")
-        memo = " ".join(f["text"] for f in fs)
         lost = [g for g in m.get("emotions", []) if not re.search(EMOTION_GROUPS[g], memo)]
         if lost:
             errors.append(f"턴 {m['turn']} 원문의 감정 말 {lost} 이 그 턴의 사실 메모에 없다 — "
@@ -728,7 +755,7 @@ def normalize_corrections(out: dict) -> list[dict]:
                         "why": f"정정 뒤 값을 가진 사실 {[f['id'] for f in A]} · 정정 전 값 {[f['id'] for f in B]} — 하나로 정할 수 없다"})
             continue
         a = A[0]
-        rec = {"correction": i, "applied": True, "valid_fact": a["id"], "was": c["fact"],
+        rec = {"correction": i, "applied": True, "changed": False, "valid_fact": a["id"], "was": c["fact"],
                "turns_added": sorted(ts - set(a["turns"])), "stripped": None, "removed": None}
         a["turns"] = sorted(set(a["turns"]) | ts)
         c["fact"] = a["id"]
@@ -746,6 +773,9 @@ def normalize_corrections(out: dict) -> list[dict]:
                 for u in out["units"]:
                     u["facts"] = [x for x in u["facts"] if x != b["id"]]
                 rec["removed"] = b["id"]
+        rec["changed"] = bool(rec["turns_added"] or rec["stripped"] or rec["was"] != a["id"])
+        if not rec["changed"]:
+            rec.update(applied=False, why="이미 하나의 유효 사실로 정정돼 있다 — 바꾸지 않음")
         log.append(rec)
         facts = {f["id"]: f for f in out["facts"]}
     return log
@@ -890,8 +920,8 @@ def check_analysis(out, T: set[int], marks: list[dict] | None = None,
     # ---- 명시적 정정은 코드가 하나의 유효 사실로 정리한 뒤 뜻을 본다 (기록은 normalized 에)
     out["normalized"] = normalize_corrections(out)
     for n in out["normalized"]:
-        if n["applied"]:
-            c.warnings.append(f"정정 정규화 — 유효 사실 {n['valid_fact']}(턴 {n['turns_added']} 붙임)"
+        if n.get("changed"):
+            c.warnings.append(f"정정 정규화(코드가 바꿈) — 유효 사실 {n['valid_fact']}(턴 {n['turns_added']} 붙임)"
                               + (f", {n['stripped']} 에서 정정 전 연도를 지움" if n["stripped"] else ""))
 
     # ---- 뜻 (전부 모은 뒤, 하나라도 있으면 멈춘다)
@@ -1315,12 +1345,42 @@ def _fact_tokens(text: str) -> list[tuple[str, str]]:
     return out
 
 
+_SINO_DIGIT = {"일": 1, "이": 2, "삼": 3, "사": 4, "오": 5, "육": 6, "칠": 7, "팔": 8, "구": 9}
+_NATIVE_ONES = {"한": 1, "하나": 1, "두": 2, "둘": 2, "세": 3, "셋": 3, "네": 4, "넷": 4, "다섯": 5, "여섯": 6,
+                "일곱": 7, "여덟": 8, "아홉": 9}
+_NATIVE_TENS = {"열": 10, "스물": 20, "스무": 20, "서른": 30, "마흔": 40, "쉰": 50, "예순": 60, "일흔": 70,
+                "여든": 80, "아흔": 90}
+
+
+def _korean_number(num: str) -> int | None:
+    """이십오 → 25 · 육 → 6 · 열일곱 → 17 · 네 → 4. 모르면 None."""
+    if num and all(ch in _SINO_DIGIT or ch == "십" for ch in num):
+        if "십" in num:
+            a, _, b = num.partition("십")
+            return (_SINO_DIGIT.get(a, 1) if a else 1) * 10 + (_SINO_DIGIT.get(b, 0) if b else 0)
+        return _SINO_DIGIT.get(num) if len(num) == 1 else None
+    for tens, tv in _NATIVE_TENS.items():
+        if num.startswith(tens):
+            rest = num[len(tens):]
+            return tv + (_NATIVE_ONES.get(rest, 0) if rest else 0) if not rest or rest in _NATIVE_ONES else None
+    return _NATIVE_ONES.get(num)
+
+
+def _counts_as_number(shown: str, value: str) -> bool:
+    """수 보존 검사 대상 — 연도 · 시각 · 나이 · 기간 · 금액 · 넓이 (NUMBER_UNITS)."""
+    if "|" in value:
+        return value.split("|")[1] in NUMBER_UNITS
+    return any(u in shown for u in NUMBER_UNITS) or len(value) == 4
+
+
 def _num_supported(value: str, support: str, support_digits: set[str]) -> bool:
     if "|" not in value:                                    # 아라비아 숫자 — 연도는 끝 두 자리도 같다고 본다
         return (value in support_digits or (len(value) == 4 and value[2:] in support_digits)
                 or (len(value) == 2 and any(len(x) == 4 and x.endswith(value) for x in support_digits)))
     num, unit = value.split("|")
-    return num + unit in support or (len(num) >= 2 and num in support)    # "열일곱에" 처럼 단위 없이 말한 나이
+    n = _korean_number(num)
+    return (num + unit in support or (len(num) >= 2 and num in support)    # "열일곱에" 처럼 단위 없이 말한 나이
+            or (n is not None and str(n) in support_digits))              # "한 육 년" ↔ "약 6년"
 
 
 def fact_findings(chapters: list[dict], data: dict) -> list[dict]:
@@ -2330,7 +2390,8 @@ def memory_map(analysis: dict, data: dict) -> dict:
     }
 
 
-def memory_map_text(analysis: dict, mm: dict, diagnostics: list[str], warnings: list[str]) -> str:
+def memory_map_text(analysis: dict, mm: dict, diagnostics: list[str], warnings: list[str],
+                    checked: bool = True) -> str:
     """사람 검토용 기억 지도 (eval/runs 안에만 남는다 — 원문 요약이 들어 있다)."""
     facts = {f["id"]: f for f in analysis.get("facts", []) if isinstance(f, dict) and "id" in f}
     home: dict[str, list] = {}
@@ -2343,7 +2404,10 @@ def memory_map_text(analysis: dict, mm: dict, diagnostics: list[str], warnings: 
              f"대략/불확실 {len(mm['approx_or_uncertain'])} · 정정 {len(mm['corrections'])}", "",
              "## 계약 위반 (있으면 다음 단계로 넘기지 않는다)", ""]
     lines += [f"- {x}" for x in diagnostics] or ["- 없음"]
-    lines += ["", "## 검토할 점 (경고)", ""] + ([f"- {x}" for x in warnings] or ["- 없음"])
+    if not checked:
+        lines += ["- **뜻 검사 미실행** — 형식 오류에서 멈춰 정정 · 기억 단위 · 전언 · 감정 검사를 하지 않았다"]
+    lines += ["", "## 검토할 점 (경고)", ""]
+    lines += ([f"- {x}" for x in warnings] or ["- 없음"]) if checked else ["- 검사 미실행 (경고 0건이 아니다)"]
     lines += ["", "## 정정", "", "| 유효 사실 | 턴 | 정정 전(이력) | 정정 뒤 |", "|---|---|---|---|"]
     norm = [f"- 코드 정규화: {n}" for n in analysis.get("normalized", [])]
     lines += [f"| {c.get('fact')} | {c.get('turns')} | {c.get('before', '')} | {c.get('after', '')} |"
@@ -2384,7 +2448,7 @@ async def run_analysis_only(data: dict, turn_map: list[dict], *, call: Call = ca
     started_at = datetime.now(timezone.utc).isoformat(timespec="seconds")
     st: _Run | None = None
     result: dict = {"mode": "analysis_only", "generation_state": FAILED, "analysis_ok": False,
-                    "diagnostics": [], "warnings": [], "memory_map": None, "failure": None,
+                    "semantic_checks": "not_run", "diagnostics": [], "warnings": [], "memory_map": None, "failure": None,
                     "human_review": "not_run", "calls": 0, "prompt_version": PROMPT_VERSION}
     try:
         T = check_input(data, turn_map)
@@ -2398,17 +2462,20 @@ async def run_analysis_only(data: dict, turn_map: list[dict], *, call: Call = ca
             status, warnings = check_analysis(analysis, T, marks, source_texts(data))
             step["warnings"], step["ok"] = warnings, True
             result.update(generation_state="analyzed" if status == "ready" else status,
-                          analysis_ok=status == "ready", warnings=warnings)
+                          analysis_ok=status == "ready", warnings=warnings, semantic_checks="run")
         except PipelineError as e:
             step["error"] = e.as_dict()
-            result.update(failure=e.as_dict(), diagnostics=e.details or [e.message], warnings=e.warnings)
+            ran = bool(e.details)                       # 뜻 검사까지 갔으면 details 가 있다 — 형식 오류면 없다
+            result.update(failure=e.as_dict(), diagnostics=e.details or [e.message], warnings=e.warnings,
+                          semantic_checks="run" if ran else "not_run")
         if isinstance(analysis, dict) and analysis.get("normalized"):
             rec.json("01_analysis_normalized.json", analysis)
             result["normalized"] = analysis["normalized"]
         if isinstance(analysis, dict) and isinstance(analysis.get("facts"), list):
             mm = memory_map(analysis, data)
             result["memory_map"] = mm
-            rec.text("01_memory_map.md", memory_map_text(analysis, mm, result["diagnostics"], result["warnings"]))
+            rec.text("01_memory_map.md", memory_map_text(analysis, mm, result["diagnostics"], result["warnings"],
+                                                         result.get("semantic_checks") == "run"))
         result["calls"] = st.calls
         return result
     except PipelineError as e:

@@ -233,3 +233,35 @@
 **Context**: CONSTRUCTION - 단위 8P v5 분석 보완 2차 모의 완료, 상위 모델 분석 시험 조건 확인
 
 ---
+
+## Build and Test 단위 8P - gemini-3.8-flash 분석 시험 조건 확인 (호출 안 함)
+**Timestamp**: 2026-10-27T00:49:33Z
+**User Input**: (위 승인 5항 — AI Studio 에서 이 프로젝트의 해당 모델 무료 접근 확인 · 확인되지 않으면 호출하지 말고 보고)
+**AI Response**: "커밋 02b423d. 공개 문서 확인 — 가격표(ai.google.dev/gemini-api/docs/pricing): gemini-3.8-flash 무료 등급 입력 · 출력 'Free of charge'. 한도 문서(…/rate-limits): 한도는 키가 아니라 프로젝트 단위, 실제 한도는 AI Studio 에서만 보이며 무료 등급 수치는 문서에 없음. AI Studio 의 이 프로젝트 화면은 직접 볼 수 없어 **이 프로젝트의 3.8-flash 무료 접근을 확인하지 못함 → 호출하지 않음**. 모델 지정은 실행 때 MEMOIR_PIPE_TEXT_MODEL 환경 변수로만(코드 기본값 무변경), 생각 토큰이 출력 상한에 들어갈 수 있어 그 1회는 MEMOIR_PIPE_ANALYSIS_MAX_OUTPUT_TOKENS 를 넉넉히(예: 16000) 두는 안을 제안. 사용자 확인 대기."
+**Context**: CONSTRUCTION - 단위 8P 상위 모델 분석 시험 보류(무료 접근 미확인)
+
+---
+
+## Build and Test 단위 8P - gemini-3.8-flash 분석 시험 조건부 승인 — 조건 미확인으로 호출 안 함
+**Timestamp**: 2026-10-27T00:54:29Z
+**User Input**: "… gemini-3.8-flash 가 정식 모델이고 Free Tier 입력 · 출력이 무료임을 확인 … 현재 API 키가 속한 프로젝트의 실제 무료 사용 가능 여부는 별도 확인 필요 … 조건부 승인: 1 AI Studio 에서 프로젝트 Free Tier · 3.8-flash 무료 한도 확인 2 확인되지 않으면 호출하지 않고 보고 3 확인되면 02b423d 코드 · 같은 Seed C 로 분석만 1회 4 재시도 · 유료 전환 · 추가 단계 금지 5 thinking 고려 출력 상한, 추가 호출 금지 … 모델 성능만의 차이라고 주장 금지 … push · PR 금지"
+**AI Response**: "내장 브라우저로 AI Studio 사용량 · 한도 화면(aistudio.google.com/usage?tab=rate-limit)을 읽기 전용으로 열었으나 Google 계정 로그인 화면으로 넘어감. 사용자 계정으로 로그인하지 않으므로 이 프로젝트의 등급 · 3.8-flash 무료 한도를 확인하지 못함 → 조건 2 에 따라 호출하지 않음. 코드 · 데이터 변경 없음."
+**Context**: CONSTRUCTION - 단위 8P 상위 모델 분석 시험 보류(프로젝트 무료 한도 미확인)
+
+---
+
+## Build and Test 단위 8P - v5 분석만 실제 1회 (보완 2차, flash-lite)
+**Timestamp**: 2026-10-27T01:02:41Z
+**User Input**: "이전 지시와 최신 결정이 혼동된 것 같습니다. 현재 최종 결정은 gemini-3.5-flash-lite 를 계속 사용 … 3.8 Flash 무료 확인 · AI Studio 로그인 · RPM/RPD 확인 조건은 제외 … 유료 사용도 허용했으므로 무료 티어 확인을 필수 선행조건으로 두지 않음, 결제 설정 변경 · 유료 전환은 직접 하지 말 것 … 커밋 02b423d · flash-lite · Seed C 39턴 · b9f8e2daea65 · --analysis-only · 정확히 1회 · 재시도 0 · 불필요한 코드 변경 금지 · 목차 이후 호출 금지 · 다른 모델 전환 금지 · 실제 적용 모델 확인 · 기존 환경 유지 … 보고 8가지 … 성공해도 다음 단계 자동 실행 금지"
+**AI Response**: "HEAD 02b423d · 코드 차이 0 · MEMOIR_PIPE_* 덮어쓰기 없음 · dry-run 으로 적용 모델 gemini-3.5-flash-lite · 상한 8,000 확인 뒤 1회(20261027T010241Z-C5-b9f8-analysis): 14.5초 · 입력 10,817 · 출력 6,569 · STOP. 계약 실패 — 모양 1건 f56.source='reported'(지시문의 표지 이름을 source 값으로 씀). 참고로 사본에 뜻 검사: 턴 13 heard 없음 · 턴 16 감정 말 누락, 경고 m6 무관 묶음 등. 사실 60 · 단위 7(턴과 하나씩 아님), 정정은 모델이 바르게(f34 [21, 25] 1985 봄 · f33 은행동), 턴 38 세 사실 · 턴 32 view · keep 14. m1 · m2 · m3 · m7 은 문단 설계가 가능한 기억 덩어리, m6 무관 묶음. 다음 단계로는 갈 수 없음(계약 실패), 지시문 source 값 명시 등 제안. 코드 · 지시문 변경과 함께 바뀐 결과 — 모델 차이 아님. R1-20261027T010241Z-C5-v5-analysis.md. 추가 호출 · 수정 · push 없음."
+**Context**: CONSTRUCTION - 단위 8P v5 분석만 2차 시험 계약 실패(모양), 다음 조치 결정 대기
+
+---
+
+## Code Generation 단위 8P - v5 분석 보완 3차 (source 계약 · 사실 보존 · 로그, 모의)
+**Timestamp**: 2026-10-27T01:19:48Z
+**User Input**: "… 계약 검사에 실패했지만 기억 단위 · 정정 처리에서 유의미한 개선 … 대규모 재설계 없이 확인된 문제만 수정 1 source 는 self(직접 경험 · 직접 받은 말 · 편지) · heard · view 셋만, reported 마커는 참고 정보이지 source 값 아님, 자동 변환 통과 금지, 일반 가상 사례 2 사실 보존 — 13 · 16 · 2 · 8 · 29 · 35 · 37 · 38, 사실 원장에서 누락 금지(본문 포함 의무는 아님) 3 로그 — 실제 변경 / 이미 정정 구분, 형식 오류로 후속 검사 미실행이면 '검사 미실행' 4 m3 · m7 긍정, m6 개선 대상 유지, 개수 · 분할 강제 금지 5 결과 보존 · 실패 사례 회귀 고정 · 8P · 전체 · theme-interview · analysis-only dry-run · 통과하면 8P 만 로컬 커밋 뒤 flash-lite 분석만 1회 · 재시도 0 6 통과하고 사실 · 단위가 충분하면 목차 · 집필로, 같은 문제 반복이면 미세 수정을 계속하지 않고 모델 적합성 · 계약 복잡도 재판단 … push · PR 금지"
+**AI Response**: "source 세 값 지시문 명시(reported 는 참고 표시), 자동 변환 없음 테스트. 사실 보존 검사(실패): 수 · 기간(시간 · 나이 · 기간 · 금액 · 넓이, 한자어/고유어 ↔ 숫자) · 부정(답 말 제외) · 직접 받은 말 내용 · 망설임 · 자부심 감정 무리, 정정 · 제외 턴 제외. 지시문 10항 원문의 뜻 보존(일반 예). 정규화 changed / 이미 정정 구분, semantic_checks run/not_run · 기억 지도 '뜻 검사 미실행'. 01:02Z 출력 고정 — 사본에서 2 · 8 · 13 · 16 · 29 · 35 · 37 (+10 · 14 · 27) 위반, 38 통과. 8P 127 · 전체 196 · theme-interview 사본 127 · 막은 시도 0 · dry-run."
+**Context**: CONSTRUCTION - 단위 8P v5 분석 보완 3차 모의 완료, flash-lite 분석만 1회 진행
+
+---

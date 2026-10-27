@@ -952,7 +952,7 @@ def source_b():
 
 def analysis_b(partial=False):
     a = analysis_ok()
-    a["facts"] = [fact("f1", [1, 6], "딸 입학", "1996년"), fact("f2", [2, 7], "노란 가방 · 뭉클"),
+    a["facts"] = [fact("f1", [1, 6], "딸 입학", "1996년"), fact("f2", [2, 7], "노란 가방 · 딸은 울지 않음 · 뭉클"),
                   fact("f3", [3, 4] if partial else [3], "꽃집 첫 손님")]
     a["units"] = [{"id": "m1", "name": "딸 입학", "facts": ["f1", "f2"], "time": "1996년", "weight": "main"},
                   {"id": "m2", "name": "꽃집", "facts": ["f3"], "time": "", "weight": "main"}]
@@ -1408,7 +1408,7 @@ def test_turn13_heard_and_remembered_must_be_split_at_fact_level():
     assert not any("턴 13" in x for x in errors)
     f37 = next(f for f in a["facts"] if f["id"] == "f37")                  # 딸이 한 말을 전한 것 — 직접 겪은 일
     f37.update(source="self", text="딸이 이야기를 책으로 남기자고 함")
-    assert not any("턴 37" in x for x in _diag(a, data)[0])
+    assert not any("턴 37 에서 화자가 직접 받은 말" in x for x in _diag(a, data)[0])   # 직접 받은 말 — 전언 아님
 
 
 def test_unit_spanning_unrelated_periods_and_loaded_theme_words_are_flagged():
@@ -1481,8 +1481,8 @@ def test_explicit_correction_is_normalized_into_one_valid_fact():
     assert f["f21"]["certainty"] == "stated"                           # 흐림은 지운 연도에 걸린 것이었다
     assert a["corrections"] == [{"fact": "f25", "turns": [21, 25], "before": "86년", "after": "1985년 봄",
                                  "note": a["corrections"][0]["note"]}]  # 1986 은 이력으로만
-    assert a["normalized"][0] == {"correction": 0, "applied": True, "valid_fact": "f25", "was": "f21",
-                                  "turns_added": [21], "stripped": "f21", "removed": None}
+    assert a["normalized"][0] == {"correction": 0, "applied": True, "changed": True, "valid_fact": "f25",
+                                  "was": "f21", "turns_added": [21], "stripped": "f21", "removed": None}
     assert not any(re.search(r"86\s?년", x["text"] + x["time"]) for x in a["facts"])
     nxt = pipe._analysis_for_next(a)
     assert "86" not in json.dumps(nxt["corrections"]) and "normalized" not in nxt
@@ -1491,7 +1491,7 @@ def test_explicit_correction_is_normalized_into_one_valid_fact():
 def test_correction_normalization_is_general_not_seed_specific():
     data, _ = source_b()                                               # seed B — 1998 → 1996 정정
     a = analysis_b()
-    a["facts"] = [fact("f1", [1], "1998년에 딸이 초등학교에 입학함", "1998년"), fact("f2", [2, 7], "노란 가방 · 뭉클했음"),
+    a["facts"] = [fact("f1", [1], "1998년에 딸이 초등학교에 입학함", "1998년"), fact("f2", [2, 7], "노란 가방 · 딸은 울지 않음 · 뭉클했음"),
                   fact("f3", [3], "꽃집 첫 손님"), fact("f6", [6], "입학 연도는 1996년", "1996년")]
     a["units"] = [{"id": "m1", "name": "딸 입학", "facts": ["f1", "f2", "f6"], "time": "", "weight": "main"},
                   {"id": "m2", "name": "꽃집", "facts": ["f3"], "time": "", "weight": "main"}]
@@ -1554,10 +1554,10 @@ def test_turn16_32_38_keep_their_meaning():
     assert any("턴 16 원문의 감정 말" in x for x in errors) and not any("턴 16 에 남에게" in x for x in errors)
     assert any("턴 32 은 화자의 평가" in x for x in errors)
     assert any("턴 38 원문의 감정 말 ['싫음']" in x for x in errors)
-    assert any("턴 16 의 직접 들은 말" in w for w in warnings)
+    assert any("턴 16 에서 화자가 직접 받은 말" in x for x in errors)               # 고맙다고 한 말을 뺐다
     f["f16"].update(text="힘들었지만 첫 월급을 집에 부칠 때 좋았고 엄마가 편지로 고맙다고 함")
-    f["f32"].update(source="view", text="아들이 큰언니를 닮았다고 내가 말함")
-    f["f38"].update(text="지금은 그 재봉틀 소리에 언니 생각이 남")
+    f["f32"].update(source="view", text="말이 없는 아들이 큰언니를 닮았다고 내가 말함")
+    f["f38"].update(text="재봉틀을 아직 못 버림 · 지금은 그 소리에 언니 생각이 남")
     a["facts"].append(fact("f40", [38], "공장 다닐 때는 그 소리가 싫었음"))
     a["units"].append({"id": "m99", "name": "n", "facts": ["f40"], "time": "", "weight": "minor"})
     errors, _ = _diag(a, data)
@@ -1590,3 +1590,72 @@ def test_analysis_prompt_separates_fact_unit_thread_and_paragraph_plan():
     assert '"view"' in a and "직접 받은 말" in a and "다른 사람의 다른 일을 한 묶음으로 만들지 마세요" in a
     assert "화자가 말한 감정은 메모에서 빼지 마세요" in a
     assert "화자의 생각으로 씁니다" in pipe.role_text("chapter") and "opinion_as_fact" in pipe.role_text("edit")
+
+
+# ---------------------------------------------------------------- source 계약 · 사실 보존 · 로그 (01:02Z flash-lite 회귀)
+
+LITE_V5B = ROOT / "tests" / "data" / "v5_analysis_20261027T010241Z.json"
+
+
+def test_reported_is_a_marker_not_a_source_and_is_not_auto_converted(tmp_path):
+    data, turn_map = source_c()
+    a = json.loads(LITE_V5B.read_text(encoding="utf-8"))
+    with pytest.raises(pipe.PipelineError) as e:
+        pipe.check_analysis(a, T_of(data), pipe.turn_marks(data), pipe.source_texts(data))
+    assert e.value.kind == "format" and "f56.source='reported'" in e.value.message
+    assert next(f for f in a["facts"] if f["id"] == "f56")["source"] == "reported"   # 바꿔 통과시키지 않는다
+    r = asyncio.run(pipe.run_analysis_only(data, turn_map, call=Fake({"analysis": json.loads(LITE_V5B.read_text(encoding="utf-8"))}),
+                                           recorder=pipe.Recorder(tmp_path)))
+    assert r["analysis_ok"] is False and r["semantic_checks"] == "not_run"
+    text = (tmp_path / "01_memory_map.md").read_text(encoding="utf-8")
+    assert "뜻 검사 미실행" in text and "검사 미실행 (경고 0건이 아니다)" in text
+
+
+def test_lite_v5b_meaning_losses_are_all_caught():
+    """01:02Z 출력을 source 만 self 로 고친 사본(시험용) — 사실 원장에서 빠진 뜻을 모두 찾는다. 38 은 보존돼 통과."""
+    data, _ = source_c()
+    a = json.loads(LITE_V5B.read_text(encoding="utf-8"))
+    next(f for f in a["facts"] if f["id"] == "f56")["source"] = "self"
+    with pytest.raises(pipe.PipelineError) as e:
+        pipe.check_analysis(a, T_of(data), pipe.turn_marks(data), pipe.source_texts(data))
+    d = " / ".join(e.value.details)
+    for want in ("턴 2 원문의 수 · 기간 표현 ['이십오 년']",           # 운영 기간의 대략 표현
+                 "턴 8 원문의 감정 말 ['뿌듯함 · 자부심']",           # 대학 보낸 자부심
+                 "턴 13 에 남에게 들은 이야기 말투",                 # 울었대요
+                 "턴 16 원문의 감정 말 ['좋음 · 기쁨', '힘듦']",      # 힘들었지만 좋았다
+                 "턴 29 원문의 부정 표현",                          # 바다 쪽은 쳐다보지도 않았다
+                 "턴 35 에서 화자가 직접 받은 말",                   # 남들은 고물이라고 팔라고
+                 "턴 37 원문의 망설임"):                             # 대단한 게 있나 싶은데
+        assert want in d, want
+    assert "턴 38" not in d                                           # 싫었던 소리 · 언니 생각 · 못 버림 모두 보존
+    assert a["normalized"][0]["changed"] is False and a["normalized"][0]["applied"] is False
+    assert not any("정정 정규화" in w for w in e.value.warnings)       # 바꾼 것이 없으면 정규화로 적지 않는다
+    assert any("m6(자녀들의 결혼과 가족의 소식)" in w for w in e.value.warnings)   # 무관한 묶음은 경고로 유지
+
+
+def test_turn_marks_for_negation_doubt_numbers_and_pride():
+    data, _ = source_c()
+    m = {x["turn"]: x for x in pipe.turn_marks(data)}
+    assert m[10]["negation"] and m[29]["negation"] and m[27]["negation"]      # 기억은 안 나요 · 쳐다보지도 않았어요 · 별말 없었어요
+    assert 39 not in m                                                       # "없어요." 는 질문에 대한 답 — 사실의 부정 아님
+    assert m[37]["doubt"] and m[2]["numbers"] == ["이십오 년", "2010"]
+    assert m[28]["numbers"] == []                                            # 두 번(횟수)은 수 보존 대상이 아니다
+    assert "뿌듯함 · 자부심" in m[8]["emotions"]                              # 내가 했다 싶어요
+
+
+@pytest.mark.parametrize("num, n", [("이십오", 25), ("육", 6), ("십", 10), ("열일곱", 17), ("네", 4), ("스무", 20), ("곰", None)])
+def test_korean_numbers_match_digits(num, n):
+    assert pipe._korean_number(num) == n
+
+
+def test_approximate_duration_can_be_written_in_digits():
+    assert pipe._num_supported("육|년", "약6년", {"6"}) and pipe._num_supported("이십오|년", "25년쯤", {"25"})
+    assert not pipe._num_supported("이십오|년", "오래함", set())
+
+
+def test_analysis_prompt_states_three_sources_and_meaning_preservation():
+    a = pipe.role_text("analysis")
+    assert '"self" · "heard" · "view" 세 값뿐' in a and "turn_marks의 이름(reported 등)을 source에 쓰지 마세요" in a
+    assert "참고 표시" in a and "원문의 뜻을 메모에서 잃지 마세요" in a
+    for k in ("수 · 기간 · 나이", "부정 표현", "남이 화자에게 한 말", "망설임", "자부심"):
+        assert k in a, k
