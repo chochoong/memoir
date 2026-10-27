@@ -69,7 +69,7 @@ def fact(fid, turns, text="일", time="", source="self", certainty="stated", kee
 def analysis_ok():
     return {
         "status": "ready",
-        "facts": [fact("f1", [1], "첫 월급", "1979년"), fact("f2", [2], "목도리를 사 드림"),
+        "facts": [fact("f1", [1], "첫 월급", "1979년"), fact("f2", [2], "목도리를 사 드려 뿌듯했음"),
                   fact("f3", [5], "딸 입학", "1996년"), fact("f4", [6], "뭉클했음")],
         "units": [{"id": "m1", "name": "첫 월급", "facts": ["f1", "f2"], "time": "1979년", "weight": "main"},
                   {"id": "m2", "name": "딸 입학", "facts": ["f3", "f4"], "time": "1996년", "weight": "main"}],
@@ -198,9 +198,14 @@ def T_of(data):
 
 
 def seed_c_facts(data):
-    """Seed C 턴마다 사실 하나 — 들은 이야기 표지가 있는 턴은 heard 로 (분석 계약을 지키는 최소 원장)."""
-    heard = {m["turn"] for m in pipe.turn_marks(data) if m["heard"]}
-    return [fact(f"f{t}", [t], source="heard" if t in heard else "self") for t in sorted(T_of(data))]
+    """Seed C 턴마다 사실 하나 — 메모는 원문 그대로, 들은 이야기 표지 턴은 heard · 평가 표지 턴은 view
+    (분석 계약을 지키는 최소 원장 — 시험용. 사실 수를 턴 수에 맞추라는 뜻이 아니다)."""
+    marks = {m["turn"]: m for m in pipe.turn_marks(data)}
+    src = pipe.source_texts(data)
+    def kind(t):
+        m = marks.get(t, {})
+        return "heard" if m.get("heard") else "view" if m.get("view") else "self"
+    return [fact(f"f{t}", [t], src[t], source=kind(t)) for t in sorted(T_of(data))]
 
 
 # ---------------------------------------------------------------- 흐름
@@ -1311,7 +1316,7 @@ def test_failed_v5_analysis_reports_every_problem_and_stops_before_outline():
     assert "사실 ['f51'] 이 어느 기억 단위에도 없다" in d
     assert "사실 f34 의 turns" in d                                    # 정정 기록이 정정 전 사실을 가리킴
     assert "다른 사실 f40 에도 시점" in d                              # 정정 전 f34 와 유효 f40 이 나뉨
-    assert "턴 13 에 들은 이야기 말투" in d
+    assert "턴 13 에 남에게 들은 이야기 말투" in d
     assert "keep 이 사실 58개 중 42개" in d
     w = " / ".join(e.value.warnings)
     assert "m2(대전 수선집 운영과 삶) 가 1983~2010년" in w           # 여러 시기를 한 단위로
@@ -1395,8 +1400,8 @@ def test_turn13_heard_and_remembered_must_be_split_at_fact_level():
     f13 = next(f for f in a["facts"] if f["id"] == "f13")
     f13.update(source="self", text="시집가던 날 버스 정류장에서 많이 울었음")
     errors, _ = _diag(a, data)
-    assert any("턴 13 에 들은 이야기 말투" in x for x in errors)
-    f13.update(text="시집가던 날 많이 울었다고 들음")                     # 들은 부분을 나눈 사실 + 기억 부분
+    assert any("턴 13 에 남에게 들은 이야기 말투" in x for x in errors)
+    f13.update(source="heard", text="시집가던 날 많이 울었다고 들음")   # 들은 부분(heard) + 기억 부분(self)으로 나눔
     a["facts"].append(fact("f40", [13], "버스 정류장이 기억남"))
     a["units"].append({"id": "m99", "name": "n", "facts": ["f40"], "time": "", "weight": "minor"})
     errors, _ = _diag(a, data)
@@ -1454,5 +1459,134 @@ def test_analysis_prompt_carries_the_stabilised_rules():
     assert "정정된 유효 사실은 하나" in a and '"before"' in a and "따로 만들지 마세요" in a and "unclear에 적으세요" in a
     assert "주 기억 단위" in a and "threads로 잇습니다" in a and "개수는 정해져 있지 않습니다" in a
     assert "핵심 사실에만" in a and "대부분의 사실은 false" in a
-    assert "한 발언에 둘이 섞이면 사실을 나눕니다" in a
+    assert "한 발언에 섞이면 사실을 나눕니다" in a
     assert "편집적 해석" in a and "희생" in a
+
+
+# ---------------------------------------------------------------- 정정 정규화 · 전언/직접 들은 말/평가 · 감정 보존
+
+LITE_V5 = ROOT / "tests" / "data" / "v5_analysis_20261027T002005Z.json"
+
+
+def test_explicit_correction_is_normalized_into_one_valid_fact():
+    """Flash-Lite 분석만(20261027T002005Z) 출력 — 정정 이력은 분명하고 사실만 둘로 나뉜 모양을 코드가 정리한다."""
+    data, _ = source_c()
+    a = json.loads(LITE_V5.read_text(encoding="utf-8"))
+    with pytest.raises(pipe.PipelineError) as e:                       # 정정 말고 다른 위반이 남아 실패한다
+        pipe.check_analysis(a, T_of(data), pipe.turn_marks(data), pipe.source_texts(data))
+    assert not any("corrections" in d for d in e.value.details)        # 정정 위반은 사라졌다
+    f = {x["id"]: x for x in a["facts"]}
+    assert f["f25"]["turns"] == [21, 25] and f["f25"]["time"] == "1985년 봄"   # 유효 사실 하나, 두 발언 출처
+    assert f["f21"]["text"] == "은행동 골목 두 평 가게를 얻음" and f["f21"]["time"] == ""   # 정정 대상 아닌 사실은 남김
+    assert f["f21"]["certainty"] == "stated"                           # 흐림은 지운 연도에 걸린 것이었다
+    assert a["corrections"] == [{"fact": "f25", "turns": [21, 25], "before": "86년", "after": "1985년 봄",
+                                 "note": a["corrections"][0]["note"]}]  # 1986 은 이력으로만
+    assert a["normalized"][0] == {"correction": 0, "applied": True, "valid_fact": "f25", "was": "f21",
+                                  "turns_added": [21], "stripped": "f21", "removed": None}
+    assert not any(re.search(r"86\s?년", x["text"] + x["time"]) for x in a["facts"])
+    nxt = pipe._analysis_for_next(a)
+    assert "86" not in json.dumps(nxt["corrections"]) and "normalized" not in nxt
+
+
+def test_correction_normalization_is_general_not_seed_specific():
+    data, _ = source_b()                                               # seed B — 1998 → 1996 정정
+    a = analysis_b()
+    a["facts"] = [fact("f1", [1], "1998년에 딸이 초등학교에 입학함", "1998년"), fact("f2", [2, 7], "노란 가방 · 뭉클했음"),
+                  fact("f3", [3], "꽃집 첫 손님"), fact("f6", [6], "입학 연도는 1996년", "1996년")]
+    a["units"] = [{"id": "m1", "name": "딸 입학", "facts": ["f1", "f2", "f6"], "time": "", "weight": "main"},
+                  {"id": "m2", "name": "꽃집", "facts": ["f3"], "time": "", "weight": "main"}]
+    a["corrections"] = [{"fact": "f1", "turns": [1, 6], "before": "1998년", "after": "1996년", "note": "입학 연도"}]
+    pipe.check_analysis(a, T_of(data), pipe.turn_marks(data), pipe.source_texts(data))
+    f = {x["id"]: x for x in a["facts"]}
+    assert f["f6"]["turns"] == [1, 6] and a["corrections"][0]["fact"] == "f6"
+    assert f["f1"]["text"] == "딸이 초등학교에 입학함" and f["f1"]["time"] == ""
+    src = (ROOT / "app" / "session" / "memoir_pipeline.py").read_text(encoding="utf-8")
+    assert not re.search(r"1985|1986|은행동|f2[15]\b", src)             # Seed C 값을 코드에 두지 않는다
+
+
+@pytest.mark.parametrize("change, why", [
+    (lambda a: a["facts"].append(fact("f40", [25], "다시 1985년 봄이라 함", "1985년 봄")), "정뒤 둘"),
+    (lambda a: a["corrections"][0].update(before="", after=""), "이력 없음"),
+    (lambda a: a["corrections"][0].update(before="작은 가게", after="큰 가게"), "연도 없는 정정"),
+])
+def test_unclear_corrections_are_not_guessed(change, why):
+    data, _ = source_c()
+    a = json.loads(LITE_V5.read_text(encoding="utf-8"))
+    change(a)
+    if why == "정뒤 둘":
+        a["units"][1]["facts"].append("f40")
+    with pytest.raises(pipe.PipelineError) as e:
+        pipe.check_analysis(a, T_of(data), pipe.turn_marks(data), pipe.source_texts(data))
+    assert a["normalized"][0]["applied"] is False, why                 # 고치지 않고
+    assert any("corrections" in d for d in e.value.details), why       # 실패로 멈춘다
+
+
+def test_stripped_fact_with_nothing_left_is_removed():
+    data, _ = source_c()
+    a = _seed_c_corrected(data)
+    a["corrections"][0]["fact"] = "f21"
+    f25 = next(f for f in a["facts"] if f["id"] == "f25")
+    f25["turns"] = [25]
+    a["facts"].append(fact("f40", [21], "86년쯤", "86년쯤", certainty="uncertain"))
+    a["units"].append({"id": "m99", "name": "n", "facts": ["f40"], "time": "", "weight": "minor"})
+    log = pipe.normalize_corrections(a)
+    assert log[0]["removed"] == "f40" and all(f["id"] != "f40" for f in a["facts"])
+    assert all("f40" not in u["facts"] for u in a["units"]) and f25["turns"] == [21, 25]
+
+
+def test_turn_marks_separate_heard_reported_view_and_emotions():
+    data, _ = source_c()
+    m = {x["turn"]: x for x in pipe.turn_marks(data)}
+    assert m[13]["heard"] and not m[13]["reported"]                    # 울었대요 — 남에게 들은 지난 일
+    assert m[16]["reported"] and not m[16]["heard"]                    # 엄마가 편지로 고맙다고 했어요 — 직접 받은 말
+    assert m[32]["view"] and not m[32]["heard"]                        # 닮았다고 제가 그래요 — 화자의 평가
+    assert m[38]["emotions"] == ["싫음"] and set(m[31]["emotions"]) == {"좋음 · 기쁨", "아쉬움 · 서운함"}
+
+
+def test_turn16_32_38_keep_their_meaning():
+    data, _ = source_c()
+    a = _seed_c_corrected(data)
+    f = {x["id"]: x for x in a["facts"]}
+    f["f16"].update(text="첫 월급을 집에 부치고 엄마에게 편지를 받음")      # 고마움 · 좋았음 · 힘들었음을 뺌
+    f["f32"].update(source="self", text="아들은 말이 없어 큰언니를 닮음")  # 평가를 사실로
+    f["f38"].update(text="언니가 준 재봉틀 소리에 언니 생각이 남")         # 지난날 싫었던 소리를 뺌
+    errors, warnings = _diag(a, data)
+    assert any("턴 16 원문의 감정 말" in x for x in errors) and not any("턴 16 에 남에게" in x for x in errors)
+    assert any("턴 32 은 화자의 평가" in x for x in errors)
+    assert any("턴 38 원문의 감정 말 ['싫음']" in x for x in errors)
+    assert any("턴 16 의 직접 들은 말" in w for w in warnings)
+    f["f16"].update(text="힘들었지만 첫 월급을 집에 부칠 때 좋았고 엄마가 편지로 고맙다고 함")
+    f["f32"].update(source="view", text="아들이 큰언니를 닮았다고 내가 말함")
+    f["f38"].update(text="지금은 그 재봉틀 소리에 언니 생각이 남")
+    a["facts"].append(fact("f40", [38], "공장 다닐 때는 그 소리가 싫었음"))
+    a["units"].append({"id": "m99", "name": "n", "facts": ["f40"], "time": "", "weight": "minor"})
+    errors, _ = _diag(a, data)
+    assert not any(re.search(r"턴 (16|32|38) ", x) for x in errors)
+
+
+def test_opinion_written_as_fact_is_flagged_in_body():
+    book = pipe.ledger({"facts": [fact("f32", [32], "아들이 큰언니를 닮았다고 내가 말함", source="view")]})
+    f = pipe.voice_findings([_chapter([("아들은 큰언니를 닮았다.", ["f32"])])], book)
+    assert [x["rule"] for x in f] == ["opinion_as_fact"]
+    assert pipe.voice_findings([_chapter([("아들이 큰언니를 닮았다고 나는 말하곤 한다.", ["f32"])])], book) == []
+    assert "opinion_as_fact" not in pipe.KEPT_ACCEPTED
+
+
+def test_unit_of_unrelated_people_and_times_is_flagged():
+    data, _ = source_c()
+    a = _seed_c_corrected(data)
+    f = {x["id"]: x for x in a["facts"]}
+    f["f33"]["time"] = "2015년"
+    a["units"] = [u for u in a["units"] if u["facts"][0] not in ("f33", "f37")]
+    a["units"].append({"id": "m99", "name": "가족의 이별과 기록", "facts": ["f33", "f37"], "time": "", "weight": "minor"})
+    _, warnings = _diag(a, data)
+    assert any("m99(가족의 이별과 기록) 의 사실들이 시기로도 끈으로도" in w for w in warnings)
+
+
+def test_analysis_prompt_separates_fact_unit_thread_and_paragraph_plan():
+    a = pipe.role_text("analysis")
+    assert "네 가지를 섞지 마세요" in a and "문단 계획" in a and "목차 단계가 합니다" in a
+    assert "사실 수는 턴 수와 같아도, 많아도, 적어도 됩니다" in a
+    assert '"view"' in a and "직접 받은 말" in a and "다른 사람의 다른 일을 한 묶음으로 만들지 마세요" in a
+    assert "화자가 말한 감정은 메모에서 빼지 마세요" in a
+    assert "화자의 생각으로 씁니다" in pipe.role_text("chapter") and "opinion_as_fact" in pipe.role_text("edit")
