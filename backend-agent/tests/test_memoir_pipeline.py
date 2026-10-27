@@ -197,6 +197,12 @@ def T_of(data):
     return {u["turn"] for u in data["utterances"]}
 
 
+def seed_c_facts(data):
+    """Seed C 턴마다 사실 하나 — 들은 이야기 표지가 있는 턴은 heard 로 (분석 계약을 지키는 최소 원장)."""
+    heard = {m["turn"] for m in pipe.turn_marks(data) if m["heard"]}
+    return [fact(f"f{t}", [t], source="heard" if t in heard else "self") for t in sorted(T_of(data))]
+
+
 # ---------------------------------------------------------------- 흐름
 
 
@@ -274,13 +280,14 @@ def test_t06_analysis_with_unknown_turn_stops_before_outline():
 
 
 @pytest.mark.parametrize("mutate, kind, why", [
-    (lambda a: a["units"][1]["facts"].append("f1"), "reference", "두 단위"),
+    (lambda a: a["units"][1]["facts"].append("f1"), "reference", "함께 있다"),
     (lambda a: a["units"][1].update(facts=["f3"]), "reference", "어느 기억 단위에도"),
     (lambda a: a.update(not_in_facts=[]), "reference", "[3, 4]"),
     (lambda a: a["facts"][0].update(source="told"), "format", "source"),
     (lambda a: a["facts"][0].update(certainty="maybe"), "format", "certainty"),
     (lambda a: a["facts"][0].pop("keep"), "format", "keep"),
-    (lambda a: a.update(corrections=[{"fact": "f1", "turns": [1], "note": "x"}]), "reference", "정정 전 · 뒤"),
+    (lambda a: a.update(corrections=[{"fact": "f1", "turns": [1], "before": "1978년", "after": "1979년",
+                                      "note": "x"}]), "reference", "정정 전 · 뒤"),
     (lambda a: a["facts"].append(fact("f1", [3])), "reference", "겹친다"),
 ])
 def test_analysis_v5_contract(mutate, kind, why):
@@ -300,13 +307,14 @@ def test_analysis_v5_warnings_marks_units_and_years():
     assert marks[2]["uncertain"] and marks[23]["uncertain"] and marks[28]["uncertain"]   # 했나 · 받았나 · 일 거예요
     assert 34 not in marks or not marks[34]["heard"]                 # 직접 겪은 별세
     assert 4 not in marks                                            # "보내 준 거예요" 는 흐림이 아니다
-    facts = [fact(f"f{t}", [t]) for t in sorted(T)]
+    facts = seed_c_facts(data)
     a = {**analysis_ok(), "facts": facts, "not_in_facts": [],
          "units": [{"id": f"m{t}", "name": "n", "facts": [f"f{t}"], "time": "", "weight": "minor"} for t in sorted(T)],
          "themes": [], "direction": {"theme": "", "reason": "", "neutral": True}}
     a["facts"][27]["time"] = "77년쯤, 2003년"                       # 두 방문을 한 사실로
+    assert marks[25]["correction"] and not marks.get(32, {}).get("heard")   # 다시 생각해 보니 · "그래요"는 전언이 아니다
     _, w = pipe.check_analysis(a, T, pipe.turn_marks(data))
-    assert any("턴 13 에 전언 표지" in x for x in w)
+    assert any("턴 25 에 정정 말투가 있는데 정정 기록이 없다" in x for x in w)   # 추측하지 않고 검토 대상으로
     assert any("사실 하나" in x for x in w)                           # 사실마다 단위 하나 — 묶는 판단을 다시
     assert any("f28 의 시점이 여럿" in x for x in w)
 
@@ -516,7 +524,7 @@ def test_edit_trace_detects_unchanged_merge_split_and_dropped_facts():
 def test_edit_receives_facts_must_keep_checks_and_listing_signals():
     data, _ = source_c()
     T = sorted(T_of(data))
-    a = {**analysis_ok(), "facts": [fact(f"f{t}", [t]) for t in T], "not_in_facts": [],
+    a = {**analysis_ok(), "facts": seed_c_facts(data), "not_in_facts": [],
          "units": [{"id": "m1", "name": "전부", "facts": [f"f{t}" for t in T], "time": "", "weight": "main"}],
          "themes": [], "direction": {"theme": "", "reason": "", "neutral": True}}
     a["facts"][12].update(source="heard", keep=True)                   # 턴 13
@@ -943,7 +951,8 @@ def analysis_b(partial=False):
                   fact("f3", [3, 4] if partial else [3], "꽃집 첫 손님")]
     a["units"] = [{"id": "m1", "name": "딸 입학", "facts": ["f1", "f2"], "time": "1996년", "weight": "main"},
                   {"id": "m2", "name": "꽃집", "facts": ["f3"], "time": "", "weight": "main"}]
-    a["corrections"] = [{"fact": "f1", "turns": [1, 6], "note": "입학 연도를 고쳐 말함"}]
+    a["corrections"] = [{"fact": "f1", "turns": [1, 6], "before": "1998년", "after": "1996년",
+                         "note": "입학 연도를 고쳐 말함"}]
     a["exclusions"] = [{"mode": "partial" if partial else "whole", "turns": [4], "requested_in": [5],
                         "scope": "빌린 사람과 금액"}]
     a["not_in_facts"] = []
@@ -1228,10 +1237,10 @@ def test_structure_moves_keep_fact_ids_and_source_turns(tmp_path):
 def test_unresolved_hearsay_or_certainty_never_reaches_awaiting_human():
     data, _ = source_c()
     T = sorted(T_of(data))
-    a = {**analysis_ok(), "facts": [fact(f"f{t}", [t]) for t in T], "not_in_facts": [],
+    a = {**analysis_ok(), "facts": seed_c_facts(data), "not_in_facts": [],
          "units": [{"id": "m1", "name": "전부", "facts": [f"f{t}" for t in T], "time": "", "weight": "main"}],
          "themes": [], "direction": {"theme": "", "reason": "", "neutral": True}}
-    a["facts"][9]["source"] = "heard"                                     # f10 — 업어 키웠다고 들음
+    assert a["facts"][9]["source"] == "heard"                             # f10 — 업어 키웠다고 들음
     o = {**outline_ok(), "chapters": [chapter_plan("ch-1", [para([f"f{t}" for t in T])])],
          "book": {**outline_ok()["book"], "closing_facts": ["f39"]}}
     body = [sent("언니가 나를 업어 키웠다.", ["f10"])] + [sent("그 일이 있었다.", [f"f{t}"]) for t in T if t != 10]
@@ -1279,3 +1288,171 @@ def test_blind_comparison_records_different_input_scope(tmp_path):
     note = (tmp_path / "out" / "검수자용" / "비교조건.md").read_text(encoding="utf-8")
     assert "입력 범위가 다르다" in note and "사람이 짠" in note
     assert not (tmp_path / "out" / "평가용" / "비교조건.md").exists()
+
+
+# ---------------------------------------------------------------- 분석 안정화 — 정정 · 기억 단위 · keep · 전언 · 주제 (v5 실패 회귀)
+
+FAILED_V5 = ROOT / "tests" / "data" / "v5_focus_analysis_20261026T093440Z.json"
+
+
+def _diag(a, data):
+    return pipe.analysis_diagnostics(a, T_of(data), pipe.turn_marks(data), pipe.source_texts(data))
+
+
+def test_failed_v5_analysis_reports_every_problem_and_stops_before_outline():
+    """v5 집중 시험(20261026T093440Z) 분석 출력 그대로 — 문제를 한 번에 모두 모으고, 목차로 넘기지 않는다."""
+    data, turn_map = source_c()
+    a = json.loads(FAILED_V5.read_text(encoding="utf-8"))
+    with pytest.raises(pipe.PipelineError) as e:
+        pipe.check_analysis(a, T_of(data), pipe.turn_marks(data), pipe.source_texts(data))
+    d = " / ".join(e.value.details)
+    assert e.value.kind == "reference"
+    assert "사실 f30 이 기억 단위 ['m2', 'm4'] 에 함께" in d and "사실 f31 이 기억 단위 ['m2', 'm4'] 에 함께" in d
+    assert "사실 ['f51'] 이 어느 기억 단위에도 없다" in d
+    assert "사실 f34 의 turns" in d                                    # 정정 기록이 정정 전 사실을 가리킴
+    assert "다른 사실 f40 에도 시점" in d                              # 정정 전 f34 와 유효 f40 이 나뉨
+    assert "턴 13 에 들은 이야기 말투" in d
+    assert "keep 이 사실 58개 중 42개" in d
+    w = " / ".join(e.value.warnings)
+    assert "m2(대전 수선집 운영과 삶) 가 1983~2010년" in w           # 여러 시기를 한 단위로
+    assert "['그리움']" in w and "['치열']" in w                       # 원문에 없는 감정 · 서사 말
+    fake = Fake({"analysis": a})
+    r = asyncio.run(pipe.run(data, turn_map, call=fake))
+    assert fake.order == ["analysis"] and r["generation_state"] == "failed"
+    assert len(r["failure"]["details"]) == len(e.value.details) >= 8
+
+
+def _seed_c_corrected(data):
+    """Seed C 개업 정정을 하나의 유효 사실로 — f25 [21, 25] 1985년 봄, 정정 이력 before 1986년."""
+    facts = [f for f in seed_c_facts(data) if f["id"] not in ("f21", "f25")]
+    facts += [fact("f21", [21], "은행동 골목에 두 평짜리 가게를 얻음"),
+              fact("f25", [21, 25], "가게를 연 때", "1985년 봄", keep=True)]
+    a = {**analysis_ok(), "facts": facts, "not_in_facts": [],
+         "units": [{"id": f"m{i}", "name": "n", "facts": [f["id"]], "time": "", "weight": "minor"}
+                   for i, f in enumerate(facts, 1)],
+         "corrections": [{"fact": "f25", "turns": [21, 25], "before": "1986년", "after": "1985년 봄",
+                          "note": "개업 연도를 다시 말함"}],
+         "themes": [], "direction": {"theme": "", "reason": "", "neutral": True}}
+    return a
+
+
+def test_correction_is_one_valid_fact_and_the_old_value_is_history_only():
+    data, _ = source_c()
+    a = _seed_c_corrected(data)
+    errors, warnings = _diag(a, data)
+    assert errors == [] and not any("정정 말투" in w for w in warnings)
+    assert "f25" in pipe.must_keep(a)
+    nxt = json.loads(pipe.outline_message(data, a).split("\n\n", 1)[1])["analysis"]
+    assert nxt["corrections"] == [{"fact": "f25", "turns": [21, 25], "after": "1985년 봄"}]   # before 는 넘기지 않는다
+
+    split = copy.deepcopy(a)                                           # v5 실패 모양 — 정정 전 값을 별개 사실로
+    split["facts"].append(fact("f40", [21], "가게를 연 것이 86년", "86년이었을 것", certainty="uncertain", keep=True))
+    split["units"].append({"id": "m99", "name": "n", "facts": ["f40"], "time": "", "weight": "minor"})
+    errors, _ = _diag(split, data)
+    assert any("정정 전 값(1986년)을 별개 사실 f40" in x for x in errors)
+
+    stale = copy.deepcopy(a)
+    next(f for f in stale["facts"] if f["id"] == "f25")["time"] = "1986년"
+    errors, _ = _diag(stale, data)
+    assert any("정정 전 값(1986년)이 남아" in x for x in errors) and any("정정 뒤 값(1985년 봄)이 없다" in x for x in errors)
+
+    for bad, why in (({"before": ""}, "before · after"), ({"after": "1986년"}, "before · after"),
+                     ({"turns": [21, 24]}, "정정 전 · 뒤 턴")):
+        x = copy.deepcopy(a)
+        x["corrections"][0].update(bad)
+        errors, _ = _diag(x, data)
+        assert any(why in e for e in errors), bad                      # 불명확한 정정은 추측하지 않고 실패
+
+
+def test_stale_correction_value_in_body_blocks():
+    data, _ = source_c()
+    a = _seed_c_corrected(data)
+    ch = _chapter([("1986년 봄에 은행동에 가게를 열었다.", ["f21", "f25"])])
+    f = pipe.correction_findings([ch], a)
+    assert [(x["rule"], x["severity"], x["fact"]) for x in f] == [("stale_correction", "block", "f25")]
+    ch = _chapter([("1985년 봄에 은행동에 가게를 열었다.", ["f21", "f25"])])
+    assert pipe.correction_findings([ch], a) == []
+    assert pipe.correction_findings([], a, sent("86년의 가게", [], "editorial"))[0]["location"] == "title"
+
+
+@pytest.mark.parametrize("share, kind", [(0.6, "error"), (0.4, "warning"), (0.1, None)])
+def test_keep_is_for_core_facts_only(share, kind):
+    data, _ = source_c()
+    a = _seed_c_corrected(data)
+    n = len(a["facts"])
+    for f in a["facts"]:
+        f["keep"] = False
+    for f in a["facts"][:int(n * share)]:
+        f["keep"] = True
+    errors, warnings = _diag(a, data)
+    hit = [x for x in errors if x.startswith("keep")], [x for x in warnings if x.startswith("keep")]
+    assert (bool(hit[0]), bool(hit[1])) == {"error": (True, False), "warning": (False, True), None: (False, False)}[kind]
+
+
+def test_turn13_heard_and_remembered_must_be_split_at_fact_level():
+    data, _ = source_c()
+    a = _seed_c_corrected(data)
+    f13 = next(f for f in a["facts"] if f["id"] == "f13")
+    f13.update(source="self", text="시집가던 날 버스 정류장에서 많이 울었음")
+    errors, _ = _diag(a, data)
+    assert any("턴 13 에 들은 이야기 말투" in x for x in errors)
+    f13.update(text="시집가던 날 많이 울었다고 들음")                     # 들은 부분을 나눈 사실 + 기억 부분
+    a["facts"].append(fact("f40", [13], "버스 정류장이 기억남"))
+    a["units"].append({"id": "m99", "name": "n", "facts": ["f40"], "time": "", "weight": "minor"})
+    errors, _ = _diag(a, data)
+    assert not any("턴 13" in x for x in errors)
+    f37 = next(f for f in a["facts"] if f["id"] == "f37")                  # 딸이 한 말을 전한 것 — 직접 겪은 일
+    f37.update(source="self", text="딸이 이야기를 책으로 남기자고 함")
+    assert not any("턴 37" in x for x in _diag(a, data)[0])
+
+
+def test_unit_spanning_unrelated_periods_and_loaded_theme_words_are_flagged():
+    data, _ = source_c()
+    a = _seed_c_corrected(data)
+    times = {"f19": "1983년쯤", "f2": "2010년", "f22": "", "f23": "", "f24": "", "f3": ""}
+    for f in a["facts"]:
+        if f["id"] in times:
+            f["time"] = times[f["id"]]
+    a["units"] = [u for u in a["units"] if u["facts"][0] not in times]
+    a["units"].append({"id": "m99", "name": "가게를 한 세월 전체", "facts": list(times), "time": "", "weight": "main"})
+    a["themes"] = [{"theme": "재봉틀에 담긴 그리움", "supporting": [38], "counter": [], "strength": "clear"},
+                   {"theme": "언니가 준 재봉틀과 함께한 세월", "supporting": [4, 26, 38], "counter": [7], "strength": "clear"}]
+    errors, warnings = _diag(a, data)
+    assert errors == []
+    assert any("m99(가게를 한 세월 전체) 가 1983~2010년" in w for w in warnings)
+    assert any("['그리움']" in w for w in warnings) and not any("함께한 세월" in w for w in warnings)
+
+
+def test_analysis_only_mode_is_one_call_and_writes_the_memory_map(tmp_path):
+    data, turn_map = source_c()
+    bad = json.loads(FAILED_V5.read_text(encoding="utf-8"))
+    fake = Fake({"analysis": bad})
+    r = asyncio.run(pipe.run_analysis_only(data, turn_map, call=fake, recorder=pipe.Recorder(tmp_path)))
+    assert fake.order == ["analysis"] and r["calls"] == 1 and r["analysis_ok"] is False
+    assert len(r["diagnostics"]) >= 8 and r["memory_map"]["keep"] == 42 and r["human_review"] == "not_run"
+    text = (tmp_path / "01_memory_map.md").read_text(encoding="utf-8")
+    assert "f30 (중복)" in text and "계약 위반" in text and "keep 이 사실 58개 중 42개" in text
+    good = _seed_c_corrected(data)
+    r = asyncio.run(pipe.run_analysis_only(data, turn_map, call=Fake({"analysis": good}),
+                                           recorder=pipe.Recorder(tmp_path / "ok")))
+    assert r["analysis_ok"] is True and r["generation_state"] == "analyzed" and r["diagnostics"] == []
+    assert r["memory_map"]["corrections"][0]["before"] == "1986년"         # 정정 이력은 분석 기록에 남는다
+    run_doc = json.loads((tmp_path / "ok" / "run.json").read_text(encoding="utf-8"))
+    assert run_doc["mode"] == "analysis_only" and [s["stage"] for s in run_doc["steps"]] == ["analysis"]
+
+
+def test_cli_analysis_only_dry_run(capsys):
+    args = ["--seed", str(SEED_C_PATH), "--aliases", "c1,c2,c3,c4,c5", "--dry-run"]
+    assert cli.main(args + ["--analysis-only"]) == 0
+    out = capsys.readouterr().out
+    assert "분석만 · 예상 호출 1회" in out and "모델을 부르지 않았다" in out
+    assert cli.main(args + ["--analysis-only", "--focus", "소재"]) == 2
+
+
+def test_analysis_prompt_carries_the_stabilised_rules():
+    a = pipe.role_text("analysis")
+    assert "정정된 유효 사실은 하나" in a and '"before"' in a and "따로 만들지 마세요" in a and "unclear에 적으세요" in a
+    assert "주 기억 단위" in a and "threads로 잇습니다" in a and "개수는 정해져 있지 않습니다" in a
+    assert "핵심 사실에만" in a and "대부분의 사실은 false" in a
+    assert "한 발언에 둘이 섞이면 사실을 나눕니다" in a
+    assert "편집적 해석" in a and "희생" in a

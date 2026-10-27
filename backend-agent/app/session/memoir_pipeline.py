@@ -129,8 +129,9 @@ _QUOTE = re.compile(r"'[^']*'|\"[^\"]*\"|“[^”]*”|‘[^’]*’")
 
 # 원문(사용자 발언)의 전언 · 불확실 표지 — 코드가 먼저 찾아 분석에 표시로 준다 (모델 판단을 돕는 표시일 뿐)
 _HEARD_SRC = re.compile(r"대요|다고\s?(하더라고요|하데요|하더라|했어요|들었|그러)|라고\s?(하더라고요|들었)"
-                        r"|들었어요|그러더라고요|래요")
+                        r"|들었어요|그러더라고요|(?<!그)래요")
 _UNCERTAIN_SRC = re.compile(r"쯤|인가|땐가|던가|했나|았나|었나|였나|[일을]\s?거예요|것\s?같|아마|년\?")
+_CORRECTION_SRC = re.compile(r"다시\s?생각해\s?보니|고칠게요|잘못\s?말|정정|이\s?아니라|가\s?아니라")
 # 본문의 전언 · 흐림 표지 — 들은 사실 · 대략의 사실을 단정으로 바꿨는지 볼 때
 _HEARD_BODY = re.compile(r"다고|라고|자고|냐고|다며|라며|단다|대서|댔|들었|들은|전해|하더라")
 _HEDGE_BODY = re.compile(r"쯤|무렵|것\s?같|듯|인지|였을|았을|었을|던가|인가|아마|정도|즈음|기억이|확실하지|약\s|대략|남짓|어림")
@@ -152,10 +153,14 @@ class PipelineError(RuntimeError):
     def __init__(self, stage: str, kind: str, message: str, chapter_key: str | None = None):
         super().__init__(f"{stage}{'/' + chapter_key if chapter_key else ''} {kind} — {message}")
         self.stage, self.kind, self.message, self.chapter_key = stage, kind, message, chapter_key
+        self.details: list[str] = []          # 한 번에 모은 문제 전부 (분석 계약 위반 등)
+        self.warnings: list[str] = []
 
     def as_dict(self) -> dict:
-        return {"stage": self.stage, "chapter_key": self.chapter_key,
-                "kind": self.kind, "message": self.message}
+        out = {"stage": self.stage, "chapter_key": self.chapter_key, "kind": self.kind, "message": self.message}
+        if self.details:
+            out["details"] = self.details
+        return out
 
 
 # ---------------------------------------------------------------- 설정
@@ -260,7 +265,7 @@ def check_input(data, turn_map) -> set[int]:
 
 def turn_marks(data: dict) -> list[dict]:
     """
-    원문 턴의 전언(heard) · 불확실(uncertain) 표지 — 사용자 발언의 말끝에서 코드가 찾는다.
+    원문 턴의 전언(heard) · 불확실(uncertain) · 정정(correction) 표지 — 사용자 발언에서 코드가 찾는다.
 
     분석이 사실마다 source · certainty 를 정할 때 참고하는 **표시**다(판정이 아니다). 한 턴에
     들은 이야기와 직접 기억이 섞일 수 있어 턴 표시를 사실 값으로 그대로 옮기지 않는다.
@@ -268,9 +273,14 @@ def turn_marks(data: dict) -> list[dict]:
     out = []
     for u in data["utterances"]:
         heard, unsure = bool(_HEARD_SRC.search(u["elder"])), bool(_UNCERTAIN_SRC.search(u["elder"]))
-        if heard or unsure:
-            out.append({"turn": u["turn"], "heard": heard, "uncertain": unsure})
+        fix = bool(_CORRECTION_SRC.search(u["elder"]))
+        if heard or unsure or fix:
+            out.append({"turn": u["turn"], "heard": heard, "uncertain": unsure, "correction": fix})
     return out
+
+
+def source_texts(data: dict) -> dict[int, str]:
+    return {u["turn"]: u["elder"] for u in data["utterances"]}
 
 
 def excluded_turns(analysis: dict) -> set[int]:
@@ -489,7 +499,151 @@ class _Check:
 # ---------------------------------------------------------------- ① 분석 검사
 
 
-def check_analysis(out, T: set[int], marks: list[dict] | None = None) -> tuple[str, list[str]]:
+KEEP_ERROR_RATIO = 0.5          # keep 이 사실의 절반을 넘으면 「핵심」 표시가 아니다 — 실패
+KEEP_WARN_RATIO = 0.3
+UNIT_SPAN_YEARS = 15            # 한 기억 단위의 연도 폭이 이만큼 넘고 사실이 많으면 여러 시기를 묶은 것인지 본다
+UNIT_SPAN_FACTS = 6
+# 원문에 없으면 주제 이름으로 단정하지 않는 말 — 감정 · 희생 서사 (편집적 해석이 화자의 사실처럼 되지 않게)
+_LOADED_THEME = re.compile(r"그리움|그리워|희생|헌신|치열|사랑|한평생|보람|감사|숙명|운명|눈물")
+_REPORTED = re.compile(r"다고|라고|자고|냐고|대요|들음|들었")
+
+
+def _year_forms(text: str) -> set[str]:
+    return _years(text or "")
+
+
+def analysis_diagnostics(out: dict, T: set[int], marks: list[dict] | None = None,
+                         texts: dict[int, str] | None = None) -> tuple[list[str], list[str]]:
+    """
+    모양 검사를 통과한 분석 출력의 뜻 검사 — **문제를 모두 모아** (errors, warnings) 로 돌려준다.
+    errors 가 하나라도 있으면 check_analysis 가 실패로 멈춘다(다음 단계로 넘기지 않는다). 한 번에 여러
+    문제가 있어도 첫 문제에서 멈추지 않고 전체 진단을 남긴다.
+
+        errors   빼 달라고 한 턴의 사용 · 빠진 턴 · 사실의 단위 중복 · 단위 없는 사실 · 정정 오류(정정 전 값이
+                 별개 사실 · 유효 사실에 정정 전 값 · 불명확한 정정) · 들은 이야기 표지 턴에 들은 사실 없음 ·
+                 keep 과다(사실의 절반 초과)
+        warnings 불확실 표지 턴의 사실이 모두 stated · 정정 표지 턴인데 정정 기록 없음(검토 대상) · 여러 시기를
+                 묶은 큰 기억 단위 · 원문에 없는 감정 · 희생 말로 정한 주제 · 시점이 여럿인 사실 · keep 이 많음 ·
+                 사실 하나짜리 단위가 대부분 · 주제와 방향의 앞뒤
+    """
+    errors: list[str] = []
+    warnings: list[str] = []
+    gone = excluded_turns(out)
+    facts = {f["id"]: f for f in out["facts"]}
+
+    # 빼 달라고 한 턴 · 빠진 턴
+    covered: set[int] = set()
+    for f in facts.values():
+        bad = sorted(set(f["turns"]) & gone)
+        if bad:
+            errors.append(f"{f['id']}.turns {bad} — 빼 달라고 한 턴을 사실 근거로 씀")
+        covered |= set(f["turns"])
+    left = {t for x in out["not_in_facts"] for t in x["turns"]}
+    missing = sorted(T - covered - left - gone)
+    if missing:
+        errors.append(f"턴 {missing} 이 사실 · not_in_facts · exclusions 어디에도 없다")
+
+    # 기억 단위 — 사실은 정확히 한 주 기억 단위에. 같은 사람 · 물건이 여러 단위에 나오면 끈으로 잇는다
+    home: dict[str, list[str]] = {}
+    for u in out["units"]:
+        for fid in u["facts"]:
+            home.setdefault(fid, []).append(u["id"])
+    for fid in sorted(home, key=lambda x: int(x[1:])):
+        if len(home[fid]) > 1:
+            errors.append(f"사실 {fid} 이 기억 단위 {home[fid]} 에 함께 있다 — 주 기억 단위 하나에만, 이어지는 것은 threads 로")
+    lost = sorted(set(facts) - set(home), key=lambda x: int(x[1:]))
+    if lost:
+        errors.append(f"사실 {lost} 이 어느 기억 단위에도 없다")
+    for u in out["units"]:
+        ys = {y for fid in u["facts"] if fid in facts for y in _full_years(facts[fid]["time"] + " " + facts[fid]["text"])}
+        if len(u["facts"]) >= UNIT_SPAN_FACTS and ys and max(ys) - min(ys) > UNIT_SPAN_YEARS:
+            warnings.append(f"기억 단위 {u['id']}({u['name']}) 가 {min(ys)}~{max(ys)}년 사실 {len(u['facts'])}개를 묶었다 — "
+                            "여러 시기의 다른 이야기를 한 단위로 묶었는지 본다(같은 사람 · 물건은 threads 로)")
+    singles = sum(1 for u in out["units"] if len(u["facts"]) == 1)
+    if len(out["units"]) > 3 and singles / len(out["units"]) >= 0.7:
+        warnings.append(f"기억 단위 {len(out['units'])}개 중 {singles}개가 사실 하나 — 기억을 묶는 판단을 다시 본다")
+
+    # 정정 — 하나의 정정된 유효 사실(정정 뒤 값 · 정정 전 · 뒤 턴 모두)과 정정 이력(before)만. 추측해서 고치지 않는다
+    corrected: set[str] = set()
+    for i, x in enumerate(out["corrections"]):
+        at = f"corrections[{i}]"
+        fid, ts = x["fact"], set(x["turns"])
+        corrected.add(fid)
+        f = facts.get(fid)
+        if f is None:
+            errors.append(f"{at}.fact {fid!r} — 원장에 없는 사실")
+            continue
+        if len(ts) < 2 or ts - set(f["turns"]):
+            errors.append(f"{at}.turns {sorted(ts)} — 정정 전 · 뒤 턴이 모두 사실 {fid} 의 turns 에 있어야 한다")
+        before, after = x.get("before", "").strip(), x.get("after", "").strip()
+        clear = bool(before and after and _norm(before) != _norm(after))
+        if not clear:
+            errors.append(f"{at} — 정정 이력 before · after 가 없거나 같다: 정정 전 · 뒤 값을 적거나, 불명확한 정정이면 "
+                          "corrections 에 넣지 않고 unclear 로")
+        b_years, a_years = (_year_forms(before), _year_forms(after)) if clear else (set(), set())
+        if clear:
+            own = f["time"] + " " + f["text"]
+            if b_years - a_years and _year_forms(own) & (b_years - a_years):
+                errors.append(f"{at} — 유효 사실 {fid} 에 정정 전 값({before})이 남아 있다")
+            if a_years and not _year_forms(own) & a_years:
+                errors.append(f"{at} — 유효 사실 {fid} 에 정정 뒤 값({after})이 없다")
+        # 정정 턴에 시점을 가진 사실이 따로 있으면 — 정정 전 값이 별개 사실로 남았거나, 유효 사실이 둘로 나뉜 것
+        for g in facts.values():
+            if g["id"] == fid or not set(g["turns"]) & ts:
+                continue
+            g_years = _year_forms(g["time"] + " " + g["text"])
+            if (b_years - a_years) & g_years or (clear and not b_years and _norm(before) in _norm(g["text"])):
+                errors.append(f"{at} — 정정 전 값({before})을 별개 사실 {g['id']} 로 남겼다: 정정 이력(before)으로만 둔다")
+            elif g_years:
+                errors.append(f"{at} — 정정 턴의 다른 사실 {g['id']} 에도 시점({sorted(g_years)})이 있다: "
+                              f"정정 전 사실({fid})과 정정 뒤 사실이 나뉘었다 — 정정된 유효 사실 하나로")
+    for fid, f in facts.items():
+        years = _years(f["time"])
+        if len(years) > 1 and fid not in corrected:
+            warnings.append(f"사실 {fid} 의 시점이 여럿 {sorted(years)} — 별개의 일을 합쳤는지 본다")
+    in_corr = {t for x in out["corrections"] for t in x["turns"]}
+    for m in marks or []:
+        if m.get("correction") and m["turn"] not in in_corr:
+            warnings.append(f"턴 {m['turn']} 에 정정 말투가 있는데 정정 기록이 없다 — 검토 대상(추측해서 고치지 않는다)")
+
+    # 들은 이야기 · 흐린 기억 — 한 발언에 섞이면 사실 수준에서 나눈다
+    by_turn: dict[int, list[dict]] = {}
+    for f in facts.values():
+        for t in f["turns"]:
+            by_turn.setdefault(t, []).append(f)
+    for m in marks or []:
+        fs = by_turn.get(m["turn"], [])
+        if m["heard"] and fs and not any(f["source"] == "heard" or _REPORTED.search(f["text"]) for f in fs):
+            errors.append(f"턴 {m['turn']} 에 들은 이야기 말투가 있는데 그 턴의 사실이 모두 직접 기억(self) — "
+                          "들은 부분을 heard 사실로 나눈다")
+        if m["uncertain"] and fs and all(f["certainty"] == "stated" for f in fs):
+            warnings.append(f"턴 {m['turn']} 에 불확실 표지가 있는데 모든 사실이 stated")
+
+    # keep — 핵심 사실에만. 일반 사실을 본문에 쓸지는 목차가 정한다
+    keeps = sum(1 for f in facts.values() if f["keep"])
+    if facts and keeps / len(facts) > KEEP_ERROR_RATIO:
+        errors.append(f"keep 이 사실 {len(facts)}개 중 {keeps}개 — 핵심 사실에만 둔다(본문 사용 여부는 목차가 정한다)")
+    elif facts and keeps / len(facts) > KEEP_WARN_RATIO:
+        warnings.append(f"keep 이 사실 {len(facts)}개 중 {keeps}개 — 핵심 사실인지 다시 본다")
+
+    # 주제 — 원문 근거가 있는 편집적 해석은 되지만, 원문에 없는 감정 · 희생 말을 화자의 것으로 단정하지 않는다
+    for t in out["themes"] if texts is not None else []:
+        words = set(_LOADED_THEME.findall(t["theme"]))
+        said = " ".join(texts.get(x, "") for x in t["supporting"])
+        unsaid = sorted(w for w in words if w not in said)
+        if unsaid:
+            warnings.append(f"주제 「{t['theme']}」의 {unsaid} 는 근거 턴 원문에 없는 말 — 화자의 감정 · 서사로 단정하지 않는다")
+    d = out["direction"]
+    clear = [t["theme"] for t in out["themes"] if t["strength"] == "clear"]
+    if d["neutral"] and d["theme"].strip():
+        warnings.append("direction.neutral=true 인데 theme 을 정했다")
+    if not d["neutral"] and not clear:
+        warnings.append("clear 인 주제가 없는데 direction.neutral=false")
+    return errors, warnings
+
+
+def check_analysis(out, T: set[int], marks: list[dict] | None = None,
+                   texts: dict[int, str] | None = None) -> tuple[str, list[str]]:
     """
     사실 원장(facts)과 기억 단위(units)를 나눠 본다.
 
@@ -497,7 +651,11 @@ def check_analysis(out, T: set[int], marks: list[dict] | None = None) -> tuple[s
                 사실마다 문장 하나를 쓰라는 뜻이 아니다. 서로 다른 해의 방문 · 서로 다른 사람의
                 일은 서로 다른 사실이다
         units   독자가 하나의 이야기로 읽을 기억 덩어리 — 사실 여럿을 묶는다. 모든 사실은 정확히
-                한 기억 단위에 든다
+                한 주 기억 단위에 든다
+        corrections  정정된 유효 사실 하나(정정 뒤 값, 정정 전 · 뒤 턴 모두) + 정정 이력 before · after
+
+    모양이 틀리면 바로 멈추고, 모양이 맞으면 analysis_diagnostics 로 뜻의 문제를 모두 모은 뒤
+    하나라도 있으면 그 전체를 details 에 담아 멈춘다.
     """
     c = _Check("analysis")
     out = c.obj(out, ("status", "facts", "units", "threads", "people", "corrections", "themes",
@@ -515,7 +673,7 @@ def check_analysis(out, T: set[int], marks: list[dict] | None = None) -> tuple[s
     if not out["facts"] or not out["units"]:
         raise c.fail("format", "ready 인데 facts · units 가 비었다")
 
-    # 제외 범위 — whole 은 턴째로 막고, partial 은 턴을 남긴 채 scope 로 알린다
+    # ---- 모양 (틀리면 바로 멈춘다)
     gone: set[int] = set()
     for i, x in enumerate(out["exclusions"]):
         at = f"exclusions[{i}]"
@@ -533,16 +691,12 @@ def check_analysis(out, T: set[int], marks: list[dict] | None = None) -> tuple[s
     partial = {t for x in out["exclusions"] if x["mode"] == "partial" for t in x["turns"]}
     if partial & gone:
         raise c.fail("reference", f"턴 {sorted(partial & gone)} 이 partial 과 whole · 요청 턴에 함께 있다")
-    left: set[int] = set()
     for i, x in enumerate(out["not_in_facts"]):
         if not isinstance(x, dict):
             raise c.fail("format", f"not_in_facts[{i}] 가 객체가 아니다")
-        left |= set(c.turns(x.get("turns"), T, f"not_in_facts[{i}]"))
+        c.turns(x.get("turns"), T, f"not_in_facts[{i}]")
         c.text(x.get("reason"), f"not_in_facts[{i}].reason")
-
-    # 사실 원장
-    facts: dict[str, dict] = {}
-    covered: set[int] = set()
+    ids: set[str] = set()
     for i, f in enumerate(out["facts"]):
         at = f"facts[{i}]"
         if not isinstance(f, dict):
@@ -550,12 +704,10 @@ def check_analysis(out, T: set[int], marks: list[dict] | None = None) -> tuple[s
         fid = f.get("id")
         if not isinstance(fid, str) or not _FACT_ID.match(fid):
             raise c.fail("format", f"{at}.id={fid!r} — f<숫자>")
-        if fid in facts:
+        if fid in ids:
             raise c.fail("reference", f"사실 id {fid} 가 겹친다")
-        ts = c.turns(f.get("turns"), T, fid, nonempty=True)
-        bad = sorted(set(ts) & gone)
-        if bad:
-            raise c.fail("reference", f"{fid}.turns {bad} — 빼 달라고 한 턴을 사실 근거로 씀")
+        ids.add(fid)
+        c.turns(f.get("turns"), T, fid, nonempty=True)
         c.text(f.get("text"), f"{fid}.text")
         if not isinstance(f.get("time"), str):
             raise c.fail("format", f"{fid}.time 이 문자열이 아니다")
@@ -565,67 +717,29 @@ def check_analysis(out, T: set[int], marks: list[dict] | None = None) -> tuple[s
             raise c.fail("format", f"{fid}.certainty={f.get('certainty')!r} — stated · approx · uncertain")
         if not isinstance(f.get("keep"), bool):
             raise c.fail("format", f"{fid}.keep 이 참/거짓이 아니다")
-        facts[fid] = f
-        covered |= set(ts)
-
-    # 정정 — 정정된 사실은 정정 뒤 값으로, 정정 전 · 뒤 턴을 모두 그 사실의 turns 에
-    corrected: set[str] = set()
     for i, x in enumerate(out["corrections"]):
         at = f"corrections[{i}]"
-        if not isinstance(x, dict) or x.get("fact") not in facts:
-            raise c.fail("reference", f"{at}.fact — 원장에 없는 사실")
-        ts = c.turns(x.get("turns"), T, at, nonempty=True)
-        if len(set(ts)) < 2 or set(ts) - set(facts[x["fact"]]["turns"]):
-            raise c.fail("reference", f"{at}.turns {ts} — 정정 전 · 뒤 턴이 모두 사실 {x['fact']} 의 turns 에 있어야 한다")
-        c.text(x.get("note"), f"{at}.note")
-        corrected.add(x["fact"])
-    for fid, f in facts.items():
-        years = _years(f["time"])
-        if len(years) > 1 and fid not in corrected:
-            c.warnings.append(f"사실 {fid} 의 시점이 여럿 {sorted(years)} — 별개의 일을 합쳤는지 본다")
-
-    # 원문 표지와 원장이 어긋나면 알린다 (한 턴에 들은 말과 기억이 섞일 수 있어 실패로 막지 않는다)
-    by_turn: dict[int, list[dict]] = {}
-    for f in facts.values():
-        for t in f["turns"]:
-            by_turn.setdefault(t, []).append(f)
-    for m in marks or []:
-        fs = by_turn.get(m["turn"], [])
-        if m["heard"] and fs and not any(f["source"] == "heard" for f in fs):
-            c.warnings.append(f"턴 {m['turn']} 에 전언 표지가 있는데 heard 사실이 없다")
-        if m["uncertain"] and fs and all(f["certainty"] == "stated" for f in fs):
-            c.warnings.append(f"턴 {m['turn']} 에 불확실 표지가 있는데 모든 사실이 stated")
-
-    # 기억 단위 — 모든 사실은 정확히 한 단위에
-    units: dict[str, dict] = {}
-    home: dict[str, str] = {}
+        if not isinstance(x, dict) or not isinstance(x.get("fact"), str):
+            raise c.fail("format", f"{at} 모양이 다르다")
+        c.turns(x.get("turns"), T, at, nonempty=True)
+        for k in ("before", "after", "note"):
+            if not isinstance(x.get(k, ""), str):
+                raise c.fail("format", f"{at}.{k} 가 문자열이 아니다")
+    unit_ids: set[str] = set()
     for i, u in enumerate(out["units"]):
         at = f"units[{i}]"
         if not isinstance(u, dict):
             raise c.fail("format", f"{at} 가 객체가 아니다")
         uid = u.get("id")
-        if not isinstance(uid, str) or not _UNIT_ID.match(uid):
-            raise c.fail("format", f"{at}.id={uid!r} — m<숫자>")
-        if uid in units:
-            raise c.fail("reference", f"기억 단위 id {uid} 가 겹친다")
+        if not isinstance(uid, str) or not _UNIT_ID.match(uid) or uid in unit_ids:
+            raise c.fail("format", f"{at}.id={uid!r} — m<숫자>, 겹치지 않게")
+        unit_ids.add(uid)
         c.text(u.get("name"), f"{uid}.name")
-        for fid in c.ids(u.get("facts"), facts, f"{uid}.facts", nonempty=True):
-            if fid in home:
-                raise c.fail("reference", f"사실 {fid} 이 {home[fid]} 와 {uid} 두 단위에 있다")
-            home[fid] = uid
+        c.ids(u.get("facts"), ids, f"{uid}.facts", nonempty=True)
         if not isinstance(u.get("time"), str):
             raise c.fail("format", f"{uid}.time 이 문자열이 아니다")
         if u.get("weight") not in WEIGHTS:
             raise c.fail("format", f"{uid}.weight={u.get('weight')!r}")
-        units[uid] = u
-    lost = sorted(set(facts) - set(home), key=lambda x: int(x[1:]))
-    if lost:
-        raise c.fail("reference", f"사실 {lost} 이 어느 기억 단위에도 없다")
-    singles = sum(1 for u in units.values() if len(u["facts"]) == 1)
-    if len(units) > 3 and singles / len(units) >= 0.7:
-        c.warnings.append(f"기억 단위 {len(units)}개 중 {singles}개가 사실 하나 — 기억을 묶는 판단을 다시 본다")
-
-    # 끈 — 여러 기억 단위를 잇는 사람 · 물건 · 장소 · 주제
     seen: set[str] = set()
     for i, th in enumerate(out["threads"]):
         at = f"threads[{i}]"
@@ -638,7 +752,7 @@ def check_analysis(out, T: set[int], marks: list[dict] | None = None) -> tuple[s
         c.text(th.get("name"), f"{tid}.name")
         if th.get("kind") not in THREAD_KINDS:
             raise c.fail("format", f"{tid}.kind={th.get('kind')!r}")
-        c.ids(th.get("units"), units, f"{tid}.units", nonempty=True, what="기억 단위")
+        c.ids(th.get("units"), unit_ids, f"{tid}.units", nonempty=True, what="기억 단위")
         c.turns(th.get("link_turns", []), T - gone, f"{tid}.link", outside="입력에 없거나 빼 달라고 한 턴")
     for i, p in enumerate(out["people"]):
         if not isinstance(p, dict):
@@ -656,21 +770,19 @@ def check_analysis(out, T: set[int], marks: list[dict] | None = None) -> tuple[s
     d = out["direction"]
     if not isinstance(d, dict) or not isinstance(d.get("theme"), str) or not isinstance(d.get("neutral"), bool):
         raise c.fail("format", "direction 모양이 다르다")
-    clear = [t["theme"] for t in out["themes"] if t["strength"] == "clear"]
-    if d["neutral"] and d["theme"].strip():
-        c.warnings.append("direction.neutral=true 인데 theme 을 정했다")
-    if not d["neutral"] and not clear:
-        c.warnings.append("clear 인 주제가 없는데 direction.neutral=false")
     for i, n in enumerate(out["unclear"]):
         if not isinstance(n, dict):
             raise c.fail("format", f"unclear[{i}] 가 객체가 아니다")
         c.text(n.get("issue"), f"unclear[{i}].issue")
         c.turns(n.get("turns"), T, f"unclear[{i}]")
 
-    # 빠짐없이 — 모든 발언 턴은 사실 · not_in_facts · 제외 중 한 곳에
-    missing = sorted(T - covered - left - gone)
-    if missing:
-        raise c.fail("reference", f"턴 {missing} 이 사실 · not_in_facts · exclusions 어디에도 없다")
+    # ---- 뜻 (전부 모은 뒤, 하나라도 있으면 멈춘다)
+    errors, warnings = analysis_diagnostics(out, T, marks, texts)
+    c.warnings += warnings
+    if errors:
+        e = c.fail("reference", f"분석 계약 위반 {len(errors)}건 — " + " | ".join(errors)[:600])
+        e.details, e.warnings = errors, c.warnings
+        raise e
     return status, c.warnings
 
 
@@ -988,6 +1100,7 @@ def _essay_ending(text: str) -> bool:
 #
 #   block  stop_phrase      인터뷰를 멈추거나 미루는 말이 본문에 남음
 #          memo_leak        목차 메모를 그대로 옮긴 editorial 문장
+#          stale_correction 정정 전 값(정정 이력 before)이 본문 · 제목에 다시 나옴
 #   fix    style_mix        인용 밖 서술이 ~다 로 끝나지 않음
 #          answer_trace     질문에 대한 답 말로 시작
 #          meta_text        글 바깥에서 설명하는 안내문
@@ -1191,6 +1304,26 @@ def keep_findings(chapters: list[dict], keep: set[str], omitted: dict[str, str])
     return out
 
 
+def correction_findings(chapters: list[dict], analysis: dict, title: dict | None = None) -> list[dict]:
+    """
+    정정 전 값이 본문 · 제목에 되살아났는가 — block. 연도는 끝 두 자리로 견주고, 연도가 없는 정정은
+    정정 전 값의 글자가 그대로 들어 있는지 본다(정정 이력 before 는 분석 기록에만 남는다).
+    """
+    out = []
+    items = ([("title", title)] if title else []) + [(f"{ch['chapter_key']}/title", ch.get("title") or {}) for ch in chapters]
+    items += [(loc, x) for loc, _, _, x in _sentences(chapters)]
+    for c in analysis.get("corrections", []):
+        before, after = (c.get("before") or "").strip(), (c.get("after") or "").strip()
+        stale_years = _years(before) - _years(after)
+        for loc, x in items:
+            text = x.get("text", "")
+            if (stale_years and _years(text) & stale_years) or (
+                    not _years(before) and len(_norm(before)) >= 2 and _norm(before) in _norm(text)):
+                out.append(_finding("stale_correction", "block", loc,
+                                    f"사실 {c['fact']} 의 정정 전 값이 다시 나왔다 — 정정 뒤 값만 쓴다", fact=c["fact"]))
+    return out
+
+
 def verbatim_runs(chapters: list[dict], data: dict, n: int = 3) -> list[dict]:
     """원문 한 턴을 그대로 옮긴 문장이 n 개 이상 잇달은 곳 — info (사람 검수 참고)."""
     utts = {u["turn"]: _norm(u["elder"]) for u in data["utterances"]}
@@ -1218,7 +1351,8 @@ def all_findings(chapters: list[dict], outline_out: dict, data: dict, analysis: 
     book = ledger(analysis)
     out = (code_findings(chapters, outline_out) + fact_findings(chapters, data)
            + voice_findings(chapters, book) + time_findings(chapters, book)
-           + keep_findings(chapters, must_keep(analysis), omitted or {}))
+           + keep_findings(chapters, must_keep(analysis), omitted or {})
+           + correction_findings(chapters, analysis))
     if final:
         out += verbatim_runs(chapters, data)
     return out
@@ -1654,9 +1788,15 @@ def analysis_message(data: dict) -> str:
 
 
 def _analysis_for_next(analysis: dict) -> dict:
-    """뒤 단계에 넘길 분석 — 상태 · 모름 목록은 빼고 원장 · 단위 · 끈 · 정정 · 주제만."""
-    keep = ("facts", "units", "threads", "people", "corrections", "themes", "direction", "exclusions")
-    return {k: analysis.get(k) for k in keep}
+    """
+    뒤 단계에 넘길 분석 — 상태 · 모름 목록은 빼고 원장 · 단위 · 끈 · 정정 · 주제만. 정정은 **정정 이력
+    (before)을 빼고** 유효 사실 id · 턴 · 정정 뒤 값만 넘긴다 — 정정 전 값이 목차 · 본문으로 가는 길을 막는다.
+    """
+    keep = ("facts", "units", "threads", "people", "themes", "direction", "exclusions")
+    out = {k: analysis.get(k) for k in keep}
+    out["corrections"] = [{"fact": c["fact"], "turns": c["turns"], "after": c.get("after", "")}
+                          for c in analysis.get("corrections", [])]
+    return out
 
 
 def outline_message(data: dict, analysis: dict, focus: str | None = None) -> str:
@@ -1905,7 +2045,7 @@ async def run(data: dict, turn_map: list[dict], *, call: Call = call_model,
 
         # ① 분석 — 사실 원장 · 기억 단위
         analysis, step = await st.ask("analysis", analysis_message(data), "01_analysis")
-        status, step["warnings"] = check_analysis(analysis, T, turn_marks(data))
+        status, step["warnings"] = check_analysis(analysis, T, turn_marks(data), source_texts(data))
         step["ok"] = True
         if status == INSUFFICIENT:
             result = _result(INSUFFICIENT, calls=st.calls, focus=focus)
@@ -1966,7 +2106,8 @@ async def run(data: dict, turn_map: list[dict], *, call: Call = call_model,
         rec.json("04_edit_trace.json", trace)
         resolutions, res_warnings = check_resolutions(edited, draft_checks)
         step["warnings"] += res_warnings
-        final_findings = all_findings(edited["chapters"], outline_out, data, analysis, omitted_all, final=True)
+        final_findings = (all_findings(edited["chapters"], outline_out, data, analysis, omitted_all, final=True)
+                          + correction_findings([], analysis, edited["title"]))
         gate = code_gate(final_findings, resolutions, draft_checks)
         gate["draft_checks"] = len(draft_checks)
         gate["resolutions"] = {s: sum(1 for r in resolutions.values() if r["status"] == s) for s in CHECK_STATUSES}
@@ -2034,6 +2175,126 @@ def _safe_hashes() -> dict:
         return prompt_hashes()
     except PipelineError as e:
         return {"error": e.message}
+
+
+# ---------------------------------------------------------------- 분석만 따로 — 기억 지도 검증 (호출 1회)
+
+
+def memory_map(analysis: dict, data: dict) -> dict:
+    """분석 출력의 모양을 사람이 보기 쉽게 — 숫자 · 목록. 판정이 아니다."""
+    facts = {f["id"]: f for f in analysis.get("facts", []) if isinstance(f, dict) and "id" in f}
+    session = {u["turn"]: u["session_id"] for u in data["utterances"]}
+    units = []
+    for u in analysis.get("units", []):
+        fs = [facts[x] for x in u.get("facts", []) if x in facts]
+        ys = {y for f in fs for y in _full_years(f.get("time", "") + " " + f.get("text", ""))}
+        units.append({"id": u.get("id"), "name": u.get("name"), "weight": u.get("weight"), "time": u.get("time"),
+                      "facts": len(fs), "years": [min(ys), max(ys)] if ys else [],
+                      "sessions": sorted({session[t] for f in fs for t in f.get("turns", []) if t in session})})
+    return {
+        "facts": len(facts), "units": len(units), "unit_sizes": units,
+        "keep": sum(1 for f in facts.values() if f.get("keep")),
+        "heard": sorted((f["id"] for f in facts.values() if f.get("source") == "heard"), key=lambda x: int(x[1:])),
+        "approx_or_uncertain": sorted((f["id"] for f in facts.values() if f.get("certainty") in ("approx", "uncertain")),
+                                      key=lambda x: int(x[1:])),
+        "corrections": analysis.get("corrections", []),
+        "threads": [{"id": th.get("id"), "name": th.get("name"), "units": th.get("units"),
+                     "link_turns": th.get("link_turns")} for th in analysis.get("threads", [])],
+        "themes": [{"theme": x.get("theme"), "strength": x.get("strength"), "supporting": x.get("supporting"),
+                    "counter": x.get("counter")} for x in analysis.get("themes", [])],
+        "direction": analysis.get("direction"),
+        "not_in_facts": analysis.get("not_in_facts", []),
+    }
+
+
+def memory_map_text(analysis: dict, mm: dict, diagnostics: list[str], warnings: list[str]) -> str:
+    """사람 검토용 기억 지도 (eval/runs 안에만 남는다 — 원문 요약이 들어 있다)."""
+    facts = {f["id"]: f for f in analysis.get("facts", []) if isinstance(f, dict) and "id" in f}
+    home: dict[str, list] = {}
+    for u in analysis.get("units", []):
+        for x in u.get("facts", []):
+            home.setdefault(x, []).append(u.get("id"))
+    lines = ["# 기억 지도 — 분석만 따로 본 결과", "",
+             f"- 사실 {mm['facts']} · 기억 단위 {mm['units']} · keep {mm['keep']} · 들은 이야기 {len(mm['heard'])} · "
+             f"대략/불확실 {len(mm['approx_or_uncertain'])} · 정정 {len(mm['corrections'])}", "",
+             "## 계약 위반 (있으면 다음 단계로 넘기지 않는다)", ""]
+    lines += [f"- {x}" for x in diagnostics] or ["- 없음"]
+    lines += ["", "## 검토할 점 (경고)", ""] + ([f"- {x}" for x in warnings] or ["- 없음"])
+    lines += ["", "## 정정", "", "| 유효 사실 | 턴 | 정정 전(이력) | 정정 뒤 |", "|---|---|---|---|"]
+    lines += [f"| {c.get('fact')} | {c.get('turns')} | {c.get('before', '')} | {c.get('after', '')} |"
+              for c in mm["corrections"]]
+    for u in analysis.get("units", []):
+        info = next(x for x in mm["unit_sizes"] if x["id"] == u.get("id"))
+        lines += ["", f"## {u.get('id')} {u.get('name')} — {u.get('weight')} · {u.get('time')} · 사실 {info['facts']} · "
+                      f"연도 {info['years']} · 회차 {info['sessions']}", "",
+                  "| 사실 | 턴 | 시점 | 출처 | 확실성 | keep | 메모 |", "|---|---|---|---|---|---|---|"]
+        for x in u.get("facts", []):
+            f = facts.get(x, {})
+            dup = " (중복)" if len(home.get(x, [])) > 1 else ""
+            lines.append(f"| {x}{dup} | {f.get('turns')} | {f.get('time', '')} | {f.get('source')} | {f.get('certainty')} | "
+                         f"{'O' if f.get('keep') else ''} | {f.get('text', '')} |")
+    lines += ["", "## 끈", ""] + [f"- {th['id']} {th['name']} — 단위 {th['units']} · 화자가 이은 턴 {th['link_turns']}"
+                                  for th in mm["threads"]]
+    lines += ["", "## 주제", ""] + [f"- {x['theme']} ({x['strength']}) — 근거 {x['supporting']} · 반대/복합 {x['counter']}"
+                                    for x in mm["themes"]]
+    lines += [f"- 방향: {mm['direction']}", "", "## 사실로 쓰지 않은 턴", ""]
+    lines += [f"- {x.get('turns')} — {x.get('reason')}" for x in mm["not_in_facts"]] or ["- 없음"]
+    lines += ["", "## 사람 검토 (직접 적는다)", "",
+              "- 정정이 하나의 유효 사실로 처리됐는가:", "- 기억 단위가 한 시기 · 한 이야기인가:",
+              "- 들은 이야기와 직접 기억이 나뉘었는가:", "- keep 이 핵심 사실에만 있는가:",
+              "- 주제가 원문 근거의 편집적 해석인가 (감정 · 희생 단정이 아닌가):", "- 나머지 단계를 돌려도 되는가:", ""]
+    return "\n".join(lines)
+
+
+async def run_analysis_only(data: dict, turn_map: list[dict], *, call: Call = call_model,
+                            recorder: Recorder | None = None, meta: dict | None = None) -> dict:
+    """
+    분석 단계만 따로 — 모델 호출 **1회**. 새 역할이 아니라 같은 분석 지시문 · 같은 검사다. 계약 위반이
+    여럿이면 모두 모아 남기고(diagnostics), 목차 이후 단계는 부르지 않는다.
+    """
+    rec = recorder or Recorder()
+    cfg = settings()
+    meta = dict(meta or {})
+    started_at = datetime.now(timezone.utc).isoformat(timespec="seconds")
+    st: _Run | None = None
+    result: dict = {"mode": "analysis_only", "generation_state": FAILED, "analysis_ok": False,
+                    "diagnostics": [], "warnings": [], "memory_map": None, "failure": None,
+                    "human_review": "not_run", "calls": 0, "prompt_version": PROMPT_VERSION}
+    try:
+        T = check_input(data, turn_map)
+        meta["input_ref"] = input_ref(data)
+        marks = turn_marks(data)
+        rec.json("00_input.json", {"input_ref": meta["input_ref"], "turn_marks": marks})
+        st = _Run(data, T, call, rec, cfg)
+        st.max_calls = 1
+        analysis, step = await st.ask("analysis", analysis_message(data), "01_analysis")
+        try:
+            status, warnings = check_analysis(analysis, T, marks, source_texts(data))
+            step["warnings"], step["ok"] = warnings, True
+            result.update(generation_state="analyzed" if status == "ready" else status,
+                          analysis_ok=status == "ready", warnings=warnings)
+        except PipelineError as e:
+            step["error"] = e.as_dict()
+            result.update(failure=e.as_dict(), diagnostics=e.details or [e.message], warnings=e.warnings)
+        if isinstance(analysis, dict) and isinstance(analysis.get("facts"), list):
+            mm = memory_map(analysis, data)
+            result["memory_map"] = mm
+            rec.text("01_memory_map.md", memory_map_text(analysis, mm, result["diagnostics"], result["warnings"]))
+        result["calls"] = st.calls
+        return result
+    except PipelineError as e:
+        if st is not None and st.steps and st.steps[-1]["error"] is None:
+            st.steps[-1]["error"] = e.as_dict()
+        result.update(failure=e.as_dict(), diagnostics=e.details or [e.message], calls=st.calls if st else 0)
+        return result
+    finally:
+        result.update({k: meta[k] for k in ("run_ref", "input_ref") if k in meta})
+        rec.json("result.json", result)
+        rec.json("run.json", {**meta, "mode": "analysis_only", "started_at": started_at,
+                              "finished_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
+                              "settings": cfg, "prompts": _safe_hashes(), "steps": st.steps if st else [],
+                              "calls": result["calls"], "generation_state": result["generation_state"],
+                              "failure": result["failure"]})
 
 
 # ---------------------------------------------------------------- R1 요약

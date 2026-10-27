@@ -19,6 +19,9 @@ r1_summary.md 다 — 본문 · 원문 · 비밀값이 없다.
 --focus 는 한 장 시험이다 — 같은 다섯 단계를 돌되 목차 · 편집이 그 소재로 장 하나만 만든다
 (호출 5회). 소재 이름만 받는다. 예상 정답 글 · 목차는 받지 않는다(FOCUS_MAX_CHARS).
 
+--analysis-only 는 분석 단계만 따로 본다 — 같은 분석 지시문 · 검사로 호출 1회, 목차 이후는 부르지 않는다.
+계약 위반을 모두 모아 남기고 사람이 볼 기억 지도(01_memory_map.md)를 쓴다.
+
 종료 코드: 0 pipeline_complete · insufficient_material / 1 그 밖의 결과 / 2 입력 거부
 """
 
@@ -174,6 +177,31 @@ def run_ref(set_id: str, n: int, data: dict) -> str:
     return f"{at}-{set_id}{n}-{pipe.input_ref(data)[:4]}"
 
 
+def analysis_only(a, data: dict, turn_map: list[dict], meta: dict, cfg: dict) -> int:
+    """--analysis-only — 분석 단계만 1회. 계약 위반 · 경고 · 기억 지도 숫자를 찍는다."""
+    print(f"모델 {cfg['MEMOIR_PIPE_TEXT_MODEL']} · 온도 {cfg['MEMOIR_PIPE_TEMPERATURE']} · 재시도 {cfg['retries']} · "
+          f"지시문 {pipe.PROMPT_VERSION} · 분석만 · 예상 호출 1회 (출력 상한 {cfg['MEMOIR_PIPE_ANALYSIS_MAX_OUTPUT_TOKENS']})")
+    if a.dry_run:
+        print("--dry-run — 모델을 부르지 않았다")
+        return 0
+    meta["run_ref"] += "-analysis"
+    folder = a.out_dir / meta["run_ref"]
+    r = asyncio.run(pipe.run_analysis_only(data, turn_map, recorder=pipe.Recorder(folder), meta=meta))
+    steps = json.loads((folder / "run.json").read_text(encoding="utf-8"))["steps"]
+    for s in steps:
+        u = s.get("usage") or {}
+        print(f"  {s['stage']:<8} {'O' if s['ok'] else 'X'} {s['ms']:>6}ms  출력 {s['out_chars']}자  "
+              f"토큰 {u.get('prompt')}/{u.get('output')}/{u.get('thoughts')}  {s.get('finish') or ''}")
+    mm = r.get("memory_map") or {}
+    print(f"결과 {r['generation_state']} · 계약 통과 {r['analysis_ok']} · 호출 {r['calls']}회 · 사실 {mm.get('facts')} · "
+          f"기억 단위 {mm.get('units')} · keep {mm.get('keep')} · 정정 {len(mm.get('corrections') or [])}")
+    print(f"계약 위반 {len(r['diagnostics'])}건 · 경고 {len(r['warnings'])}건 — 기억 지도 {folder / '01_memory_map.md'}")
+    for x in r["diagnostics"]:
+        print(f"  위반 {x}")
+    print(f"기록 {folder}")
+    return 0 if r["analysis_ok"] else 1
+
+
 def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(description="자서전 5단계 파이프라인을 합성 seed 로 돌린다")
     src = ap.add_mutually_exclusive_group(required=True)
@@ -183,6 +211,7 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--out-dir", type=Path, default=EVAL / "runs")
     ap.add_argument("--dry-run", action="store_true", help="입력만 만들고 모델을 부르지 않는다")
     ap.add_argument("--focus", help=f"한 장 시험 — 소재 이름({FOCUS_MAX_CHARS}자 이하). 다섯 단계 · 호출 5회, 장 1개")
+    ap.add_argument("--analysis-only", action="store_true", help="분석 단계만 — 호출 1회, 기억 지도를 남긴다")
     a = ap.parse_args(argv)
 
     from dotenv import load_dotenv
@@ -211,6 +240,11 @@ def main(argv: list[str] | None = None) -> int:
     if focus and (len(focus) > FOCUS_MAX_CHARS or "\n" in focus):
         print(f"입력 거부 — --focus 는 {FOCUS_MAX_CHARS}자 이하 한 줄 소재 이름만 받는다", file=sys.stderr)
         return 2
+    if focus and a.analysis_only:
+        print("입력 거부 — --focus 와 --analysis-only 는 함께 쓰지 않는다", file=sys.stderr)
+        return 2
+    if a.analysis_only:
+        return analysis_only(a, data, turn_map, meta, cfg)
     calls = "5회 (장 1 + 4)" if focus else f"{MIN_CALLS}~{MAX_CALLS}회 (장 수 + 4)"
     print(f"모델 {cfg['MEMOIR_PIPE_TEXT_MODEL']} · 온도 {cfg['MEMOIR_PIPE_TEMPERATURE']} · "
           f"전체 상한 {cfg['MEMOIR_PIPE_TOTAL_TIMEOUT']:.0f}초 · 재시도 {cfg['retries']} · 지시문 {pipe.PROMPT_VERSION} · "
