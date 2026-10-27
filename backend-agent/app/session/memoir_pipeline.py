@@ -165,7 +165,8 @@ _CORRECTION_SRC = re.compile(r"다시\s?생각해\s?보니|고칠게요|잘못\s
 # 본문의 전언 · 흐림 표지 — 들은 사실 · 대략의 사실을 단정으로 바꿨는지 볼 때
 _HEARD_BODY = re.compile(r"다고|라고|자고|냐고|다며|라며|단다|대서|댔|들었|들은|전해|하더라")
 _VIEW_BODY = re.compile(r"다고|라고|생각|싶|여긴|여겼|보인|같다|말하곤|그러곤|하곤")
-_HEDGE_BODY = re.compile(r"쯤|무렵|것\s?같|듯|인지|였을|았을|었을|던가|인가|아마|정도|즈음|기억이|확실하지|약\s|대략|남짓|어림")
+_HEDGE_BODY = re.compile(r"쯤|무렵|것\s?같|듯|인지|였을|았을|었을|던가|인가|아마|정도|즈음|기억이|확실하지|약\s|대략|남짓|어림"
+                         r"|모르겠|모른다|나\s?싶")
 # 문단 첫머리의 시간 표지 — 시간을 거슬러 올라가는 문단에 있어야 한다
 _TIME_MARK = re.compile(r"\d{2,4}년|년\s?(전|뒤|후)|무렵|시절|때|이듬해|그다음|그\s?뒤|그\s?후|지금|요즘"
                         r"|어릴|어렸|처음|그해|몇\s?년|오래전|그 전|그보다")
@@ -988,6 +989,9 @@ def _para_years(fact_ids, book: dict[str, dict]) -> set[int]:
     return {y for f in fact_ids if f in book for y in _full_years(book[f].get("time", ""))}
 
 
+OMIT_UNIT_RATIO = 2 / 3     # 장이 고른 기억 단위의 사실을 이 비율 넘게 빼면 일괄 생략 경고 (문단 · 문장 수를 강제하지 않는다)
+
+
 def check_outline(out, analysis: dict, T: set[int], focus: str | None = None) -> tuple[str, list[str]]:
     """
     책 설계도. 장마다 중심(center) · 핵심 경험(experience) · 문단 계획 · 시간 재배치 이유.
@@ -1094,6 +1098,25 @@ def check_outline(out, analysis: dict, T: set[int], focus: str | None = None) ->
     lost = sorted(allowed - set(used) - set(omitted), key=lambda x: int(x[1:]))
     if lost:
         raise c.fail("reference", f"사실 {lost} 이 어느 문단 계획에도 · omit 에도 없다")
+    # 한 문단에 끈으로도 같은 단위로도 이어지지 않는 기억 단위가 섞였는가 — 다른 사람의 무관한 일이 끼는 것
+    home = {f: u["id"] for u in analysis.get("units", []) for f in u.get("facts", [])}
+    thread_units = [set(th.get("units", [])) for th in analysis.get("threads", [])]
+    for ch in chapters:
+        for pi, para in enumerate(ch["paragraphs"]):
+            us = sorted({home[f] for f in list(para["facts"]) + list(para.get("brief") or []) if f in home})
+            loose = [u for u in us if len(us) > 1 and not any(u in s and (s & set(us)) - {u} for s in thread_units)]
+            if loose:
+                c.warnings.append(f"{ch['chapter_key']}/p{pi} 에 다른 기억 단위와 끈으로 이어지지 않는 단위 {loose} 가 섞였다 — "
+                                  "무관한 인물 · 사건이 한 문단에 들어왔는지 본다")
+    # 장이 고른 기억 단위의 사실을 대부분 뺐는가 — 중심 소재의 핵심 기억을 한꺼번에 생략했는지
+    for ch in chapters:
+        used_here = {f for para in ch["paragraphs"] for f in list(para["facts"]) + list(para.get("brief") or [])}
+        for uid in ch.get("units", []):
+            fs = units.get(uid, {}).get("facts", [])
+            gone_here = [f for f in fs if f in omitted]
+            if len(fs) >= 3 and len(gone_here) / len(fs) > OMIT_UNIT_RATIO:
+                c.warnings.append(f"{ch['chapter_key']} 이 고른 기억 단위 {uid} 의 사실 {len(fs)}개 중 {len(gone_here)}개를 뺐다 — "
+                                  "장의 핵심 기억을 한꺼번에 생략했는지 본다")
     dropped_keep = sorted(must_keep(analysis) & set(omitted), key=lambda x: int(x[1:]))
     if dropped_keep:
         c.warnings.append(f"근거 없이 빠지면 안 되는 사실 {dropped_keep} 을 뺐다 — 이유를 사람이 본다")
@@ -1296,6 +1319,7 @@ def _essay_ending(text: str) -> bool:
 #          opinion_as_fact  화자의 평가 · 생각(view)을 근거로 단 문장이 객관적 사실처럼 씀
 #          time_reversal    앞 문단보다 이른 시기의 문단인데 첫 문장에 시간 표지가 없음
 #          must_keep_missing  근거 없이 빠지면 안 되는 사실이 본문에도 생략 목록에도 없음
+#          edit_claim_mismatch 편집이 조치를 적었는데 결과물(edit_trace)은 그대로
 #   info   must_keep_omitted  그런 사실을 이유와 함께 뺐다 (사람이 이유를 본다)
 #          verbatim_run     원문 한 턴을 그대로 옮긴 문장이 셋 이상 잇달음
 #
@@ -1747,6 +1771,24 @@ def edit_trace(drafts: list[dict], final: list[dict], omitted: dict[str, str] | 
 
 
 # ---------------------------------------------------------------- ④ 편집 · ⑤ 검증 검사
+
+
+EDIT_UNCHANGED_RATIO = 0.8   # 편집본 문장 가운데 초안 그대로인 비율 — 이 이상이고 구조 변화가 없으면 '고치지 않은 편집'
+
+
+def edit_claim_findings(edited: dict, trace: dict) -> list[dict]:
+    """
+    편집이 진단 · 메모에 조치를 적었는데 결과물에는 바뀐 것이 없다 — fix(kept 불가). 모델의 보고가 아니라
+    코드가 잰 edit_trace 를 기준으로 본다. 진단에 조치가 없거나 실제로 바뀌었으면 아무것도 내지 않는다.
+    """
+    s = trace.get("summary") or {}
+    claimed = [d.get("action", "") for d in edited.get("diagnosis", []) if str(d.get("action", "")).strip()]
+    unchanged = (s.get("unchanged_ratio") or 0) >= EDIT_UNCHANGED_RATIO and not s.get("structure_changed")
+    if claimed and unchanged:
+        return [_finding("edit_claim_mismatch", "fix", "artifact",
+                         f"편집 진단에 조치 {len(claimed)}개를 적었지만 결과는 초안 그대로 {s.get('kept')}/{s.get('final_sentences')}문장 · "
+                         "구조 변화 없음 — 고쳤다는 보고를 믿지 않는다")]
+    return []
 
 
 def check_final(out, analysis: dict, T: set[int], focus: str | None = None) -> tuple[dict[str, str], list[str]]:
@@ -2232,6 +2274,7 @@ def _result(state: str, *, failure: PipelineError | None = None, edited: dict | 
         "metrics": metrics or {},
         "calls": calls,
         "prompt_version": PROMPT_VERSION,
+        "analysis_source": "model", "outline_source": "model",
     }
 
 
@@ -2280,15 +2323,68 @@ def load_analysis_fixture(fx, data: dict, T: set[int]) -> dict:
     return analysis
 
 
+def load_outline_fixture(fx, analysis: dict, analysis_fixture: dict, T: set[int]) -> tuple[dict, str]:
+    """
+    사람이 검토한 시험용 목차를 받는다 — 맞지 않으면 모델을 부르지 않고 입력 거부. 돌려주는 것은 (목차, focus).
+
+        fixture=outline_snapshot · outline_source=reviewed_fixture · synthetic=true
+        analysis_fixture 의 sha256(앞 16자)이 지금 받은 분석 스냅샷과 같다 — 같은 사실 원장 위의 목차
+        memories — 시험이 꼭 다뤄야 할 기억과 그 사실 id. 모두 원장에 있고, 목차에서 빼지 않았다
+        목차 메모(center · experience · flow · role · reason)는 짧은 메모 — 완성된 본문 문장(…다.)을 넣지 않는다
+        outline — 목차 계약 검사를 오류 없이 통과, 혼입 · 일괄 생략 경고가 없다
+
+    자동 목차 생성이 성공한 것이 아니다. 결과에는 outline_source=reviewed_fixture 로 늘 표시한다.
+    """
+    def bad(why):
+        return PipelineError("input", "input", f"목차 스냅샷: {why}")
+    if not isinstance(fx, dict) or fx.get("fixture") != "outline_snapshot":
+        raise bad("fixture=outline_snapshot 이 아니다")
+    if fx.get("outline_source") != REVIEWED_FIXTURE or fx.get("synthetic") is not True:
+        raise bad("outline_source=reviewed_fixture · synthetic=true 가 아니다")
+    sha = hashlib.sha256(json.dumps(analysis_fixture, ensure_ascii=False, sort_keys=True).encode("utf-8")).hexdigest()[:16]
+    if (fx.get("analysis_fixture") or {}).get("sha256") != sha:
+        raise bad("analysis_fixture.sha256 이 지금 분석 스냅샷과 다르다 — 다른 사실 원장 위의 목차")
+    focus = fx.get("focus")
+    if not isinstance(focus, str) or not focus.strip():
+        raise bad("focus 가 없다")
+    outline = json.loads(json.dumps(fx.get("outline")))
+    status, warnings = check_outline(outline, analysis, T, focus)
+    if status != "ready":
+        raise bad(f"status={status}")
+    risky = [w for w in warnings if "섞였다" in w or "한꺼번에 생략" in w]
+    if risky:
+        raise bad(f"목차 경고 — {risky[:2]}")
+    used = {f for ch in outline["chapters"] for p in ch["paragraphs"] for f in list(p["facts"]) + list(p.get("brief") or [])}
+    book = ledger(analysis)
+    mem = fx.get("memories")
+    if not isinstance(mem, list) or not mem:
+        raise bad("memories(다뤄야 할 기억)가 없다")
+    for m in mem:
+        fs = (m or {}).get("facts") or []
+        if not fs or set(fs) - set(book) or set(fs) - used:
+            raise bad(f"기억 「{(m or {}).get('name')}」 의 사실 {sorted(set(fs) - used)} 이 원장에 없거나 목차에서 빠졌다")
+    memos = [outline["book"].get("center", ""), outline["book"].get("flow", "")]
+    for ch in outline["chapters"]:
+        memos += [ch.get("center", ""), ch.get("experience", "")] + [p.get("role", "") for p in ch["paragraphs"]]
+        memos += [r.get("reason", "") for r in ch.get("reorder", [])]
+    if any(re.search(r"다\.\s*$", m or "") or len(m or "") > TRIAL_MAX_MEMO for m in memos):
+        raise bad("목차 메모에 완성된 본문 문장(…다.)이나 긴 글이 있다 — 예상 본문을 넣지 않는다")
+    return outline, focus
+
+
+TRIAL_MAX_MEMO = 80         # 시험용 목차 메모 한 칸의 최대 글자 — 본문 같은 글이 들어오지 않게
+
+
 async def run(data: dict, turn_map: list[dict], *, call: Call = call_model,
               recorder: Recorder | None = None, meta: dict | None = None, focus: str | None = None,
-              analysis_fixture: dict | None = None) -> dict:
+              analysis_fixture: dict | None = None, outline_fixture: dict | None = None) -> dict:
     """
     다섯 단계를 차례로. 돌려주는 것은 result (result.json 과 같은 것).
 
     analysis_fixture 를 주면 **후속 단계 시험**이다 — 분석을 부르지 않고 검증된 시험용 스냅샷
     (load_analysis_fixture)에서 시작해 목차 → 장 → 편집 → 검증만 부른다(호출 장 수 + 3).
-    결과 · 기록에 analysis_source=reviewed_fixture 를 남긴다.
+    outline_fixture 까지 주면 목차도 부르지 않고 사람이 검토한 시험용 목차(load_outline_fixture)에서
+    장 → 편집 → 검증만 부른다(호출 장 수 + 2). 결과 · 기록에 analysis_source · outline_source 를 남긴다.
 
     meta 는 실행 기록에 그대로 덧붙이는 식별(run_ref · seed · alias)이다. focus 를 주면 한 장
     시험이다 — 같은 다섯 단계를 돌되 목차 · 편집이 그 소재로 장 하나만 만든다(호출 5회).
@@ -2332,14 +2428,24 @@ async def run(data: dict, turn_map: list[dict], *, call: Call = call_model,
             step["metrics"] = {"facts": len(analysis["facts"]), "units": len(analysis["units"]),
                                "must_keep": len(must_keep(analysis))}
 
-        # ② 목차 — 책 설계도
-        outline_out, step = await st.ask("outline", outline_message(data, analysis, focus), "02_outline")
-        status, step["warnings"] = check_outline(outline_out, analysis, T, focus)
-        step["ok"] = True
+        # ② 목차 — 책 설계도 (또는 사람이 검토한 시험용 목차)
+        if outline_fixture is not None:
+            if analysis_fixture is None:
+                raise PipelineError("input", "input", "목차 스냅샷은 분석 스냅샷과 함께만 쓴다")
+            outline_out, fixture_focus = load_outline_fixture(outline_fixture, analysis, analysis_fixture, T)
+            if focus and focus != fixture_focus:
+                raise PipelineError("input", "input", f"focus {focus!r} 가 목차 스냅샷의 focus {fixture_focus!r} 와 다르다")
+            focus = fixture_focus
+            rec.json("02_outline_fixture.json", outline_fixture)
+            status = "ready"
+        else:
+            outline_out, step = await st.ask("outline", outline_message(data, analysis, focus), "02_outline")
+            status, step["warnings"] = check_outline(outline_out, analysis, T, focus)
+            step["ok"] = True
         if status == NEEDS_CONTEXT:
             raise PipelineError("outline", "context", "; ".join(outline_out["missing_context"])[:300])
         chapters_plan = outline_out["chapters"]
-        st.max_calls = len(chapters_plan) + (3 if analysis_fixture is not None else 4)
+        st.max_calls = len(chapters_plan) + (2 if outline_fixture is not None else 3 if analysis_fixture is not None else 4)
         memos = outline_memos(outline_out)
 
         # ③ 장별 집필 — 순서대로, 첫 실패에서 멈춘다
@@ -2383,7 +2489,7 @@ async def run(data: dict, turn_map: list[dict], *, call: Call = call_model,
         resolutions, res_warnings = check_resolutions(edited, draft_checks)
         step["warnings"] += res_warnings
         final_findings = (all_findings(edited["chapters"], outline_out, data, analysis, omitted_all, final=True)
-                          + correction_findings([], analysis, edited["title"]))
+                          + correction_findings([], analysis, edited["title"]) + edit_claim_findings(edited, trace))
         gate = code_gate(final_findings, resolutions, draft_checks)
         gate["draft_checks"] = len(draft_checks)
         gate["resolutions"] = {s: sum(1 for r in resolutions.values() if r["status"] == s) for s in CHECK_STATUSES}
@@ -2433,9 +2539,11 @@ async def run(data: dict, turn_map: list[dict], *, call: Call = call_model,
 
     finally:
         result.update({k: meta[k] for k in ("run_ref", "input_ref") if k in meta})
-        rec.json("result.json", result)
         result["analysis_source"] = REVIEWED_FIXTURE if analysis_fixture is not None else "model"
-        run_doc = {**meta, "focus": focus, "analysis_source": result["analysis_source"], "started_at": started_at,
+        result["outline_source"] = REVIEWED_FIXTURE if outline_fixture is not None else "model"
+        rec.json("result.json", result)               # 출처 표시를 넣은 뒤에 쓴다
+        run_doc = {**meta, "focus": focus, "analysis_source": result["analysis_source"],
+                   "outline_source": result["outline_source"], "started_at": started_at,
                    "finished_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
                    "settings": cfg, "prompts": _safe_hashes(),
                    "steps": st.steps if st else [],
@@ -2615,7 +2723,9 @@ def r1_summary(run_doc: dict, result: dict) -> str:
         "- 단계 상한: " + " · ".join(
             f"{s} {cfg.get(f'MEMOIR_PIPE_{s.upper()}_TIMEOUT')}초/"
             f"{cfg.get(f'MEMOIR_PIPE_{s.upper()}_MAX_OUTPUT_TOKENS')}" for s in STAGES),
-        f"- 지시문 판: {result.get('prompt_version')} · 분석 출처: **{result.get('analysis_source', 'model')}**"
+        f"- 지시문 판: {result.get('prompt_version')} · 분석 출처: **{result.get('analysis_source', 'model')}** · "
+        f"목차 출처: **{result.get('outline_source', 'model')}**"
+        + (" — 사람이 검토한 시험용 목차(자동 목차 생성 결과 아님)" if result.get("outline_source") == REVIEWED_FIXTURE else "")
         + (" — 시험용 스냅샷(모델 원본 아님), 분석 단계를 부르지 않았다"
            if result.get("analysis_source") == REVIEWED_FIXTURE else ""),
         "",

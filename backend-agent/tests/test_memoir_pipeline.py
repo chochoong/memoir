@@ -1827,3 +1827,117 @@ def test_character_overlap_does_not_prove_meaning():
     assert not any("f23" in e for e in errors)
     assert any("턴 23 원문의 부정 표현" in w for w in warnings)
     assert "뜻의 대조는 검증 단계와 사람이 한다" in (ROOT / "app" / "session" / "memoir_pipeline.py").read_text(encoding="utf-8")
+
+
+# ---------------------------------------------------------------- 후속 4단계 실패(01:44Z) 원인별 회귀 · 사람 검토 목차 · 집필 시험
+
+FOLLOWON = ROOT / "tests" / "data" / "v5_followon_20261027T014432Z.json"
+OUTLINE_C = ROOT / "eval" / "outline_fixture_C_v5_reviewed.json"
+
+
+def _fixture_analysis():
+    data, turn_map = source_c()
+    fx = json.loads(FIXTURE_C.read_text(encoding="utf-8"))
+    return data, turn_map, fx, pipe.load_analysis_fixture(fx, data, pipe.check_input(data, turn_map))
+
+
+def test_failed_followon_outline_is_flagged_for_mixing_and_bulk_omission():
+    """01:44Z 목차 그대로 — 셋째 문단에 딸(m6) · 남편(m9)이 섞이고, 장의 단위 m1 · m3 를 거의 다 뺐다."""
+    data, turn_map, _, a = _fixture_analysis()
+    o = json.loads(FOLLOWON.read_text(encoding="utf-8"))["outline"]
+    _, w = pipe.check_outline(o, a, pipe.check_input(data, turn_map), "큰언니와 재봉틀")
+    assert any("ch-1/p2 에 다른 기억 단위와 끈으로 이어지지 않는 단위 ['m6', 'm9']" in x for x in w)
+    assert any("m1 의 사실 9개 중 8개를 뺐다" in x for x in w) and any("m3 의 사실 15개 중 13개를 뺐다" in x for x in w)
+
+
+def test_edit_that_claims_changes_but_changed_nothing_is_flagged():
+    f = json.loads(FOLLOWON.read_text(encoding="utf-8"))
+    found = pipe.edit_claim_findings(f["edited"], f["edit_trace"])
+    assert [(x["rule"], x["severity"]) for x in found] == [("edit_claim_mismatch", "fix")]
+    assert "edit_claim_mismatch" not in pipe.KEPT_ACCEPTED
+    quiet = {**f["edited"], "diagnosis": [{"issue": "고칠 곳 없음", "where": [], "action": ""}]}
+    assert pipe.edit_claim_findings(quiet, f["edit_trace"]) == []          # 조치를 적지 않았으면 문제 아님
+    changed = {**f["edit_trace"], "summary": {**f["edit_trace"]["summary"], "structure_changed": True}}
+    assert pipe.edit_claim_findings(f["edited"], changed) == []          # 실제로 바뀌었으면 문제 아님
+
+
+def test_undecided_wording_counts_as_hedge():
+    """01:44Z f60 '아직 모르겠고 … 싶다' 에 certainty_lost 가 난 오탐."""
+    book = pipe.ledger({"facts": [fact("f60", [39], "줄지는 아직 모름", certainty="uncertain")]})
+    assert pipe.voice_findings([_chapter([("애들한테 그 재봉틀을 줄지는 아직 모르겠고 걔들이 쓸 일이 있겠나 싶다.", ["f60"])])],
+                               book) == []
+
+
+def test_result_json_records_sources(tmp_path):
+    data, turn_map, fx, _ = _fixture_analysis()
+    o = json.loads(OUTLINE_C.read_text(encoding="utf-8"))
+    plan = [f for p in o["outline"]["chapters"][0]["paragraphs"] for f in p["facts"]]
+    d = {"chapter_key": "ch-1", "title": sent("언니의 발틀", [], "editorial"),
+         "paragraphs": [[sent("언니가 준 재봉틀을 아직 못 버렸다.", ["f57"])]], "review_notes": []}
+    e = {**edited_ok(), "chapters": [{"chapter_key": "ch-1", "center": "", "title": sent("언니의 발틀", [], "editorial"),
+                                      "paragraphs": d["paragraphs"]}],
+         "diagnosis": [{"issue": "없음", "where": [], "action": ""}]}
+    fake = Fake({"ch-1": d, "edit": e, "verify": verify_ok(reviewed_locations=["artifact"])})
+    r = asyncio.run(pipe.run(data, turn_map, call=fake, recorder=pipe.Recorder(tmp_path), analysis_fixture=fx,
+                             outline_fixture=o))
+    saved = json.loads((tmp_path / "result.json").read_text(encoding="utf-8"))
+    assert saved["analysis_source"] == "reviewed_fixture" and saved["outline_source"] == "reviewed_fixture"
+    assert fake.order == ["ch-1", "edit", "verify"] and r["calls"] == 3       # 분석 · 목차를 부르지 않는다
+    assert r["focus"] == "큰언니와 재봉틀" and len(plan) > 0
+    assert (tmp_path / "02_outline_fixture.json").exists() and not (tmp_path / "02_outline.json").exists()
+    run_doc = json.loads((tmp_path / "run.json").read_text(encoding="utf-8"))
+    assert run_doc["outline_source"] == "reviewed_fixture" and [s["stage"] for s in run_doc["steps"]] == ["chapter", "edit", "verify"]
+    assert "사람이 검토한 시험용 목차" in (tmp_path / "r1_summary.md").read_text(encoding="utf-8")
+    asyncio.run(pipe.run(data, turn_map, call=Fake(script()), recorder=pipe.Recorder(tmp_path / "m")))
+    assert json.loads((tmp_path / "m" / "result.json").read_text(encoding="utf-8"))["analysis_source"] == "model"
+
+
+def test_reviewed_outline_covers_the_required_memories_and_is_reproducible():
+    import importlib.util
+    data, turn_map, fx, a = _fixture_analysis()
+    o = json.loads(OUTLINE_C.read_text(encoding="utf-8"))
+    assert o["outline_source"] == "reviewed_fixture" and o["synthetic"] is True and "자동 목차 생성 결과가 아니다" in o["note"]
+    outline, focus = pipe.load_outline_fixture(o, a, fx, pipe.check_input(data, turn_map))
+    assert focus == "큰언니와 재봉틀" and len(o["memories"]) == 7
+    used = {f for p in outline["chapters"][0]["paragraphs"] for f in p["facts"] + p["brief"]}
+    for m in o["memories"]:
+        assert set(m["facts"]) <= used, m["name"]
+    book = pipe.ledger(a)
+    for f in used:                                                         # 다른 인물의 무관한 일은 없다
+        assert f in book and not set(book[f]["turns"]) & {5, 7, 8, 30, 31, 32, 33, 37}, f
+    memos = [p["role"] for p in outline["chapters"][0]["paragraphs"]]
+    assert not any(m.strip().endswith("다.") for m in memos)               # 완성된 본문 문장 없음
+    spec = importlib.util.spec_from_file_location("bo", ROOT / "eval" / "build_outline_fixture_C_v5.py")
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    assert mod.build() == o
+
+
+@pytest.mark.parametrize("change, why", [
+    (lambda o: o["analysis_fixture"].update(sha256="0" * 16), "sha256"),
+    (lambda o: o.update(outline_source="model"), "outline_source"),
+    (lambda o: o["outline"]["chapters"][0]["paragraphs"][0].update(role="언니가 준 재봉틀을 나는 아직 버리지 못했다."), "완성된 본문"),
+    (lambda o: o["memories"].append({"name": "없는 기억", "facts": ["f99"]}), "원장에 없거나"),
+    (lambda o: (o["outline"]["chapters"][0]["paragraphs"][6]["facts"].append("f51"),
+                o["outline"]["omit"].__setitem__(slice(None), [x if "f51" not in x["facts"] else
+                                                                {**x, "facts": [f for f in x["facts"] if f != "f51"]}
+                                                                for x in o["outline"]["omit"] if x["facts"] != ["f51"]])),
+     "섞였다"),
+])
+def test_reviewed_outline_is_refused_when_unmarked_or_unsafe(change, why):
+    data, turn_map, fx, a = _fixture_analysis()
+    o = json.loads(OUTLINE_C.read_text(encoding="utf-8"))
+    change(o)
+    with pytest.raises(pipe.PipelineError, match=why):
+        pipe.load_outline_fixture(o, a, fx, pipe.check_input(data, turn_map))
+
+
+def test_cli_from_outline_dry_run_and_refusals(capsys):
+    args = ["--seed", str(SEED_C_PATH), "--aliases", "c1,c2,c3,c4,c5", "--dry-run"]
+    assert cli.main(args + ["--from-analysis", str(FIXTURE_C), "--from-outline", str(OUTLINE_C)]) == 0
+    out = capsys.readouterr().out
+    assert "outline_source=reviewed_fixture" in out and "목차 호출 없음" in out and "예상 호출 3회" in out
+    assert "focus「큰언니와 재봉틀」" in out
+    assert cli.main(args + ["--from-outline", str(OUTLINE_C)]) == 2                     # 분석 스냅샷 없이 못 쓴다
+    assert cli.main(args + ["--from-analysis", str(FIXTURE_C), "--from-outline", str(OUTLINE_C),
+                            "--focus", "다른 소재"]) == 2

@@ -215,6 +215,8 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--analysis-only", action="store_true", help="분석 단계만 — 호출 1회, 기억 지도를 남긴다")
     ap.add_argument("--from-analysis", type=Path,
                     help="후속 단계 시험 — 검증된 시험용 분석 스냅샷(reviewed_fixture)에서 시작, 분석을 부르지 않는다")
+    ap.add_argument("--from-outline", type=Path,
+                    help="집필 시험 — --from-analysis 와 함께, 사람이 검토한 시험용 목차에서 시작(장 → 편집 → 검증)")
     a = ap.parse_args(argv)
 
     from dotenv import load_dotenv
@@ -262,7 +264,25 @@ def main(argv: list[str] | None = None) -> int:
         print(f"분석 출처: 시험용 스냅샷 {a.from_analysis.name} (analysis_source=reviewed_fixture · 바탕 "
               f"{fixture['based_on']['run_ref']} · 고친 항목 {len(fixture['edits'])}) — 사실 {len(analysis['facts'])} · "
               f"기억 단위 {len(analysis['units'])} · 분석 호출 없음")
-    extra = 3 if fixture is not None else 4
+    outline_fx = None
+    if a.from_outline:
+        if fixture is None:
+            print("입력 거부 — --from-outline 은 --from-analysis 와 함께만 쓴다", file=sys.stderr)
+            return 2
+        try:
+            outline_fx = json.loads(a.from_outline.read_text(encoding="utf-8"))
+            _, fx_focus = pipe.load_outline_fixture(outline_fx, analysis, fixture, pipe.check_input(data, turn_map))
+        except (OSError, ValueError, pipe.PipelineError) as e:
+            print(f"입력 거부 — {getattr(e, 'message', e)}", file=sys.stderr)
+            return 2
+        if focus and focus != fx_focus:
+            print(f"입력 거부 — --focus 가 목차 스냅샷의 focus 「{fx_focus}」 와 다르다", file=sys.stderr)
+            return 2
+        focus = fx_focus
+        n_par = sum(len(ch["paragraphs"]) for ch in outline_fx["outline"]["chapters"])
+        print(f"목차 출처: 사람이 검토한 시험용 목차 {a.from_outline.name} (outline_source=reviewed_fixture) — "
+              f"장 {len(outline_fx['outline']['chapters'])} · 문단 계획 {n_par} · 목차 호출 없음")
+    extra = 2 if outline_fx is not None else 3 if fixture is not None else 4
     calls = (f"{1 + extra}회 (장 1 + {extra})" if focus else
              f"{pipe.MIN_CHAPTERS + extra}~{pipe.MAX_CHAPTERS + extra}회 (장 수 + {extra})")
     print(f"모델 {cfg['MEMOIR_PIPE_TEXT_MODEL']} · 온도 {cfg['MEMOIR_PIPE_TEMPERATURE']} · "
@@ -276,9 +296,11 @@ def main(argv: list[str] | None = None) -> int:
         meta["run_ref"] += "-focus"
     if fixture is not None:
         meta["run_ref"] += "-fixture"
+    if outline_fx is not None:
+        meta["run_ref"] += "-outline"
     folder = a.out_dir / meta["run_ref"]
     result = asyncio.run(pipe.run(data, turn_map, recorder=pipe.Recorder(folder), meta=meta, focus=focus,
-                                  analysis_fixture=fixture))
+                                  analysis_fixture=fixture, outline_fixture=outline_fx))
     steps = json.loads((folder / "run.json").read_text(encoding="utf-8"))["steps"]
     for s in steps:
         u = s.get("usage") or {}
@@ -291,7 +313,7 @@ def main(argv: list[str] | None = None) -> int:
     print(f"편집 추적 장 {t.get('draft_chapters')}→{t.get('final_chapters')} · 문장 그대로 {t.get('kept')} · 다시 씀 "
           f"{t.get('rewritten')} · 옮김 {t.get('moved')} · 덜어 냄 {t.get('dropped')} · 구조 변화 {t.get('structure_changed')}")
     print(f"구성 채점(코드 보정 뒤) {q.get('scores')} · 기준 충족 {q.get('meets_bar')}")
-    print(f"분석 출처 {result.get('analysis_source')}")
+    print(f"분석 출처 {result.get('analysis_source')} · 목차 출처 {result.get('outline_source')}")
     print(f"판정 code_gate={result.get('code_gate')} · model_verdict={result.get('model_verdict')} · "
           f"human_review={result['human_review']} → overall={result.get('overall')}")
     print(f"결과 {result['generation_state']} · pipeline_complete={str(result['pipeline_complete']).lower()} · "

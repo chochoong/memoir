@@ -1,0 +1,433 @@
+{
+ "run_ref": "20261027T014432Z-C5-b9f8-focus-fixture",
+ "outline": {
+  "status": "ready",
+  "book": {
+   "title": {
+    "text": "큰언니의 재봉틀",
+    "kind": "editorial",
+    "facts": []
+   },
+   "center": "큰언니에게서 받아 지금까지 간직한 검은색 발틀 재봉틀",
+   "flow": "어린 시절 언니와의 기억부터 재봉틀이 건네진 사연과 지금까지의 마음을 담습니다.",
+   "opening_facts": [
+    "f21"
+   ],
+   "closing_facts": [
+    "f58"
+   ]
+  },
+  "chapters": [
+   {
+    "chapter_key": "ch-1",
+    "title": {
+     "text": "큰언니와 재봉틀",
+     "kind": "editorial",
+     "facts": []
+    },
+    "center": "큰언니에게서 받은 재봉틀과 언니를 향한 기억",
+    "experience": "언니가 보낸 재봉틀 소리 속에서 삶을 지탱해 준 따뜻한 품을 느껴봅니다.",
+    "units": [
+     "m1",
+     "m3",
+     "m7"
+    ],
+    "paragraphs": [
+     {
+      "role": "어린 시절 큰언니와 나눈 이별의 기억",
+      "facts": [
+       "f21"
+      ],
+      "brief": [],
+      "time": "열다섯 살 즈음"
+     },
+     {
+      "role": "대전에 수선집을 열고 언니의 재봉틀을 받게 된 이야기",
+      "facts": [
+       "f6",
+       "f34"
+      ],
+      "brief": [],
+      "time": "1985년 봄"
+     },
+     {
+      "role": "세월이 흘러도 버리지 못한 재봉틀과 언니를 떠올리는 마음",
+      "facts": [
+       "f2",
+       "f3",
+       "f43",
+       "f48",
+       "f51",
+       "f52",
+       "f57",
+       "f58",
+       "f60"
+      ],
+      "brief": [],
+      "time": "현재"
+     }
+    ],
+    "reorder": []
+   }
+  ],
+  "omit": [
+   {
+    "facts": [
+     "f1",
+     "f4",
+     "f5",
+     "f7",
+     "f8",
+     "f9",
+     "f10",
+     "f11",
+     "f12",
+     "f13",
+     "f14",
+     "f15",
+     "f16",
+     "f17",
+     "f18",
+     "f19",
+     "f20",
+     "f22",
+     "f23",
+     "f24",
+     "f25",
+     "f26",
+     "f27",
+     "f28",
+     "f29",
+     "f30",
+     "f31",
+     "f32",
+     "f33",
+     "f35",
+     "f36",
+     "f37",
+     "f38",
+     "f39",
+     "f40",
+     "f41",
+     "f42",
+     "f44",
+     "f45",
+     "f46",
+     "f47",
+     "f49",
+     "f50",
+     "f53",
+     "f54",
+     "f55",
+     "f56",
+     "f59",
+     "f61",
+     "f62",
+     "f63",
+     "f64",
+     "f65",
+     "f66"
+    ],
+    "reason": "이번 원고의 범위인 큰언니와 재봉틀에 직접 속하지 않거나 다른 장에서 다루어야 하는 사실들입니다."
+   }
+  ],
+  "missing_context": []
+ },
+ "edited": {
+  "diagnosis": [
+   {
+    "issue": "초안이 인터뷰 질문과 답변의 순서를 그대로 따라 나열되어 서사적 흐름이 약함",
+    "where": [
+     "ch-1"
+    ],
+    "action": "큰언니와의 기억, 수선집 개업과 재봉틀의 도착, 세월이 흘러간 현재의 마음으로 문단을 다시 묶고 연결함"
+   },
+   {
+    "issue": "불확실한 기억을 다룬 사실(f60)이 단정적인 어조로 서술됨",
+    "where": [
+     "ch-1/p3"
+    ],
+    "action": "certainty_lost 규칙에 따라 '…싶다' 또는 '~는지 모르겠다'는 흐린 기억의 어조로 수정함"
+   }
+  ],
+  "title": {
+   "text": "큰언니의 재봉틀",
+   "kind": "editorial",
+   "facts": []
+  },
+  "chapters": [
+   {
+    "chapter_key": "ch-1",
+    "center": "큰언니에게서 받은 재봉틀과 언니를 향한 기억",
+    "title": {
+     "text": "큰언니와 재봉틀",
+     "kind": "editorial",
+     "facts": []
+    },
+    "paragraphs": [
+     [
+      {
+       "text": "열다섯 살 즈음 언니가 부산으로 시집가던 날 내가 많이 울었다고 들었다.",
+       "kind": "supported",
+       "facts": [
+        "f21"
+       ]
+      }
+     ],
+     [
+      {
+       "text": "1985년 봄에 수선집을 개업했다.",
+       "kind": "supported",
+       "facts": [
+        "f34"
+       ]
+      },
+      {
+       "text": "검은색 발틀 재봉틀은 큰언니가 보내 준 것이다.",
+       "kind": "supported",
+       "facts": [
+        "f6"
+       ]
+      }
+     ],
+     [
+      {
+       "text": "무릎이 아파서 더는 못 앉아 있겠어서 2010년에 수선집을 그만뒀다.",
+       "kind": "supported",
+       "facts": [
+        "f2",
+        "f3"
+       ]
+      },
+      {
+       "text": "큰언니는 병원 다녀온 그다음 해 봄인 2004년에 돌아가셨고, 남편은 2015년에 돌아가셨다.",
+       "kind": "supported",
+       "facts": [
+        "f51",
+        "f52"
+       ]
+      },
+      {
+       "text": "큰언니가 시집간 집에 처음 가 보고 그때 바다를 처음 보았다.",
+       "kind": "supported",
+       "facts": [
+        "f43"
+       ]
+      },
+      {
+       "text": "처음부터 하나 지어 주고 싶었는데 눈이 침침해 엄두가 안 나서 아쉽다.",
+       "kind": "supported",
+       "facts": [
+        "f48"
+       ]
+      },
+      {
+       "text": "언니가 준 재봉틀을 아직 못 버렸다.",
+       "kind": "supported",
+       "facts": [
+        "f57"
+       ]
+      },
+      {
+       "text": "재봉틀 드르륵 소리가 나면 언니 생각이 난다.",
+       "kind": "supported",
+       "facts": [
+        "f58"
+       ]
+      },
+      {
+       "text": "애들한테 그 재봉틀을 줄지는 아직 모르겠고 걔들이 쓸 일이 있겠나 싶다.",
+       "kind": "supported",
+       "facts": [
+        "f60"
+       ]
+      }
+     ]
+    ]
+   }
+  ],
+  "omitted": [
+   {
+    "facts": [
+     "f1",
+     "f4",
+     "f5",
+     "f7",
+     "f8",
+     "f9",
+     "f10",
+     "f11",
+     "f12",
+     "f13",
+     "f14",
+     "f15",
+     "f16",
+     "f17",
+     "f18",
+     "f19",
+     "f20",
+     "f22",
+     "f23",
+     "f24",
+     "f25",
+     "f26",
+     "f27",
+     "f28",
+     "f29",
+     "f30",
+     "f31",
+     "f32",
+     "f33",
+     "f35",
+     "f36",
+     "f37",
+     "f38",
+     "f39",
+     "f40",
+     "f41",
+     "f42",
+     "f44",
+     "f45",
+     "f46",
+     "f47",
+     "f49",
+     "f50",
+     "f53",
+     "f54",
+     "f55",
+     "f56",
+     "f59",
+     "f61",
+     "f62",
+     "f63",
+     "f64",
+     "f65",
+     "f66"
+    ],
+    "reason": "이번 원고의 범위인 큰언니와 재봉틀에 직접 속하지 않거나 다른 장에서 다루어야 하는 사실들입니다."
+   }
+  ],
+  "checks_resolution": [
+   {
+    "check_id": "certainty_lost:ch-1/p2/s6:f60",
+    "status": "resolved",
+    "reason": "사실 f60의 불확실한 기억을 반영하여 단정적인 표현을 '모르겠고… 싶다'라는 흐린 기억의 어조로 수정함"
+   },
+   {
+    "check_id": "must_keep_omitted:artifact:f12",
+    "status": "kept",
+    "reason": "이번 원고의 범위인 큰언니와 재봉틀에 직접 속하지 않는 사실이므로 목차의 범위에 따라 제외함"
+   },
+   {
+    "check_id": "must_keep_omitted:artifact:f13",
+    "status": "kept",
+    "reason": "이번 원고의 범위인 큰언니와 재봉틀에 직접 속하지 않는 사실이므로 목차의 범위에 따라 제외함"
+   },
+   {
+    "check_id": "must_keep_omitted:artifact:f22",
+    "status": "kept",
+    "reason": "이번 원고의 범위인 큰언니와 재봉틀에 직접 속하지 않는 사실이므로 목차의 범위에 따라 제외함"
+   }
+  ],
+  "notes": [
+   "초안의 발언 나열 형식을 진단하여 장의 중심 흐름에 맞춰 문단을 정리했습니다.",
+   "certainty_lost로 지적된 f60의 불확실성을 정확히 살려 수정했습니다."
+  ]
+ },
+ "edit_trace": {
+  "summary": {
+   "draft_chapters": 1,
+   "final_chapters": 1,
+   "draft_sentences": 10,
+   "final_sentences": 10,
+   "kept": 9,
+   "revised": 1,
+   "rewritten": 0,
+   "new": 0,
+   "dropped": 0,
+   "moved": 0,
+   "chapter_merges": [],
+   "chapter_splits": [],
+   "paragraph_merges": 0,
+   "paragraph_splits": 0,
+   "unchanged_ratio": 0.9,
+   "structure_changed": false
+  },
+  "sentences": [
+   {
+    "at": "ch-1/p0/s0",
+    "from": "ch-1/p0/s0",
+    "kind": "kept",
+    "ratio": 0.93,
+    "moved": false
+   },
+   {
+    "at": "ch-1/p1/s0",
+    "from": "ch-1/p1/s0",
+    "kind": "kept",
+    "ratio": 1.0,
+    "moved": false
+   },
+   {
+    "at": "ch-1/p1/s1",
+    "from": "ch-1/p1/s1",
+    "kind": "kept",
+    "ratio": 1.0,
+    "moved": false
+   },
+   {
+    "at": "ch-1/p2/s0",
+    "from": "ch-1/p2/s0",
+    "kind": "kept",
+    "ratio": 1.0,
+    "moved": false
+   },
+   {
+    "at": "ch-1/p2/s1",
+    "from": "ch-1/p2/s1",
+    "kind": "revised",
+    "ratio": 0.65,
+    "moved": false
+   },
+   {
+    "at": "ch-1/p2/s2",
+    "from": "ch-1/p2/s2",
+    "kind": "kept",
+    "ratio": 1.0,
+    "moved": false
+   },
+   {
+    "at": "ch-1/p2/s3",
+    "from": "ch-1/p2/s3",
+    "kind": "kept",
+    "ratio": 1.0,
+    "moved": false
+   },
+   {
+    "at": "ch-1/p2/s4",
+    "from": "ch-1/p2/s4",
+    "kind": "kept",
+    "ratio": 1.0,
+    "moved": false
+   },
+   {
+    "at": "ch-1/p2/s5",
+    "from": "ch-1/p2/s5",
+    "kind": "kept",
+    "ratio": 1.0,
+    "moved": false
+   },
+   {
+    "at": "ch-1/p2/s6",
+    "from": "ch-1/p2/s6",
+    "kind": "kept",
+    "ratio": 1.0,
+    "moved": false
+   }
+  ],
+  "dropped": [],
+  "dropped_facts": [],
+  "unexplained_dropped_facts": [],
+  "new_facts": []
+ }
+}

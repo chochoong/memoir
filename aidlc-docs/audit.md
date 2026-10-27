@@ -289,3 +289,19 @@
 **Context**: CONSTRUCTION - 단위 8P 후속 단계 실제 시험 직전
 
 ---
+
+## Build and Test 단위 8P - v5 후속 단계 실제 1회 (reviewed_fixture · 큰언니와 재봉틀)
+**Timestamp**: 2026-10-27T01:44:32Z
+**User Input**: (위 승인 — e26ed25 · flash-lite · Seed C · b9f8e2daea65 · analysis_fixture_C_v5_reviewed.json · 큰언니와 재봉틀 · 4회 · 재시도 0 · reviewed_fixture 명시 · 책다운 수필 평가 · 보고 9가지 · 추가 호출 · 변경 없이 보고)
+**AI Response**: "1회(20261027T014432Z-C5-b9f8-focus-fixture): 4호출 모두 STOP · 13.4초 · 입력 55,502 · 출력 4,076 · 분석 호출 없음(reviewed_fixture). generated · code_gate attention(certainty_lost 오탐 1) · model_verdict pass · 코드 보정 Q2 · Q3 · Q5 → 1 기준 미달 · overall needs_revision. 목차가 사실 66 중 13만 골라 핵심(바느질 · 공장 소리 · 재봉틀 도착 · 편지 · 병문안 · 싫었던 소리)을 빼고 셋째 문단에 남편 별세 · 딸 드레스 아쉬움 · 1977 바다를 모음. 본문 10문장 3문단, 창작 없음 · 전언 · 정정 · 흐림 보존, 그러나 딸 드레스 문장이 언니 이야기로 오독되는 배치 · 시간 역행. 편집은 재구성했다고 적었으나 edit_trace 는 그대로 9 · 다듬음 1 · 구조 변화 없음. 검증은 전 항목 2점 · issues 0. 제안 Q1 1 · Q2 0 · Q3 0 · Q4 0 · Q5 0 · Q6 1 · Q7 부분 · Q8 실패(예상). v4 한 장 2차보다 나쁨(방법 전체 비교). 기록 결함: result.json 에 analysis_source 누락(run.json · R1 에는 있음). 다음: 후속 단계만 상위 모델 1회 또는 사람 목차 + 집필 · 편집 시험 제안. R1-20261027T014432Z-C5-v5-followon.md. 추가 호출 · 수정 · push 없음."
+**Context**: CONSTRUCTION - 단위 8P v5 후속 단계 시험 — 책다운 수필 미도달, 다음 판단 대기
+
+---
+
+## Code Generation 단위 8P - 사람 검토 목차 · 집필 시험 모드 · 후속 실패 원인별 보완 (모의)
+**Timestamp**: 2026-10-27T02:00:37Z
+**User Input**: "Unit 8P v5 후속 4단계 … 자서전 품질 실패로 판정 … 분석 프롬프트 추가 수정 · 전체 반복 실행 안 함 1 좋은 목차가 주어졌을 때 flash-lite 가 책다운 회고 수필을 쓰는지 — 목차 설계와 집필 · 편집 분리 2 검토된 분석 스냅샷 유지, 큰언니와 재봉틀 사람 검토 목차 · 문단 계획(7 기억), 배치는 편집적 선택, 창작 금지, 정답 문장 · 예상 본문 금지, 핵심 사실 id · 출처 턴 연결, 다른 인물 무관 사건 혼입 검사, 자동 목차 성공으로 간주 금지 3 집필 → 편집 → 검증 모드 · flash-lite · 3회 · 재시도 0 · 사람 목차 사용 명시 · 출처 추적 4 핵심 기억 일괄 생략 · 문단 혼입 · 바뀌지 않았는데 개선 보고 · result.json 의 analysis_source 누락을 원인별 정리, 문장 · 문단 수 강제 금지 5 목차 · 모드 · 회귀 · dry-run 까지, 호출 없음 …"
+**AI Response**: "원인별: 일괄 생략은 목차 계약이 무엇을 뺐는지 안 봄 → 장의 단위 사실 2/3 넘게 빼면 경고, 혼입은 문단 안 단위 관계 검사 없음 → 끈으로 이어지지 않는 단위 혼입 경고, 허위 보고는 diagnosis 를 검사하지 않음 → edit_claim_mismatch(fix, edit_trace 기준), result.json 은 finally 에서 쓴 뒤 출처를 넣은 순서 오류 → 고침 + 파일 테스트. f60 흐림 오탐도 고침. 01:44Z 산출물을 tests/data 에 고정 — 세 검사가 그대로 잡음. 사람 검토 목차 outline_fixture_C_v5_reviewed.json(7문단 · 사실 30 · 7기억 모두 포함 · 무관 인물 턴 없음 · 메모에 완성 문장 없음 · 혼입/일괄 생략 경고 없음, 분석 스냅샷 sha 고정, 재현 스크립트). --from-outline 집필 시험(3호출), outline_source 표시. 8P 152 · 전체 221 · theme-interview 사본 152 · 막은 시도 0 · dry-run. 호출 · 커밋 · push 없음."
+**Context**: CONSTRUCTION - 단위 8P 집필 시험 준비 완료, 3호출 실제 시험 승인 대기
+
+---
