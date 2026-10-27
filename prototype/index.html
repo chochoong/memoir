@@ -395,6 +395,7 @@
     .screen[data-screen="wordpick"] { padding-bottom: calc(168px + env(safe-area-inset-bottom)); }
     .wd-group[hidden] { display: none; }
     .wd-group { margin: 0 0 18px; }
+    .link-words { margin: 18px 0 0; text-align: left; }
     .wd-group h3 { margin: 0 0 8px; font-size: .95rem; font-weight: 700; color: var(--ink); }
     .wd-list { list-style: none; padding: 0; margin: 0; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
     .wd-card { width: 100%; min-height: 84px; padding: 16px 12px; border-radius: 18px; border: 2px solid var(--line);
@@ -5238,7 +5239,8 @@
     other: '지금은 로그인할 수 없어요. 잠시 뒤 다시 시도해 주세요.',
   };
   const LINK_SAYS = {
-    ready:       { h: '들려주실 이야기', p: '준비되시면 아래 버튼을 눌러 주세요. 누르면 마이크를 써도 되는지 여쭤봐요.', btn: '이야기 시작하기', topic: true, friend: true },
+    ready:       { h: '들려주실 이야기', p: '준비되시면 아래 버튼을 눌러 주세요. 누르면 마이크를 써도 되는지 여쭤봐요.', btn: '이야기 시작하기', topic: true, friend: true,
+                   pick: '이야기하고 싶은 낱말을 하나 눌러 주세요. 누르면 마이크를 써도 되는지 여쭤봐요.' },
     in_progress: { h: '이야기를 이어서 해요', p: '이 기기에서 하던 이야기가 남아 있어요.', btn: '이어서 하기', topic: true, friend: true },
     in_progress_elsewhere: { h: '다른 곳에서 진행 중이에요', p: '처음 시작한 기기에서 이어서 해 주세요.' },
     interrupted: { h: '연결이 끊겼어요', p: '링크를 보내 주신 분께 새 링크를 부탁해 주세요.' },
@@ -5287,8 +5289,17 @@
       const t = [THEME_LABEL[info.theme] || '', info.topic || ''].filter(Boolean).join(' · ');
       if (t) host.append(el('p', 'fe03-acct', t));
     }
-    host.append(el('p', 'lead', say.p));
-    if (say.btn && onBtn) {
+    // 낱말 카드를 이 화면 안에 바로 놓는다 (CONFIG.interview.wordPick). 다른 화면으로 넘기지 않고,
+    // 카드를 누르는 그 동작이 곧 「시작」이다 — 마이크 · 소리 허락도 그 탭에서 이어진다
+    const inlineWords = host.id === 'linkView' && state === 'ready' && onBtn && NEW_FLOW && CONFIG.interview.wordPick;   // 개발 시안(fe03) 은 예전 버튼 그대로
+    host.append(el('p', 'lead', inlineWords ? say.pick : say.p));
+    if (inlineWords) {
+      words.pickFor = 'elder'; words.go = '';
+      words.featured = String((info && info.topic) || '').trim();
+      const box = el('div', 'link-words');
+      renderWordPick(box);
+      host.append(box);
+    } else if (say.btn && onBtn) {
       const b = el('button', 'btn btn-primary', say.btn);
       b.addEventListener('click', onBtn);
       host.append(b);
@@ -5325,7 +5336,7 @@
     if (linkBusy) return;                 // 연속 클릭 — 서버도 같은 회차를 돌려주지만 화면에서도 한 번만
     // 낱말 카드를 먼저 고르신다 (CONFIG.interview.wordPick). 고르시면 pickAndGo 가 다시 부른다
     if (NEW_FLOW && CONFIG.interview.wordPick && LINK.preview && LINK.preview.state === 'ready') {
-      if (!words.go) { openPick('elder'); return; }
+      if (!words.go) { openPick('elder'); return; }   // 카드는 첫 화면에 있다 — 여기는 그 밖에서 부른 경우뿐
       LINK.topic = words.go; words.go = '';
     }
     linkBusy = true;
@@ -6225,8 +6236,7 @@
     return sec;
   }
   /** 단추를 누르면 그 묶음 카드가 나오고, 다시 누르면 접힌다. 한 번에 한 묶음만 편다. */
-  function renderWordPick() {
-    const box = $('#wpList');
+  function renderWordPick(box = $('#wpList')) {
     const groups = wordGroups();
     const cats = groups.filter(g => !g.mine);
     const parts = groups.filter(g => g.mine).map(groupSection);
