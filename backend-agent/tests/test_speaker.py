@@ -80,6 +80,31 @@ async def run(con):
     rec = await store.load_session(s_none)
     check("load_session 에도 elder_id (자서전 화자 확인이 읽는 값)", rec["elder_id"] == mom)
 
+    print("\n[S3] 자서전의 「전부」 — 이 화자 · 닫힌 · 말씀 있는 회차 (memoir_sessions · has_words)")
+    s_said2 = await _session(con, A, "말씀 있음 2", at(10))
+    s_seed = await _session(con, A, "씨앗만", at(11), answer=False)
+    await con.execute("INSERT INTO turn (session_id, idx, question, answer) VALUES ($1, 0, '씨앗', '씨앗 글')",
+                      uuid.UUID(s_seed))
+    s_blank = await _session(con, A, "빈 말씀", at(12), answer=False)
+    await con.execute("INSERT INTO turn (session_id, idx, question, answer) VALUES ($1, 1, '질문', $2)",
+                      uuid.UUID(s_blank), " \n\t ")
+    s_open = await _session(con, A, "진행 중", at(13))
+    await con.execute("UPDATE session SET closed_at = NULL, state = 'LISTENING' WHERE session_id = $1",
+                      uuid.UUID(s_open))
+    s_dad = await _session(con, A, "아버지 회차", at(14))
+    for s, who in ((s_said2, mom), (s_seed, mom), (s_blank, mom), (s_open, mom), (s_dad, dad)):
+        await store.assign_elder(s, A, who)
+    every = await store.memoir_sessions(A, mom)
+    check("닫힌 · 말씀 있는 회차만, 연 순서대로 (씨앗만 · 빈 말씀 · 진행 중 · 다른 화자 빠짐)",
+          every == [s_none, s_said2], str(every))
+    check("미지정 회차는 들지 않는다", s_other not in every)
+    check("남의 자녀로는 빈 목록", await store.memoir_sessions(B, mom) == [])
+    rows = {r["session_id"]: r for r in await store.list_sessions(A, 100, elder_id=mom)}
+    check("목록의 has_words — 같은 규칙 (씨앗만 · 빈 말씀은 False)",
+          rows[s_said2]["has_words"] is True and rows[s_seed]["has_words"] is False
+          and rows[s_blank]["has_words"] is False and rows[s_open]["has_words"] is True,
+          str({v["title"]: v["has_words"] for v in rows.values()}))
+
 
 async def main():
     try:

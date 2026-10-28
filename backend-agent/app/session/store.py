@@ -337,6 +337,9 @@ async def list_sessions(user_id: str, limit: int = 20, has_postcard: bool = Fals
     뒤로 밀린다.
 
     elder_id 를 주면 그 화자의 회차만 준다 (화자 미지정 회차는 빠진다).
+
+    has_words 는 어르신 말씀이 하나라도 있는가다 — 자서전에 넣을 수 있는 회차의
+    조건 (memoir_sessions 와 같은 _SAID).
     """
     only = "AND p.session_id IS NOT NULL" if has_postcard else ""
     pool = _need_pool()
@@ -346,6 +349,7 @@ async def list_sessions(user_id: str, limit: int = 20, has_postcard: bool = Fals
                 f"""
                 SELECT s.*, (SELECT count(*) FROM turn t
                               WHERE t.session_id = s.session_id) AS fragment_count,
+                       {_SAID} AS has_words,
                        p.session_id IS NOT NULL AS has_postcard,
                        p.title AS postcard_title
                   FROM session s
@@ -360,8 +364,40 @@ async def list_sessions(user_id: str, limit: int = 20, has_postcard: bool = Fals
         log.error("회차 목록 읽기 실패 (%s: %s)", type(e).__name__, str(e)[:120])
         raise StoreUnavailable("회차 목록을 읽지 못했습니다") from e
     return [{**_session_row(r), "fragment_count": r["fragment_count"],
+             "has_words": r["has_words"],
              "has_postcard": r["has_postcard"],
              "postcard_title": r["postcard_title"]} for r in rows]
+
+
+# 어르신 말씀이 있는 회차 — 0번은 씨앗이라 말씀이 아니다. postcard.material 의
+# 「idx > 0 이고 answer 가 비지 않은 조각」 과 같은 규칙이다.
+_SAID = r"""EXISTS (SELECT 1 FROM turn w
+                     WHERE w.session_id = s.session_id AND w.idx > 0 AND w.answer ~ '\S')"""
+
+
+async def memoir_sessions(user_id: str, elder_id: str) -> list[str]:
+    """
+    자서전의 「전부」 — 이 자녀 · 이 화자의 **닫힌 · 말씀 있는** 회차. 연 순서대로.
+
+    화면의 자서전 고르기 목록과 같은 기준이다 (closed_at · 화자 · has_words). 화자
+    미지정 · 진행 중 · 말씀 없는 회차는 들지 않는다. 개수 상한은 없다 — 목록
+    (`list_sessions`)은 100개까지라 그보다 오래된 회차는 여기서만 보인다.
+    """
+    pool = _need_pool()
+    try:
+        async with pool.acquire() as con:
+            rows = await con.fetch(
+                f"""
+                SELECT s.session_id FROM session s
+                 WHERE s.user_id = $1 AND s.elder_id = $2
+                   AND s.closed_at IS NOT NULL AND {_SAID}
+                 ORDER BY s.created_at
+                """,
+                user_id, elder_id)
+    except Exception as e:                                   # noqa: BLE001
+        log.error("자서전 회차 읽기 실패 (%s: %s)", type(e).__name__, str(e)[:120])
+        raise StoreUnavailable("자서전 회차를 읽지 못했습니다") from e
+    return [str(r["session_id"]) for r in rows]
 
 
 async def load_session(session_id: str) -> dict | None:

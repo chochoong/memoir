@@ -597,8 +597,15 @@ async def list_sessions(limit: int = 20, has_postcard: bool = False,
     DB 를 못 읽으면 **빈 목록이 아니라 503 이다.** 빈 목록을 주면 화면에
     「기록이 없습니다」가 뜨고, 그건 어르신에게 조각이 사라졌다는 말이 된다.
     없는 것과 못 읽은 것은 다른 사건이라 화면도 다르게 말해야 한다.
+
+    `?elder_id=` 면 `memoir_total` 도 싣는다 — 그 화자의 자서전 회차(닫힌 · 말씀 있는,
+    has_words) **전부**의 수다. 목록은 limit(최대 100)까지라, 화면은 이 수와 목록에 보인
+    수의 차이로 「목록에 없지만 함께 들어가는 오래된 이야기」 를 안내한다.
     """
-    return {"sessions": await _read(store.list_sessions(who, _limit(limit), has_postcard, elder_id))}
+    rows = await _read(store.list_sessions(who, _limit(limit), has_postcard, elder_id))
+    if not elder_id:
+        return {"sessions": rows}
+    return {"sessions": rows, "memoir_total": len(await _read(store.memoir_sessions(who, elder_id)))}
 
 
 @app.put("/api/sessions/{session_id}/elder")
@@ -864,7 +871,7 @@ def _postcard_url(session_id: str, rec: dict) -> str:
 
 # 화면이 그대로 보여 주는 말이다 (해요체). 안쪽 사정은 로그에만 남긴다.
 _MEMOIR_SAYS = {
-    400: "선택한 엽서를 확인해 주세요. 3~5장을 고를 수 있어요.",
+    400: "선택한 이야기를 확인해 주세요. 말씀이 있는 이야기가 3개 이상이어야 해요.",
     404: "선택한 엽서를 찾을 수 없어요. 목록에서 다시 골라 주세요.",
     422: "선택한 엽서의 이야기 자료를 불러오지 못했어요.",
     502: "자서전을 만드는 중 문제가 생겼어요. 엽서 선택 화면으로 돌아가 주세요.",
@@ -886,7 +893,10 @@ async def memoir_preview(request: Request, who: str = Depends(auth.current_user)
     """
     고른 회차로 자서전 초안을 쓴다. **기다리는 요청이다** — 다 쓰거나 실패해야 답이 간다.
 
-    본문은 `{"session_ids": [...], "style": ...}` 다. style 은 없으면 구어체다.
+    본문은 `{"session_ids": [...], "style": ...}` (고른 것) 이나
+    `{"elder_id": ..., "exclude_session_ids": [...], "style": ...}` (화자의 전부에서 뺄 것 ·
+    상한 없음) 다. exclude_session_ids 칸이 있으면 뒤의 것이다. style 은 없으면 구어체다.
+    응답의 run.session_ids 는 실제로 쓴 회차 전부다.
     누구의 요청인지는 로그인으로 안다.
     본문을 pydantic 으로 받지 않는 것은 모양이 틀렸을 때 FastAPI 가 422 를
     내기 때문이다 — 여기서 422 는 「자료를 못 읽었다」는 다른 뜻이다.
@@ -895,16 +905,20 @@ async def memoir_preview(request: Request, who: str = Depends(auth.current_user)
     `{"detail": 안내, "code": 갈래}` 로만 나간다. 둘을 서로 바꿔 내보내지 않는다.
     """
     try:
-        body = json.loads(await _body_capped(request, 16 * 1024) or b"null")
+        # 빼기 요청은 뺄 회차 수만큼 길어진다 (UUID 하나 40바이트쯤 — 64KB 면 1,500개)
+        body = json.loads(await _body_capped(request, 64 * 1024) or b"null")
     except ValueError:
         body = None
-    ids = body.get("session_ids") if isinstance(body, dict) else None
+    if not isinstance(body, dict):
+        body = {}
     try:
-        chosen = styles.pick(body.get("style") if isinstance(body, dict) else None)
+        chosen = styles.pick(body.get("style"))
     except styles.UnsupportedStyle:
         return _unsupported_style()
     try:
-        return await memoir.preview(ids, who, chosen)
+        if "exclude_session_ids" in body:
+            return await memoir.preview_all(body.get("elder_id"), body["exclude_session_ids"], who, chosen)
+        return await memoir.preview(body.get("session_ids"), who, chosen)
     except memoir.MemoirError as e:
         status, code = next((s, c) for kind, s, c in _MEMOIR_STATUS if isinstance(e, kind))
         code = code or e.code      # 400 은 갈래가 여럿이다 — bad_selection · mixed_speakers · speaker_unassigned

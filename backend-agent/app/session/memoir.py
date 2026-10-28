@@ -2,7 +2,8 @@
 자서전 초안 — 고른 회차 3~5개를 한 입력으로 합쳐 한 번 쓰게 한다 (업무지시서 01 v1.1)
 
     검사      check_selection   개수 · 중복 · 모양               → BadSelection (400)
-    조회      collect           있나 · 내 것인가                  → NotFound (404)
+              (빼기 요청)       check_exclusion · pick_all — 화자의 전부에서 뺀다
+    조회      collect          있나 · 내 것인가                  → NotFound (404)
                                 말씀이 있나 · 한 화자인가          → BadSelection (400)
                                 DB 를 못 읽었다                   → SourceUnavailable (422)
     합치기    merge             전역 턴 · turn_map
@@ -10,6 +11,12 @@
                                                                    GenerationTimeout (504)
     검사      check             7개 키 · 본문 줄마다 출처 하나    → GenerationFailed (502)
                                 확인 필요 · 자료 누락              → NotFinal (503)
+
+**요청은 두 모양이다.** `{session_ids}` 는 고른 것 (3 ~ MEMOIR_MAX_SESSIONS).
+`{elder_id, exclude_session_ids}` 는 최종 정책 「같은 화자 전체 선택 후 제외」(7-C1 §4 ·
+태헌 10-26) — 서버가 그 화자의 전부(store.memoir_sessions)를 정하고 뺄 것만 받는다.
+**빼기 요청에는 개수 상한이 없다** (최충 · 태헌 10-28). 어느 쪽이든 응답의
+run.session_ids 에 실제로 쓴 회차를 전부 싣는다 — 화면이 늦게 온 결과를 알아본다.
 
 **저장하지 않는다.** 초안은 응답으로만 나간다. 자서전 표도, 작업 ID 도 없다.
 
@@ -169,8 +176,12 @@ def check_selection(session_ids) -> list[str]:
     top = max_sessions()
     if not MIN_SESSIONS <= len(session_ids) <= top:
         raise BadSelection(f"회차 {len(session_ids)}개 — {MIN_SESSIONS}~{top}개여야 한다")
+    return _uuids(session_ids)
+
+
+def _uuids(values: list) -> list[str]:
     ids: list[str] = []
-    for s in session_ids:
+    for s in values:
         if not isinstance(s, str):
             raise BadSelection("session_id 가 문자열이 아니다")
         try:
@@ -179,6 +190,38 @@ def check_selection(session_ids) -> list[str]:
             raise BadSelection("session_id 가 UUID 가 아니다") from e
     if len(set(ids)) != len(ids):
         raise BadSelection("같은 회차를 두 번 골랐다")
+    return ids
+
+
+def check_exclusion(elder_id, exclude) -> tuple[str, list[str]]:
+    """빼기 요청의 모양을 본다. DB 는 아직 보지 않는다. 뺄 것이 없으면 빈 목록이다."""
+    if not isinstance(elder_id, str) or not elder_id.strip() or len(elder_id) > 64:
+        raise BadSelection("elder_id 가 없다")
+    if not isinstance(exclude, list):
+        raise BadSelection("exclude_session_ids 가 목록이 아니다")
+    return elder_id.strip(), _uuids(exclude)
+
+
+async def pick_all(elder_id: str, exclude: list[str], user_id: str) -> list[str]:
+    """
+    이 화자의 전부(store.memoir_sessions)에서 뺄 것을 뺀다. **상한은 없다.**
+
+    남의 화자면 404 다. 전부에 없는 회차를 빼라고 하면 거절하지 않고 넘어간다 —
+    어차피 들어가지 않는다 (화면 목록이 말씀 없는 회차를 보여 줬을 때 등).
+    남은 것이 3개보다 적으면 400 이다.
+    """
+    try:
+        if not await store.owns_elder(user_id, elder_id):
+            raise NotFound(f"화자가 없다 {elder_id}")
+        every = await store.memoir_sessions(user_id, elder_id)
+    except store.StoreUnavailable as e:
+        raise SourceUnavailable("자서전 회차를 읽지 못했다") from e
+    gone = set(exclude)
+    if gone - set(every):
+        log.info("자서전 — 화자의 회차가 아닌 것을 빼라고 했다 %d개 (넘어간다)", len(gone - set(every)))
+    ids = [s for s in every if s not in gone]
+    if len(ids) < MIN_SESSIONS:
+        raise BadSelection(f"남은 회차 {len(ids)}개 — {MIN_SESSIONS}개 이상이어야 한다")
     return ids
 
 
@@ -446,8 +489,8 @@ def check(out, turns: set[int]) -> dict:
 
 async def preview(session_ids, user_id: str, style: str = "spoken") -> dict:
     """
-    고른 회차로 초안 하나. 돌려주는 것은 5개 키(SHOWN)에 요청받은 style 을 더한
-    6키다 — turn_map 은 이 요청 안에서 출처를 따져 보는 데만 쓰고 화면에 내보내지
+    고른 회차로 초안 하나. 돌려주는 것은 5개 키(SHOWN)에 요청받은 style 과 실제로 쓴
+    회차(run.session_ids)를 더한 7키다 — turn_map 은 이 요청 안에서 출처를 따져 보는 데만 쓰고 화면에 내보내지
     않는다. missing_context · coverage_notes 는 로그에만 남긴다.
 
     style 은 라우트가 거른 값이다. 지금은 spoken 뿐이라 모델에 보내지 않는다
@@ -455,7 +498,16 @@ async def preview(session_ids, user_id: str, style: str = "spoken") -> dict:
 
     로그에는 회차 ID 와 개수만 남긴다. 원문은 남기지 않는다.
     """
-    ids = check_selection(session_ids)
+    return await _draft(check_selection(session_ids), user_id, style)
+
+
+async def preview_all(elder_id, exclude, user_id: str, style: str = "spoken") -> dict:
+    """빼기 요청 — 이 화자의 전부에서 exclude 를 뺀 회차로 초안 하나. 응답은 preview 와 같다."""
+    elder, gone = check_exclusion(elder_id, exclude)
+    return await _draft(await pick_all(elder, gone, user_id), user_id, style)
+
+
+async def _draft(ids: list[str], user_id: str, style: str) -> dict:
     recs = await collect(ids, user_id)
     data, turn_map = merge(recs)
     turns = {t["global_turn"] for t in turn_map}
@@ -466,4 +518,4 @@ async def preview(session_ids, user_id: str, style: str = "spoken") -> dict:
     log.info("자서전 응답 — %s · 본문 %d줄 · 확인 %d건 · 범위 메모 %s",
              out["status"], len(out["body"].split("\n")) if out["body"] else 0,
              len(out["to_confirm"]), out["coverage_notes"])
-    return {**{k: out[k] for k in SHOWN}, "style": style}
+    return {**{k: out[k] for k in SHOWN}, "style": style, "run": {"session_ids": ids}}

@@ -267,9 +267,9 @@ EMPTY = {"status": "insufficient_material", "title": "", "body": "", "sources": 
          "missing_context": [], "coverage_notes": []}
 
 
-def shown(out: dict, style: str = "spoken") -> dict:
-    """화면에 나가는 6키 — 모델 응답의 다섯 키에 요청받은 문체."""
-    return {**{k: out[k] for k in memoir.SHOWN}, "style": style}
+def shown(out: dict, ids: list[str], style: str = "spoken") -> dict:
+    """화면에 나가는 7키 — 모델 응답의 다섯 키에 요청받은 문체 · 실제로 쓴 회차."""
+    return {**{k: out[k] for k in memoir.SHOWN}, "style": style, "run": {"session_ids": ids}}
 TURNS = {1, 2, 3, 4, 5, 6}
 
 
@@ -374,7 +374,7 @@ class _Fake:
         return {"session_ids": [self.ids[a] for a in aliases]}
 
     def __enter__(self):
-        self._saved = (store.load_session, memoir.write)
+        self._saved = (store.load_session, memoir.write, store.owns_elder, store.memoir_sessions)
 
         async def load_session(sid):
             if self.db_down:
@@ -387,11 +387,25 @@ class _Fake:
             self.seen = data
             return copy.deepcopy(self.out)
 
+        # 빼기 요청 — 화자는 ME 의 e_mom 하나. 「전부」 는 SQL 과 같은 규칙을 seed 회차에 건다 (tests/test_speaker [S3])
+        async def owns_elder(user_id, elder_id):
+            if self.db_down:
+                raise store.StoreUnavailable("화자 확인에 실패했습니다")
+            return (user_id, elder_id) == (ME, "e_mom")
+
+        async def memoir_sessions(user_id, elder_id):
+            said = lambda r: any(f["idx"] > 0 and (f.get("answer") or "").strip()   # noqa: E731
+                                 for f in r["fragments"])
+            got = [r for r in self.recs.values() if r["user_id"] == user_id and r.get("elder_id") == elder_id
+                   and r["closed_at"] and said(r)]
+            return [r["session_id"] for r in sorted(got, key=lambda r: r["created_at"])]
+
         store.load_session, memoir.write = load_session, write
+        store.owns_elder, store.memoir_sessions = owns_elder, memoir_sessions
         return self
 
     def __exit__(self, *a):
-        store.load_session, memoir.write = self._saved
+        store.load_session, memoir.write, store.owns_elder, store.memoir_sessions = self._saved
 
 
 def test_routes():
@@ -414,17 +428,17 @@ def test_routes():
                         and isinstance(body["detail"], str) and "요" in body["detail"])
 
             r = c.post(url, json=three, headers=me)
-            check("3개를 고르면 200 · 다섯 키 + style", r.status_code == 200 and r.json() == shown(READY),
+            check("3개를 고르면 200 · 다섯 키 + style + run", r.status_code == 200 and r.json() == shown(READY, three["session_ids"]),
                   f"{r.status_code} {r.text[:80]}")
             check("모델은 한 번만 부른다", fake.writes == 1, str(fake.writes))
             check("모델에 간 입력은 합치기 결과다 (말씀 6개 · 회차 3개)",
                   len(fake.seen["utterances"]) == 6 and len(fake.seen["sessions"]) == 3)
             check("응답에 turn_map · missing_context · coverage_notes 가 실리지 않는다",
-                  set(r.json()) == {*memoir.SHOWN, "style"})
+                  set(r.json()) == {*memoir.SHOWN, "style", "run"})
 
             r = c.post(url, json={**three, "style": "spoken"}, headers=me)
             check("style spoken 을 보내면 200 · 응답 style spoken",
-                  r.status_code == 200 and r.json() == shown(READY), f"{r.status_code} {r.text[:80]}")
+                  r.status_code == 200 and r.json() == shown(READY, three["session_ids"]), f"{r.status_code} {r.text[:80]}")
 
             # 지원하지 않는 문체 — 고른 회차가 틀린 400 과 code 로 갈린다.
             fake.writes = 0
@@ -514,7 +528,7 @@ def test_routes():
 
             fake.out = copy.deepcopy(EMPTY)
             r = c.post(url, json=three, headers=me)
-            check("자료 부족은 200 · insufficient_material", r.status_code == 200 and r.json() == shown(EMPTY),
+            check("자료 부족은 200 · insufficient_material", r.status_code == 200 and r.json() == shown(EMPTY, three["session_ids"]),
                   f"{r.status_code} {r.text[:60]}")
 
             for name in ("없는 턴을 가리키는 출처", "sentence 번호가 겹치는 출처"):
@@ -561,6 +575,108 @@ def test_routes():
         check("모르는 주입 값은 끈 것으로 읽는다", memoir.inject() == "")
 
 
+def test_exclude():
+    print("\n[빼기] {elder_id, exclude_session_ids} — 화자의 전부에서 뺀다 · 상한 없음 (최충 · 태헌 10-28)")
+    from fastapi.testclient import TestClient
+
+    from app.main import app
+
+    url = "/api/memoirs/preview"
+    me, other = {"X-User-Id": ME}, {"X-User-Id": OTHER}
+
+    with _Env(AZURE_SPEECH_KEY="", GEMINI_API_KEY="", MEMOIR_FAIL_INJECT="off",
+              MEMOIR_MAX_SESSIONS="3"), _Fake() as fake, NoDb(), AsHeader():
+        for r in fake.recs.values():
+            r["elder_id"] = "e_mom"
+        ids = fake.ids
+        every = sorted(ids.values(), key=lambda s: fake.recs[s]["created_at"])
+
+        def ask(exclude, elder="e_mom", who=me, **kv):
+            return c.post(url, json={"elder_id": elder, "exclude_session_ids": exclude, **kv}, headers=who)
+
+        def failed(r, code: str) -> bool:
+            body = r.json()
+            return set(body) == {"detail", "code"} and body["code"] == code
+
+        with TestClient(app) as c:
+            r = ask([])
+            check("뺄 것 없음 → 200 · 다섯 회차 전부 (MEMOIR_MAX_SESSIONS=3 이어도 상한 없음)",
+                  r.status_code == 200 and r.json()["run"]["session_ids"] == every
+                  and len(fake.seen["sessions"]) == 5, f"{r.status_code} {r.text[:80]}")
+            check("응답은 고른 요청과 같은 모양 (다섯 키 + style + run)",
+                  set(r.json()) == {*memoir.SHOWN, "style", "run"})
+
+            r = ask([ids["s-b"], ids["s-d"]])
+            check("두 개를 빼면 → 200 · run 에 나머지 세 개 (뺀 것은 없다)",
+                  r.status_code == 200 and r.json()["run"]["session_ids"] == [ids["s-a"], ids["s-c"], ids["s-e"]]
+                  and len(fake.seen["sessions"]) == 3, f"{r.status_code} {r.text[:80]}")
+            r = ask([ids["s-b"].upper()], style="spoken")
+            check("대문자 UUID 로 빼도 같은 회차다", r.status_code == 200
+                  and ids["s-b"] not in r.json()["run"]["session_ids"], f"{r.status_code}")
+
+            # 「전부」 의 기준 — 진행 중 · 말씀 없음 · 다른 화자 · 미지정은 들지 않는다
+            fake.recs[ids["s-a"]]["closed_at"] = None
+            mute = fake.recs[ids["s-b"]]
+            kept = mute["fragments"]
+            mute["fragments"] = [f for f in kept if f["idx"] == 0]
+            fake.recs[ids["s-c"]]["elder_id"] = None
+            r = ask([])
+            check("진행 중 · 말씀 없음 · 미지정 회차는 빠진다 → 남은 둘이라 400 · bad_selection",
+                  r.status_code == 400 and failed(r, "bad_selection"), f"{r.status_code} {r.text[:80]}")
+            fake.recs[ids["s-c"]]["elder_id"] = "e_mom"
+            r = ask([ids["s-b"], "00000000-0000-4000-8000-0000000000ff"])
+            check("전부에 없는 회차를 빼라고 해도 거절하지 않는다 (말씀 없는 회차 · 없는 회차)",
+                  r.status_code == 200 and r.json()["run"]["session_ids"] == [ids["s-c"], ids["s-d"], ids["s-e"]],
+                  f"{r.status_code} {r.text[:80]}")
+            fake.recs[ids["s-a"]]["closed_at"] = "2026-10-12T10:01:50+00:00"
+            mute["fragments"] = kept
+
+            fake.writes = 0
+            for name, r, code in (
+                ("셋을 빼 두 개만 남으면", ask([ids["s-a"], ids["s-b"], ids["s-c"]]), "bad_selection"),
+                ("elder_id 없음", c.post(url, json={"exclude_session_ids": []}, headers=me), "bad_selection"),
+                ("elder_id 가 문자열이 아님", ask([], elder=3), "bad_selection"),
+                ("exclude 가 목록이 아님", ask(ids["s-a"]), "bad_selection"),
+                ("exclude 에 UUID 가 아닌 것", ask(["s-a"]), "bad_selection"),
+                ("exclude 중복", ask([ids["s-a"], ids["s-a"]]), "bad_selection"),
+            ):
+                check(f"{name} → 400 · {code}", r.status_code == 400 and failed(r, code), f"{r.status_code} {r.text[:60]}")
+            r = ask([], elder="e_dad")
+            check("내 화자가 아니면 → 404 · not_found", r.status_code == 404 and failed(r, "not_found"), f"{r.status_code}")
+            r = ask([], who=other)
+            check("다른 자녀 → 404 · not_found", r.status_code == 404 and failed(r, "not_found"), f"{r.status_code}")
+            fake.db_down = True
+            r = ask([])
+            check("DB 를 못 읽으면 → 422 · source_unavailable", r.status_code == 422 and failed(r, "source_unavailable"),
+                  f"{r.status_code}")
+            fake.db_down = False
+            r = ask([], style="novel")
+            check("문체 거절은 빼기 요청에도 같다 → 400 · unsupported_style",
+                  r.status_code == 400 and r.json()["code"] == "unsupported_style", f"{r.status_code}")
+            check("거절한 빼기 요청은 모델을 부르지 않는다", fake.writes == 0, str(fake.writes))
+
+            r = c.post(url, json={"session_ids": every[:3]}, headers=me)
+            check("exclude_session_ids 칸이 없으면 예전 고르기 그대로 (run 은 고른 것)",
+                  r.status_code == 200 and r.json()["run"]["session_ids"] == every[:3], f"{r.status_code}")
+
+            # 목록 — 화자로 거르면 그 화자의 「전부」 수를 함께 준다 (목록은 100개까지라)
+            saved = store.list_sessions
+
+            async def list_sessions(*a, **kv):
+                return []
+
+            store.list_sessions = list_sessions
+            try:
+                r1 = c.get("/api/sessions?elder_id=e_mom&limit=100", headers=me)
+                r2 = c.get("/api/sessions?limit=100", headers=me)
+            finally:
+                store.list_sessions = saved
+            check("?elder_id= 목록에 memoir_total (화자의 자서전 회차 전부 수)",
+                  r1.status_code == 200 and r1.json() == {"sessions": [], "memoir_total": 5}, f"{r1.status_code} {r1.text[:80]}")
+            check("화자 없이 부르면 memoir_total 이 없다 (예전 그대로)",
+                  r2.status_code == 200 and r2.json() == {"sessions": []}, f"{r2.status_code} {r2.text[:80]}")
+
+
 def test_all_checks_passed():
     """pytest 안전판 — test_flow.py 의 같은 함수 주석 참조."""
     assert not FAIL, "실패: " + ", ".join(FAIL)
@@ -572,6 +688,7 @@ def main() -> int:
     test_merge()
     test_check()
     test_routes()
+    test_exclude()
     print(f"\n{'=' * 52}\n통과 {len(PASS)} · 실패 {len(FAIL)}")
     if FAIL:
         print("실패:", ", ".join(FAIL))
