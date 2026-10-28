@@ -284,7 +284,12 @@ def test_controller_stream():
         ctl.release()
         return ctl, snap
 
-    ctl, snap = run(default())
+    import os
+    saved = {k: os.environ.pop(k, None) for k in ("TTS_PROVIDER", "TTS_STREAM")}
+    try:                  # 기본 = 낭독 설정 없음. pytest 로 함께 돌면 .env 의 TTS_STREAM=1 이 켜져 있다
+        ctl, snap = run(default())
+    finally:
+        os.environ.update({k: v for k, v in saved.items() if v is not None})
     check("기본은 예전 길 — stream_fn 이 없다", ctl.stream_fn is None,
           "TTS_STREAM 을 안 켜면 Azure mp3 한 덩어리")
     check("기본 스냅샷은 흘려 읽기 아님", snap["question_audio_stream"] is False)
