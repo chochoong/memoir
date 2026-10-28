@@ -25,7 +25,7 @@ app/
     timers.py             T1 / T2 + 격발 오차 계측
     controller.py         FSM + 타이머 + 저장을 묶는 곳
     shared.py             공유 상태 — 모델은 읽기만, 쓰는 것은 여기 (사실 병합 · 요약)
-    prompt.py             인터뷰 프롬프트 로더 (첨부프롬프트_md/인터뷰_v3.md)
+    prompt.py             인터뷰 프롬프트 로더 (첨부프롬프트_md/인터뷰_v4.md)
     question.py           다음 질문 생성 (Gemini). 실패해도 회차를 끊지 않는다
     audio.py              브라우저 PCM 조각 → 전사기에 넘길 한 덩어리 (WAV)
     stt.py                전사 (Azure). 실패해도 회차를 끊지 않는다
@@ -33,9 +33,9 @@ app/
     photo.py              사진 검증 · 변환 (HEIC→JPEG · EXIF · 1024px)
     photostore.py         사진 바이트 저장 심 — pg / local (나중에 blob)
     photo_analyze.py      사진 분석 (Gemini VLM) → 단서 JSON
-    postcard.py           엽서 — 카드 작성 (엽서_v2.md) · 출처 검사 · Pillow 굽기. 닫혀도 자동으로 굽지 않는다
+    postcard.py           엽서 — 카드 작성 (엽서_v3.md) · 출처 검사 · Pillow 굽기. 닫혀도 자동으로 굽지 않는다
     memoir.py             자서전 초안 — 회차 합치기 (전역 턴) · 한 번 쓰기 · 구조 검사 (실험)
-    roledoc.py            엽서_v2.md · 자서전_v2.md 에서 실행할 절(§2 · §5 · 역할 · §7-4 · §8-2)만 잇는다
+    roledoc.py            엽서_v3.md · 자서전_v4.md 에서 실행할 절(§2 · §5 · 역할 · §7-4 · §8-2)만 잇는다
     store.py              저장 (asyncpg). DB 가 없어도 회차는 돈다
     migrate.py            마이그레이션 적용 · 체크섬 · advisory lock
     conf.py               환경변수 읽기 (틀린 값을 조용히 0 으로 만들지 않는다)

@@ -736,8 +736,8 @@ def test_checked():
             check(f"모르는 status {status!r} 는 503 쪽 오류", True)
 
     p = postcard._prompt()
-    check("프롬프트는 엽서_v2.md 의 실행 절이다 (§2 · §5 · §5-1 · §7-4 · §8-2)",
-          postcard.PROMPT.name == "엽서_v2.md"
+    check("프롬프트는 엽서_v3.md 의 실행 절이다 (§2 · §5 · §5-1 · §7-4 · §8-2)",
+          postcard.PROMPT.name == "엽서_v3.md"
           and p.startswith("당신은 한국어 인생기록 서비스") and "사진 속 기억을 담은" in p
           and "위 8개 키만 반환한다" in p and "문자 수는 NFC" in p and "상태 우선순위" in p, p[:30])
     check("다른 역할 절은 싣지 않는다", "자서전 담당" not in p)

@@ -48,7 +48,7 @@ from .question import _client
 
 log = logging.getLogger("memoir")
 
-PROMPT = Path(__file__).resolve().parents[2] / "첨부프롬프트_md" / "자서전_v2.md"
+PROMPT = Path(__file__).resolve().parents[2] / "첨부프롬프트_md" / "자서전_v4.md"
 
 MIN_SESSIONS = 3
 # 상한은 **단일 호출 구조의 임시 시험 제한**이다 (태헌 10-26). 최종 정책은 같은 화자의
