@@ -584,8 +584,8 @@ def test_exclude():
     url = "/api/memoirs/preview"
     me, other = {"X-User-Id": ME}, {"X-User-Id": OTHER}
 
-    with _Env(AZURE_SPEECH_KEY="", GEMINI_API_KEY="", MEMOIR_FAIL_INJECT="off",
-              MEMOIR_MAX_SESSIONS="3"), _Fake() as fake, NoDb(), AsHeader():
+    with _Env(AZURE_SPEECH_KEY="", GEMINI_API_KEY="", MEMOIR_FAIL_INJECT="off"), \
+            _Fake() as fake, NoDb(), AsHeader():
         for r in fake.recs.values():
             r["elder_id"] = "e_mom"
         ids = fake.ids
@@ -600,11 +600,15 @@ def test_exclude():
 
         with TestClient(app) as c:
             r = ask([])
-            check("뺄 것 없음 → 200 · 다섯 회차 전부 (MEMOIR_MAX_SESSIONS=3 이어도 상한 없음)",
+            check("뺄 것 없음 → 200 · 다섯 회차 전부",
                   r.status_code == 200 and r.json()["run"]["session_ids"] == every
                   and len(fake.seen["sessions"]) == 5, f"{r.status_code} {r.text[:80]}")
             check("응답은 고른 요청과 같은 모양 (다섯 키 + style + run)",
                   set(r.json()) == {*memoir.SHOWN, "style", "run"})
+            with _Env(MEMOIR_MAX_SESSIONS="3"):
+                r = ask([])
+                check("한 번 호출(single) 계정은 빼기 요청에도 MEMOIR_MAX_SESSIONS — 5개 > 3 → 400",
+                      r.status_code == 400 and failed(r, "bad_selection"), f"{r.status_code}")
 
             r = ask([ids["s-b"], ids["s-d"]])
             check("두 개를 빼면 → 200 · run 에 나머지 세 개 (뺀 것은 없다)",
@@ -672,7 +676,7 @@ def test_exclude():
             finally:
                 store.list_sessions = saved
             check("?elder_id= 목록에 memoir_total (화자의 자서전 회차 전부 수)",
-                  r1.status_code == 200 and r1.json() == {"sessions": [], "memoir_total": 5}, f"{r1.status_code} {r1.text[:80]}")
+                  r1.status_code == 200 and r1.json() == {"sessions": [], "memoir_total": 5, **memoir.limits(ME)}, f"{r1.status_code} {r1.text[:80]}")
             check("화자 없이 부르면 memoir_total 이 없다 (예전 그대로)",
                   r2.status_code == 200 and r2.json() == {"sessions": []}, f"{r2.status_code} {r2.text[:80]}")
 
@@ -704,7 +708,8 @@ def test_pipeline_engine():
 
     mp.run = run
     try:
-        with _Env(AZURE_SPEECH_KEY="", GEMINI_API_KEY="", MEMOIR_FAIL_INJECT="off", MEMOIR_ENGINE="pipeline"),                 _Fake() as fake, NoDb(), AsHeader(), TestClient(app) as c:
+        with _Env(AZURE_SPEECH_KEY="", GEMINI_API_KEY="", MEMOIR_FAIL_INJECT="off", MEMOIR_ENGINE="pipeline",
+                  MEMOIR_PIPELINE_USERS=ME), _Fake() as fake, NoDb(), AsHeader(), TestClient(app) as c:
             three = fake.pick("s-a", "s-b", "s-c")
             r = c.post(url, json=three, headers=me)
             body = r.json()
@@ -765,10 +770,10 @@ def test_pipeline_engine():
                 r = c.post(url, json=three, headers=me)
                 check("주입 generation_timeout → 504 · 부르지 않는다",
                       r.status_code == 504 and len(calls) == n_calls, f"{r.status_code}")
-        with _Env(MEMOIR_ENGINE="single"):
-            check("MEMOIR_ENGINE 이 pipeline 이 아니면 single", memoir.engine() == "single")
-        with _Env(MEMOIR_ENGINE=" Pipeline "):
-            check("대소문자 · 공백은 맞춘다", memoir.engine() == "pipeline")
+        with _Env(MEMOIR_ENGINE="single", MEMOIR_PIPELINE_USERS="*"):
+            check("MEMOIR_ENGINE 이 pipeline 이 아니면 single", memoir.engine(ME) == "single")
+        with _Env(MEMOIR_ENGINE=" Pipeline ", MEMOIR_PIPELINE_USERS="*"):
+            check("대소문자 · 공백은 맞춘다", memoir.engine(ME) == "pipeline")
     finally:
         mp.run = saved_run
 
@@ -812,8 +817,8 @@ def test_jobs():
     saved_run = mp.run
     mp.run = run
     try:
-        with _Env(AZURE_SPEECH_KEY="", GEMINI_API_KEY="", MEMOIR_FAIL_INJECT="off", MEMOIR_ENGINE="pipeline"), \
-                _Fake() as fake, NoDb(), AsHeader(), TestClient(app) as c:
+        with _Env(AZURE_SPEECH_KEY="", GEMINI_API_KEY="", MEMOIR_FAIL_INJECT="off", MEMOIR_ENGINE="pipeline",
+                  MEMOIR_PIPELINE_USERS=ME), _Fake() as fake, NoDb(), AsHeader(), TestClient(app) as c:
             three = fake.pick("s-a", "s-b", "s-c")
             r = c.post("/api/memoirs", json=three, headers=me)
             job = r.json()
@@ -893,6 +898,136 @@ def test_jobs():
         memoir_jobs._JOBS.clear()
 
 
+def test_policy():
+    print("\n[정책] 시험 대상만 · 입력량 상한 · 분석 1회 재시도 · 사용량 · 최근 작업 (태헌 10-28)")
+    import time as _time
+
+    from fastapi.testclient import TestClient
+
+    from app.main import app
+    from app.session import memoir_jobs
+    from app.session import memoir_pipeline as mp
+
+    url = "/api/memoirs/preview"
+    me, other = {"X-User-Id": ME}, {"X-User-Id": OTHER}
+    base = json.loads((ROOT / "tests" / "data" / "v5_edit_pro_20261027T024949Z" / "result.json")
+                      .read_text(encoding="utf-8"))
+    done = {**base, "generation_state": mp.GENERATED, "verification": {"state": "completed"}}
+
+    def failed_at(kind: str) -> dict:
+        return {**done, "generation_state": mp.FAILED, "chapters": [], "calls": 1,
+                "failure": {"stage": "analysis", "kind": kind, "message": "…"}}
+
+    queue: list[dict] = []
+    calls: list[int] = []
+
+    async def run(data, turn_map, recorder=None, **kv):
+        calls.append(1)
+        recorder.json("run.json", {"steps": [{"stage": "analysis", "chapter_key": None, "ms": 10,
+                                              "usage": {"prompt": 1000, "output": 100, "thoughts": 400}}]})
+        return copy.deepcopy(queue.pop(0) if queue else done)
+
+    def wait(c, job_id):
+        for _ in range(300):
+            r = c.get(f"/api/memoirs/{job_id}", headers=me)
+            if r.status_code != 200 or r.json()["status"] != "running":
+                return r
+            _time.sleep(0.01)
+        return r
+
+    saved_run = mp.run
+    mp.run = run
+    try:
+        with _Env(AZURE_SPEECH_KEY="", GEMINI_API_KEY="", MEMOIR_FAIL_INJECT="off", MEMOIR_ENGINE="pipeline",
+                  MEMOIR_PIPELINE_USERS=f" {OTHER} , {ME} "), _Fake() as fake, NoDb(), AsHeader(), \
+                TestClient(app) as c:
+            three = fake.pick("s-a", "s-b", "s-c")
+
+            # A — 시험 대상만
+            check("목록에 든 계정은 pipeline (쉼표 · 공백 정리)", memoir.engine(ME) == "pipeline")
+            with _Env(MEMOIR_PIPELINE_USERS=OTHER):
+                check("목록에 없으면 single", memoir.engine(ME) == "single")
+                n = len(calls)
+                r = c.post(url, json=three, headers=me)
+                check("목록에 없는 계정은 한 번 호출로 쓴다 (파이프라인을 부르지 않는다)",
+                      r.status_code == 200 and len(calls) == n and fake.writes >= 1, f"{r.status_code}")
+                check("limits — single 이면 memoir_max 가 MEMOIR_MAX_SESSIONS",
+                      memoir.limits(ME)["memoir_engine"] == "single" and memoir.limits(ME)["memoir_max"] == 5)
+            with _Env(MEMOIR_PIPELINE_USERS=""):
+                check("목록이 비면 아무도 pipeline 을 쓰지 않는다", memoir.engine(ME) == "single")
+            with _Env(MEMOIR_PIPELINE_USERS="*"):
+                check("* 이면 모두", memoir.engine("anyone") == "pipeline")
+            check("limits — pipeline 이면 memoir_max 없음 (None)",
+                  memoir.limits(ME) == {"memoir_engine": "pipeline", "memoir_max": None,
+                                        "memoir_max_chars": memoir.DEFAULT_MAX_INPUT_CHARS})
+
+            # B — 입력량 상한: 빼지 않고 안내
+            with _Env(MEMOIR_MAX_INPUT_CHARS="20"):
+                n, jobs = len(calls), len(memoir_jobs._JOBS)
+                r = c.post(url, json=three, headers=me)
+                body = r.json()
+                check("말씀이 상한을 넘으면 400 too_much · 무엇을 할지 안내",
+                      r.status_code == 400 and body["code"] == "too_much" and "빼 주세요" in body["detail"],
+                      f"{r.status_code} {r.text[:80]}")
+                r = c.post("/api/memoirs", json=three, headers=me)
+                check("작업 시작도 바로 400 too_much · 작업을 열지 않는다",
+                      r.status_code == 400 and r.json()["code"] == "too_much" and len(memoir_jobs._JOBS) == jobs)
+                check("상한을 넘으면 모델을 부르지 않는다", len(calls) == n)
+
+            # C — 분석 1회 재시도
+            for kind in ("format", "call"):
+                calls.clear()
+                queue[:] = [failed_at(kind), done]
+                r = c.post(url, json=three, headers=me)
+                check(f"분석 {kind} 실패 → 한 번 더 불러 200", r.status_code == 200 and len(calls) == 2,
+                      f"{r.status_code} 호출 {len(calls)}")
+            calls.clear()
+            queue[:] = [failed_at("format"), failed_at("format"), done]
+            r = c.post(url, json=three, headers=me)
+            check("같은 문제가 또 나면 멈춘다 (2번까지) → 502", r.status_code == 502 and len(calls) == 2,
+                  f"{r.status_code} 호출 {len(calls)}")
+            queue.clear()
+            for kind, status in (("reference", 502), ("timeout", 504), ("truncated", 502)):
+                calls.clear()
+                queue[:] = [failed_at(kind), done]
+                r = c.post(url, json=three, headers=me)
+                check(f"분석 {kind} 실패는 다시 부르지 않는다 → {status}", r.status_code == status and len(calls) == 1,
+                      f"{r.status_code} 호출 {len(calls)}")
+            queue.clear()
+            calls.clear()
+            queue[:] = [{**done, "generation_state": mp.PARTIAL, "chapters": [],
+                         "failure": {"stage": "chapter", "kind": "format", "chapter_key": "ch-1"}}, done]
+            r = c.post(url, json=three, headers=me)
+            check("분석이 아닌 단계의 실패는 다시 부르지 않는다 (처음부터 다시 돌지 않는다)",
+                  r.status_code == 503 and len(calls) == 1, f"{r.status_code} 호출 {len(calls)}")
+            queue.clear()
+
+            # 최근 작업
+            r = c.get("/api/memoirs/latest", headers=me)
+            check("작업이 없으면 latest → 404 job_not_found", r.status_code == 404
+                  and r.json()["code"] == "job_not_found")
+            j = c.post("/api/memoirs", json=three, headers=me).json()["job_id"]
+            wait(c, j)
+            r = c.get("/api/memoirs/latest", headers=me)
+            check("latest → 내 가장 최근 작업 (GET {job_id} 와 같은 본문)",
+                  r.status_code == 200 and r.json()["job_id"] == j and r.json()["status"] == "done", r.text[:80])
+            r = c.get("/api/memoirs/latest", headers=other)
+            check("다른 계정의 latest 에는 보이지 않는다", r.status_code == 404)
+
+        # D — 사용량 · 비용
+        steps = [{"usage": {"prompt": 42785, "output": 6522, "thoughts": 16387}},
+                 {"usage": {"prompt": 210000, "output": 1000, "thoughts": 0}}, {"usage": None}]
+        u = memoir.usage("gemini-3.1-pro-preview", steps)
+        want = 42785 * 2 / 1e6 + (6522 + 16387) * 12 / 1e6 + 210000 * 4 / 1e6 + 1000 * 18 / 1e6
+        check("사용량 — 토큰 합 · 20만 넘는 요청은 높은 단가",
+              (u["input"], u["output"], u["thoughts"]) == (252785, 7522, 16387) and abs(u["usd"] - want) < 1e-9,
+              f"{u}")
+        check("단가를 모르는 모델은 비용을 적지 않는다", memoir.usage("gemini-x", steps)["usd"] is None)
+    finally:
+        mp.run = saved_run
+        memoir_jobs._JOBS.clear()
+
+
 def test_all_checks_passed():
     """pytest 안전판 — test_flow.py 의 같은 함수 주석 참조."""
     assert not FAIL, "실패: " + ", ".join(FAIL)
@@ -907,6 +1042,7 @@ def main() -> int:
     test_exclude()
     test_pipeline_engine()
     test_jobs()
+    test_policy()
     print(f"\n{'=' * 52}\n통과 {len(PASS)} · 실패 {len(FAIL)}")
     if FAIL:
         print("실패:", ", ".join(FAIL))

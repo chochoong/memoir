@@ -601,11 +601,14 @@ async def list_sessions(limit: int = 20, has_postcard: bool = False,
     `?elder_id=` 면 `memoir_total` 도 싣는다 — 그 화자의 자서전 회차(닫힌 · 말씀 있는,
     has_words) **전부**의 수다. 목록은 limit(최대 100)까지라, 화면은 이 수와 목록에 보인
     수의 차이로 「목록에 없지만 함께 들어가는 오래된 이야기」 를 안내한다.
+    memoir_engine · memoir_max (None = 상한 없음) · memoir_max_chars 도 싣는다 (memoir.limits) —
+    다섯 단계는 시험 대상 계정만 쓰므로 사람마다 다르다.
     """
     rows = await _read(store.list_sessions(who, _limit(limit), has_postcard, elder_id))
     if not elder_id:
         return {"sessions": rows}
-    return {"sessions": rows, "memoir_total": len(await _read(store.memoir_sessions(who, elder_id)))}
+    return {"sessions": rows, "memoir_total": len(await _read(store.memoir_sessions(who, elder_id))),
+            **memoir.limits(who)}
 
 
 @app.put("/api/sessions/{session_id}/elder")
@@ -866,7 +869,7 @@ def _postcard_url(session_id: str, rec: dict) -> str:
 
 # ---------------------------------------------------------------- 자서전
 #
-# 엽서가 있는 회차 3~5개를 골라 초안 하나를 받는다. 저장하지 않는다 — 다시 보려면
+# 같은 화자의 회차(전부에서 뺄 것만 빼거나, 고른 것)로 초안 하나를 받는다. 저장하지 않는다 — 다시 보려면
 # 다시 만든다. 무엇을 하는지는 memoir.py 머리에 있다.
 
 # 화면이 그대로 보여 주는 말이다 (해요체). 안쪽 사정은 로그에만 남긴다.
@@ -915,8 +918,8 @@ async def memoir_preview(request: Request, who: str = Depends(auth.current_user)
             return await memoir.preview_all(body.get("elder_id"), body["exclude_session_ids"], who, chosen)
         return await memoir.preview(body.get("session_ids"), who, chosen)
     except memoir.MemoirError as e:
-        status, code = _memoir_failure(e)
-        return JSONResponse({"detail": _MEMOIR_SAYS[status], "code": code}, status_code=status)
+        status, code, detail = _memoir_failure(e)
+        return JSONResponse({"detail": detail, "code": code}, status_code=status)
 
 
 async def _memoir_body(request: Request) -> dict:
@@ -928,11 +931,17 @@ async def _memoir_body(request: Request) -> dict:
     return body if isinstance(body, dict) else {}
 
 
-def _memoir_failure(e: memoir.MemoirError) -> tuple[int, str]:
+def _memoir_failure(e: memoir.MemoirError) -> tuple[int, str, str]:
+    """(HTTP 상태, code, 화면 안내). 안내는 상태마다 하나, too_much 만 따로 — 무엇을 해야 하는지가 다르다."""
     status, code = next((s, c) for kind, s, c in _MEMOIR_STATUS if isinstance(e, kind))
-    code = code or e.code      # 400 은 갈래가 여럿이다 — bad_selection · mixed_speakers · speaker_unassigned
+    code = code or e.code      # 400 은 갈래가 여럿이다 — bad_selection · mixed_speakers · speaker_unassigned · too_much
     log.warning("자서전 %d %s — %s", status, type(e).__name__, str(e)[:200])
-    return status, code
+    return status, code, _MEMOIR_SAYS_CODE.get(code, _MEMOIR_SAYS[status])
+
+
+_MEMOIR_SAYS_CODE = {
+    "too_much": "이야기가 너무 많아 한 번에 만들 수 없어요. 넣지 않을 이야기를 몇 개 빼 주세요.",
+}
 
 
 @app.post("/api/memoirs")
@@ -957,10 +966,24 @@ async def memoir_start(request: Request, who: str = Depends(auth.current_user)):
         ids = await memoir.select(body, who)
         recs = await memoir.collect(ids, who)
     except memoir.MemoirError as e:
-        status, code = _memoir_failure(e)
-        return JSONResponse({"detail": _MEMOIR_SAYS[status], "code": code}, status_code=status)
+        status, code, detail = _memoir_failure(e)
+        return JSONResponse({"detail": detail, "code": code}, status_code=status)
     job = await memoir_jobs.start(recs, ids, who, chosen)
     return JSONResponse(_memoir_job_view(job), status_code=202)
+
+
+@app.get("/api/memoirs/latest")
+async def memoir_job_latest(who: str = Depends(auth.current_user)):
+    """
+    내 가장 최근 작업 — GET /api/memoirs/{job_id} 와 같은 본문. 새로고침으로 작업 번호를 잊은
+    화면이 찾는다. 보관 시간(MEMOIR_JOB_KEEP_SECONDS) 안에 없으면 404 job_not_found.
+    **{job_id} 라우트보다 먼저 둔다** — 뒤에 두면 「latest」 가 작업 번호로 읽힌다.
+    """
+    job = memoir_jobs.latest(who)
+    if job is None:
+        return JSONResponse({"detail": "자서전 작업을 찾을 수 없어요. 다시 만들어 주세요.",
+                             "code": "job_not_found"}, status_code=404)
+    return _memoir_job_view(job)
 
 
 @app.get("/api/memoirs/{job_id}")
@@ -1007,8 +1030,8 @@ def _memoir_job_view(job: memoir_jobs.Job) -> dict:
     elif isinstance(job.error, memoir_jobs.Cancelled):
         out.update(code="cancelled", detail="자서전 만들기를 그만두었어요.")
     else:
-        status, code = _memoir_failure(job.error)
-        out.update(code=code, detail=_MEMOIR_SAYS[status])
+        _, code, detail = _memoir_failure(job.error)
+        out.update(code=code, detail=detail)
     return out
 
 

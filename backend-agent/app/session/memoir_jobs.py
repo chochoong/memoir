@@ -3,6 +3,7 @@
 
     POST   /api/memoirs             검사 · 조회까지 바로 → 202 {job_id, status: running, stage, run}
     GET    /api/memoirs/{job_id}    running (지금 단계) · done (7-C1 결과) · failed (code)
+    GET    /api/memoirs/latest      내 가장 최근 작업 — 작업 번호를 잊은 화면(새로고침)이 찾는다
     DELETE /api/memoirs/{job_id}    그만 만든다
 
 **왜 작업인가.** 다섯 단계는 39회차 실측 369초 (분석 90 · 목차 45 · 장마다 25 · 편집 101 ·
@@ -75,6 +76,13 @@ def running(user_id: str) -> Job | None:
     return next((j for j in _JOBS.values() if j.user_id == user_id and j.status == RUNNING), None)
 
 
+def latest(user_id: str) -> Job | None:
+    """이 사람의 가장 최근 작업 (보관 시간 안). 없으면 None."""
+    _sweep()
+    mine = [j for j in _JOBS.values() if j.user_id == user_id]
+    return max(mine, key=lambda j: j.started) if mine else None
+
+
 def get(job_id: str, user_id: str) -> Job | None:
     _sweep()
     job = _JOBS.get(job_id)
@@ -85,14 +93,14 @@ async def start(recs: list[dict], ids: list[str], user_id: str, style: str) -> J
     """collect 를 지난 회차로 작업을 연다. 만드는 중인 것이 있는지는 라우트가 먼저 본다."""
     _sweep()
     job = Job(uuid.uuid4().hex, user_id, ids, style,
-              stage="analysis" if memoir.engine() == "pipeline" else "write")
+              stage="analysis" if memoir.engine(user_id) == "pipeline" else "write")
 
     def progress(stage: str, chapter: int, chapters: int) -> None:
         job.stage, job.chapter, job.chapters = stage, chapter, chapters
 
     async def work() -> None:
         try:
-            job.result = await memoir.generate(recs, ids, style, progress)
+            job.result = await memoir.generate(recs, ids, user_id, style, progress)
             job.status = DONE
         except asyncio.CancelledError:
             job.status, job.error = FAILED, Cancelled("그만두었다")
@@ -109,7 +117,7 @@ async def start(recs: list[dict], ids: list[str], user_id: str, style: str) -> J
 
     _JOBS[job.job_id] = job
     job.task = asyncio.create_task(work())
-    log.info("자서전 작업 %s 시작 — 회차 %d개 · 엔진 %s", job.job_id[:8], len(ids), memoir.engine())
+    log.info("자서전 작업 %s 시작 — 회차 %d개 · 엔진 %s", job.job_id[:8], len(ids), memoir.engine(user_id))
     return job
 
 

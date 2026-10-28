@@ -1,5 +1,5 @@
 """
-자서전 초안 — 고른 회차 3~5개를 한 입력으로 합쳐 한 번 쓰게 한다 (업무지시서 01 v1.1)
+자서전 초안 — 고른 회차를 한 입력으로 합쳐 쓰게 한다 (업무지시서 01 v1.1 · 단위 8S)
 
     검사      check_selection   개수 · 중복 · 모양               → BadSelection (400)
               (빼기 요청)       check_exclusion · pick_all — 화자의 전부에서 뺀다
@@ -156,13 +156,50 @@ class NotFinal(MemoirError):
         self.reasons = reasons
 
 
+class TooMuch(BadSelection):
+    """말씀이 MEMOIR_MAX_INPUT_CHARS 를 넘는다. 400 — 일부를 몰래 빼지 않고 사용자가 빼게 한다."""
+
+    code = "too_much"
+
+
 class Incomplete(MemoirError):
     """파이프라인의 일부 장이 실패했다 (partial). 503 incomplete — 만든 장도 내보내지 않는다."""
 
 
-def engine() -> str:
-    """MEMOIR_ENGINE — pipeline 이 아니면 전부 single (예전 한 번 호출)."""
-    return "pipeline" if env_str("MEMOIR_ENGINE").strip().lower() == "pipeline" else "single"
+def engine(user_id: str | None = None) -> str:
+    """
+    이 사람의 자서전을 무엇으로 쓰나. MEMOIR_ENGINE=pipeline 이고 MEMOIR_PIPELINE_USERS
+    (쉼표로 나눈 user_id, `*` 이면 모두)에 든 사람만 pipeline, 나머지는 single (예전 한 번 호출).
+
+    **운영에 올려도 시험 대상만 쓴다** (태헌 10-28 — 기능 연결과 일반 공개 · 품질 승인은 따로).
+    목록이 비어 있으면 아무도 pipeline 을 쓰지 않는다.
+    """
+    if env_str("MEMOIR_ENGINE").strip().lower() != "pipeline":
+        return "single"
+    allowed = {x.strip() for x in env_str("MEMOIR_PIPELINE_USERS").split(",") if x.strip()}
+    return "pipeline" if "*" in allowed or (user_id is not None and user_id in allowed) else "single"
+
+
+def limits(user_id: str) -> dict:
+    """
+    화면이 고르기 전에 알아야 할 것 — 회차 목록(?elder_id=)에 함께 싣는다.
+    memoir_max 는 None 이면 상한 없음 (pipeline), single 이면 MEMOIR_MAX_SESSIONS.
+    """
+    kind = engine(user_id)
+    return {"memoir_engine": kind, "memoir_max": None if kind == "pipeline" else max_sessions(),
+            "memoir_max_chars": max_input_chars()}
+
+
+DEFAULT_MAX_INPUT_CHARS = 150_000
+
+
+def max_input_chars() -> int:
+    """
+    한 번에 넣을 수 있는 어르신 말씀 글자 수. 넘으면 회차를 임의로 빼지 않고 400 too_much 로
+    안내한다 (태헌 10-28). 기본 15만 자 — 39회차 실측 3.8만 자에 단계당 입력 4.5만 토큰이었고,
+    Pro 단가가 바뀌는 요청당 20만 토큰보다 넉넉히 아래에 둔다.
+    """
+    return env_int("MEMOIR_MAX_INPUT_CHARS", DEFAULT_MAX_INPUT_CHARS)
 
 
 def inject() -> str:
@@ -269,6 +306,9 @@ async def collect(session_ids: list[str], user_id: str) -> list[dict]:
         # 화자 있는 회차와 미지정 회차가 섞였으면 꺼져 있어도 거절한다 — 미지정 쪽이
         # 다른 분의 이야기일 수 있다.
         raise SpeakerUnassigned("화자 미지정 회차가 있다")
+    said = sum(len((f.get("answer") or "").strip()) for rec in recs for f in rec["fragments"] if f["idx"] > 0)
+    if said > max_input_chars():
+        raise TooMuch(f"말씀 {said}자 — 상한 {max_input_chars()}자 (회차 {len(recs)}개)")
     if inject() == INJECT_SOURCE:
         raise SourceUnavailable("MEMOIR_FAIL_INJECT=source_material_unavailable")
     return recs
@@ -518,8 +558,8 @@ async def preview(session_ids, user_id: str, style: str = "spoken") -> dict:
 
 async def preview_all(elder_id, exclude, user_id: str, style: str = "spoken") -> dict:
     """빼기 요청 — 이 화자의 전부에서 exclude 를 뺀 회차로 초안 하나. 응답은 preview 와 같다."""
-    elder, gone = check_exclusion(elder_id, exclude)
-    return await _draft(await pick_all(elder, gone, user_id), user_id, style)
+    ids = await select({"elder_id": elder_id, "exclude_session_ids": exclude}, user_id)
+    return await _draft(ids, user_id, style)
 
 
 async def select(body: dict, user_id: str) -> list[str]:
@@ -529,21 +569,26 @@ async def select(body: dict, user_id: str) -> list[str]:
     """
     if "exclude_session_ids" in body:
         elder, gone = check_exclusion(body.get("elder_id"), body["exclude_session_ids"])
-        return await pick_all(elder, gone, user_id)
+        ids = await pick_all(elder, gone, user_id)
+        # 상한 없음은 pipeline 만이다 — 한 번 호출(single)은 MEMOIR_MAX_SESSIONS 를 넘겨 받지 않는다.
+        # 화면은 목록의 memoir_max 로 미리 안다 (limits)
+        if engine(user_id) == "single" and len(ids) > max_sessions():
+            raise BadSelection(f"남은 회차 {len(ids)}개 — 이 계정은 {max_sessions()}개까지 (single)")
+        return ids
     return check_selection(body.get("session_ids"))
 
 
 async def _draft(ids: list[str], user_id: str, style: str) -> dict:
-    return await generate(await collect(ids, user_id), ids, style)
+    return await generate(await collect(ids, user_id), ids, user_id, style)
 
 
-async def generate(recs: list[dict], ids: list[str], style: str, progress=None) -> dict:
+async def generate(recs: list[dict], ids: list[str], user_id: str, style: str, progress=None) -> dict:
     """
-    collect 를 지난 회차로 쓴다. 엔진은 MEMOIR_ENGINE.
+    collect 를 지난 회차로 쓴다. 엔진은 engine(user_id).
 
     progress(stage, chapter, chapters) 는 다섯 단계가 한 단계를 마칠 때마다 불린다 (작업 화면용).
     """
-    if engine() == "pipeline":
+    if engine(user_id) == "pipeline":
         return await _draft_pipeline(recs, ids, style, progress)
     data, turn_map = merge(recs)
     turns = {t["global_turn"] for t in turn_map}
@@ -575,22 +620,61 @@ async def _draft_pipeline(recs: list[dict], ids: list[str], style: str, progress
         raise GenerationFailed("MEMOIR_FAIL_INJECT=generation_failed")
     if hook == INJECT_TIMEOUT:
         raise GenerationTimeout("MEMOIR_FAIL_INJECT=generation_timeout")
-    rec = _progress_recorder(progress)                # folder 없음 — 메모리에만
+    model = mp.settings()["MEMOIR_PIPE_TEXT_MODEL"]
     t0 = time.monotonic()
     log.info("자서전 다섯 단계 요청 — 회차 %d개 %s · 말씀 %d턴 · 모델 %s", len(ids),
-             ",".join(s[:8] for s in ids), len(turn_map), mp.settings()["MEMOIR_PIPE_TEXT_MODEL"])
-    res = await mp.run(data, turn_map, recorder=rec)
-    try:
-        steps = json.loads(rec.files.get("run.json", "{}")).get("steps", [])
-    except ValueError:
-        steps = []
-    log.info("자서전 다섯 단계 응답 — %s · %.1f초 · 호출 %d · 단계 %s · 검증 %s · 실패 %s",
-             res["generation_state"], time.monotonic() - t0, res.get("calls", 0),
+             ",".join(s[:8] for s in ids), len(turn_map), model)
+    steps: list[dict] = []
+    calls = 0
+    for attempt in (1, 2):
+        rec = _progress_recorder(progress)            # folder 없음 — 메모리에만
+        if attempt > 1 and progress is not None:
+            progress("analysis", 0, 0)
+        res = await mp.run(data, turn_map, recorder=rec)
+        try:
+            steps += json.loads(rec.files.get("run.json", "{}")).get("steps", [])
+        except ValueError:
+            pass
+        calls += res.get("calls", 0)
+        fail = res.get("failure") or {}
+        # 분석 단계의 형식 · 허용값 오류와 일시적 호출 오류만 한 번 더 (태헌 10-28). 분석이 첫 단계라
+        # 다시 부르는 것은 분석뿐이다. 정정 · 제외 · 화자 · 출처(reference)와 시간 · 잘림은 그대로 멈춘다
+        if not (attempt == 1 and fail.get("stage") == "analysis" and fail.get("kind") in RETRY_KINDS):
+            break
+        log.warning("자서전 분석 다시 부름 — %s %s", fail.get("kind"), str(fail.get("message", ""))[:160])
+    log.info("자서전 다섯 단계 응답 — %s · %.1f초 · 시도 %d · 호출 %d · 단계 %s · 검증 %s · 실패 %s",
+             res["generation_state"], time.monotonic() - t0, attempt, calls,
              " ".join(f"{x['stage']}{'/' + x['chapter_key'] if x.get('chapter_key') else ''}"
                       f"={x['ms'] / 1000:.1f}s" for x in steps),
              (res.get("verification") or {}).get("state"),
              json.dumps(res.get("failure"), ensure_ascii=False)[:200] if res.get("failure") else "-")
+    use = usage(model, steps)
+    log.info("자서전 사용량 — 모델 %s · 시도 %d · 호출 %d · 입력 %d · 출력 %d · 생각 %d · 비용 %s",
+             model, attempt, calls, use["input"], use["output"], use["thoughts"],
+             f"약 ${use['usd']:.3f}" if use["usd"] is not None else "단가 모름")
     return pipeline_result(res, ids, style)
+
+
+# 다시 부를 실패 — 형식 · 허용값(format)과 호출 오류(call). memoir_pipeline.KINDS 참조
+RETRY_KINDS = ("format", "call")
+
+# 100만 토큰당 USD — (입력, 출력 · 생각) 요청 하나 20만 토큰 이하 / 넘으면. ai.google.dev 가격표 10-28.
+# 모르는 모델은 비용을 적지 않는다 (지어내지 않는다)
+PRICES = {"gemini-3.1-pro-preview": ((2.0, 12.0), (4.0, 18.0))}
+
+
+def usage(model: str, steps: list[dict]) -> dict:
+    """실행 기록 단계들의 토큰 합과 비용 추정. 생각 토큰은 출력 단가로 센다."""
+    tin = tout = think = 0
+    usd: float | None = 0.0 if model in PRICES else None
+    for x in steps:
+        u = x.get("usage") or {}
+        p, o, t = u.get("prompt") or 0, u.get("output") or 0, u.get("thoughts") or 0
+        tin, tout, think = tin + p, tout + o, think + t
+        if usd is not None:
+            rin, rout = PRICES[model][p > 200_000]
+            usd += p * rin / 1e6 + (o + t) * rout / 1e6
+    return {"input": tin, "output": tout, "thoughts": think, "usd": usd}
 
 
 def _progress_recorder(progress):
