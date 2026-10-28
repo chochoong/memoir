@@ -394,11 +394,16 @@
     .photo-label { margin: 20px 0 0; }
     /* 낱말 카드 고르기 — 이 기기에서 시작 · 어르신 링크에서 시작을 누르면 먼저 나온다 */
     .screen[data-screen="wordpick"] { padding-bottom: calc(168px + env(safe-area-inset-bottom)); }
-    .wd-group[hidden] { display: none; }
+    .wd-group[hidden], .wp-msg[hidden], .mm-all[hidden] { display: none; }
     .wd-group { margin: 0 0 18px; }
     .link-words { margin: 18px 0 0; text-align: left; }
     .link-words .wd-card[aria-pressed="true"], .wd-select .wd-card[aria-pressed="true"] { border-color: var(--ink); background: var(--ink); color: #fff; }
     .link-words-go { position: sticky; bottom: calc(12px + env(safe-area-inset-bottom)); margin-top: 8px; }
+    .wd-group[hidden], .wp-msg[hidden], .mm-all[hidden] { display: none; }
+    .mm-all { display: flex; gap: 8px; margin: 0 0 12px; }
+    .mm-all .btn-line { flex: 1; margin: 0; }
+    .lk-picked { display: block; margin: 2px 0 6px; font-size: .92rem; color: #4a3d78; font-weight: 600; }
+    .wp-msg { margin: 0 0 14px; padding: 10px 14px; border-radius: 14px; background: #fbeee8; color: #8a3b1e; font-weight: 600; }
     .wd-group h3 { margin: 0 0 8px; font-size: .95rem; font-weight: 700; color: var(--ink); }
     .wd-list { list-style: none; padding: 0; margin: 0; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
     .wd-card { width: 100%; min-height: 84px; padding: 16px 12px; border-radius: 18px; border: 2px solid var(--line);
@@ -859,6 +864,7 @@
       <section class="screen" data-screen="wordpick">
         <h1>어떤 낱말 이야기를<br />들려주실래요?</h1>
         <p class="lead" style="margin:0 0 14px">낱말을 고르고 아래 「이야기 시작하기」를 눌러 주세요.</p>
+        <p class="prep-note wp-msg" id="wpMsg" role="status" aria-live="polite" hidden></p>
         <div id="wpList" class="wd-select"></div>
         <div class="dock">
           <button class="btn btn-primary" id="wpGo">이야기 시작하기</button>
@@ -1131,6 +1137,7 @@
         <div data-mm="pick" hidden>
           <p class="mm-guide" id="mmGuide">이야기 3~5개를 골라 주세요.</p>
           <p class="prep-note" id="mmUnassigned" hidden></p>
+          <div class="mm-all" id="mmPickAll" hidden><button type="button" class="btn-line" data-all="on">모두 고르기</button><button type="button" class="btn-line" data-all="off">모두 빼기</button></div>
           <div class="tabs style-pick" id="mmStyle" role="radiogroup" aria-label="문체" hidden></div>
           <div id="mmList"></div>
         </div>
@@ -1404,7 +1411,7 @@
   const CONFIG = {
     // 화면 아래와 개발용 패널에 그대로 찍힌다. 「고친 게 반영이 안 된 것 같다」는
     // 대부분 예전 파일이 열려 있는 경우라서, 눈으로 확인할 자리를 만들어 둔다.
-    version: 'v0.45 · 2026-10-27 (낱말 카드 고르기 — 이 기기에서 시작 · 어르신 링크)',
+    version: 'v0.47 · 2026-10-28 (운영 화면 — 궁금한 주제 · 고르고 시작 · 흘려 읽기 + v0.46 거절 안내 · 고르신 낱말 · 많이 고르기 준비)',
 
     // 이 화면을 백엔드가 직접 서빙하면(web/ 폴더) 빈 문자열 그대로 둔다.
     // 다른 포트에서 열어 시험할 때만 'http://127.0.0.1:8010' 처럼 채운다.
@@ -1522,7 +1529,14 @@
       // 장이라 따로 ID 가 없고, postcard 표의 키가 session_id 다.
       idsField: 'session_ids',
       min: 3,
+      // **서버 상한 MEMOIR_MAX_SESSIONS 와 같아야 한다** (지금 기본 5 — 단일 호출 구조의 임시 시험 제한).
+      // 팀 요청은 30~50개까지. 서버가 상한을 올리면 이 숫자만 같이 올린다. 화면만 올리면 6개부터 400 bad_selection 이다.
+      // 6개 이상이면 고르기 화면에 「모두 고르기 · 모두 빼기」 가 나온다 (하나씩 50번 누르지 않게)
       max: 5,
+      // 요청 모양. 'ids' = {session_ids, style} (지금) ·
+      // 'exclude' = {elder_id, exclude_session_ids, style} — 최종 정책 「같은 화자 전체 선택 후 제외」 (7-C1 §4 · 태헌 10-26).
+      // 다섯 단계 구조가 서버에 들어오면 서버가 전체를 정하고 화면은 뺄 것만 보낸다. 서버와 같이 바꾼다
+      requestShape: 'ids',
       // 고를 엽서 수 (서버 상한 100). 서버에 「엽서 있는 회차만」(?has_postcard=1) 을 달라고 하므로
       // 최근 회차에 엽서 없는 회차가 많아도 밀려나지 않는다. (v0.26 에서 잠깐 100 으로 늘렸다가 되돌림)
       listLimit: 100,
@@ -1900,9 +1914,12 @@
     // 다른 API 와 같은 call() 을 쓴다. 실패는 HTTP 상태 + {"detail": …} 로 온다.
     // 화면 안내는 상태로만 고르고 detail 은 화면에 내지 않는다 (mmWhy).
     // 사용자 신원은 본문이 아니라 call() 이 붙인다 (dev 모드 X-User-Id · 로그인 모드 msid 쿠키).
-    memoirPreview: (ids, signal, style) => call(CONFIG.memoir.path, {
+    // req = { ids } 또는 { elderId, exclude } (CONFIG.memoir.requestShape — mmRequest 가 만든다)
+    memoirPreview: (req, signal, style) => call(CONFIG.memoir.path, {
       method: 'POST', signal,
-      body: JSON.stringify(Object.assign({ [CONFIG.memoir.idsField]: ids }, style ? { style } : {})),
+      body: JSON.stringify(Object.assign(req.exclude
+        ? { elder_id: req.elderId, exclude_session_ids: req.exclude }
+        : { [CONFIG.memoir.idsField]: req.ids }, style ? { style } : {})),
     }),
 
     // 이 회차에 엽서가 있나. GET /postcard 는 JPEG 라 json() 으로 읽지 않는다.
@@ -4474,6 +4491,25 @@
       : n < min ? `${n}개 골랐어요. ${min}~${max}개를 골라 주세요.`
       : `${n}개 골랐어요. 자서전을 만들 수 있어요.`;
     if (mmView === 'pick') $('#mmMain').disabled = n < min || n > max;
+    // 많이 고를 수 있을 때만 (상한 6개 이상 · 고를 것이 2개 이상)
+    $('#mmPickAll').hidden = !(max > 5 && mmRows.length > 1);
+    $('#mmPickAll').querySelector('[data-all="on"]').disabled = n >= Math.min(max, mmRows.length);
+    $('#mmPickAll').querySelector('[data-all="off"]').disabled = n === 0;
+  }
+
+  /** 요청 모양 — 'exclude' 이고 화자별 목록일 때만 「전체 중 뺄 것」 으로 보낸다. 그 밖은 고른 것 */
+  function mmRequest(ids) {
+    if (CONFIG.memoir.requestShape === 'exclude' && mmElder) {
+      return { elderId: mmElder.elder_id, exclude: mmRows.map(r => r.session_id).filter(id => !ids.includes(id)) };
+    }
+    return { ids };
+  }
+  /** 모두 고르기 · 모두 빼기 — 상한이 6개 이상일 때만 (30~50개를 하나씩 누르지 않게) */
+  function mmPickAll(on) {
+    if (mmView !== 'pick') return;
+    mmPicked = on ? mmRows.map(r => r.session_id).slice(0, CONFIG.memoir.max) : [];
+    if (on && mmRows.length > CONFIG.memoir.max) toast(`최대 ${CONFIG.memoir.max}개까지라 최근 ${CONFIG.memoir.max}개를 골랐어요.`);
+    mmSync();
   }
 
   function mmToggle(id) {
@@ -4841,7 +4877,7 @@
     let out;
     try {
       const style = CONFIG.style.pick ? mmStyle : '';
-      const res = kind ? await mmFake(kind, ctl.signal, style, ids) : await api.memoirPreview(ids, ctl.signal, style);
+      const res = kind ? await mmFake(kind, ctl.signal, style, ids) : await api.memoirPreview(mmRequest(ids), ctl.signal, style);
       if (!kind && res && typeof res === 'object') capSeen('memoirChapters', Array.isArray(res.chapters) && res.chapters.length > 0 && !!res.run);
       out = mmRead(res, ids);
     } catch (e) {
@@ -4892,6 +4928,7 @@
   });
 
   $('#arMemoir').addEventListener('click', () => void openMemoir());
+  $('#mmPickAll').addEventListener('click', (e) => { const b = e.target.closest('[data-all]'); if (b) mmPickAll(b.dataset.all === 'on'); });
   $('#mmMain').addEventListener('click', () => {
     if (mmView === 'pick') { void mmMake(); return; }
     if (mmView === 'loadfail') { void openMemoir(); return; }
@@ -5356,6 +5393,14 @@
     try { await beginInterview(); } finally { linkBusy = false; if (b) b.disabled = false; }
   }
   function linkFailed(e) {
+    // 고르신 낱말을 서버가 받지 않았다 (feature/link-topic · 422 topic_not_allowed). 링크는 소모되지 않았다 —
+    // 낱말 화면으로 돌아가 다른 낱말을 고르시게 한다. 화면과 서버의 낱말 목록이 어긋났을 때 생긴다
+    if (e && e.code === 'topic_not_allowed' && CONFIG.interview.wordPick) {
+      openPick('elder');
+      const m = $('#wpMsg'); m.hidden = false; m.textContent = '이 낱말로는 시작할 수 없어요. 다른 낱말을 골라 주세요.';
+      log('링크', '시작 실패 · 422 topic_not_allowed — 낱말 목록이 서버와 다를 수 있습니다');
+      return;
+    }
     show('link');
     const st = linkStateOf(e);
     if (st === 'ended') { void openReview('link', '', { link: true }); return; }
@@ -5665,6 +5710,8 @@
     lkRows.forEach(r => {
       const li = el('li', 'lk-item'); li.dataset.id = r.link_id;
       li.append(el('b', '', [THEME_LABEL[r.theme] || r.title || '', r.topic].filter(Boolean).join(' · ') || '인터뷰'));
+      // 어르신이 낱말 카드에서 다른 낱말을 고르셨으면 함께 (feature/link-topic · picked_topic, 없으면 null)
+      if (typeof r.picked_topic === 'string' && r.picked_topic.trim()) li.append(el('span', 'lk-picked', `고르신 낱말 · ${r.picked_topic.trim()}`));
       const meta = el('div', 'lk-meta');
       meta.append(el('span', `lk-st ${r.state}`, LK_STATE[r.state] || r.state), el('span', '', `${lkDate(r.created_at)} 보냄`));
       if (r.state === 'ready' && r.expires_at) meta.append(el('span', '', `${lkDate(r.expires_at)}까지 열 수 있어요`));
@@ -6279,6 +6326,7 @@
   }
   function openPick(kind) {
     words.pickFor = kind; words.go = '';
+    $('#wpMsg').hidden = true;
     words.featured = String(prepInfo.topic || '').trim();
     words.inline = words.featured;          // 적어 둔 주제가 처음부터 골라져 있다
     renderWordPick();
