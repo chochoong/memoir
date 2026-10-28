@@ -675,6 +675,15 @@ def run():
             check("빈 낱말은 고르지 않은 것과 같다", r.status_code == 200 and ctl_e
                   and ctl_e.topic == "딸의 초등학교 입학" and rec_e["picked_topic"] is None, r.text[:120])
 
+        # 자녀가 낱말을 여러 개 적은 링크 — 화면이 낱말마다 카드를 만든다 (prototype splitWords)
+        from app.session import words as wl
+        many = "첫 직장, 보릿고개 이야기"
+        check("여러 낱말 중 하나 → 그 조각", wl.allowed("보릿고개 이야기", many) == "보릿고개 이야기"
+              and wl.allowed("보릿고개", many) == "보릿고개", str(wl.allowed("보릿고개", many)))
+        check("쉼표 없이 띄어 써도 조각을 받는다", wl.allowed("보릿고개", "첫 직장 보릿고개") == "보릿고개")
+        check("쉼표를 넘는 묶음 · 글자 조각은 받지 않는다",
+              wl.allowed("직장보릿고개", many) is None and wl.allowed("보릿", many) is None)
+
         for s_ in list(sc._sessions):
             sc._sessions.pop(s_).release()
         for c in (a, b, dev, both, dev3, dev5):

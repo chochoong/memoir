@@ -54,7 +54,8 @@ def allowed(raw: str, link_topic: str) -> str | None:
     """
     고른 낱말이 카드에 있으면 **카드의 글자 그대로** 돌려준다. 없으면 None.
 
-    링크의 구체 주제는 자녀가 적은 그대로 돌려준다. 띄어쓰기는 보지 않는다 —
+    링크의 구체 주제는 자녀가 적은 그대로 돌려준다. 여러 낱말을 적었으면 그중 한 낱말도
+    받는다 (아래 _spans). 띄어쓰기는 보지 않는다 —
     「첫직장」 을 보내도 카드의 「첫 직장」 으로 연다. 보낸 글자를 그대로 쓰지 않는 것은
     이 함수를 지난 글이 늘 목록 안의 글이게 하려는 것이다.
     """
@@ -63,4 +64,20 @@ def allowed(raw: str, link_topic: str) -> str | None:
         return None
     if link_topic and k == key(link_topic):
         return link_topic
-    return _BY_KEY.get(k)
+    if k in _BY_KEY:
+        return _BY_KEY[k]
+    # 자녀가 「첫 직장, 보릿고개」 · 「첫 직장 보릿고개」 처럼 여러 낱말을 적으면 화면이 낱말마다
+    # 카드를 만든다 (prototype 의 splitWords). 그 카드는 자녀가 적은 글의 조각이라 받는다.
+    for span in _spans(link_topic):
+        if k == key(span):
+            return span
+    return None
+
+
+def _spans(topic: str) -> list[str]:
+    """쉼표 조각마다 이어진 낱말 묶음 전부 — 화면이 어떻게 나눴든 그 카드가 이 안에 있다."""
+    out: list[str] = []
+    for part in re.split(r"[,，、;]+", topic or ""):
+        tok = part.split()
+        out += [" ".join(tok[i:j]) for i in range(len(tok)) for j in range(i + 1, len(tok) + 1)]
+    return out
