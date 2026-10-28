@@ -1,8 +1,9 @@
 """
-자서전 초안 — 고른 회차 3~5개를 한 입력으로 합쳐 한 번 쓰게 한다 (업무지시서 01 v1.1)
+자서전 초안 — 고른 회차를 한 입력으로 합쳐 쓰게 한다 (업무지시서 01 v1.1 · 단위 8S)
 
     검사      check_selection   개수 · 중복 · 모양               → BadSelection (400)
-    조회      collect           있나 · 내 것인가                  → NotFound (404)
+              (빼기 요청)       check_exclusion · pick_all — 화자의 전부에서 뺀다
+    조회      collect          있나 · 내 것인가                  → NotFound (404)
                                 말씀이 있나 · 한 화자인가          → BadSelection (400)
                                 DB 를 못 읽었다                   → SourceUnavailable (422)
     합치기    merge             전역 턴 · turn_map
@@ -10,6 +11,18 @@
                                                                    GenerationTimeout (504)
     검사      check             7개 키 · 본문 줄마다 출처 하나    → GenerationFailed (502)
                                 확인 필요 · 자료 누락              → NotFinal (503)
+
+**요청은 두 모양이다.** `{session_ids}` 는 고른 것 (3 ~ MEMOIR_MAX_SESSIONS).
+`{elder_id, exclude_session_ids}` 는 최종 정책 「같은 화자 전체 선택 후 제외」(7-C1 §4 ·
+태헌 10-26) — 서버가 그 화자의 전부(store.memoir_sessions)를 정하고 뺄 것만 받는다.
+**빼기 요청에는 개수 상한이 없다** (최충 · 태헌 10-28). 어느 쪽이든 응답의
+run.session_ids 에 실제로 쓴 회차를 전부 싣는다 — 화면이 늦게 온 결과를 알아본다.
+
+**쓰는 엔진은 둘이다** (MEMOIR_ENGINE). 비우거나 single 이면 위의 한 번 호출, pipeline 이면
+다섯 단계(memoir_pipeline.run · 단위 8S 연결). 고르기 · 조회 · 합치기는 같다. 파이프라인 결과는
+7-C1 §3 모양(장 · 문단 · 문장, body · sources 는 장을 펼친 것)으로 바꿔 내보낸다
+(pipeline_result). 일부 장 실패는 503 incomplete (태헌 10-26 A — 장 내용 없이). 실행 기록은
+메모리에만 두고 디스크에 남기지 않는다 — 원문이 들어 있다 (8P 인계 5번, 보관 정책 미정).
 
 **저장하지 않는다.** 초안은 응답으로만 나간다. 자서전 표도, 작업 ID 도 없다.
 
@@ -143,6 +156,52 @@ class NotFinal(MemoirError):
         self.reasons = reasons
 
 
+class TooMuch(BadSelection):
+    """말씀이 MEMOIR_MAX_INPUT_CHARS 를 넘는다. 400 — 일부를 몰래 빼지 않고 사용자가 빼게 한다."""
+
+    code = "too_much"
+
+
+class Incomplete(MemoirError):
+    """파이프라인의 일부 장이 실패했다 (partial). 503 incomplete — 만든 장도 내보내지 않는다."""
+
+
+def engine(user_id: str | None = None) -> str:
+    """
+    이 사람의 자서전을 무엇으로 쓰나. MEMOIR_ENGINE=pipeline 이고 MEMOIR_PIPELINE_USERS
+    (쉼표로 나눈 user_id, `*` 이면 모두)에 든 사람만 pipeline, 나머지는 single (예전 한 번 호출).
+
+    **운영에 올려도 시험 대상만 쓴다** (태헌 10-28 — 기능 연결과 일반 공개 · 품질 승인은 따로).
+    목록이 비어 있으면 아무도 pipeline 을 쓰지 않는다.
+    """
+    if env_str("MEMOIR_ENGINE").strip().lower() != "pipeline":
+        return "single"
+    allowed = {x.strip() for x in env_str("MEMOIR_PIPELINE_USERS").split(",") if x.strip()}
+    return "pipeline" if "*" in allowed or (user_id is not None and user_id in allowed) else "single"
+
+
+def limits(user_id: str) -> dict:
+    """
+    화면이 고르기 전에 알아야 할 것 — 회차 목록(?elder_id=)에 함께 싣는다.
+    memoir_max 는 None 이면 상한 없음 (pipeline), single 이면 MEMOIR_MAX_SESSIONS.
+    """
+    kind = engine(user_id)
+    return {"memoir_engine": kind, "memoir_max": None if kind == "pipeline" else max_sessions(),
+            "memoir_max_chars": max_input_chars()}
+
+
+DEFAULT_MAX_INPUT_CHARS = 150_000
+
+
+def max_input_chars() -> int:
+    """
+    한 번에 넣을 수 있는 어르신 말씀 글자 수. 넘으면 회차를 임의로 빼지 않고 400 too_much 로
+    안내한다 (태헌 10-28). 기본 15만 자 — 39회차 실측 3.8만 자에 단계당 입력 4.5만 토큰이었고,
+    Pro 단가가 바뀌는 요청당 20만 토큰보다 넉넉히 아래에 둔다.
+    """
+    return env_int("MEMOIR_MAX_INPUT_CHARS", DEFAULT_MAX_INPUT_CHARS)
+
+
 def inject() -> str:
     """지금 걸린 실패 주입. 모르는 값은 끈 것으로 읽고 로그에 남긴다."""
     v = env_str("MEMOIR_FAIL_INJECT").strip().lower()
@@ -169,8 +228,12 @@ def check_selection(session_ids) -> list[str]:
     top = max_sessions()
     if not MIN_SESSIONS <= len(session_ids) <= top:
         raise BadSelection(f"회차 {len(session_ids)}개 — {MIN_SESSIONS}~{top}개여야 한다")
+    return _uuids(session_ids)
+
+
+def _uuids(values: list) -> list[str]:
     ids: list[str] = []
-    for s in session_ids:
+    for s in values:
         if not isinstance(s, str):
             raise BadSelection("session_id 가 문자열이 아니다")
         try:
@@ -179,6 +242,38 @@ def check_selection(session_ids) -> list[str]:
             raise BadSelection("session_id 가 UUID 가 아니다") from e
     if len(set(ids)) != len(ids):
         raise BadSelection("같은 회차를 두 번 골랐다")
+    return ids
+
+
+def check_exclusion(elder_id, exclude) -> tuple[str, list[str]]:
+    """빼기 요청의 모양을 본다. DB 는 아직 보지 않는다. 뺄 것이 없으면 빈 목록이다."""
+    if not isinstance(elder_id, str) or not elder_id.strip() or len(elder_id) > 64:
+        raise BadSelection("elder_id 가 없다")
+    if not isinstance(exclude, list):
+        raise BadSelection("exclude_session_ids 가 목록이 아니다")
+    return elder_id.strip(), _uuids(exclude)
+
+
+async def pick_all(elder_id: str, exclude: list[str], user_id: str) -> list[str]:
+    """
+    이 화자의 전부(store.memoir_sessions)에서 뺄 것을 뺀다. **상한은 없다.**
+
+    남의 화자면 404 다. 전부에 없는 회차를 빼라고 하면 거절하지 않고 넘어간다 —
+    어차피 들어가지 않는다 (화면 목록이 말씀 없는 회차를 보여 줬을 때 등).
+    남은 것이 3개보다 적으면 400 이다.
+    """
+    try:
+        if not await store.owns_elder(user_id, elder_id):
+            raise NotFound(f"화자가 없다 {elder_id}")
+        every = await store.memoir_sessions(user_id, elder_id)
+    except store.StoreUnavailable as e:
+        raise SourceUnavailable("자서전 회차를 읽지 못했다") from e
+    gone = set(exclude)
+    if gone - set(every):
+        log.info("자서전 — 화자의 회차가 아닌 것을 빼라고 했다 %d개 (넘어간다)", len(gone - set(every)))
+    ids = [s for s in every if s not in gone]
+    if len(ids) < MIN_SESSIONS:
+        raise BadSelection(f"남은 회차 {len(ids)}개 — {MIN_SESSIONS}개 이상이어야 한다")
     return ids
 
 
@@ -211,6 +306,9 @@ async def collect(session_ids: list[str], user_id: str) -> list[dict]:
         # 화자 있는 회차와 미지정 회차가 섞였으면 꺼져 있어도 거절한다 — 미지정 쪽이
         # 다른 분의 이야기일 수 있다.
         raise SpeakerUnassigned("화자 미지정 회차가 있다")
+    said = sum(len((f.get("answer") or "").strip()) for rec in recs for f in rec["fragments"] if f["idx"] > 0)
+    if said > max_input_chars():
+        raise TooMuch(f"말씀 {said}자 — 상한 {max_input_chars()}자 (회차 {len(recs)}개)")
     if inject() == INJECT_SOURCE:
         raise SourceUnavailable("MEMOIR_FAIL_INJECT=source_material_unavailable")
     return recs
@@ -446,8 +544,8 @@ def check(out, turns: set[int]) -> dict:
 
 async def preview(session_ids, user_id: str, style: str = "spoken") -> dict:
     """
-    고른 회차로 초안 하나. 돌려주는 것은 5개 키(SHOWN)에 요청받은 style 을 더한
-    6키다 — turn_map 은 이 요청 안에서 출처를 따져 보는 데만 쓰고 화면에 내보내지
+    고른 회차로 초안 하나. 돌려주는 것은 5개 키(SHOWN)에 요청받은 style 과 실제로 쓴
+    회차(run.session_ids)를 더한 7키다 — turn_map 은 이 요청 안에서 출처를 따져 보는 데만 쓰고 화면에 내보내지
     않는다. missing_context · coverage_notes 는 로그에만 남긴다.
 
     style 은 라우트가 거른 값이다. 지금은 spoken 뿐이라 모델에 보내지 않는다
@@ -455,8 +553,43 @@ async def preview(session_ids, user_id: str, style: str = "spoken") -> dict:
 
     로그에는 회차 ID 와 개수만 남긴다. 원문은 남기지 않는다.
     """
-    ids = check_selection(session_ids)
-    recs = await collect(ids, user_id)
+    return await _draft(check_selection(session_ids), user_id, style)
+
+
+async def preview_all(elder_id, exclude, user_id: str, style: str = "spoken") -> dict:
+    """빼기 요청 — 이 화자의 전부에서 exclude 를 뺀 회차로 초안 하나. 응답은 preview 와 같다."""
+    ids = await select({"elder_id": elder_id, "exclude_session_ids": exclude}, user_id)
+    return await _draft(ids, user_id, style)
+
+
+async def select(body: dict, user_id: str) -> list[str]:
+    """
+    요청 본문 → 쓸 회차. exclude_session_ids 칸이 있으면 빼기 요청, 없으면 고른 것.
+    작업으로 시작할 때(memoir_jobs) 모델을 부르기 전에 400 · 404 · 422 를 바로 내려고 따로 둔다.
+    """
+    if "exclude_session_ids" in body:
+        elder, gone = check_exclusion(body.get("elder_id"), body["exclude_session_ids"])
+        ids = await pick_all(elder, gone, user_id)
+        # 상한 없음은 pipeline 만이다 — 한 번 호출(single)은 MEMOIR_MAX_SESSIONS 를 넘겨 받지 않는다.
+        # 화면은 목록의 memoir_max 로 미리 안다 (limits)
+        if engine(user_id) == "single" and len(ids) > max_sessions():
+            raise BadSelection(f"남은 회차 {len(ids)}개 — 이 계정은 {max_sessions()}개까지 (single)")
+        return ids
+    return check_selection(body.get("session_ids"))
+
+
+async def _draft(ids: list[str], user_id: str, style: str) -> dict:
+    return await generate(await collect(ids, user_id), ids, user_id, style)
+
+
+async def generate(recs: list[dict], ids: list[str], user_id: str, style: str, progress=None) -> dict:
+    """
+    collect 를 지난 회차로 쓴다. 엔진은 engine(user_id).
+
+    progress(stage, chapter, chapters) 는 다섯 단계가 한 단계를 마칠 때마다 불린다 (작업 화면용).
+    """
+    if engine(user_id) == "pipeline":
+        return await _draft_pipeline(recs, ids, style, progress)
     data, turn_map = merge(recs)
     turns = {t["global_turn"] for t in turn_map}
     log.info("자서전 요청 — 회차 %d개 %s · 말씀 %d턴 · 모델 %s",
@@ -466,4 +599,161 @@ async def preview(session_ids, user_id: str, style: str = "spoken") -> dict:
     log.info("자서전 응답 — %s · 본문 %d줄 · 확인 %d건 · 범위 메모 %s",
              out["status"], len(out["body"].split("\n")) if out["body"] else 0,
              len(out["to_confirm"]), out["coverage_notes"])
-    return {**{k: out[k] for k in SHOWN}, "style": style}
+    return {**{k: out[k] for k in SHOWN}, "style": style, "run": {"session_ids": ids}}
+
+
+# ---------------------------------------------------------------- 다섯 단계 (MEMOIR_ENGINE=pipeline)
+
+
+async def _draft_pipeline(recs: list[dict], ids: list[str], style: str, progress=None) -> dict:
+    """
+    다섯 단계로 쓴다. 입력은 한 번 호출과 같은 merge 다 (memoir_pipeline.build_input 과 같다).
+
+    로그에는 회차 수 · 단계별 시간 · 결과 상태만 남긴다. 원문 · 본문은 남기지 않는다.
+    """
+    from . import memoir_pipeline as mp
+    import time
+
+    data, turn_map = merge(recs)
+    hook = inject()
+    if hook == INJECT_FAILED:
+        raise GenerationFailed("MEMOIR_FAIL_INJECT=generation_failed")
+    if hook == INJECT_TIMEOUT:
+        raise GenerationTimeout("MEMOIR_FAIL_INJECT=generation_timeout")
+    model = mp.settings()["MEMOIR_PIPE_TEXT_MODEL"]
+    t0 = time.monotonic()
+    log.info("자서전 다섯 단계 요청 — 회차 %d개 %s · 말씀 %d턴 · 모델 %s", len(ids),
+             ",".join(s[:8] for s in ids), len(turn_map), model)
+    steps: list[dict] = []
+    calls = 0
+    for attempt in (1, 2):
+        rec = _progress_recorder(progress)            # folder 없음 — 메모리에만
+        if attempt > 1 and progress is not None:
+            progress("analysis", 0, 0)
+        res = await mp.run(data, turn_map, recorder=rec)
+        try:
+            steps += json.loads(rec.files.get("run.json", "{}")).get("steps", [])
+        except ValueError:
+            pass
+        calls += res.get("calls", 0)
+        fail = res.get("failure") or {}
+        # 분석 단계의 형식 · 허용값 오류와 일시적 호출 오류만 한 번 더 (태헌 10-28). 분석이 첫 단계라
+        # 다시 부르는 것은 분석뿐이다. 정정 · 제외 · 화자 · 출처(reference)와 시간 · 잘림은 그대로 멈춘다
+        if not (attempt == 1 and fail.get("stage") == "analysis" and fail.get("kind") in RETRY_KINDS):
+            break
+        log.warning("자서전 분석 다시 부름 — %s %s", fail.get("kind"), str(fail.get("message", ""))[:160])
+    log.info("자서전 다섯 단계 응답 — %s · %.1f초 · 시도 %d · 호출 %d · 단계 %s · 검증 %s · 실패 %s",
+             res["generation_state"], time.monotonic() - t0, attempt, calls,
+             " ".join(f"{x['stage']}{'/' + x['chapter_key'] if x.get('chapter_key') else ''}"
+                      f"={x['ms'] / 1000:.1f}s" for x in steps),
+             (res.get("verification") or {}).get("state"),
+             json.dumps(res.get("failure"), ensure_ascii=False)[:200] if res.get("failure") else "-")
+    use = usage(model, steps)
+    log.info("자서전 사용량 — 모델 %s · 시도 %d · 호출 %d · 입력 %d · 출력 %d · 생각 %d · 비용 %s",
+             model, attempt, calls, use["input"], use["output"], use["thoughts"],
+             f"약 ${use['usd']:.3f}" if use["usd"] is not None else "단가 모름")
+    return pipeline_result(res, ids, style)
+
+
+# 다시 부를 실패 — 형식 · 허용값(format)과 호출 오류(call). memoir_pipeline.KINDS 참조
+RETRY_KINDS = ("format", "call")
+
+# 100만 토큰당 USD — (입력, 출력 · 생각) 요청 하나 20만 토큰 이하 / 넘으면. ai.google.dev 가격표 10-28.
+# 모르는 모델은 비용을 적지 않는다 (지어내지 않는다)
+PRICES = {"gemini-3.1-pro-preview": ((2.0, 12.0), (4.0, 18.0))}
+
+
+def usage(model: str, steps: list[dict]) -> dict:
+    """실행 기록 단계들의 토큰 합과 비용 추정. 생각 토큰은 출력 단가로 센다."""
+    tin = tout = think = 0
+    usd: float | None = 0.0 if model in PRICES else None
+    for x in steps:
+        u = x.get("usage") or {}
+        p, o, t = u.get("prompt") or 0, u.get("output") or 0, u.get("thoughts") or 0
+        tin, tout, think = tin + p, tout + o, think + t
+        if usd is not None:
+            rin, rout = PRICES[model][p > 200_000]
+            usd += p * rin / 1e6 + (o + t) * rout / 1e6
+    return {"input": tin, "output": tout, "thoughts": think, "usd": usd}
+
+
+def _progress_recorder(progress):
+    """
+    실행 기록(Recorder)이 단계 파일을 남길 때 다음 단계를 알린다. 파이프라인 코드를 고치지 않고
+    파일 이름으로 읽는다 — 01_analysis → 목차 · 02_outline → 장(장 수) · 03_ch-k → k+1 장 ·
+    03_checks → 편집 · 04_code_gate → 검증.
+    """
+    from . import memoir_pipeline as mp
+
+    class Rec(mp.Recorder):
+        chapters = 0
+
+        def text(self, name: str, body: str) -> str:
+            out = super().text(name, body)
+            if progress is None or not name.endswith(".json"):
+                return out
+            try:
+                if name == "01_analysis.json":
+                    progress("outline", 0, 0)
+                elif name == "02_outline.json":
+                    self.chapters = len(json.loads(body).get("chapters") or [])
+                    progress("chapter", 1, self.chapters)
+                elif name.startswith("03_ch-"):
+                    k = int(name[len("03_ch-"):-len(".json")])
+                    if k < self.chapters:
+                        progress("chapter", k + 1, self.chapters)
+                elif name == "03_checks.json":
+                    progress("edit", 0, self.chapters)
+                elif name == "04_code_gate.json":
+                    progress("verify", 0, self.chapters)
+            except (ValueError, AttributeError):
+                pass                                    # 진행 표시는 덤이다 — 생성을 막지 않는다
+            return out
+
+    return Rec()
+
+
+def pipeline_result(res: dict, ids: list[str], style: str) -> dict:
+    """
+    파이프라인 result → 7-C1 §3 응답. 고치지 않는다 — 모양이 어긋나면 502 다.
+
+    generated     → 200 ready (검증 실패 · 사람 검토 전이어도 생성된 글이다. verification.state 로 남긴다)
+    insufficient  → 200 insufficient_material
+    partial       → 503 incomplete
+    needs_context → 503 not_final
+    failed        → 시간(timeout · budget)이면 504, 그 밖은 502
+    """
+    from . import memoir_pipeline as mp
+
+    state = res.get("generation_state")
+    run = {"session_ids": ids, "chapters_requested": 0}
+    if state == mp.INSUFFICIENT:
+        return {"status": INSUFFICIENT, "style": style, "title": "", "chapters": [], "to_confirm": [],
+                "body": "", "sources": [], "run": run}
+    failure = res.get("failure") or {}
+    if state == mp.PARTIAL:
+        raise Incomplete(f"partial — {failure.get('stage')}/{failure.get('chapter_key')} {failure.get('kind')}")
+    if state == mp.NEEDS_CONTEXT:
+        raise NotFinal("needs_context", [failure.get("message", "")])
+    if state != mp.GENERATED:
+        why = f"{state} — {failure.get('stage')} {failure.get('kind')} {str(failure.get('message', ''))[:120]}"
+        if failure.get("kind") in ("timeout", "budget"):
+            raise GenerationTimeout(why)
+        raise GenerationFailed(why)
+    try:
+        title = res["title"]["text"].strip()
+        chapters = [{"no": i, "title": ch["title"]["text"].strip(), "status": "ready",
+                     "paragraphs": [{"sentences": [{"text": x["text"].strip(), "turns": list(x.get("turns") or [])}
+                                                   for x in para]} for para in ch["paragraphs"]]}
+                    for i, ch in enumerate(res["chapters"], start=1)]
+    except (KeyError, TypeError, AttributeError) as e:
+        raise GenerationFailed(f"파이프라인 결과 모양이 다르다 ({type(e).__name__}: {e})") from e
+    flat = [x for ch in chapters for p in ch["paragraphs"] for x in p["sentences"]]
+    if not title or not chapters or not flat or not all(x["text"] for x in flat):
+        raise GenerationFailed("파이프라인 결과에 제목 · 장 · 문장이 비었다")
+    run["chapters_requested"] = len(chapters)
+    return {"status": READY, "style": style, "title": title, "chapters": chapters, "to_confirm": [],
+            "body": "\n".join(x["text"] for x in flat),
+            "sources": [{"sentence": i, "turns": x["turns"]} for i, x in enumerate(flat)],
+            "verification": {"state": (res.get("verification") or {}).get("state") or "not_run"},
+            "run": run}

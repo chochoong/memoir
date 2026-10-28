@@ -31,12 +31,10 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.encoders import jsonable_encoder
 from fastapi.responses import FileResponse, JSONResponse, Response, StreamingResponse
 from fastapi.staticfiles import StaticFiles
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Fi
 
 from app.session import controller as sc
-from app.session import auth, limits, link, memoir, photo, photostore, postcard, prompt, store, stt, tts, words
-from app.session import style as styles
-from app.session.conf import env_flag, env_int, env_str
+from app.session import auth, limits, link, memoir, memoir_jobs, photo, photostore, postcard, prompt, store, stt, tts, words
 from app.session.machine import State, TransitionError
 from app.session.question import gemini_question, warmup
 
@@ -638,8 +636,18 @@ async def list_sessions(limit: int = 20, has_postcard: bool = False,
     DB 를 못 읽으면 **빈 목록이 아니라 503 이다.** 빈 목록을 주면 화면에
     「기록이 없습니다」가 뜨고, 그건 어르신에게 조각이 사라졌다는 말이 된다.
     없는 것과 못 읽은 것은 다른 사건이라 화면도 다르게 말해야 한다.
+
+    `?elder_id=` 면 `memoir_total` 도 싣는다 — 그 화자의 자서전 회차(닫힌 · 말씀 있는,
+    has_words) **전부**의 수다. 목록은 limit(최대 100)까지라, 화면은 이 수와 목록에 보인
+    수의 차이로 「목록에 없지만 함께 들어가는 오래된 이야기」 를 안내한다.
+    memoir_engine · memoir_max (None = 상한 없음) · memoir_max_chars 도 싣는다 (memoir.limits) —
+    다섯 단계는 시험 대상 계정만 쓰므로 사람마다 다르다.
     """
-    return {"sessions": await _read(store.list_sessions(who, _limit(limit), has_postcard, elder_id))}
+    rows = await _read(store.list_sessions(who, _limit(limit), has_postcard, elder_id))
+    if not elder_id:
+        return {"sessions": rows}
+    return {"sessions": rows, "memoir_total": len(await _read(store.memoir_sessions(who, elder_id))),
+            **memoir.limits(who)}
 
 
 @app.put("/api/sessions/{session_id}/elder")
@@ -900,12 +908,12 @@ def _postcard_url(session_id: str, rec: dict) -> str:
 
 # ---------------------------------------------------------------- 자서전
 #
-# 엽서가 있는 회차 3~5개를 골라 초안 하나를 받는다. 저장하지 않는다 — 다시 보려면
+# 같은 화자의 회차(전부에서 뺄 것만 빼거나, 고른 것)로 초안 하나를 받는다. 저장하지 않는다 — 다시 보려면
 # 다시 만든다. 무엇을 하는지는 memoir.py 머리에 있다.
 
 # 화면이 그대로 보여 주는 말이다 (해요체). 안쪽 사정은 로그에만 남긴다.
 _MEMOIR_SAYS = {
-    400: "선택한 엽서를 확인해 주세요. 3~5장을 고를 수 있어요.",
+    400: "선택한 이야기를 확인해 주세요. 말씀이 있는 이야기가 3개 이상이어야 해요.",
     404: "선택한 엽서를 찾을 수 없어요. 목록에서 다시 골라 주세요.",
     422: "선택한 엽서의 이야기 자료를 불러오지 못했어요.",
     502: "자서전을 만드는 중 문제가 생겼어요. 엽서 선택 화면으로 돌아가 주세요.",
@@ -919,6 +927,7 @@ _MEMOIR_STATUS = (
     (memoir.SourceUnavailable, 422, "source_unavailable"),
     (memoir.GenerationTimeout, 504, "generation_timeout"),
     (memoir.GenerationFailed, 502, "invalid_model_output"), (memoir.NotFinal, 503, "not_final"),
+    (memoir.Incomplete, 503, "incomplete"),     # 다섯 단계의 일부 장 실패 — 화면은 「일부 장」 안내 (태헌 10-26 A)
 )
 
 
@@ -927,7 +936,10 @@ async def memoir_preview(request: Request, who: str = Depends(auth.current_user)
     """
     고른 회차로 자서전 초안을 쓴다. **기다리는 요청이다** — 다 쓰거나 실패해야 답이 간다.
 
-    본문은 `{"session_ids": [...], "style": ...}` 다. style 은 없으면 구어체다.
+    본문은 `{"session_ids": [...], "style": ...}` (고른 것) 이나
+    `{"elder_id": ..., "exclude_session_ids": [...], "style": ...}` (화자의 전부에서 뺄 것 ·
+    상한 없음) 다. exclude_session_ids 칸이 있으면 뒤의 것이다. style 은 없으면 구어체다.
+    응답의 run.session_ids 는 실제로 쓴 회차 전부다.
     누구의 요청인지는 로그인으로 안다.
     본문을 pydantic 으로 받지 않는 것은 모양이 틀렸을 때 FastAPI 가 422 를
     내기 때문이다 — 여기서 422 는 「자료를 못 읽었다」는 다른 뜻이다.
@@ -935,22 +947,131 @@ async def memoir_preview(request: Request, who: str = Depends(auth.current_user)
     자료 부족은 200 의 insufficient_material 이고 실패가 아니다. 실패는 상태 코드와
     `{"detail": 안내, "code": 갈래}` 로만 나간다. 둘을 서로 바꿔 내보내지 않는다.
     """
+    body = await _memoir_body(request)
     try:
-        body = json.loads(await _body_capped(request, 16 * 1024) or b"null")
-    except ValueError:
-        body = None
-    ids = body.get("session_ids") if isinstance(body, dict) else None
-    try:
-        chosen = styles.pick(body.get("style") if isinstance(body, dict) else None)
+        chosen = styles.pick(body.get("style"))
     except styles.UnsupportedStyle:
         return _unsupported_style()
     try:
-        return await memoir.preview(ids, who, chosen)
+        if "exclude_session_ids" in body:
+            return await memoir.preview_all(body.get("elder_id"), body["exclude_session_ids"], who, chosen)
+        return await memoir.preview(body.get("session_ids"), who, chosen)
     except memoir.MemoirError as e:
-        status, code = next((s, c) for kind, s, c in _MEMOIR_STATUS if isinstance(e, kind))
-        code = code or e.code      # 400 은 갈래가 여럿이다 — bad_selection · mixed_speakers · speaker_unassigned
-        log.warning("자서전 %d %s — %s", status, type(e).__name__, str(e)[:200])
-        return JSONResponse({"detail": _MEMOIR_SAYS[status], "code": code}, status_code=status)
+        status, code, detail = _memoir_failure(e)
+        return JSONResponse({"detail": detail, "code": code}, status_code=status)
+
+
+async def _memoir_body(request: Request) -> dict:
+    try:
+        # 빼기 요청은 뺄 회차 수만큼 길어진다 (UUID 하나 40바이트쯤 — 64KB 면 1,500개)
+        body = json.loads(await _body_capped(request, 64 * 1024) or b"null")
+    except ValueError:
+        body = None
+    return body if isinstance(body, dict) else {}
+
+
+def _memoir_failure(e: memoir.MemoirError) -> tuple[int, str, str]:
+    """(HTTP 상태, code, 화면 안내). 안내는 상태마다 하나, too_much 만 따로 — 무엇을 해야 하는지가 다르다."""
+    status, code = next((s, c) for kind, s, c in _MEMOIR_STATUS if isinstance(e, kind))
+    code = code or e.code      # 400 은 갈래가 여럿이다 — bad_selection · mixed_speakers · speaker_unassigned · too_much
+    log.warning("자서전 %d %s — %s", status, type(e).__name__, str(e)[:200])
+    return status, code, _MEMOIR_SAYS_CODE.get(code, _MEMOIR_SAYS[status])
+
+
+_MEMOIR_SAYS_CODE = {
+    "too_much": "이야기가 너무 많아 한 번에 만들 수 없어요. 넣지 않을 이야기를 몇 개 빼 주세요.",
+}
+
+
+@app.post("/api/memoirs")
+async def memoir_start(request: Request, who: str = Depends(auth.current_user)):
+    """
+    자서전 작업을 연다 — **기다리지 않는다.** 본문은 /api/memoirs/preview 와 같다.
+
+    고르기 · 조회 검사는 여기서 끝낸다 — 400 · 404 · 422 는 지금처럼 바로 나간다. 통과하면
+    202 `{job_id, status: "running", stage, ...}` 이고, 결과는 GET /api/memoirs/{job_id} 로 받는다.
+    만드는 중인 작업이 있으면 새로 열지 않고 409 `{code: "busy", job_id}` 다. memoir_jobs.py 머리 참조.
+    """
+    body = await _memoir_body(request)
+    try:
+        chosen = styles.pick(body.get("style"))
+    except styles.UnsupportedStyle:
+        return _unsupported_style()
+    busy = memoir_jobs.running(who)
+    if busy is not None:
+        return JSONResponse({"detail": "자서전을 만들고 있어요. 다 만들어지면 볼 수 있어요.", "code": "busy",
+                             "job_id": busy.job_id}, status_code=409)
+    try:
+        ids = await memoir.select(body, who)
+        recs = await memoir.collect(ids, who)
+    except memoir.MemoirError as e:
+        status, code, detail = _memoir_failure(e)
+        return JSONResponse({"detail": detail, "code": code}, status_code=status)
+    job = await memoir_jobs.start(recs, ids, who, chosen)
+    return JSONResponse(_memoir_job_view(job), status_code=202)
+
+
+@app.get("/api/memoirs/latest")
+async def memoir_job_latest(who: str = Depends(auth.current_user)):
+    """
+    내 가장 최근 작업 — GET /api/memoirs/{job_id} 와 같은 본문. 새로고침으로 작업 번호를 잊은
+    화면이 찾는다. 보관 시간(MEMOIR_JOB_KEEP_SECONDS) 안에 없으면 404 job_not_found.
+    **{job_id} 라우트보다 먼저 둔다** — 뒤에 두면 「latest」 가 작업 번호로 읽힌다.
+    """
+    job = memoir_jobs.latest(who)
+    if job is None:
+        return JSONResponse({"detail": "자서전 작업을 찾을 수 없어요. 다시 만들어 주세요.",
+                             "code": "job_not_found"}, status_code=404)
+    return _memoir_job_view(job)
+
+
+@app.get("/api/memoirs/{job_id}")
+async def memoir_job(job_id: str, who: str = Depends(auth.current_user)):
+    """
+    작업 하나. 늘 200 이고 상태는 본문의 status 다 — 화면이 몇 초마다 부른다.
+
+        running  stage (analysis · outline · chapter · edit · verify · write), chapter / chapters, elapsed
+        done     result — /api/memoirs/preview 의 200 본문과 같다 (7-C1 §3)
+        failed   code · detail — preview 의 실패와 같은 code. 그만두었으면 cancelled
+
+    없거나 남의 것이거나 서버를 다시 켜서 사라졌으면 404 `{code: "job_not_found"}`.
+    """
+    job = memoir_jobs.get(job_id, who)
+    if job is None:
+        return JSONResponse({"detail": "자서전 작업을 찾을 수 없어요. 다시 만들어 주세요.",
+                             "code": "job_not_found"}, status_code=404)
+    return _memoir_job_view(job)
+
+
+@app.delete("/api/memoirs/{job_id}")
+async def memoir_job_cancel(job_id: str, who: str = Depends(auth.current_user)):
+    """만드는 중인 작업을 그만둔다. 이미 끝난 작업은 그대로다. 결과는 GET 과 같다."""
+    job = memoir_jobs.get(job_id, who)
+    if job is None:
+        return JSONResponse({"detail": "자서전 작업을 찾을 수 없어요. 다시 만들어 주세요.",
+                             "code": "job_not_found"}, status_code=404)
+    memoir_jobs.cancel(job)
+    if job.task is not None and not job.task.done():
+        try:
+            await asyncio.wait_for(asyncio.shield(job.task), timeout=2)
+        except (asyncio.CancelledError, asyncio.TimeoutError):
+            pass
+    return _memoir_job_view(job)
+
+
+def _memoir_job_view(job: memoir_jobs.Job) -> dict:
+    out = {"job_id": job.job_id, "status": job.status, "style": job.style,
+           "run": {"session_ids": job.ids}, "elapsed": memoir_jobs.elapsed(job)}
+    if job.status == memoir_jobs.RUNNING:
+        out.update(stage=job.stage, chapter=job.chapter, chapters=job.chapters)
+    elif job.status == memoir_jobs.DONE:
+        out["result"] = job.result
+    elif isinstance(job.error, memoir_jobs.Cancelled):
+        out.update(code="cancelled", detail="자서전 만들기를 그만두었어요.")
+    else:
+        _, code, detail = _memoir_failure(job.error)
+        out.update(code=code, detail=detail)
+    return out
 
 
 # ---------------------------------------------------------------- 인터뷰 링크 (자녀)

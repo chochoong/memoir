@@ -1,0 +1,67 @@
+{
+  "checks": [
+    {
+      "id": "must_keep_omitted:artifact:f12",
+      "rule": "must_keep_omitted",
+      "severity": "info",
+      "location": "artifact",
+      "detail": "사실 f12 을 뺐다 — 이유: 남편의 일 · 김 사장 · 운동회 · 자녀 대학은 가게 시절의 다른 사람 이야기 — 다른 장 몫",
+      "fact": "f12"
+    },
+    {
+      "id": "must_keep_omitted:artifact:f13",
+      "rule": "must_keep_omitted",
+      "severity": "info",
+      "location": "artifact",
+      "detail": "사실 f13 을 뺐다 — 이유: 남편의 일 · 김 사장 · 운동회 · 자녀 대학은 가게 시절의 다른 사람 이야기 — 다른 장 몫",
+      "fact": "f13"
+    },
+    {
+      "id": "must_keep_omitted:artifact:f43",
+      "rule": "must_keep_omitted",
+      "severity": "info",
+      "location": "artifact",
+      "detail": "사실 f43 을 뺐다 — 이유: 1977년 부산 첫 방문 · 바다 — 큰언니 끈이지만 이 장은 언니의 마지막을 병문안 · 별세로 다룬다",
+      "fact": "f43"
+    },
+    {
+      "id": "must_keep_omitted:artifact:f48",
+      "rule": "must_keep_omitted",
+      "severity": "info",
+      "location": "artifact",
+      "detail": "사실 f48 을 뺐다 — 이유: 딸의 결혼 드레스 — 딸의 이야기, 다른 장 몫",
+      "fact": "f48"
+    },
+    {
+      "id": "must_keep_omitted:artifact:f51",
+      "rule": "must_keep_omitted",
+      "severity": "info",
+      "location": "artifact",
+      "detail": "사실 f51 을 뺐다 — 이유: 남편의 별세 — 화자가 말을 멈춘 대목, 이 장에 넣지 않는다",
+      "fact": "f51"
+    }
+  ],
+  "signals": [
+    {
+      "chapter_key": "ch-1",
+      "sentences": 24,
+      "supported": 24,
+      "one_to_one": 0.46,
+      "order_kept": 0.83,
+      "facts_per_sentence": 1.25,
+      "links": 4,
+      "paragraphs": 7,
+      "multi_session_paragraphs": 3,
+      "listing": false
+    }
+  ],
+  "plan_coverage": {
+    "planned": 30,
+    "planned_used": 30,
+    "core": 18,
+    "core_used": 18,
+    "core_missing": [],
+    "support": 12,
+    "support_used": 12
+  }
+}

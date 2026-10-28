@@ -1,0 +1,48 @@
+{
+  "state": "pass",
+  "findings": [
+    {
+      "id": "must_keep_omitted:artifact:f12",
+      "rule": "must_keep_omitted",
+      "severity": "info",
+      "location": "artifact",
+      "detail": "사실 f12 을 뺐다 — 이유: 남편의 일 · 김 사장 · 운동회 · 자녀 대학은 가게 시절의 다른 사람 이야기 — 다른 장 몫",
+      "fact": "f12"
+    },
+    {
+      "id": "must_keep_omitted:artifact:f13",
+      "rule": "must_keep_omitted",
+      "severity": "info",
+      "location": "artifact",
+      "detail": "사실 f13 을 뺐다 — 이유: 남편의 일 · 김 사장 · 운동회 · 자녀 대학은 가게 시절의 다른 사람 이야기 — 다른 장 몫",
+      "fact": "f13"
+    },
+    {
+      "id": "must_keep_omitted:artifact:f48",
+      "rule": "must_keep_omitted",
+      "severity": "info",
+      "location": "artifact",
+      "detail": "사실 f48 을 뺐다 — 이유: 딸의 결혼 드레스 — 딸의 이야기, 다른 장 몫",
+      "fact": "f48"
+    },
+    {
+      "id": "must_keep_omitted:artifact:f51",
+      "rule": "must_keep_omitted",
+      "severity": "info",
+      "location": "artifact",
+      "detail": "사실 f51 을 뺐다 — 이유: 남편의 별세 — 화자가 말을 멈춘 대목, 이 장에 넣지 않는다",
+      "fact": "f51"
+    }
+  ],
+  "accepted": {},
+  "counts": {
+    "block": 0,
+    "fix": 0,
+    "info": 4
+  },
+  "draft_checks": 5,
+  "resolutions": {
+    "resolved": 5,
+    "kept": 0
+  }
+}

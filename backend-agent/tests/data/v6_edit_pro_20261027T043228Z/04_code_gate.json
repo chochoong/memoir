@@ -1,0 +1,85 @@
+{
+  "state": "attention",
+  "findings": [
+    {
+      "id": "must_keep_omitted:artifact:f12",
+      "rule": "must_keep_omitted",
+      "severity": "info",
+      "location": "artifact",
+      "detail": "사실 f12 을 뺐다 — 이유: 자녀 운동회와 대학 진학 이야기는 이 장의 주제인 큰언니와 재봉틀의 흐름에서 벗어나 목차가 제외를 지시함",
+      "fact": "f12"
+    },
+    {
+      "id": "must_keep_omitted:artifact:f13",
+      "rule": "must_keep_omitted",
+      "severity": "info",
+      "location": "artifact",
+      "detail": "사실 f13 을 뺐다 — 이유: 자녀 운동회와 대학 진학 이야기는 이 장의 주제인 큰언니와 재봉틀의 흐름에서 벗어나 목차가 제외를 지시함",
+      "fact": "f13"
+    },
+    {
+      "id": "must_keep_omitted:artifact:f48",
+      "rule": "must_keep_omitted",
+      "severity": "info",
+      "location": "artifact",
+      "detail": "사실 f48 을 뺐다 — 이유: 딸의 드레스를 직접 지어주지 못한 아쉬움은 딸 이야기이므로 목차가 제외를 지시함",
+      "fact": "f48"
+    },
+    {
+      "id": "must_keep_omitted:artifact:f51",
+      "rule": "must_keep_omitted",
+      "severity": "info",
+      "location": "artifact",
+      "detail": "사실 f51 을 뺐다 — 이유: 남편의 별세는 화자가 깊이 말하기를 멈춘 대목으로 이 장의 맥락에 맞지 않아 목차가 제외를 지시함",
+      "fact": "f51"
+    },
+    {
+      "id": "spoken_carryover:ch-1/p3/s2",
+      "rule": "spoken_carryover",
+      "severity": "review",
+      "location": "ch-1/p3/s2",
+      "detail": "서술에 구어 ['그거'] — 인용이 아니면 수필 문장으로"
+    },
+    {
+      "id": "spoken_carryover:ch-1/p6/s1",
+      "rule": "spoken_carryover",
+      "severity": "review",
+      "location": "ch-1/p6/s1",
+      "detail": "서술에 구어 ['겠어서'] — 인용이 아니면 수필 문장으로"
+    },
+    {
+      "id": "spoken_carryover:ch-1/p6/s4",
+      "rule": "spoken_carryover",
+      "severity": "review",
+      "location": "ch-1/p6/s4",
+      "detail": "서술에 구어 ['걔'] — 인용이 아니면 수필 문장으로"
+    },
+    {
+      "id": "time_reversal_undeclared:ch-1/p5",
+      "rule": "time_reversal_undeclared",
+      "severity": "fix",
+      "location": "ch-1/p5",
+      "detail": "앞 문단(1985년)보다 이른 1977년으로 돌아가는데 composition.reorder 에 사실 ['f42'] 과 이유가 없다"
+    },
+    {
+      "id": "edit_claim_mismatch:artifact:d3",
+      "rule": "edit_claim_mismatch",
+      "severity": "fix",
+      "location": "artifact",
+      "detail": "diagnosis[3] change=rewrite — 다시 썼다는 문장 5개 중 2개만 초안과 달라졌다. 진단: 연도 표기가 중복되었으며, 재봉틀 소리에 대한 대비가 약함",
+      "token": "d3"
+    }
+  ],
+  "accepted": {},
+  "counts": {
+    "block": 0,
+    "fix": 2,
+    "info": 4,
+    "review": 3
+  },
+  "draft_checks": 8,
+  "resolutions": {
+    "resolved": 0,
+    "kept": 0
+  }
+}
