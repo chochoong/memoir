@@ -5,7 +5,8 @@
     http://127.0.0.1:8010/docs
 
 1주차 범위 — 오디오 없음. 텍스트로 전 흐름을 돌린다.
-인증도 없다. X-User-Id 헤더를 받는 척만 하고, 구글 로그인은 나중에 갈아 끼운다.
+신원은 구글 로그인 뒤 서버가 준 앱 세션 쿠키에서만 나온다 (session/auth.py).
+인터뷰 링크로 들어온 사람은 `/api/i/*` 만 쓴다 (session/link.py).
 
 화면은 frontend-client 저장소에 있다. 두 가지 방식으로 붙는다.
   개발     Vite 개발 서버(5173) → CORS 로 허용
@@ -18,22 +19,23 @@ import asyncio
 import json
 import logging
 import os
-import re
 import sys
+import uuid
 from contextlib import asynccontextmanager
 from pathlib import Path
+from typing import Literal
 
 from dotenv import load_dotenv
-from fastapi import FastAPI, Header, HTTPException, Request
+from fastapi import Depends, FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse, Response
+from fastapi.encoders import jsonable_encoder
+from fastapi.responses import FileResponse, JSONResponse, Response, StreamingResponse
 from fastapi.staticfiles import StaticFiles
-from pydantic import BaseModel
+from pydantic import BaseModel, Fi
 
 from app.session import controller as sc
-from app.session import limits, memoir, photo, photostore, postcard, prompt, store, stt, tts
-from app.session.conf import env_flag, env_int, env_str
-from app.session.machine import TransitionError
+from app.session import auth, limits, link, memoir, memoir_jobs, photo, photostore, postcard, prompt, store, stt, tts, words
+from app.session.machine import State, TransitionError
 from app.session.question import gemini_question, warmup
 
 load_dotenv()
@@ -47,48 +49,6 @@ logging.basicConfig(
     datefmt="%H:%M:%S")
 
 log = logging.getLogger("api")
-
-# 로그인이 없을 때 X-User-Id 에 실려 오는 값. 프론트가 **모두에게** 이것을 보낸다
-# (frontend-client/src/api.ts). 그래서 이 값은 신원이 아니라 「신원이 없다」는 표시다.
-# 사용자별 상한이 이 값을 걸러야 하는 이유가 아래 create_session 에 있다.
-ANON_USER = "dev-user"
-
-# 신원을 담는 쿠키. **헤더만으로는 사진을 내보낼 수 없어서 생겼다.**
-UID_COOKIE = "uid"
-
-# 신원으로 받아들이는 모양. 구글 로그인의 sub 는 숫자열이고, 지금은 dev-user 다.
-# 아무 문자열이나 받으면 그것이 로그와 DB 에 그대로 실려 다닌다.
-UID_OK = re.compile(r"^[A-Za-z0-9._@|-]{1,128}$")
-
-
-def uid(request: Request) -> str:
-    """
-    이 요청의 신원. **헤더가 먼저, 없으면 쿠키다.**
-
-    쿠키가 필요한 이유는 사진 한 줄에 있다 —
-
-        <img src="/api/photos/{id}">
-
-    브라우저가 이 요청을 보낼 때 **커스텀 헤더를 실을 방법이 없다.** fetch 로
-    받아 Blob URL 로 바꾸면 헤더를 실을 수 있지만, 그러면 화면이 사진마다
-    수동으로 받아 관리해야 하고 브라우저 캐시도 못 쓴다. 신원을 쿠키에 한 벌
-    더 두는 쪽이 훨씬 작다.
-
-    **헤더를 먼저 보는 것이 중요하다.** 기존 라우트(회차 생성·목록·기록)는
-    지금도 X-User-Id 로 돌고, 그 동작을 바꾸지 않는 것이 이번 변경을 작게
-    유지하는 방법이다. 쿠키는 헤더가 없을 때만, 즉 사실상 <img> 와 <audio> 에서만
-    쓰인다.
-
-    로그인이 붙으면 고칠 곳은 이 함수 하나다. 토큰을 풀어 user_id 를 얻고,
-    헤더·쿠키를 둘 다 무시하면 된다. 그때까지 이 값은 **위조할 수 있다** —
-    신원의 「운반」을 정리한 것이고 「증명」은 아직 없다.
-    """
-    head = (request.headers.get("x-user-id") or "").strip()
-    if head:
-        return head if UID_OK.match(head) else ANON_USER
-    cookie = (request.cookies.get(UID_COOKIE) or "").strip()
-    return cookie if UID_OK.match(cookie) else ANON_USER
-
 
 def _workers() -> int:
     """이 서버가 몇 벌 뜨려는지. 모르면 1 로 읽는다."""
@@ -199,53 +159,104 @@ app.add_middleware(
 )
 
 
-@app.middleware("http")
-async def mirror_uid(request: Request, call_next):
+def _secure(request: Request) -> bool:
     """
-    X-User-Id 를 쿠키에 한 벌 적어 둔다. 위 uid() 의 짝이다.
-
-    화면은 아무것도 안 해도 된다는 것이 이 미들웨어의 값이다. 이미 모든 API
-    호출에 X-User-Id 를 싣고 있으니 (frontend-client/src/api.ts), 첫 호출의
-    응답에 쿠키가 실려 오고 그 뒤로 <img src> 가 그걸 들고 간다.
-
-    **이미 있는 쿠키와 같으면 다시 안 보낸다.** 화면이 300ms 마다 폴링하므로,
-    이 검사를 빼면 Set-Cookie 가 초당 세 번씩 오간다.
-
-    Secure 는 https 일 때만 켠다. localhost(http)에서 켜면 브라우저가 쿠키를
-    아예 저장하지 않아 개발 중에 사진이 안 보이고, 원인이 눈에 안 띈다.
+    쿠키에 Secure 를 붙일지. https 일 때만 켠다 — localhost(http)에서 켜면 브라우저가
+    쿠키를 아예 저장하지 않아 로그인이 안 되고, 원인이 눈에 안 띈다.
 
     **프록시 뒤에서는 scheme 이 http 로 보인다.** 터널이 TLS 를 끝내고 평문으로
-    넘겨주기 때문이다. uvicorn 을 --proxy-headers 로 띄우면 X-Forwarded-Proto 를
-    읽어 https 로 잡아 주지만, 그 옵션을 잊는 것이 흔한 사고라 PUBLIC_ORIGIN 이
-    https 면 그것만으로도 켠다. COOKIE_SECURE=1 로 강제할 수도 있다.
+    넘겨주기 때문이다. 그래서 PUBLIC_ORIGIN 이 https 면 그것만으로도 켠다.
+    COOKIE_SECURE=1 로 강제할 수도 있다.
     """
-    response = await call_next(request)
-    who = (request.headers.get("x-user-id") or "").strip()
-    if who and UID_OK.match(who) and request.cookies.get(UID_COOKIE) != who:
-        response.set_cookie(
-            UID_COOKIE, who,
-            max_age=30 * 24 * 3600, httponly=True, samesite="lax", path="/",
-            secure=(env_flag("COOKIE_SECURE")
-                    or PUBLIC_ORIGIN.startswith("https://")
-                    or request.url.scheme == "https"))
-    return response
+    return (env_flag("COOKIE_SECURE") or PUBLIC_ORIGIN.startswith("https://")
+            or request.url.scheme == "https")
+
+
+_SAFE = {"GET", "HEAD", "OPTIONS"}
+
+
+@app.middleware("http")
+async def same_origin_writes(request: Request, call_next):
+    """
+    상태를 바꾸는 요청은 **허용한 출처에서 온 것만** 받는다 (요청 위조 방지).
+
+    로그인이 쿠키라서, 다른 사이트가 숨긴 폼으로 우리 API 에 POST 를 보내면
+    브라우저가 쿠키를 실어 줄 수 있다. SameSite=Lax 가 대부분 막지만 한 겹 더 둔다.
+    브라우저는 POST 에 Origin 을 반드시 싣는다. Origin 이 없는 요청(curl · 시험)은
+    쿠키를 들고 있지 않은 한 신원이 없으니 지나가도 해가 없다.
+    """
+    origin = request.headers.get("origin")
+    if (request.method not in _SAFE and origin and request.url.path.startswith("/api/")
+            and origin not in _origins and origin != PUBLIC_ORIGIN
+            and origin != f"{request.url.scheme}://{request.url.netloc}"):
+        log.warning("다른 출처의 쓰기 요청을 거절 %s %s", request.method, request.url.path)
+        return JSONResponse({"detail": "허용하지 않은 곳에서 온 요청이에요", "code": "bad_origin"},
+                            status_code=403)
+    return await call_next(request)
+
+
+@app.exception_handler(auth.AuthError)
+async def _auth_error(request: Request, e: auth.AuthError):
+    res = JSONResponse({"detail": e.detail, "code": e.code}, status_code=e.status)
+    if e.code == "session_expired":
+        res.delete_cookie(auth.COOKIE, path="/")
+    return res
 
 
 # ---------------------------------------------------------------- 모델
 
 class StartReq(BaseModel):
     title: str
-    seed: str
+    # 가족이 적은 설명. **어르신의 말씀이 아니다** — 0번 조각에 남지만 대화 기록에
+    # 「어르신:」으로 실리지 않고 [시작 자료]로 따로 간다 (question._start_material).
+    seed: str = ""
+    # 시작 자료 (C1). 가족이 고른 테마와 구체 주제 하나. 둘 다 없어도 연다 —
+    # 지금 화면은 seed 만 보낸다. 모르는 테마·너무 긴 주제는 422 로 돌려보낸다.
+    theme: Literal["family", "self", "hobby"] | None = None
+    topic: str = Field("", max_length=100)
     pace: str = "normal"          # fast(3초) / normal(5초) / slow(7초)
     # 0 = 제한 없음. 대화가 어디서 끝날지는 AI 의 close 판단이 정한다.
     # 양을 미리 묶고 싶은 쪽(시험 도구 등)이 값을 준다.
     max_turn: int = 0
     # 회차를 여는 사진. 없이도 연다 — 씨앗만으로 도는 것이 원래 길이다.
     photo_id: str | None = None
+    # 누구의 이야기인가 (「누구의 이야기를 남길까요?」 에서 고른 화자). 이 자녀의 화자여야 한다.
+    # 지금은 없어도 연다 — 화면이 보내기 전까지. 없으면 화자 미지정 회차가 된다.
+    elder_id: str | None = Field(None, max_length=64)
+
+
+class ElderAssignReq(BaseModel):
+    elder_id: str = Field(..., min_length=1, max_length=64)
 
 
 class SpeechReq(BaseModel):
     text: str
+
+
+class GoogleLoginReq(BaseModel):
+    # Google Identity Services 콜백이 준 ID 토큰 (credential) 그대로.
+    credential: str = Field(..., max_length=4096)
+
+
+class ElderReq(BaseModel):
+    # 「누구의 이야기를 남길까요?」에 적은 이름. 상세 프로필은 받지 않는다.
+    name: str = Field(..., min_length=1, max_length=40)
+
+
+class LinkStartReq(BaseModel):
+    # 어르신이 낱말 카드에서 고른 낱말. 없으면 링크의 구체 주제로 연다 (예전 화면은 본문이 없다).
+    # 허용 목록(app/session/words.py)에 없으면 422 — 길이는 그 앞에서 한 번 더 자른다.
+    topic: str | None = Field(None, max_length=60)
+
+
+class LinkReq(BaseModel):
+    # 링크로 진행할 회차의 준비. StartReq 의 같은 이름 칸과 뜻이 같다.
+    elder_id: str = Field(..., max_length=64)
+    title: str = Field("", max_length=100)
+    seed: str = Field("", max_length=4000)
+    theme: Literal["family", "self", "hobby"] | None = None
+    topic: str = Field("", max_length=100)
+    photo_id: str | None = Field(None, max_length=64)
 
 
 # ---------------------------------------------------------------- API
@@ -287,14 +298,93 @@ async def health(request: Request):
     }
 
 
+# ---------------------------------------------------------------- 로그인
+#
+# 화면은 user.name · elders[].name 으로 그린다. 이메일은 「누구로 로그인했는지」
+# 보여 주는 데만 쓰고 식별에 쓰지 않는다.
+
+def _me(login: dict, elders: list[dict]) -> dict:
+    return {
+        "user": {"user_id": login["user_id"], "name": login.get("name") or "",
+                 "email": login.get("email") or ""},
+        "elders": [{"elder_id": e["elder_id"], "name": e["display_name"]} for e in elders],
+    }
+
+
+async def _elders(user_id: str) -> list[dict]:
+    try:
+        return await store.list_elders(user_id)
+    except store.StoreUnavailable as e:
+        raise auth.AuthError(503, "auth_unavailable", "지금은 로그인을 확인할 수 없어요") from e
+
+
+@app.post("/api/auth/google")
+async def auth_google(req: GoogleLoginReq, request: Request):
+    """
+    구글 ID 토큰 → 앱 세션 쿠키. 토큰은 검증에만 쓰고 저장하지 않는다.
+
+    **DB 가 없으면 로그인할 수 없다 (503).** 로그인을 기록하지 못하면 끊을 수도
+    없기 때문이다. 메모리 전용으로 뜬 개발 서버는 로그인 화면에서 멈춘다.
+    """
+    claims = await auth.verify_google(req.credential)
+    try:
+        user_id, raw = await auth.login(claims)
+        elders = await store.list_elders(user_id)
+    except store.StoreUnavailable as e:
+        raise auth.AuthError(503, "auth_unavailable", "지금은 로그인할 수 없어요") from e
+    res = JSONResponse(_me({"user_id": user_id, "name": claims.get("name"),
+                            "email": claims.get("email")}, elders))
+    res.set_cookie(auth.COOKIE, raw, max_age=auth.max_hours() * 3600,
+                   httponly=True, samesite="lax", path="/", secure=_secure(request))
+    return res
+
+
+@app.get("/api/auth/me")
+async def auth_me(login: dict = Depends(auth.current_login)):
+    """지금 누구로 로그인했는지. 앱을 열 때 한 번 부른다. 401 이면 로그인 화면이다."""
+    return _me(login, await _elders(login["user_id"]))
+
+
+@app.post("/api/auth/logout", status_code=204)
+async def auth_logout(request: Request):
+    """
+    로그아웃. **쿠키가 없어도, 이미 끝난 로그인이어도 204 다** — 누른 결과는 같다.
+    서버 표에 끝났다고 적으므로, 옛 쿠키를 들고 다시 와도 401 이다.
+    """
+    try:
+        await auth.logout(request.cookies.get(auth.COOKIE))
+    except store.StoreUnavailable as e:
+        raise auth.AuthError(503, "auth_unavailable", "지금은 로그아웃할 수 없어요") from e
+    res = Response(status_code=204)
+    res.delete_cookie(auth.COOKIE, path="/")
+    return res
+
+
+@app.post("/api/elders", status_code=201)
+async def create_elder(req: ElderReq, who: str = Depends(auth.current_user)):
+    """
+    화자(이야기의 주인공) 하나를 만든다. 첫 로그인에 화자가 없을 때 부른다.
+
+    **이름이 같은 화자를 찾아 붙이지 않는다.** 같은 이름의 다른 분일 수 있다.
+    부를 때마다 새 화자다 — 화면이 두 번 보내지 않게 막는다.
+    """
+    name = req.name.strip()
+    if not name:
+        raise HTTPException(422, "이름을 적어 주세요")
+    try:
+        e = await store.create_elder(who, name)
+    except store.StoreUnavailable as err:
+        raise HTTPException(503, "지금은 저장할 수 없어요") from err
+    return {"elder_id": e["elder_id"], "name": e["display_name"]}
+
+
 @app.post("/api/sessions")
 async def create_session(req: StartReq, request: Request,
-                         x_user_id: str = Header(default=ANON_USER)):
+                         who: str = Depends(auth.current_user)):
     """
     회차를 연다. 씨앗이 0번 조각이 되고, 첫 질문을 든 SPEAKING 상태로 시작한다.
 
-    X-User-Id 는 받아만 두고 검사하지 않는다. 구글 로그인이 붙으면 여기서 토큰을 풀어
-    user_id 를 얻는다 — 그때 고칠 곳이 이 인자 하나로 끝나도록 해 둔 것이다.
+    로그인한 자녀만 연다 (auth.current_user).
 
     여기만 _guard 를 지나지 않는다. 상태 머신이 이제 막 생겨 전이랄 게 없다.
 
@@ -316,6 +406,24 @@ async def create_session(req: StartReq, request: Request,
     한 코드로 뭉치면 화면이 이 셋을 구분할 수 없고, 어르신은 자기가 무엇을 해야
     하는지 알 수 없게 된다.
     """
+    _open_checks(request, who)
+    if req.elder_id and not await link.read(store.owns_elder(who, req.elder_id)):
+        raise HTTPException(404, "화자를 찾을 수 없어요")
+
+    ctl = sc.put(sc.SessionController(
+        user_id=who, title=req.title, pace=req.pace, max_turn=req.max_turn,
+        photo_id=req.photo_id, theme=req.theme, topic=req.topic.strip(),
+        elder_id=req.elder_id,
+        question_fn=gemini_question, closed_fn=postcard.on_closed))
+    await ctl.start(req.seed)
+    if not req.elder_id:
+        # 필수로 바꾸기 전에 빠진 채 들어오는 화면이 남았는지 본다 (v0.42 부터 늘 보낸다)
+        log.info("회차 %s 화자 없이 시작", ctl.session_id[:8])
+    return ctl.snapshot()
+
+
+def _open_checks(request: Request, who: str) -> None:
+    """회차를 여는 두 입구(/api/sessions · /api/i/start)가 같은 상한을 지난다."""
     try:
         limits.take(limits.client_ip(request))
     except limits.Rejected as e:
@@ -328,26 +436,13 @@ async def create_session(req: StartReq, request: Request,
         log.error("동시 회차 상한 %d 에 닿았다 — 새 회차를 열지 않는다", sc.max_live())
         raise HTTPException(503, "지금은 회차를 열 수 없습니다. 잠시 뒤에 다시 시도해 주세요")
 
-    # **user_id 가 아직 신원이 아니다.** 프론트가 모두에게 'dev-user' 를 보내므로
-    # 이 검사를 그대로 켜면 「사용자당 3회차」가 아니라 「서버 전체 3회차」가 되어,
-    # 네 번째 어르신이 회차를 열 수 없다. 그 실패는 화면에 「이미 진행 중인 회차가
-    # 있습니다」로 나타나는데 그 어르신은 회차를 연 적이 없어, 원인을 찾기까지
-    # 오래 걸리는 종류의 버그다. 로그인이 붙어 user_id 가 실제로 갈릴 때 이 검사가
-    # 저절로 살아난다 — 그때 지울 것은 아래 조건 앞부분 하나다.
-    if x_user_id != ANON_USER and sc.user_live(x_user_id) >= limits.user_cap():
+    if sc.user_live(who) >= limits.user_cap():
         raise HTTPException(
             429, "이미 진행 중인 회차가 있습니다. 그 회차를 마치거나 중단해 주세요")
 
-    ctl = sc.put(sc.SessionController(
-        user_id=x_user_id, title=req.title, pace=req.pace, max_turn=req.max_turn,
-        photo_id=req.photo_id, question_fn=gemini_question,
-        closed_fn=postcard.auto))
-    await ctl.start(req.seed)
-    return ctl.snapshot()
-
 
 @app.get("/api/sessions/{session_id}")
-async def get_session(session_id: str):
+async def get_session(session_id: str, who: str = Depends(auth.current_user)):
     """
     현재 상태. 프론트가 300ms 마다 때린다.
 
@@ -355,25 +450,24 @@ async def get_session(session_id: str):
     갱신하면 T1·T2 가 만료되는 걸 화면이 영영 모른다. 4일차에 WebSocket 으로 바꿔도
     이 엔드포인트는 남는다 — 첫 진입 시 1회 조회에 쓴다.
 
-    소유자 검사가 없다. session_id 만 알면 남의 조각이 보인다. 1주차 한정이고,
-    로그인이 붙을 때 x_user_id 와 ctl.user_id 를 맞춰 막는다.
+    남의 회차면 404 다 (_mine). 이 아래 진행 라우트가 전부 같다.
     """
-    return _need(session_id).snapshot()
+    return _mine(session_id, who).snapshot()
 
 
 @app.post("/api/sessions/{session_id}/tts-done")
-async def tts_done(session_id: str):
+async def tts_done(session_id: str, who: str = Depends(auth.current_user)):
     """
     낭독이 끝났다(또는 어르신이 탭해서 끊었다) → 수음 시작. 여기서부터 T1 이 돈다.
 
     낭독이 끝나는 시각은 서버가 알 수 없어 프론트가 알려준다. 2주차에 TTS 가 붙어도
     마찬가지다 — 오디오를 끝까지 튼 쪽은 프론트다.
     """
-    return await _guard(_need(session_id).tts_done())
+    return await _guard(_mine(session_id, who).tts_done())
 
 
 @app.post("/api/sessions/{session_id}/speech")
-async def speech(session_id: str, req: SpeechReq):
+async def speech(session_id: str, req: SpeechReq, who: str = Depends(auth.current_user)):
     """
     유효 발화 수신 → T1 리셋. 올 때마다 발화 확정이 3초씩 미뤄진다.
 
@@ -381,11 +475,11 @@ async def speech(session_id: str, req: SpeechReq):
     마이크도 키도 없이 FSM·타이머를 돌려볼 수 있어야 하고, tests/test_flow.py 가
     이 길로 돈다.
     """
-    return await _guard(_need(session_id).speech(req.text))
+    return await _guard(_mine(session_id, who).speech(req.text))
 
 
 @app.post("/api/sessions/{session_id}/speech/audio")
-async def speech_audio(session_id: str, request: Request):
+async def speech_audio(session_id: str, request: Request, who: str = Depends(auth.current_user)):
     """
     오디오 청크 수신 → T1 리셋. 위 `/speech` 의 오디오판이고 자리는 똑같다.
 
@@ -401,13 +495,17 @@ async def speech_audio(session_id: str, request: Request):
     말이 잘린 조각을 전사하면 정확도가 떨어진다. 발화가 확정되는 순간
     (controller._confirm) 모아서 한 번에 보낸다.
     """
+    return await _chunk(_mine(session_id, who), request)
+
+
+async def _chunk(ctl: sc.SessionController, request: Request):
     data = await request.body()
     mime = request.headers.get("content-type") or "audio/webm"
-    return await _guard(_need(session_id).audio_chunk(data, mime))
+    return await _guard(ctl.audio_chunk(data, mime))
 
 
 @app.get("/api/sessions/{session_id}/question/audio")
-async def question_audio(session_id: str):
+async def question_audio(session_id: str, who: str = Depends(auth.current_user)):
     """
     지금 질문을 읽은 mp3. 아직 합성 중이면 잠깐 기다렸다가 준다.
 
@@ -419,26 +517,65 @@ async def question_audio(session_id: str):
     합성 자체는 여기서 시작하지 않는다. 질문이 준비되는 순간(controller._speak)
     이미 걸려서 T2 안에서 돌고 있다. 여기는 받아 가는 자리일 뿐이다.
     """
-    audio = await _need(session_id).question_audio()
+    return await _question_audio(_mine(session_id, who))
+
+
+async def _question_audio(ctl: sc.SessionController) -> Response:
+    audio = await ctl.question_audio()
     if not audio:
         return Response(status_code=204)
-    return Response(content=audio, media_type="audio/mpeg",
+    # Gemini 갈래는 wav 를 준다 (tts.py). 형식을 앞머리로 가린다 — 사파리는
+    # mime 이 틀리면 재생을 거부한다.
+    mime = "audio/wav" if audio[:4] == b"RIFF" else "audio/mpeg"
+    return Response(content=audio, media_type=mime,
                     headers={"Cache-Control": "no-store"})
 
 
+@app.get("/api/sessions/{session_id}/question/stream")
+async def question_stream(session_id: str, who: str = Depends(auth.current_user)):
+    """
+    지금 질문의 낭독을 **조각으로 흘려보낸다.** 날 PCM 16비트 모노 —
+    rate 는 Content-Type 에 실린다. 스냅샷의 question_audio_stream 이 참일 때
+    화면이 여기로 온다 (TTS_STREAM=1).
+
+    **첫 소리가 올 때까지는 머리를 보내지 않는다.** 그래야 소리 없이 끝난
+    경우에 위 /question/audio 와 똑같이 204 로 말할 수 있다. 한번 200 을
+    보내면 「소리가 없다」를 알릴 길이 빈 본문뿐이다.
+
+    합성은 여기서 시작하지 않는다. 질문이 준비되는 순간(controller._speak)
+    이미 걸려서 조각이 쌓이고 있다. 늦게 온 요청은 쌓인 것부터 받는다.
+
+    **중간 프록시가 모아 보내면 스트리밍이 아니다.** X-Accel-Buffering 은
+    nginx 계열에 「모으지 말라」는 표시다. 터널(Tailscale · Cloudflare)을
+    거쳐서도 첫 소리가 당겨지는지는 화면 로그의 「첫 소리」 줄로 본다.
+    """
+    return await _question_stream(_mine(session_id, who))
+
+
+async def _question_stream(ctl: sc.SessionController) -> Response:
+    speech = ctl.question_speech()
+    if speech is None or not await speech.wait_first(timeout=3.0):
+        return Response(status_code=204)
+    return StreamingResponse(
+        speech.iter_chunks(),
+        media_type=f"audio/L16;rate={speech.rate};channels=1",
+        headers={"Cache-Control": "no-store", "X-Accel-Buffering": "no",
+                 "X-Speech-Source": speech.source or "none"})
+
+
 @app.post("/api/sessions/{session_id}/done")
-async def done(session_id: str):
+async def done(session_id: str, who: str = Depends(auth.current_user)):
     """
     「다 말했어요」 — T1·T2 를 둘 다 건너뛰고 즉시 확정한다.
 
     **지연이 그대로 드러나는 유일한 경로다.** 평소엔 질문 생성이 T2(3~7초) 안에 숨지만
     이 버튼에는 숨을 곳이 없다. NFR-PF-001 을 잴 때 여기를 본다.
     """
-    return await _guard(_need(session_id).done_button())
+    return await _guard(_mine(session_id, who).done_button())
 
 
 @app.post("/api/sessions/{session_id}/abort")
-async def abort(session_id: str):
+async def abort(session_id: str, who: str = Depends(auth.current_user)):
     """
     사용자 중단. 타이머를 모두 끄고 대기 중인 질문 생성 태스크도 취소한 뒤 CLOSED 로 간다.
 
@@ -447,11 +584,11 @@ async def abort(session_id: str):
     「정의되지 않은 전이는 409」 원칙의 유일한 예외다. 중단을 두 번 눌러도 결과가 같은
     건 맞지만, 의도한 설계인지는 확인이 필요하다.
     """
-    return await _guard(_need(session_id).abort())
+    return await _guard(_mine(session_id, who).abort())
 
 
 @app.get("/api/sessions/{session_id}/latency")
-async def latency(session_id: str):
+async def latency(session_id: str, who: str = Depends(auth.current_user)):
     """
     FR-AD-314 — 구간별 지연(저장 · 질문 · 전달)과 타이머 격발 오차.
 
@@ -465,7 +602,7 @@ async def latency(session_id: str):
     **이 숫자는 localhost 에서만 의미가 있다.** 터널을 끼면 왕복이 섞여 우리 코드가
     느린 건지 릴레이가 느린 건지 가릴 수 없다.
     """
-    ctl = _need(session_id)
+    ctl = _mine(session_id, who)
     return {
         "turns": ctl.latencies,
         "timer_drift": ctl.timers.drift_report(),
@@ -487,19 +624,56 @@ async def latency(session_id: str):
 
 
 @app.get("/api/sessions")
-async def list_sessions(limit: int = 20, x_user_id: str = Header(default="dev-user")):
+async def list_sessions(limit: int = 20, has_postcard: bool = False,
+                        elder_id: str | None = None,
+                        who: str = Depends(auth.current_user)):
     """
-    지난 회차 목록. 최근 순.
+    지난 회차 목록. 최근 순. 회차마다 has_postcard · postcard_title 을 싣는다.
+
+    `?has_postcard=1` 이면 엽서가 있는 회차만 준다. `?elder_id=` 면 그 화자의 회차만.
+    회차마다 elder_id 가 실린다 — None 이면 화자 미지정이다.
 
     DB 를 못 읽으면 **빈 목록이 아니라 503 이다.** 빈 목록을 주면 화면에
     「기록이 없습니다」가 뜨고, 그건 어르신에게 조각이 사라졌다는 말이 된다.
     없는 것과 못 읽은 것은 다른 사건이라 화면도 다르게 말해야 한다.
+
+    `?elder_id=` 면 `memoir_total` 도 싣는다 — 그 화자의 자서전 회차(닫힌 · 말씀 있는,
+    has_words) **전부**의 수다. 목록은 limit(최대 100)까지라, 화면은 이 수와 목록에 보인
+    수의 차이로 「목록에 없지만 함께 들어가는 오래된 이야기」 를 안내한다.
+    memoir_engine · memoir_max (None = 상한 없음) · memoir_max_chars 도 싣는다 (memoir.limits) —
+    다섯 단계는 시험 대상 계정만 쓰므로 사람마다 다르다.
     """
-    return {"sessions": await _read(store.list_sessions(x_user_id, _limit(limit)))}
+    rows = await _read(store.list_sessions(who, _limit(limit), has_postcard, elder_id))
+    if not elder_id:
+        return {"sessions": rows}
+    return {"sessions": rows, "memoir_total": len(await _read(store.memoir_sessions(who, elder_id))),
+            **memoir.limits(who)}
+
+
+@app.put("/api/sessions/{session_id}/elder")
+async def assign_elder(session_id: str, req: ElderAssignReq,
+                       who: str = Depends(auth.current_user)):
+    """
+    화자 미지정 회차에 화자를 정한다. 자서전에 넣기 전에 자녀가 한 번 고른다.
+
+    화자가 한 명뿐인 계정이어도 서버가 알아서 정하지 않는다 — 화면이 그 화자를
+    미리 골라 보여 주고, 자녀가 확인하면 이 요청이 온다.
+
+    남의 회차 · 남의 화자는 404, 이미 다른 화자로 정해진 회차는 409 elder_already_set.
+    """
+    got = await _read(store.assign_elder(session_id, who, req.elder_id))
+    if got == "no_session":
+        raise HTTPException(404, "회차를 찾을 수 없습니다")
+    if got == "no_elder":
+        raise HTTPException(404, "화자를 찾을 수 없어요")
+    if got == "taken":
+        return JSONResponse({"detail": "이미 다른 분의 이야기로 정해진 기록이에요.",
+                             "code": "elder_already_set"}, status_code=409)
+    return {"session_id": session_id, "elder_id": req.elder_id}
 
 
 @app.get("/api/sessions/{session_id}/record")
-async def session_record(session_id: str, x_user_id: str = Header(default="dev-user")):
+async def session_record(session_id: str, who: str = Depends(auth.current_user)):
     """
     저장된 회차 하나. 조각·근거(FR-IV-006)·구간별 지연(FR-AD-314)까지 전부.
 
@@ -508,11 +682,9 @@ async def session_record(session_id: str, x_user_id: str = Header(default="dev-u
 
     **여기는 소유자를 확인한다.** 남의 것이면 403 이 아니라 404 로 답한다 —
     403 은 「있긴 있다」를 알려주는 셈이라 id 를 넣어 보며 존재를 확인할 수 있다.
-    다만 지금은 X-User-Id 를 그대로 믿으므로 실제로 막아 주지는 못한다.
-    헤더를 바꾸면 통과한다. 로그인이 붙으면 이 줄이 그대로 실효를 가진다.
     """
     rec = await _read(store.load_session(session_id))
-    if rec is None or rec["user_id"] != x_user_id:
+    if rec is None or rec["user_id"] != who:
         raise HTTPException(404, "회차를 찾을 수 없습니다")
     if rec["postcard"]:
         # 저장 키는 화면에 내보내지 않는다 (photostore.py 머리). 주소로 바꿔 준다.
@@ -530,7 +702,8 @@ async def session_record(session_id: str, x_user_id: str = Header(default="dev-u
 
 
 @app.post("/api/photos")
-async def upload_photo(request: Request, session_id: str | None = None):
+async def upload_photo(request: Request, session_id: str | None = None,
+                       who: str = Depends(auth.current_user)):
     """
     사진 한 장. 본문은 **바이트 그대로**다 (`/speech/audio` 와 같은 모양).
 
@@ -547,7 +720,6 @@ async def upload_photo(request: Request, session_id: str | None = None):
     한다. 그래서 photo.session_id 가 NULL 을 허용하고, 읽을 때의 주인은 회차가
     아니라 photo.user_id 가 정한다 (002 마이그레이션 주석 참조).
     """
-    who = uid(request)
     data = await _body_capped(request, photostore.max_bytes())
 
     if session_id:
@@ -584,7 +756,7 @@ async def upload_photo(request: Request, session_id: str | None = None):
 
 
 @app.get("/api/photos/{photo_id}")
-async def get_photo(photo_id: str, request: Request):
+async def get_photo(photo_id: str, request: Request, who: str = Depends(auth.current_user)):
     """
     사진 바이트. `<img src>` 가 직접 물어 오는 자리다.
 
@@ -596,8 +768,14 @@ async def get_photo(photo_id: str, request: Request):
     바뀌지 않으므로 304 가 항상 옳다.
     """
     rec = await _read(store.load_photo(photo_id))
-    if rec is None or rec["user_id"] != uid(request):
+    if rec is None or rec["user_id"] != who:
         raise HTTPException(404, "사진을 찾을 수 없습니다")
+    return await _photo_bytes(rec, request)
+
+
+async def _photo_bytes(rec: dict, request: Request) -> Response:
+    """사진 한 장을 내보낸다. **주인 검사는 부르는 쪽이 이미 했다.**"""
+    photo_id = rec["photo_id"]
     if rec["status"] != "stored":
         # 행은 있는데 아직 바이트가 없다. 지금 흐름에서는 생기지 않지만,
         # 「없다」와 섞어 404 로 답하면 나중에 두 단계 저장을 넣을 때 구분이
@@ -634,7 +812,7 @@ async def get_photo(photo_id: str, request: Request):
 
 
 @app.post("/api/sessions/{session_id}/postcard")
-async def make_postcard(session_id: str, request: Request):
+async def make_postcard(session_id: str, request: Request, who: str = Depends(auth.current_user)):
     """
     끝난 회차의 엽서를 굽는다. 이미 있으면 새로 구워 덮어쓴다.
 
@@ -643,14 +821,32 @@ async def make_postcard(session_id: str, request: Request):
     화면은 그동안 「그리는 중」을 띄우면 된다.
 
     409 는 어르신이 다른 것을 하면 되는 경우(회차가 안 끝났다 · 말씀이 없다 ·
-    이미 굽는 중), 503 은 서버 쪽 사정이다. 화면이 둘을 다르게 말해야 한다.
+    이미 굽는 중 · 담을 말씀이 부족하다), 503 은 서버 쪽 사정이다. 화면이 둘을
+    다르게 말해야 한다. 409 의 네 원인은 본문의 code 로 가른다.
+
+    본문은 없어도 된다. 있으면 `{"style": ...}` 이고, 없으면 구어체다 (style.py).
+    응답의 created_at 은 DB 가 찍은 값이다 — 화면은 busy 뒤에 이 값이 바뀌었는지로
+    새 엽서를 알아본다 (4-C1 §6).
     """
     try:
-        rec = await postcard.make(session_id, uid(request))
+        body = json.loads(await _body_capped(request, 1024) or b"{}")
+    except ValueError:
+        body = None
+    if not isinstance(body, dict):
+        raise HTTPException(400, "요청을 읽지 못했어요.")
+    try:
+        chosen = styles.pick(body.get("style"))
+    except styles.UnsupportedStyle:
+        return _unsupported_style()
+    try:
+        rec = await postcard.make(session_id, who, chosen)
     except LookupError as e:
         raise HTTPException(404, "회차를 찾을 수 없습니다") from e
     except postcard.PostcardNotReady as e:
-        raise HTTPException(409, str(e)) from e
+        return JSONResponse({"detail": str(e), "code": e.code}, status_code=409)
+    except postcard.PhotoUnavailable as e:
+        # 다른 503 과 화면 안내가 다르다 — 「사진을 불러오지 못했어요. 다시 만들어 주세요」
+        return JSONResponse({"detail": str(e), "code": e.code}, status_code=503)
     except postcard.PostcardUnavailable as e:
         raise HTTPException(503, str(e)) from e
     except store.StoreUnavailable as e:
@@ -663,18 +859,25 @@ async def make_postcard(session_id: str, request: Request):
         "width": rec["width"],
         "height": rec["height"],
         "bytes": rec["bytes"],
+        "style": rec["style"],
+        "created_at": rec["created_at"],
     }
 
 
+def _unsupported_style() -> JSONResponse:
+    """엽서 · 자서전이 같은 모양으로 거절한다. 400 의 다른 원인과는 code 로 갈린다."""
+    return JSONResponse({"detail": styles.SAYS, "code": styles.CODE}, status_code=400)
+
+
 @app.get("/api/sessions/{session_id}/postcard")
-async def get_postcard(session_id: str, request: Request):
+async def get_postcard(session_id: str, request: Request, who: str = Depends(auth.current_user)):
     """
-    엽서 바이트. `<img src>` 가 직접 물어 오는 자리라 신원은 쿠키로도 받는다 (uid).
+    엽서 바이트. `<img src>` 가 직접 물어 오는 자리다. 로그인 쿠키가 같이 온다.
 
     ETag 는 저장 키다. 다시 구우면 키가 바뀌므로 옛 엽서가 304 로 남지 않는다.
     """
     rec = await _read(store.load_postcard(session_id))
-    if rec is None or rec["user_id"] != uid(request):
+    if rec is None or rec["user_id"] != who:
         raise HTTPException(404, "엽서를 찾을 수 없습니다")
 
     etag = f'"{postcard.version(rec["storage_key"])}"'
@@ -705,46 +908,431 @@ def _postcard_url(session_id: str, rec: dict) -> str:
 
 # ---------------------------------------------------------------- 자서전
 #
-# 엽서가 있는 회차 3~5개를 골라 초안 하나를 받는다. 저장하지 않는다 — 다시 보려면
+# 같은 화자의 회차(전부에서 뺄 것만 빼거나, 고른 것)로 초안 하나를 받는다. 저장하지 않는다 — 다시 보려면
 # 다시 만든다. 무엇을 하는지는 memoir.py 머리에 있다.
 
 # 화면이 그대로 보여 주는 말이다 (해요체). 안쪽 사정은 로그에만 남긴다.
 _MEMOIR_SAYS = {
-    400: "선택한 엽서를 확인해 주세요. 3~5장을 고를 수 있어요.",
+    400: "선택한 이야기를 확인해 주세요. 말씀이 있는 이야기가 3개 이상이어야 해요.",
     404: "선택한 엽서를 찾을 수 없어요. 목록에서 다시 골라 주세요.",
     422: "선택한 엽서의 이야기 자료를 불러오지 못했어요.",
     502: "자서전을 만드는 중 문제가 생겼어요. 엽서 선택 화면으로 돌아가 주세요.",
+    503: "지금은 자서전을 만들 수 없어요. 엽서 선택 화면으로 돌아가 주세요.",
     504: "정해진 시간 안에 자서전을 받지 못했어요. 엽서 선택 화면으로 돌아가 주세요.",
 }
+# code 는 화면이 HTTP 숫자보다 먼저 보는 갈래다. 모르는 code 면 화면은 숫자로 고른다.
+# needs_confirmation · needs_context 는 화면이 나누지 않으므로 not_final 하나다.
 _MEMOIR_STATUS = (
-    (memoir.BadSelection, 400), (memoir.NotFound, 404), (memoir.SourceUnavailable, 422),
-    (memoir.GenerationTimeout, 504), (memoir.GenerationFailed, 502),
+    (memoir.BadSelection, 400, None), (memoir.NotFound, 404, "not_found"),
+    (memoir.SourceUnavailable, 422, "source_unavailable"),
+    (memoir.GenerationTimeout, 504, "generation_timeout"),
+    (memoir.GenerationFailed, 502, "invalid_model_output"), (memoir.NotFinal, 503, "not_final"),
+    (memoir.Incomplete, 503, "incomplete"),     # 다섯 단계의 일부 장 실패 — 화면은 「일부 장」 안내 (태헌 10-26 A)
 )
 
 
 @app.post("/api/memoirs/preview")
-async def memoir_preview(request: Request):
+async def memoir_preview(request: Request, who: str = Depends(auth.current_user)):
     """
     고른 회차로 자서전 초안을 쓴다. **기다리는 요청이다** — 다 쓰거나 실패해야 답이 간다.
 
-    본문은 `{"session_ids": [...]}` 뿐이다. 누구의 요청인지는 X-User-Id 로 받는다
-    (uid). 본문을 pydantic 으로 받지 않는 것은 모양이 틀렸을 때 FastAPI 가 422 를
+    본문은 `{"session_ids": [...], "style": ...}` (고른 것) 이나
+    `{"elder_id": ..., "exclude_session_ids": [...], "style": ...}` (화자의 전부에서 뺄 것 ·
+    상한 없음) 다. exclude_session_ids 칸이 있으면 뒤의 것이다. style 은 없으면 구어체다.
+    응답의 run.session_ids 는 실제로 쓴 회차 전부다.
+    누구의 요청인지는 로그인으로 안다.
+    본문을 pydantic 으로 받지 않는 것은 모양이 틀렸을 때 FastAPI 가 422 를
     내기 때문이다 — 여기서 422 는 「자료를 못 읽었다」는 다른 뜻이다.
 
     자료 부족은 200 의 insufficient_material 이고 실패가 아니다. 실패는 상태 코드와
-    `{"detail": 안내}` 로만 나간다. 둘을 서로 바꿔 내보내지 않는다.
+    `{"detail": 안내, "code": 갈래}` 로만 나간다. 둘을 서로 바꿔 내보내지 않는다.
     """
+    body = await _memoir_body(request)
     try:
-        body = json.loads(await _body_capped(request, 16 * 1024) or b"null")
+        chosen = styles.pick(body.get("style"))
+    except styles.UnsupportedStyle:
+        return _unsupported_style()
+    try:
+        if "exclude_session_ids" in body:
+            return await memoir.preview_all(body.get("elder_id"), body["exclude_session_ids"], who, chosen)
+        return await memoir.preview(body.get("session_ids"), who, chosen)
+    except memoir.MemoirError as e:
+        status, code, detail = _memoir_failure(e)
+        return JSONResponse({"detail": detail, "code": code}, status_code=status)
+
+
+async def _memoir_body(request: Request) -> dict:
+    try:
+        # 빼기 요청은 뺄 회차 수만큼 길어진다 (UUID 하나 40바이트쯤 — 64KB 면 1,500개)
+        body = json.loads(await _body_capped(request, 64 * 1024) or b"null")
     except ValueError:
         body = None
-    ids = body.get("session_ids") if isinstance(body, dict) else None
+    return body if isinstance(body, dict) else {}
+
+
+def _memoir_failure(e: memoir.MemoirError) -> tuple[int, str, str]:
+    """(HTTP 상태, code, 화면 안내). 안내는 상태마다 하나, too_much 만 따로 — 무엇을 해야 하는지가 다르다."""
+    status, code = next((s, c) for kind, s, c in _MEMOIR_STATUS if isinstance(e, kind))
+    code = code or e.code      # 400 은 갈래가 여럿이다 — bad_selection · mixed_speakers · speaker_unassigned · too_much
+    log.warning("자서전 %d %s — %s", status, type(e).__name__, str(e)[:200])
+    return status, code, _MEMOIR_SAYS_CODE.get(code, _MEMOIR_SAYS[status])
+
+
+_MEMOIR_SAYS_CODE = {
+    "too_much": "이야기가 너무 많아 한 번에 만들 수 없어요. 넣지 않을 이야기를 몇 개 빼 주세요.",
+}
+
+
+@app.post("/api/memoirs")
+async def memoir_start(request: Request, who: str = Depends(auth.current_user)):
+    """
+    자서전 작업을 연다 — **기다리지 않는다.** 본문은 /api/memoirs/preview 와 같다.
+
+    고르기 · 조회 검사는 여기서 끝낸다 — 400 · 404 · 422 는 지금처럼 바로 나간다. 통과하면
+    202 `{job_id, status: "running", stage, ...}` 이고, 결과는 GET /api/memoirs/{job_id} 로 받는다.
+    만드는 중인 작업이 있으면 새로 열지 않고 409 `{code: "busy", job_id}` 다. memoir_jobs.py 머리 참조.
+    """
+    body = await _memoir_body(request)
     try:
-        return await memoir.preview(ids, uid(request))
+        chosen = styles.pick(body.get("style"))
+    except styles.UnsupportedStyle:
+        return _unsupported_style()
+    busy = memoir_jobs.running(who)
+    if busy is not None:
+        return JSONResponse({"detail": "자서전을 만들고 있어요. 다 만들어지면 볼 수 있어요.", "code": "busy",
+                             "job_id": busy.job_id}, status_code=409)
+    try:
+        ids = await memoir.select(body, who)
+        recs = await memoir.collect(ids, who)
     except memoir.MemoirError as e:
-        code = next(c for kind, c in _MEMOIR_STATUS if isinstance(e, kind))
-        log.warning("자서전 %d %s — %s", code, type(e).__name__, str(e)[:200])
-        raise HTTPException(code, _MEMOIR_SAYS[code]) from e
+        status, code, detail = _memoir_failure(e)
+        return JSONResponse({"detail": detail, "code": code}, status_code=status)
+    job = await memoir_jobs.start(recs, ids, who, chosen)
+    return JSONResponse(_memoir_job_view(job), status_code=202)
+
+
+@app.get("/api/memoirs/latest")
+async def memoir_job_latest(who: str = Depends(auth.current_user)):
+    """
+    내 가장 최근 작업 — GET /api/memoirs/{job_id} 와 같은 본문. 새로고침으로 작업 번호를 잊은
+    화면이 찾는다. 보관 시간(MEMOIR_JOB_KEEP_SECONDS) 안에 없으면 404 job_not_found.
+    **{job_id} 라우트보다 먼저 둔다** — 뒤에 두면 「latest」 가 작업 번호로 읽힌다.
+    """
+    job = memoir_jobs.latest(who)
+    if job is None:
+        return JSONResponse({"detail": "자서전 작업을 찾을 수 없어요. 다시 만들어 주세요.",
+                             "code": "job_not_found"}, status_code=404)
+    return _memoir_job_view(job)
+
+
+@app.get("/api/memoirs/{job_id}")
+async def memoir_job(job_id: str, who: str = Depends(auth.current_user)):
+    """
+    작업 하나. 늘 200 이고 상태는 본문의 status 다 — 화면이 몇 초마다 부른다.
+
+        running  stage (analysis · outline · chapter · edit · verify · write), chapter / chapters, elapsed
+        done     result — /api/memoirs/preview 의 200 본문과 같다 (7-C1 §3)
+        failed   code · detail — preview 의 실패와 같은 code. 그만두었으면 cancelled
+
+    없거나 남의 것이거나 서버를 다시 켜서 사라졌으면 404 `{code: "job_not_found"}`.
+    """
+    job = memoir_jobs.get(job_id, who)
+    if job is None:
+        return JSONResponse({"detail": "자서전 작업을 찾을 수 없어요. 다시 만들어 주세요.",
+                             "code": "job_not_found"}, status_code=404)
+    return _memoir_job_view(job)
+
+
+@app.delete("/api/memoirs/{job_id}")
+async def memoir_job_cancel(job_id: str, who: str = Depends(auth.current_user)):
+    """만드는 중인 작업을 그만둔다. 이미 끝난 작업은 그대로다. 결과는 GET 과 같다."""
+    job = memoir_jobs.get(job_id, who)
+    if job is None:
+        return JSONResponse({"detail": "자서전 작업을 찾을 수 없어요. 다시 만들어 주세요.",
+                             "code": "job_not_found"}, status_code=404)
+    memoir_jobs.cancel(job)
+    if job.task is not None and not job.task.done():
+        try:
+            await asyncio.wait_for(asyncio.shield(job.task), timeout=2)
+        except (asyncio.CancelledError, asyncio.TimeoutError):
+            pass
+    return _memoir_job_view(job)
+
+
+def _memoir_job_view(job: memoir_jobs.Job) -> dict:
+    out = {"job_id": job.job_id, "status": job.status, "style": job.style,
+           "run": {"session_ids": job.ids}, "elapsed": memoir_jobs.elapsed(job)}
+    if job.status == memoir_jobs.RUNNING:
+        out.update(stage=job.stage, chapter=job.chapter, chapters=job.chapters)
+    elif job.status == memoir_jobs.DONE:
+        out["result"] = job.result
+    elif isinstance(job.error, memoir_jobs.Cancelled):
+        out.update(code="cancelled", detail="자서전 만들기를 그만두었어요.")
+    else:
+        _, code, detail = _memoir_failure(job.error)
+        out.update(code=code, detail=detail)
+    return out
+
+
+# ---------------------------------------------------------------- 인터뷰 링크 (자녀)
+#
+# 자녀가 회차를 준비해 링크를 받는다. 링크를 연 사람이 할 수 있는 일은 아래
+# `/api/i/*` 에 있다. 무엇이 무엇을 보는지는 link.py 머리에 있다.
+
+async def _my_link(link_id: str, who: str) -> dict:
+    rec = await link.read(store.load_link(link_id))
+    if rec is None or rec["user_id"] != who:
+        raise HTTPException(404, "링크를 찾을 수 없어요")
+    return rec
+
+
+def _issued(rec: dict, raw: str) -> dict:
+    """
+    발급 응답. **토큰 원문은 여기서 한 번만 나간다** — 표에는 해시만 있어 다시 보여
+    줄 수 없다. 잃어버리면 재발급한다.
+    """
+    return {**link.summary(rec), "token": raw, "url": f"{PUBLIC_ORIGIN}/i#{raw}"}
+
+
+@app.post("/api/links", status_code=201)
+async def create_link(req: LinkReq, who: str = Depends(auth.current_user)):
+    """
+    회차 준비 → 인터뷰 링크. 회차는 아직 열지 않는다 — 받은 사람이 「시작」을
+    누를 때 열린다. 그래서 링크를 몇 번 열어 봐도 아무것도 소모되지 않는다.
+
+    화자와 사진은 **이 자녀의 것이어야 한다.** 남의 것이면 404 다.
+    """
+    if not await link.read(store.owns_elder(who, req.elder_id)):
+        raise HTTPException(404, "화자를 찾을 수 없어요")
+    if req.photo_id:
+        rec = await _read(store.load_photo(req.photo_id))
+        if rec is None or rec["user_id"] != who:
+            raise HTTPException(404, "사진을 찾을 수 없어요")
+    topic = req.topic.strip()
+    rec, raw = await link.issue(who, {
+        "elder_id": req.elder_id, "title": req.title.strip() or topic or "인터뷰",
+        "seed": req.seed, "theme": req.theme, "topic": topic, "photo_id": req.photo_id})
+    return _issued(rec, raw)
+
+
+@app.get("/api/links")
+async def list_links(elder_id: str | None = None, limit: int = 20,
+                     who: str = Depends(auth.current_user)):
+    """내가 발급한 링크. 최근 순. 토큰은 싣지 않는다 (다시 보여 줄 수 없다)."""
+    rows = await link.read(store.list_links(who, elder_id, _limit(limit)))
+    return {"links": [link.summary(r) for r in rows]}
+
+
+@app.post("/api/links/{link_id}/revoke")
+async def revoke_link(link_id: str, who: str = Depends(auth.current_user)):
+    """
+    링크를 거둔다. 그 뒤로 링크의 모든 요청은 410 이다. 이미 거둔 링크도 200 이다.
+
+    **진행 중이면 회차를 중단한다** (D4 — 자녀가 회수할 수 있다). 거두었는데 회차가
+    계속 돌면 회수가 아니다. 이미 내려받은 소리 · 사진을 지운다고 약속하지는 않는다.
+    """
+    rec = await _my_link(link_id, who)
+    await link.read(store.revoke_link(link_id))
+    ctl = sc.get(rec["session_id"]) if rec["session_id"] else None
+    if ctl is not None and ctl.machine.state is not State.CLOSED:
+        await ctl.abort()
+    log.info("링크 회수 %s", link_id)
+    return link.summary({**rec, "revoked_at": rec["revoked_at"] or link.now()})
+
+
+@app.post("/api/links/{link_id}/reissue", status_code=201)
+async def reissue_link(link_id: str, who: str = Depends(auth.current_user)):
+    """
+    같은 준비로 새 링크. **이전 링크는 거둔다** (D4). 링크를 잃어버렸거나 기한이
+    지났을 때 쓴다.
+
+    시작한 링크는 다시 내지 않는다 (409 already_started) — 그 링크는 이미 회차 하나와
+    묶였다. 새 인터뷰는 새로 준비한다.
+    """
+    old = await _my_link(link_id, who)
+    if old["session_id"] is not None:
+        return JSONResponse({"detail": "이미 시작한 인터뷰의 링크예요", "code": "already_started"},
+                            status_code=409)
+    await link.read(store.revoke_link(link_id))
+    rec, raw = await link.issue(who, old)
+    return _issued(rec, raw)
+
+
+# ---------------------------------------------------------------- 인터뷰 링크 (받은 사람)
+#
+# **여기는 msid 를 읽지 않는다.** 링크 토큰(헤더)과 기기 쿠키(mlink)만 본다.
+# 본문의 session_id · user_id 도 받지 않는다 — 회차는 링크가 정한다.
+# 진행 라우트는 위 /api/sessions/{id}/... 와 같은 처리 함수를 부른다.
+
+def _token(request: Request) -> str | None:
+    return request.headers.get(link.HEADER)
+
+
+@app.get("/api/i/preview")
+async def link_preview(request: Request):
+    """
+    링크를 열었다. **아무것도 바꾸지 않는다** — 몇 번 열어도 같다.
+    회수 · 만료는 410, 모르는 링크는 404 이고 준비 내용을 싣지 않는다.
+    """
+    rec = await link.by_token(_token(request))
+    state = link.state_of(rec)
+    link.gone(state)
+    return link.view(rec, state)
+
+
+@app.post("/api/i/start")
+async def link_start(request: Request, body: LinkStartReq | None = None):
+    """
+    「시작」. 처음이면 회차를 열고 기기 쿠키를 준다. 응답은 진행 라우트와 같은
+    snapshot 에 state · theme · topic · photo_url 을 더한 것이다.
+
+    **한 링크는 한 회차다.** 같은 기기에서 다시 누르면 같은 회차를 돌려준다.
+    쿠키 없이 다시 오면 (다른 기기 · 동시에 두 번 누름) 409 in_progress_elsewhere —
+    회차가 둘 생기지 않는다 (link.starting · store.claim_link).
+
+    상한은 /api/sessions 와 같다 (_open_checks). 회차를 여는 입구가 하나 더 생긴 것뿐이다.
+
+    **낱말 카드** — 본문 { topic } 은 어르신이 고른 낱말이다. 허용 목록(카드 + 링크의 구체
+    주제)에 있을 때만 그 낱말로 연다. 없으면 422 topic_not_allowed 이고 링크는 소모되지
+    않는다. 이미 진행 중인 회차를 돌려줄 때는 보지 않는다 — 중간에 주제가 바뀌지 않는다.
+    """
+    rec = await link.by_token(_token(request))
+    device = request.cookies.get(link.COOKIE)
+    async with link.starting(rec["link_id"]):
+        # 기다리는 동안 다른 요청이 시작했을 수 있다 — 잠근 뒤에 다시 읽는다.
+        rec = await link.by_token(_token(request))
+        state = link.state_of(rec)
+        link.gone(state)
+        if state in ("ended", "interrupted"):
+            raise link.stuck(state)
+        if state == "in_progress":
+            if not link.device_matches(device, rec["device_hash"]):
+                raise link.stuck("in_progress_elsewhere")
+            return {**sc.get(rec["session_id"]).snapshot(), **link.view(rec, state)}
+
+        picked = None
+        if body and body.topic and body.topic.strip():
+            picked = words.allowed(body.topic, rec["topic"])
+            if picked is None:
+                raise link.topic_not_allowed()
+            if picked == rec["topic"]:
+                picked = None               # 자녀가 적은 주제 그대로 — 고른 것이 없는 것과 같다
+
+        _open_checks(request, rec["user_id"])
+        session_id = str(uuid.uuid4())
+        raw = await link.claim(rec, session_id, picked)
+        if raw is None:
+            # 이 프로세스 밖에서 먼저 묶였다 (DB 의 조건부 UPDATE 가 막았다).
+            raise link.stuck("in_progress_elsewhere")
+        ctl = sc.put(sc.SessionController(
+            user_id=rec["user_id"], title=rec["title"], session_id=session_id,
+            photo_id=rec["photo_id"], theme=rec["theme"], topic=picked or rec["topic"],
+            elder_id=rec["elder_id"], question_fn=gemini_question, closed_fn=link.on_closed))
+        # 다른 낱말을 고르셨으면 자녀의 시작 자료(seed)는 쓰지 않는다 — 다른 주제의 자료가
+        # 0번 조각으로 들어가 질문을 그쪽으로 끌고 간다
+        await ctl.start(picked if picked else rec["seed"])
+    log.info("링크 %s → 회차 %s 시작", rec["link_id"], session_id[:8])
+    res = JSONResponse(jsonable_encoder({**ctl.snapshot(), **link.view(rec, "in_progress")}))
+    res.set_cookie(link.COOKIE, raw, max_age=link.DEVICE_HOURS * 3600, httponly=True,
+                   samesite="lax", path=link.COOKIE_PATH, secure=_secure(request))
+    return res
+
+
+async def _link_session(request: Request) -> sc.SessionController:
+    """
+    진행 라우트의 회차. 기기 쿠키 → 링크 → 메모리의 회차.
+
+    닫힌 회차도 메모리에 있는 동안은 돌려준다 — 화면이 마지막 상태(CLOSED)를 받아
+    가야 한다. 닫힌 회차에 말을 보내면 상태 머신이 409 로 끊는다.
+    **회수된 링크는 메모리에 회차가 있어도 410 이다.** 진행 중에는 기한을 보지 않는다 (D4).
+    """
+    rec = await link.by_device(request.cookies.get(link.COOKIE))
+    state = link.state_of(rec)
+    if state == "revoked":
+        link.gone(state)
+    ctl = sc.get(rec["session_id"]) if rec["session_id"] else None
+    if ctl is not None:
+        return ctl
+    link.gone(state)
+    raise link.stuck("ended" if state == "ended" else "interrupted")
+
+
+@app.get("/api/i/session")
+async def link_get(request: Request):
+    return (await _link_session(request)).snapshot()
+
+
+@app.post("/api/i/session/tts-done")
+async def link_tts_done(request: Request):
+    return await _guard((await _link_session(request)).tts_done())
+
+
+@app.post("/api/i/session/speech")
+async def link_speech(req: SpeechReq, request: Request):
+    return await _guard((await _link_session(request)).speech(req.text))
+
+
+@app.post("/api/i/session/speech/audio")
+async def link_speech_audio(request: Request):
+    return await _chunk(await _link_session(request), request)
+
+
+@app.get("/api/i/session/question/audio")
+async def link_question_audio(request: Request):
+    return await _question_audio(await _link_session(request))
+
+
+@app.get("/api/i/session/question/stream")
+async def link_question_stream(request: Request):
+    return await _question_stream(await _link_session(request))
+
+
+@app.post("/api/i/session/done")
+async def link_done(request: Request):
+    return await _guard((await _link_session(request)).done_button())
+
+
+@app.post("/api/i/session/abort")
+async def link_abort(request: Request):
+    return await _guard((await _link_session(request)).abort())
+
+
+@app.get("/api/i/photo")
+async def link_photo(request: Request):
+    """
+    링크에 지정된 보조 사진 한 장. 시작 전에는 토큰 헤더로 (화면이 받아 blob 으로
+    띄운다), 시작한 뒤에는 기기 쿠키로 (`<img src>`) 받는다. 다른 사진에는 닿지 않는다.
+    """
+    token = _token(request)
+    rec = await (link.by_token(token) if token
+                 else link.by_device(request.cookies.get(link.COOKIE)))
+    link.gone(link.state_of(rec))
+    if not rec["photo_id"]:
+        raise HTTPException(404, "사진을 찾을 수 없습니다")
+    pic = await _read(store.load_photo(rec["photo_id"]))
+    if pic is None or pic["user_id"] != rec["user_id"]:
+        raise HTTPException(404, "사진을 찾을 수 없습니다")
+    return await _photo_bytes(pic, request)
+
+
+@app.get("/api/i/transcript")
+async def link_transcript(request: Request):
+    """
+    끝난 인터뷰의 대화를 읽기 전용으로 (D6). 끝나기 전에는 409 not_ended.
+
+    **그때 하신 말씀 그대로다.** 회차의 질문과 답만 싣는다. 0번 조각(자녀가 적은
+    시작 자료) · 엽서 · 자서전 · 모델 판단 · 화자 · 발급자는 싣지 않는다.
+    답하지 않은 마지막 질문은 저장되지 않으므로 나오지 않는다.
+    """
+    rec = await link.by_token(_token(request))
+    state = link.state_of(rec)
+    link.gone(state)
+    if state != "ended":
+        raise link.stuck("not_ended")
+    saved = await _read(store.load_session(rec["session_id"]))
+    turns = [{"question": f["question"] or "", "answer": f["answer"]}
+             for f in (saved["fragments"] if saved else []) if f["idx"] > 0]
+    return {"theme": rec["theme"], "topic": rec["topic"], "turns": turns}
 
 
 # ---------------------------------------------------------------- 보조
@@ -776,9 +1364,13 @@ async def _body_capped(request: Request, cap: int) -> bytes:
     return b"".join(chunks)
 
 
-def _need(session_id: str) -> sc.SessionController:
+def _mine(session_id: str, who: str) -> sc.SessionController:
+    """
+    진행 중인 **내** 회차. 남의 것이면 없는 것과 같은 404 다 — 있는지조차 알려
+    주지 않는다 (/record 와 같은 이유).
+    """
     ctl = sc.get(session_id)
-    if ctl is None:
+    if ctl is None or ctl.user_id != who:
         raise HTTPException(404, "세션을 찾을 수 없습니다")
     return ctl
 

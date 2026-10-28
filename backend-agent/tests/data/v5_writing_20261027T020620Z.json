@@ -1,0 +1,339 @@
+{
+ "note": "2026-10-27T02:06:20Z 집필 시험(c276109, gemini-3.5-flash-lite)의 실제 출력 — 핵심 기억 누락 · 검증 위치 표기 회귀 사례. 모델 출력 그대로(가공 없음)",
+ "run_ref": "20261027T020620Z-C5-b9f8-focus-fixture-outline",
+ "draft": {
+  "chapter_key": "ch-1",
+  "title": {
+   "text": "언니의 발틀",
+   "kind": "editorial",
+   "facts": []
+  },
+  "paragraphs": [
+   [
+    {
+     "text": "언니가 준 재봉틀을 아직 못 버렸다.",
+     "kind": "supported",
+     "facts": [
+      "f57"
+     ]
+    },
+    {
+     "text": "그 재봉틀 드르륵 소리가 나면 언니 생각이 난다.",
+     "kind": "supported",
+     "facts": [
+      "f58"
+     ]
+    }
+   ],
+   [
+    {
+     "text": "열다섯 살 즈음 큰언니가 부산으로 시집을 갔는데, 언니가 시집가던 날 내가 많이 울었다고 들었다.",
+     "kind": "supported",
+     "facts": [
+      "f20",
+      "f21"
+     ]
+    }
+   ],
+   [
+    {
+     "text": "시골에 있어 봐야 할 게 없어서 열일곱 살에 서울 동대문 근처 봉제 공장으로 올라갔다.",
+     "kind": "supported",
+     "facts": [
+      "f22"
+     ]
+    }
+   ],
+   [
+    {
+     "text": "수선집을 1985년 봄에 개업했다.",
+     "kind": "supported",
+     "facts": [
+      "f34"
+     ]
+    },
+    {
+     "text": "검은색 발틀 재봉틀은 큰언니가 보내 준 것이다.",
+     "kind": "supported",
+     "facts": [
+      "f6"
+     ]
+    }
+   ],
+   [
+    {
+     "text": "아침 아홉 시에 문 열면 저녁 여덟 시까지 거의 재봉틀 앞에 있었다.",
+     "kind": "supported",
+     "facts": [
+      "f4"
+     ]
+    }
+   ],
+   [
+    {
+     "text": "큰언니는 병원 다녀온 그다음 해 봄인 2004년에 돌아가셨다.",
+     "kind": "supported",
+     "facts": [
+      "f52"
+     ]
+    }
+   ],
+   [
+    {
+     "text": "2010년에 수선집을 그만뒀다.",
+     "kind": "supported",
+     "facts": [
+      "f2"
+     ]
+    },
+    {
+     "text": "무릎이 아파서 더는 못 앉아 있겠어서 그만뒀다.",
+     "kind": "supported",
+     "facts": [
+      "f3"
+     ]
+    },
+    {
+     "text": "애들한테 그 재봉틀을 줄지는 아직 모르겠고 걔들이 쓸 일이 있겠나 싶다.",
+     "kind": "supported",
+     "facts": [
+      "f60"
+     ]
+    }
+   ]
+  ],
+  "review_notes": []
+ },
+ "edited": {
+  "diagnosis": [
+   {
+    "issue": "초안은 시기별 사건이 시간순으로 단순 나열되어 있어 책으로서의 유기적 흐름이 약합니다.",
+    "where": [
+     "ch-1"
+    ],
+    "action": "재봉틀의 소리와 현재의 회상에서 출발해, 어린 시절과 공장 생활, 재봉틀이 도착한 가게 시절, 그리고 언니의 이별과 지금까지 이어지는 기억을 자연스럽게 엮습니다."
+   }
+  ],
+  "title": {
+   "text": "언니의 발틀",
+   "kind": "editorial",
+   "facts": []
+  },
+  "chapters": [
+   {
+    "chapter_key": "ch-1",
+    "center": "큰언니가 보내 준 발틀 재봉틀과 겹치는 기억",
+    "title": {
+     "text": "언니의 발틀",
+     "kind": "editorial",
+     "facts": []
+    },
+    "paragraphs": [
+     [
+      {
+       "text": "언니가 준 재봉틀을 아직 못 버렸다. 그 재봉틀 드르륵 소리가 나면 언니 생각이 난다.",
+       "kind": "supported",
+       "facts": [
+        "f57",
+        "f58"
+       ]
+      },
+      {
+       "text": "공장 다닐 때는 그 소리가 그렇게 싫었는데, 지금은 그 소리에 언니 생각이 난다.",
+       "kind": "supported",
+       "facts": [
+        "f58",
+        "f59"
+       ]
+      }
+     ],
+     [
+      {
+       "text": "열다섯 살 즈음 큰언니가 부산으로 시집을 갔는데, 언니가 시집가던 날 내가 많이 울었다고 들었다.",
+       "kind": "supported",
+       "facts": [
+        "f20",
+        "f21"
+       ]
+      },
+      {
+       "text": "시골에 있어 봐야 할 게 없어서 열일곱 살에 서울 동대문 근처 봉제 공장으로 올라갔다.",
+       "kind": "supported",
+       "facts": [
+        "f22"
+       ]
+      }
+     ],
+     [
+      {
+       "text": "수선집을 1985년 봄에 개업했다.",
+       "kind": "supported",
+       "facts": [
+        "f34"
+       ]
+      },
+      {
+       "text": "검은색 발틀 재봉틀은 큰언니가 보내 준 것이다.",
+       "kind": "supported",
+       "facts": [
+        "f6"
+       ]
+      }
+     ],
+     [
+      {
+       "text": "아침 아홉 시에 문 열면 저녁 여덟 시까지 거의 재봉틀 앞에 있었다.",
+       "kind": "supported",
+       "facts": [
+        "f4"
+       ]
+      }
+     ],
+     [
+      {
+       "text": "큰언니는 병원 다녀온 그다음 해 봄인 2004년에 돌아가셨다.",
+       "kind": "supported",
+       "facts": [
+        "f52"
+       ]
+      }
+     ],
+     [
+      {
+       "text": "2010년에 수선집을 그만뒀다. 무릎이 아파서 더는 못 앉아 있겠어서 그만뒀다.",
+       "kind": "supported",
+       "facts": [
+        "f2",
+        "f3"
+       ]
+      },
+      {
+       "text": "애들한테 그 재봉틀을 줄지는 아직 모르겠고 걔들이 쓸 일이 있겠나 싶다.",
+       "kind": "supported",
+       "facts": [
+        "f60"
+       ]
+      }
+     ]
+    ]
+   }
+  ],
+  "omitted": [
+   {
+    "facts": [
+     "f14",
+     "f15"
+    ],
+    "reason": "출신 및 나이 차 사실은 이 장의 핵심 주제인 재봉틀과 언니의 기억에 직접적이지 않아 제외함."
+   },
+   {
+    "facts": [
+     "f56",
+     "f66"
+    ],
+    "reason": "딸의 책 제안과 화자의 망설임은 책 전체의 도입부나 마무리 몫으로 남김."
+   }
+  ],
+  "checks_resolution": [
+   {
+    "check_id": "must_keep_omitted:artifact:f12",
+    "status": "resolved",
+    "reason": "가게 시절의 운동회 미안함은 해당 장의 중심인 재봉틀과 언니 이야기 흐름에 맞지 않아 다른 장 몫으로 둠."
+   },
+   {
+    "check_id": "must_keep_omitted:artifact:f13",
+    "status": "resolved",
+    "reason": "자녀 대학 등록 사실은 재봉틀 중심의 구성에서 벗어나 제외함."
+   },
+   {
+    "check_id": "must_keep_omitted:artifact:f43",
+    "status": "resolved",
+    "reason": "1977년 부산 첫 방문과 바다 기억은 언니의 별세 및 병문안 흐름과 결이 달라 제외함."
+   },
+   {
+    "check_id": "must_keep_omitted:artifact:f48",
+    "status": "resolved",
+    "reason": "딸의 결혼 드레스 아쉬움은 딸 이야기 영역으로 다른 장에 배치함."
+   },
+   {
+    "check_id": "must_keep_omitted:artifact:f51",
+    "status": "resolved",
+    "reason": "남편의 별세는 화자가 말을 아낀 대목이므로 이 장에 포함하지 않음."
+   }
+  ],
+  "notes": [
+   "이번 편집본은 한 장 시험 범위에 맞춰 초안의 문장을 매끄럽게 연결하고 시기별 흐름을 정돈했습니다."
+  ]
+ },
+ "verify": {
+  "review_status": "completed",
+  "verdict": "pass",
+  "issues": [],
+  "quality": [
+   {
+    "item": "Q1",
+    "score": 2,
+    "locations": [
+     "ch-1/paragraphs/0",
+     "ch-1/paragraphs/2",
+     "ch-1/paragraphs/5"
+    ],
+    "reason": "재봉틀과 언니의 소리로 시작해, 과거의 기억과 연도를 거쳐 다시 재봉틀과 현재의 생각으로 닫힙니다."
+   },
+   {
+    "item": "Q2",
+    "score": 2,
+    "locations": [
+     "ch-1/paragraphs/0",
+     "ch-1/paragraphs/5"
+    ],
+    "reason": "현재의 재봉틀 소리에 대한 감상과 과거 공장 시절의 기억, 그리고 미래에 대한 생각이 자연스럽게 묶였습니다."
+   },
+   {
+    "item": "Q3",
+    "score": 2,
+    "locations": [
+     "ch-1/paragraphs/1",
+     "ch-1/paragraphs/4"
+    ],
+    "reason": "열다섯 살 시절과 열일곱 살의 상경, 그리고 개업과 별세의 연도가 시간 흐름에 맞게 배치되었습니다."
+   },
+   {
+    "item": "Q4",
+    "score": 2,
+    "locations": [
+     "ch-1/omitted"
+    ],
+    "reason": "재봉틀과 큰언니라는 장의 중심에 맞춰 필요한 일화들을 골랐고, 무관한 내용은 적절히 생략되었습니다."
+   },
+   {
+    "item": "Q5",
+    "score": 2,
+    "locations": [
+     "ch-1/paragraphs/2"
+    ],
+    "reason": "개업 시기와 재봉틀에 관한 사실들이 하나의 맥락 속에서 자연스럽게 종합되었습니다."
+   },
+   {
+    "item": "Q6",
+    "score": 2,
+    "locations": [
+     "ch-1/paragraphs/5"
+    ],
+    "reason": "질문과 답의 흔적 없이 담백한 '~다' 체의 1인칭 서술로 통일되었습니다."
+   }
+  ],
+  "reviewed_locations": [
+   "artifact",
+   "title",
+   "ch-1/title",
+   "ch-1/paragraphs/0",
+   "ch-1/paragraphs/1",
+   "ch-1/paragraphs/2",
+   "ch-1/paragraphs/3",
+   "ch-1/paragraphs/4",
+   "ch-1/paragraphs/5"
+  ],
+  "missing_context": []
+ }
+}

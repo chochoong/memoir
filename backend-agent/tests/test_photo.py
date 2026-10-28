@@ -31,6 +31,7 @@ for _stream in (sys.stdout, sys.stderr):
 from PIL import Image                                                    # noqa: E402
 
 from app.session import migrate, photo, photostore, store                # noqa: E402
+from tests._auth import AsHeader                                          # noqa: E402
 from tests._nodb import NoDb                                              # noqa: E402
 
 PASS, FAIL = [], []
@@ -339,7 +340,7 @@ def test_migrations():
     found = migrate.files()
     # **이 목록은 새 마이그레이션마다 손으로 늘린다.** 귀찮으라고 그랬다 —
     # 번호를 빠뜨리거나 두 사람이 같은 번호를 쓰면 여기서 먼저 걸린다.
-    check("번호순으로 읽는다", [v for v, _ in found] == ["001", "002", "003", "004", "005", "006", "007", "008"],
+    check("번호순으로 읽는다", [v for v, _ in found] == ["001", "002", "003", "004", "005", "006", "007", "008", "009", "010", "011", "012"],
           str([v for v, _ in found]))
     check("001 은 처음 세 테이블", "CREATE TABLE IF NOT EXISTS session"
           in found[0][1].read_text(encoding="utf-8"))
@@ -446,7 +447,7 @@ def test_routes():
 
     src = jpeg(1600, 1200)
     with _Env(GEMINI_API_KEY="", AZURE_SPEECH_KEY="", PHOTO_STORE="local",
-              PHOTO_DIR=str(TMP), CREATE_MAX_PER_WINDOW=0), _FakeRows() as rows, NoDb():
+              PHOTO_DIR=str(TMP), CREATE_MAX_PER_WINDOW=0), _FakeRows() as rows, NoDb(), AsHeader():
         photostore.reset()
         with TestClient(app) as c:
             up = c.post("/api/photos", content=src,
@@ -460,10 +461,10 @@ def test_routes():
                                               body.get("height", 0)) == 1024,
                   f"{body.get('width')}×{body.get('height')}")
 
-            # **쿠키가 실려 왔는지.** <img src> 가 헤더를 못 보내기 때문에 이게
-            # 없으면 사진이 화면에 안 뜬다.
-            check("X-User-Id 가 쿠키로 옮겨진다", c.cookies.get("uid") == "kim",
-                  f"uid={c.cookies.get('uid')!r}")
+            # 헤더 신원을 쿠키로 옮겨 적던 길(mirror_uid)은 없어졌다. <img src> 는
+            # 로그인 쿠키(msid)를 들고 온다 — tests/test_auth.py 가 본다.
+            check("헤더 신원을 쿠키로 옮겨 적지 않는다", "uid" not in c.cookies,
+                  f"cookies={list(c.cookies)}")
 
             got = c.get(f"/api/photos/{pid}", headers={"X-User-Id": "kim"})
             check("다시 받으면 같은 바이트", got.status_code == 200
@@ -481,10 +482,12 @@ def test_routes():
                   f"{again.status_code} — 카드를 오갈 때마다 200KB 를 다시 "
                   f"보내지 않는다")
 
-            # 쿠키만으로도 읽힌다 = <img src> 가 도는 경로.
             bare = c.get(f"/api/photos/{pid}")
-            check("헤더 없이 쿠키만으로도 읽힌다", bare.status_code == 200,
-                  f"{bare.status_code} — 이게 안 되면 <img src> 가 사진을 못 받는다")
+            check("신원 없이 오면 401 · 바이트를 주지 않는다",
+                  bare.status_code == 401 and bare.json().get("code") == "login_required",
+                  f"{bare.status_code}")
+            bare304 = c.get(f"/api/photos/{pid}", headers={"If-None-Match": etag})
+            check("신원 없이는 304 도 주지 않는다", bare304.status_code == 401, str(bare304.status_code))
 
             c.cookies.clear()
             other = c.get(f"/api/photos/{pid}", headers={"X-User-Id": "park"})
@@ -538,7 +541,7 @@ def test_clues():
         async def get(self, key):
             return b"\xff\xd8"
 
-    async def run(photo_id, *, owner="kim", clues=CLUES, stored=None):
+    async def run(photo_id, *, owner="kim", clues=CLUES, stored=None, topic=""):
         seen = {}
 
         async def load_photo(pid):
@@ -566,7 +569,7 @@ def test_clues():
         photostore.current = lambda: _Bytes()
         try:
             ctl = C.SessionController(user_id="kim", title="t",
-                                      photo_id=photo_id, tts_fn=silent)
+                                      photo_id=photo_id, tts_fn=silent, topic=topic)
             await ctl.start("씨앗")
             if ctl._clues:
                 await ctl._clues
@@ -614,6 +617,16 @@ def test_clues():
           ctl._next_question == "사진 잘 받았습니다. 이 사진은 어떤 날에 찍으신 건가요?",
           ctl._next_question)
     check("회차에도 그 단서를 적는다", seen.get("저장") == READY)
+
+    # 가족이 고른 주제가 있으면 사진 질문보다 앞선다. 단서는 그대로 붙는다.
+    ctl, seen = asyncio.run(run("p1", stored=READY, topic="가족과 함께 이사한 기억"))
+    check("주제가 있으면 여는 말은 주제다",
+          ctl._next_question == C.topic_opening("가족과 함께 이사한 기억", photo=True),
+          ctl._next_question)
+    check("주제가 있어도 사진 단서는 붙는다", ctl.state.get("photo_analyses") == [READY])
+    ctl, seen = asyncio.run(run(None, topic="처음 사진을 찍던 때"))
+    check("사진 없이도 여는 말은 주제다",
+          ctl._next_question == C.topic_opening("처음 사진을 찍던 때"), ctl._next_question)
 
     # 올리자마자 시작을 누른 경우 — 올릴 때 건 분석이 아직 돌고 있다.
     from app.session import photo
@@ -702,6 +715,11 @@ def test_photo_opening():
     check("첫 마디에 사진을 받았다는 말이 있다",
           op(["어떤 날인가요?"]).startswith("사진 잘 받았습니다"),
           "그게 없으면 사진이 안 닿은 것으로 보인다")
+    for q in ("그때 어떤 소리가 들렸나요?", "음식 냄새가 기억나세요?", "그 국수 맛은 어땠나요?"):
+        check(f"감각을 묻는 후보는 쓰지 않는다 — {q}", op([q]) == C.OPENING_PHOTO,
+              "오감 질문은 하지 않는다 (인터뷰_v4.md)")
+    check("감각 낱말이 없는 활동 질문은 그대로다",
+          op(["사진 찍기는 언제 시작하셨나요?"]) != C.OPENING_PHOTO)
 
 
 def test_all_checks_passed():

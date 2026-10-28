@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import re
 import time
 import uuid
 from dataclasses import dataclass, field
@@ -38,6 +39,10 @@ SttFn = Callable[[bytes, str, str | None], Awaitable[str]]
 
 # 낭독기. 질문 -> mp3. 실패해도 예외가 아니라 빈 바이트다.
 TtsFn = Callable[[str], Awaitable[bytes]]
+
+# 흘려 읽는 낭독기. 질문 -> tts.Speech (조각이 차오르는 그릇). None 이면 위 TtsFn
+# 으로 한 덩어리를 받는다 — 기본이 그쪽이다 (tts.stream_factory · TTS_STREAM).
+StreamFn = Callable[[str], "tts.Speech"]
 
 # 회차가 닫힌 뒤에 할 일. (session_id, user_id, closed_reason). 엽서 자동 굽기가
 # 여기 들어간다 (main.py). 기본은 없음 — 시험이 만드는 회차가 모델을 부르지 않는다.
@@ -102,6 +107,21 @@ OPENING = "오늘은 어떤 이야기를 들려주시겠어요?"
 # 내려온다 (아래 photo_opening · start 참조).
 OPENING_PHOTO = "사진 잘 받았습니다. 이 사진은 어떤 사진인가요?"
 
+# 가족이 고른 주제가 있으면 여는 말은 그 주제다. **사진 질문보다 앞선다** — 사진
+# 내용이 다르다고 고른 주제가 바뀌면 안 된다 (인터뷰_v4.md [질문 방향과 자료 구분]).
+# 「떠오르는 것이 있으면」은 그 경험이 있었다고 전제하지 않으려고 붙였다.
+OPENING_TOPIC = "오늘은 「{topic}」 이야기를 나눠 볼까요? 떠오르는 것이 있으면 편하게 들려주세요."
+
+# 감각을 떠올리게 하는 질문. 모델 밖에서 고른 문장(사진 질문 후보)에만 쓰는 거친
+# 체다. 뜻으로 가르는 일은 프롬프트가 하고, 여기는 놓친 것이 첫 마디로 나가지
+# 않게 막는다. 걸리면 고정 문장으로 돌아갈 뿐이라 잘못 걸려도 잃는 것이 적다.
+_SENSORY = re.compile(r"소리|냄새|향기|향이|맛[이은을]|촉감|감촉")
+
+
+def topic_opening(topic: str, photo: bool = False) -> str:
+    said = OPENING_TOPIC.format(topic=topic)
+    return f"사진 잘 받았습니다. {said}" if photo else said
+
 # 회차를 열 때 돌고 있는 사진 분석을 기다리는 한도(초). 분석은 1.6~3.9초이고
 # 올린 때부터 재므로, 3초면 올리자마자 누르셔도 대개 안에 든다.
 PHOTO_WAIT = env_float("PHOTO_OPEN_WAIT_SECONDS", 3.0)
@@ -134,18 +154,29 @@ def photo_opening(clues: dict | None) -> str:
     """
     qs = (clues or {}).get("questions")
     q = qs[0].strip() if isinstance(qs, list) and qs and isinstance(qs[0], str) else ""
-    if not q.endswith(("?", "？")) or len(q) > 100:
+    if not q.endswith(("?", "？")) or len(q) > 100 or _SENSORY.search(q):
         return OPENING_PHOTO
     return f"사진 잘 받았습니다. {q}"
 
 
 async def fixed_questions(ctl: "SessionController") -> str | None:
-    """Day 1~4 용 고정 문구. LLM 없이 흐름만 돌린다."""
+    """
+    고정 문구. 키가 없을 때와 모델이 실패했을 때 나간다 (question._fallback).
+
+    **감각을 묻지 않는다.** 첫 항목이 「어떤 소리가 들렸는지」였는데, 모델이
+    실패하거나 종료가 하한에 막히면 이것이 그대로 나갔다. 무엇을 들었는지
+    모르고 내는 말이라 어느 이야기에도 붙는 열린 질문만 둔다.
+
+    **어르신 말씀 뒤에만 나간다.** 시작할 때 나가는 말은 여는 말(OPENING · topic_opening)
+    이고, 이 목록은 턴 1(첫 답을 들은 뒤)부터 쓴다. 그래서 첫 항목도 들은 말씀을
+    이어 받는 말이다. 인터뷰_v4.md 개발 인계의 예비 질문(「이 주제로 어떤 이야기를
+    나누고 싶으세요?」)은 답이 아직 없을 때의 말이라 여기에 두지 않는다.
+    """
     await asyncio.sleep(0.2)                     # 호출 지연 흉내
     seq = [
-        "그때 어떤 소리가 들렸는지 기억나세요?",
-        "그 자리에 누가 함께 계셨어요?",
-        "그 이야기를 하시니 지금 어떤 마음이 드세요?",
+        "그 이야기를 조금 더 들려주시겠어요?",
+        "그 일은 어떻게 하게 되셨어요?",
+        "더 남기고 싶은 이야기가 있으세요?",
     ]
     i = ctl.machine.turn - 1
     return seq[i] if 0 <= i < len(seq) else None
@@ -187,9 +218,18 @@ class SessionController:
     max_turn: int = 0                             # 0 = 제한 없음 (machine.py 참조)
     # 회차를 연 사진. 배경에서 한 번만 분석해 state["photo_analyses"] 로 간다.
     photo_id: str | None = None
+    # 시작 자료 (C1). 가족이 고른 테마(family/self/hobby)와 구체 주제.
+    # 어르신의 말씀이 아니라 질문 방향이다 — 대화 기록에 섞지 않는다.
+    theme: str | None = None
+    topic: str = ""
+    # 회차의 화자. 링크로 연 회차만 안다 (link.py) — 자녀가 바로 연 회차는 None.
+    elder_id: str | None = None
     question_fn: QuestionFn = fixed_questions
     stt_fn: SttFn = stt.azure_transcribe
     tts_fn: TtsFn = tts.synthesize
+    # **회차를 열 때 한 번 정한다.** 회차 도중에 .env 를 바꿔도 이 회차는 처음
+    # 방식대로 읽는다 — 화면이 받는 길이 턴마다 바뀌면 안 된다.
+    stream_fn: StreamFn | None = field(default_factory=tts.stream_factory)
     closed_fn: ClosedFn | None = None
 
     machine: Machine = field(init=False)
@@ -218,6 +258,7 @@ class SessionController:
     _clues: asyncio.Task | None = None
     _next_question: str | None = None
     _question_audio: bytes = b""
+    _speech: tts.Speech | None = None
     _speaking: asyncio.Task | None = None
 
     def __post_init__(self) -> None:
@@ -245,8 +286,12 @@ class SessionController:
             # 「소리가 있다」 또는 「아직 만드는 중이다」. 끝난 태스크는 세지
             # 않는다 — 합성이 실패로 끝나도 있다고 말하게 되고, 화면은 오지
             # 않을 소리를 기다린다.
-            "question_audio": bool(self._question_audio) or bool(
-                self._speaking and not self._speaking.done()),
+            "question_audio": (self._speech.pending if self._speech else
+                               bool(self._question_audio) or bool(
+                                   self._speaking and not self._speaking.done())),
+            # 참이면 화면은 /question/stream 으로 조각을 받아 오는 대로 튼다.
+            # 거짓이면 예전처럼 /question/audio 로 파일 하나를 받는다.
+            "question_audio_stream": self._speech is not None,
             # 폰 화면의 콘솔에서 상태가 차오르는 것을 보려고 싣는다. 사실이
             # 한 턴도 안 쌓이면 인터뷰 에이전트가 제 몫을 못 하고 있는 것인데,
             # 로그를 열지 않고 알아채려면 여기 있어야 한다.
@@ -312,6 +357,9 @@ class SessionController:
         if clues:
             self._apply_clues(clues)
             await store.save_photo_clues(self, clues)
+        if self.topic:
+            self._next_question = topic_opening(self.topic, photo=bool(self.photo_id))
+        elif clues:
             self._next_question = photo_opening(clues)
         else:
             self._next_question = OPENING_PHOTO if self.photo_id else OPENING
@@ -543,6 +591,8 @@ class SessionController:
         for task in (self._pending, self._speaking, self._clues):
             if task and not task.done():
                 task.cancel()
+        if self._speech:
+            self._speech.cancel()
 
     async def _close(self, reason: str) -> dict:
         """ABORT 전이로 닫는다. 어느 상태에서 불러도 받는다 (machine.fire 참조)."""
@@ -770,9 +820,9 @@ class SessionController:
 
         **지난 답변은 넣지 않는다.** 답변은 그 자체가 전사 결과라, 한 번 잘못
         들린 말(「지난 바다」→「친한 바다」)이 힌트가 되면 다음 턴부터 전사기를
-        그 오답 쪽으로 끌어당긴다. 사람이 적은 씨앗만 믿을 수 있는 글이다.
+        그 오답 쪽으로 끌어당긴다. 사람이 적은 주제와 씨앗만 믿을 수 있는 글이다.
         """
-        return shared_state.seed(self)
+        return " ".join(s for s in (self.topic, shared_state.seed(self)) if s)
 
     async def _make_question(self) -> None:
         before = self.last_decision
@@ -809,12 +859,28 @@ class SessionController:
         self._question_audio = b""
         if self._speaking and not self._speaking.done():
             self._speaking.cancel()
+        if self._speech:
+            self._speech.cancel()
+            self._speech = None
 
         # **지금 턴의 Marks 를 붙잡아 둔다.** self.marks 를 태스크 안에서 읽으면
         # 늦게 끝난 합성이 **다음 턴의** 기록에 시각을 적는다. 전달이 빠른 경로
         # (「다 말했어요」는 T2 를 건너뛴다)에서 실제로 낭독 칸이 음수로 나왔다 —
         # 이번 턴 question_at 보다 앞선 시각이 적혔다는 뜻이다.
         marks = self.marks
+
+        if self.stream_fn:
+            # 조각은 Speech 가 모으고, 여기서는 첫 소리가 온 시각만 적는다.
+            # 그 순간부터 소리를 틀 수 있으니 낭독 칸은 거기까지다.
+            speech = self.stream_fn(q)
+            self._speech = speech
+
+            async def first() -> None:
+                if await speech.wait_first():
+                    marks.spoken_at = speech.first_at or time.perf_counter()
+
+            self._speaking = asyncio.create_task(first())
+            return
 
         async def run() -> None:
             try:
@@ -836,12 +902,23 @@ class SessionController:
         질문 글자를 띄운 채고, 소리는 그 위에 얹히는 것이다. 못 받으면 빈
         바이트가 가고 화면은 「낭독 끝」 버튼으로 넘어간다.
         """
+        if self._speech:
+            # 흘려 읽는 회차에서 파일 하나로 달라는 것은 화면의 「소리 시험」
+            # 버튼이다. 끝까지 모아 wav 로 준다. 한 덩어리 기다림이라 넉넉히 둔다.
+            speech = self._speech
+            await speech.wait_done(max(wait, 8.0))
+            pcm = speech.pcm()
+            return audiolib.pcm16_to_wav(pcm, speech.rate) if pcm else b""
         if self._speaking and not self._speaking.done():
             try:
                 await asyncio.wait_for(asyncio.shield(self._speaking), timeout=wait)
             except (asyncio.TimeoutError, asyncio.CancelledError):
                 log.warning("낭독 소리를 %.1f초 안에 못 만들었다 — 글자만 나간다", wait)
         return self._question_audio
+
+    def question_speech(self) -> tts.Speech | None:
+        """흘려 읽는 회차의 지금 낭독. 아니면 None."""
+        return self._speech
 
     async def _maybe_advance(self) -> None:
         """질문 준비 + T2 만료가 모두 참일 때만 다음 턴으로."""
@@ -899,8 +976,7 @@ def user_live(user_id: str) -> int:
     """
     한 사용자가 지금 들고 있는 회차 수.
 
-    **이 값으로 막는 것은 보안이 아니다.** user_id 는 X-User-Id 를 그대로 믿는
-    값이라 바꿔 넣으면 통과한다 (limits.py 참조). 로그인이 붙으면 실효를 가진다.
+    user_id 는 로그인한 자녀다 (auth.current_user). 상한의 뜻은 limits.py 에 있다.
     """
     return sum(1 for c in live_sessions() if c.user_id == user_id)
 

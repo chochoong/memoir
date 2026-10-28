@@ -133,13 +133,13 @@ async def save_session(ctl: "SessionController") -> None:
             await con.execute(
                 """
                 INSERT INTO session (session_id, user_id, title, state, turn,
-                                     max_turn, t2_seconds, photo_id)
-                VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+                                     max_turn, t2_seconds, photo_id, elder_id)
+                VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
                 ON CONFLICT (session_id) DO NOTHING
                 """,
                 _sid(ctl), ctl.user_id, ctl.title, ctl.machine.state.value,
                 ctl.machine.turn, ctl.machine.max_turn,
-                Decimal(str(ctl.timers.t2_seconds)), _pid(ctl.photo_id))
+                Decimal(str(ctl.timers.t2_seconds)), _pid(ctl.photo_id), ctl.elder_id)
     except Exception as e:                                   # noqa: BLE001
         log.error("세션 저장 실패 (%s: %s)", type(e).__name__, str(e)[:120])
 
@@ -309,6 +309,9 @@ def _session_row(r: Any) -> dict:
         "title": r["title"],
         # 엽서를 그릴 때 참고로 줄 사진. 사진 없이 연 회차는 None 이다.
         "photo_id": str(r["photo_id"]) if r["photo_id"] else None,
+        # 누구의 이야기인가. 링크 회차 · 화자를 고르고 연 회차는 있고, 그 전 회차는 None
+        # (화자 미지정) 이다. 자서전은 한 화자의 회차만 묶는다 (7-C1).
+        "elder_id": r.get("elder_id"),
         "state": r["state"],
         "turn": r["turn"],
         "max_turn": r["max_turn"],
@@ -319,30 +322,82 @@ def _session_row(r: Any) -> dict:
     }
 
 
-async def list_sessions(user_id: str, limit: int = 20) -> list[dict]:
+async def list_sessions(user_id: str, limit: int = 20, has_postcard: bool = False,
+                        elder_id: str | None = None) -> list[dict]:
     """
-    지난 회차 목록. 최근 순. 조각 개수를 같이 센다.
+    지난 회차 목록. 최근 순. 조각 개수와 엽서가 있는지 · 엽서 제목을 같이 싣는다.
 
-    user_id 로 거른다. 지금은 X-User-Id 헤더를 그대로 믿으므로 막아 주지는
-    못하지만, 로그인이 붙으면 이 조건이 그대로 실효를 가진다.
+    postcard_title 은 엽서가 없으면 칸을 빼지 않고 None 이다. 화면이 「칸이 없다
+    (예전 서버)」 와 「엽서가 없다」 를 가른다. 006 이전 엽서는 제목이 없어 None 이다.
+
+    user_id 로 거른다 — 로그인한 자녀의 것만 나간다.
+
+    has_postcard 면 엽서가 있는 회차만 준다. 엽서는 이제 손으로만 굽기 때문에
+    최근 회차 대부분에 엽서가 없다 — 거르지 않으면 자서전에 고를 회차가 목록
+    뒤로 밀린다.
+
+    elder_id 를 주면 그 화자의 회차만 준다 (화자 미지정 회차는 빠진다).
+
+    has_words 는 어르신 말씀이 하나라도 있는가다 — 자서전에 넣을 수 있는 회차의
+    조건 (memoir_sessions 와 같은 _SAID).
+    """
+    only = "AND p.session_id IS NOT NULL" if has_postcard else ""
+    pool = _need_pool()
+    try:
+        async with pool.acquire() as con:
+            rows = await con.fetch(
+                f"""
+                SELECT s.*, (SELECT count(*) FROM turn t
+                              WHERE t.session_id = s.session_id) AS fragment_count,
+                       {_SAID} AS has_words,
+                       p.session_id IS NOT NULL AS has_postcard,
+                       p.title AS postcard_title
+                  FROM session s
+                  LEFT JOIN postcard p ON p.session_id = s.session_id
+                 WHERE s.user_id = $1 {only}
+                   AND ($3::text IS NULL OR s.elder_id = $3)
+                 ORDER BY s.created_at DESC
+                 LIMIT $2
+                """,
+                user_id, limit, elder_id)
+    except Exception as e:                                   # noqa: BLE001
+        log.error("회차 목록 읽기 실패 (%s: %s)", type(e).__name__, str(e)[:120])
+        raise StoreUnavailable("회차 목록을 읽지 못했습니다") from e
+    return [{**_session_row(r), "fragment_count": r["fragment_count"],
+             "has_words": r["has_words"],
+             "has_postcard": r["has_postcard"],
+             "postcard_title": r["postcard_title"]} for r in rows]
+
+
+# 어르신 말씀이 있는 회차 — 0번은 씨앗이라 말씀이 아니다. postcard.material 의
+# 「idx > 0 이고 answer 가 비지 않은 조각」 과 같은 규칙이다.
+_SAID = r"""EXISTS (SELECT 1 FROM turn w
+                     WHERE w.session_id = s.session_id AND w.idx > 0 AND w.answer ~ '\S')"""
+
+
+async def memoir_sessions(user_id: str, elder_id: str) -> list[str]:
+    """
+    자서전의 「전부」 — 이 자녀 · 이 화자의 **닫힌 · 말씀 있는** 회차. 연 순서대로.
+
+    화면의 자서전 고르기 목록과 같은 기준이다 (closed_at · 화자 · has_words). 화자
+    미지정 · 진행 중 · 말씀 없는 회차는 들지 않는다. 개수 상한은 없다 — 목록
+    (`list_sessions`)은 100개까지라 그보다 오래된 회차는 여기서만 보인다.
     """
     pool = _need_pool()
     try:
         async with pool.acquire() as con:
             rows = await con.fetch(
-                """
-                SELECT s.*, (SELECT count(*) FROM turn t
-                              WHERE t.session_id = s.session_id) AS fragment_count
-                  FROM session s
-                 WHERE s.user_id = $1
-                 ORDER BY s.created_at DESC
-                 LIMIT $2
+                f"""
+                SELECT s.session_id FROM session s
+                 WHERE s.user_id = $1 AND s.elder_id = $2
+                   AND s.closed_at IS NOT NULL AND {_SAID}
+                 ORDER BY s.created_at
                 """,
-                user_id, limit)
+                user_id, elder_id)
     except Exception as e:                                   # noqa: BLE001
-        log.error("회차 목록 읽기 실패 (%s: %s)", type(e).__name__, str(e)[:120])
-        raise StoreUnavailable("회차 목록을 읽지 못했습니다") from e
-    return [{**_session_row(r), "fragment_count": r["fragment_count"]} for r in rows]
+        log.error("자서전 회차 읽기 실패 (%s: %s)", type(e).__name__, str(e)[:120])
+        raise StoreUnavailable("자서전 회차를 읽지 못했습니다") from e
+    return [str(r["session_id"]) for r in rows]
 
 
 async def load_session(session_id: str) -> dict | None:
@@ -370,7 +425,7 @@ async def load_session(session_id: str) -> dict | None:
                   FROM turn WHERE session_id = $1 ORDER BY idx
                 """, sid)
             prow = await con.fetchrow(
-                "SELECT title, text, caption, storage_key, created_at FROM postcard"
+                "SELECT title, text, caption, storage_key, style, created_at FROM postcard"
                 " WHERE session_id = $1",
                 sid)
     except Exception as e:                                   # noqa: BLE001
@@ -396,6 +451,7 @@ async def load_session(session_id: str) -> dict | None:
             "text": prow["text"],
             "caption": prow["caption"],
             "storage_key": prow["storage_key"],
+            "style": prow["style"] or "spoken",
             "created_at": prow["created_at"].isoformat(),
         } if prow else None,
     }
@@ -554,13 +610,18 @@ def _postcard_row(r: Any) -> dict:
         "photo_id": str(r["photo_id"]) if r["photo_id"] else None,
         "text_model": r["text_model"],
         "image_model": r["image_model"],
+        # NULL 은 011 전에 구운 엽서다. 그때는 구어체뿐이었다.
+        "style": r["style"] or "spoken",
         "created_at": r["created_at"].isoformat(),
     }
 
 
-async def save_postcard(rec: dict) -> str | None:
+async def save_postcard(rec: dict) -> tuple[str | None, str]:
     """
-    엽서 행을 넣거나 덮어쓴다. **덮어쓰기 전의 키를 돌려준다.**
+    엽서 행을 넣거나 덮어쓴다. **덮어쓰기 전의 키와 새로 찍힌 created_at 을 돌려준다.**
+
+    created_at 은 DB 의 now() 다. 화면은 busy 뒤에 이 값이 바뀌었는지로 새 엽서를
+    알아본다 (4-C1 §6) — 그래서 POST 응답에도 같은 값이 나가야 한다.
 
     옛 바이트를 지우는 것은 호출자다. 여기서 지우면 행과 바이트를 한 함수가 같이
     쥐게 되는데, 바이트는 이 파일이 아니라 PhotoStore 의 일이다.
@@ -571,13 +632,14 @@ async def save_postcard(rec: dict) -> str | None:
     pool_ = _need_pool()
     try:
         async with pool_.acquire() as con:
-            return await con.fetchval(
+            row = await con.fetchrow(
                 """
                 WITH old AS (SELECT storage_key FROM postcard WHERE session_id = $1)
                 INSERT INTO postcard (session_id, user_id, text, storage_key, mime,
                                       bytes, width, height, photo_id,
-                                      text_model, image_model, title, caption, sources)
-                VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
+                                      text_model, image_model, title, caption, sources,
+                                      style)
+                VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
                 ON CONFLICT (session_id) DO UPDATE
                    SET user_id     = EXCLUDED.user_id,
                        title       = EXCLUDED.title,
@@ -592,8 +654,9 @@ async def save_postcard(rec: dict) -> str | None:
                        photo_id    = EXCLUDED.photo_id,
                        text_model  = EXCLUDED.text_model,
                        image_model = EXCLUDED.image_model,
+                       style       = EXCLUDED.style,
                        created_at  = now()
-                RETURNING (SELECT storage_key FROM old)
+                RETURNING (SELECT storage_key FROM old) AS old, created_at
                 """,
                 uuid.UUID(rec["session_id"]), rec["user_id"], rec["text"],
                 rec["storage_key"], rec["mime"], rec["bytes"], rec["width"],
@@ -601,11 +664,13 @@ async def save_postcard(rec: dict) -> str | None:
                 rec.get("text_model"), rec.get("image_model"),
                 rec.get("title"), rec.get("caption"),
                 json.dumps(rec.get("sources"), ensure_ascii=False)
-                if rec.get("sources") is not None else None)
+                if rec.get("sources") is not None else None,
+                rec.get("style"))
     except Exception as e:                                   # noqa: BLE001
         log.error("엽서 행 저장 실패 %s (%s: %s)",
                   rec.get("session_id"), type(e).__name__, str(e)[:120])
         raise StoreUnavailable("엽서를 저장하지 못했습니다") from e
+    return row["old"], row["created_at"].isoformat()
 
 
 async def load_postcard(session_id: str) -> dict | None:
@@ -622,3 +687,247 @@ async def load_postcard(session_id: str) -> dict | None:
         log.error("엽서 읽기 실패 %s (%s: %s)", session_id, type(e).__name__, str(e)[:120])
         raise StoreUnavailable("엽서를 읽지 못했습니다") from e
     return _postcard_row(row) if row else None
+
+
+# ---------------------------------------------------------------- 계정 · 로그인
+#
+# 표는 003 이 만들었다 (app_user · elder · user_elder · login_session). 신원을
+# 정하는 함수라 위의 쓰기 함수들과 달리 **실패를 삼키지 않는다** — 로그인을
+# 기록하지 못했으면 로그인시키지 않는다.
+
+async def _auth_write(what: str, fn):
+    pool_ = _need_pool()
+    try:
+        async with pool_.acquire() as con:
+            return await fn(con)
+    except Exception as e:                                   # noqa: BLE001
+        log.error("%s 실패 (%s: %s)", what, type(e).__name__, str(e)[:120])
+        raise StoreUnavailable(f"{what}에 실패했습니다") from e
+
+
+async def upsert_user(provider: str, subject: str, email: str | None, name: str | None) -> str:
+    """
+    제공자 계정 → 우리 user_id. 처음이면 만든다.
+
+    찾는 열쇠는 (provider, subject) 다. 이메일은 바뀔 수 있어 열쇠로 쓰지 않고,
+    들어올 때마다 표시용으로만 갱신한다.
+    """
+    async def run(con):
+        return await con.fetchval(
+            """
+            INSERT INTO app_user (user_id, provider, subject, email, name, last_login)
+            VALUES ($1, $2, $3, $4, $5, now())
+            ON CONFLICT (provider, subject) DO UPDATE
+               SET email = EXCLUDED.email, name = EXCLUDED.name, last_login = now()
+            RETURNING user_id
+            """,
+            f"u_{uuid.uuid4().hex}", provider, subject, email, name)
+    return await _auth_write("계정 기록", run)
+
+
+async def open_login(sid_hash: str, user_id: str, expires_at) -> None:
+    async def run(con):
+        await con.execute(
+            """
+            INSERT INTO login_session (sid, user_id, kind, expires_at, last_seen_at)
+            VALUES ($1, $2, 'web', $3, now())
+            """,
+            sid_hash, user_id, expires_at)
+    await _auth_write("로그인 기록", run)
+
+
+async def load_login(sid_hash: str) -> dict | None:
+    """자녀 로그인 한 줄. 만료 · 회수 판단은 부르는 쪽(auth)이 한다."""
+    async def run(con):
+        return await con.fetchrow(
+            """
+            SELECT l.user_id, l.created_at, l.expires_at, l.last_seen_at, l.revoked_at,
+                   u.name, u.email
+              FROM login_session l JOIN app_user u ON u.user_id = l.user_id
+             WHERE l.sid = $1 AND l.kind = 'web'
+            """,
+            sid_hash)
+    row = await _auth_write("로그인 읽기", run)
+    return dict(row) if row else None
+
+
+async def touch_login(sid_hash: str) -> None:
+    async def run(con):
+        await con.execute("UPDATE login_session SET last_seen_at = now() WHERE sid = $1", sid_hash)
+    await _auth_write("로그인 갱신", run)
+
+
+async def revoke_login(sid_hash: str) -> None:
+    async def run(con):
+        await con.execute(
+            "UPDATE login_session SET revoked_at = now() WHERE sid = $1 AND revoked_at IS NULL",
+            sid_hash)
+    await _auth_write("로그아웃 기록", run)
+
+
+async def list_elders(user_id: str) -> list[dict]:
+    async def run(con):
+        return await con.fetch(
+            """
+            SELECT e.elder_id, e.display_name
+              FROM user_elder ue JOIN elder e ON e.elder_id = ue.elder_id
+             WHERE ue.user_id = $1
+             ORDER BY ue.created_at
+            """,
+            user_id)
+    return [dict(r) for r in await _auth_write("화자 목록 읽기", run)]
+
+
+async def create_elder(user_id: str, display_name: str) -> dict:
+    """화자 하나와 「이 자녀가 관리한다」 한 줄을 같이 만든다. 이름으로 기존 화자를 찾지 않는다."""
+    elder_id = f"e_{uuid.uuid4().hex}"
+
+    async def run(con):
+        async with con.transaction():
+            await con.execute("INSERT INTO elder (elder_id, display_name) VALUES ($1, $2)",
+                              elder_id, display_name)
+            await con.execute("INSERT INTO user_elder (user_id, elder_id) VALUES ($1, $2)",
+                              user_id, elder_id)
+    await _auth_write("화자 기록", run)
+    return {"elder_id": elder_id, "display_name": display_name}
+
+
+# ---------------------------------------------------------------- 인터뷰 링크
+#
+# 표는 010 이 만들었다. 권한을 정하는 함수라 계정 함수와 같이 실패를 삼키지 않는다.
+
+# token_hash 는 읽지 않는다. device_hash 는 「시작한 기기인가」를 대조하는 데만 쓰고 내보내지 않는다.
+_LINK_COLS = """link_id, user_id, elder_id, title, seed, theme, topic, picked_topic, photo_id, session_id,
+                device_hash, created_at, expires_at, revoked_at, started_at, ended_at"""
+
+
+def _link_row(r: Any) -> dict:
+    d = dict(r)
+    for k in ("photo_id", "session_id"):
+        d[k] = str(d[k]) if d[k] else None
+    return d
+
+
+async def assign_elder(session_id: str, user_id: str, elder_id: str) -> str:
+    """
+    화자 미지정 회차에 화자를 한 번 정한다. 결과는 set · same · taken · no_session · no_elder.
+
+    **정해진 화자는 바꾸지 않는다** (taken) — 다른 화자로 옮기면 그 화자의 자서전에
+    남의 말이 섞인다. 같은 화자를 다시 보내면 same 이다 (화면이 두 번 눌러도 된다).
+    같은 계정이라는 이유로 서버가 알아서 정하지 않는다 — 자녀가 고른 것만 적는다.
+    """
+    pool = _need_pool()
+    try:
+        sid = uuid.UUID(session_id)
+    except ValueError:
+        return "no_session"
+    try:
+        async with pool.acquire() as con:
+            async with con.transaction():
+                cur = await con.fetchrow(
+                    "SELECT elder_id FROM session WHERE session_id = $1 AND user_id = $2 FOR UPDATE",
+                    sid, user_id)
+                if cur is None:
+                    return "no_session"
+                if not await con.fetchval(
+                        "SELECT 1 FROM user_elder WHERE user_id = $1 AND elder_id = $2",
+                        user_id, elder_id):
+                    return "no_elder"
+                if cur["elder_id"] is not None:
+                    return "same" if cur["elder_id"] == elder_id else "taken"
+                await con.execute("UPDATE session SET elder_id = $2 WHERE session_id = $1",
+                                  sid, elder_id)
+                return "set"
+    except Exception as e:                                   # noqa: BLE001
+        log.error("화자 지정 실패 %s (%s: %s)", session_id, type(e).__name__, str(e)[:120])
+        raise StoreUnavailable("화자를 저장하지 못했습니다") from e
+
+
+async def owns_elder(user_id: str, elder_id: str) -> bool:
+    async def run(con):
+        return await con.fetchval(
+            "SELECT 1 FROM user_elder WHERE user_id = $1 AND elder_id = $2", user_id, elder_id)
+    return bool(await _auth_write("화자 확인", run))
+
+
+async def create_link(rec: dict) -> None:
+    async def run(con):
+        await con.execute(
+            """
+            INSERT INTO interview_link (link_id, token_hash, user_id, elder_id, title, seed,
+                                        theme, topic, photo_id, expires_at)
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+            """,
+            rec["link_id"], rec["token_hash"], rec["user_id"], rec["elder_id"], rec["title"],
+            rec["seed"], rec["theme"], rec["topic"], _pid(rec["photo_id"]), rec["expires_at"])
+    await _auth_write("링크 기록", run)
+
+
+async def _load_link(what: str, where: str, value: str) -> dict | None:
+    async def run(con):
+        return await con.fetchrow(f"SELECT {_LINK_COLS} FROM interview_link WHERE {where} = $1",
+                                  value)
+    row = await _auth_write(what, run)
+    return _link_row(row) if row else None
+
+
+async def load_link_by_token(token_hash: str) -> dict | None:
+    return await _load_link("링크 읽기", "token_hash", token_hash)
+
+
+async def load_link_by_device(device_hash: str) -> dict | None:
+    return await _load_link("링크 읽기", "device_hash", device_hash)
+
+
+async def load_link(link_id: str) -> dict | None:
+    return await _load_link("링크 읽기", "link_id", link_id)
+
+
+async def list_links(user_id: str, elder_id: str | None, limit: int) -> list[dict]:
+    async def run(con):
+        return await con.fetch(
+            f"""
+            SELECT {_LINK_COLS} FROM interview_link
+             WHERE user_id = $1 AND ($2::text IS NULL OR elder_id = $2)
+             ORDER BY created_at DESC LIMIT $3
+            """,
+            user_id, elder_id, limit)
+    return [_link_row(r) for r in await _auth_write("링크 목록 읽기", run)]
+
+
+async def claim_link(link_id: str, session_id: str, device_hash: str,
+                     picked_topic: str | None = None) -> bool:
+    """
+    시작 전 링크에 회차를 묶는다. **한 번만 성공한다** — 두 번 눌러도, 두 기기에서
+    동시에 눌러도 조건부 UPDATE 하나라 회차는 하나다.
+
+    picked_topic 은 어르신이 낱말 카드에서 고른 낱말이다 (012). 묶을 때 함께 적는다 —
+    시작에 실패한 요청의 낱말이 남지 않게.
+    """
+    async def run(con):
+        return await con.fetchval(
+            """
+            UPDATE interview_link
+               SET session_id = $2, device_hash = $3, started_at = now(), picked_topic = $4
+             WHERE link_id = $1 AND session_id IS NULL AND revoked_at IS NULL
+               AND expires_at > now()
+            RETURNING link_id
+            """,
+            link_id, uuid.UUID(session_id), device_hash, picked_topic)
+    return bool(await _auth_write("링크 시작 기록", run))
+
+
+async def end_link(session_id: str) -> None:
+    async def run(con):
+        await con.execute(
+            "UPDATE interview_link SET ended_at = now() WHERE session_id = $1 AND ended_at IS NULL",
+            uuid.UUID(session_id))
+    await _auth_write("링크 종료 기록", run)
+
+
+async def revoke_link(link_id: str) -> None:
+    async def run(con):
+        await con.execute(
+            "UPDATE interview_link SET revoked_at = now() WHERE link_id = $1 AND revoked_at IS NULL",
+            link_id)
+    await _auth_write("링크 회수 기록", run)

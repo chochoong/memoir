@@ -85,7 +85,9 @@ def main() -> int:
         print("manifest 에 없는 alias:", ", ".join(missing))
         return 2
 
-    data, turn_map = asyncio.run(build([by_alias[x] for x in picked], man["user_id"]))
+    data, turn_map = asyncio.run(build([by_alias[x] for x in picked],
+                                     # 새 manifest 는 시험 계정이 주인이다 (seed_sessions 머리)
+                                     man.get("app_user_id") or man["user_id"]))
     names = {sid: alias for alias, sid in by_alias.items()}
     out = {
         "set_id": man["set_id"],

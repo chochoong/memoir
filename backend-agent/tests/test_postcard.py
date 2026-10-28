@@ -8,7 +8,9 @@
 
     [1] 사진은 자르지 않고, 글은 글꼴로 얹는다
     [5] 자료는 DB 기록에서 다시 세운다  사실은 그 말씀의 턴에 붙는다
+    [4] 닫혀도 굽지 않는다              수정 반영 · 무수정 확인 뒤 「엽서 만들기」로만
     [6] 틀린 출처는 버리고 문장은 둔다  v3 「본문 출처」 · 로그만 남긴다
+    [6] 굽는 것은 ready 뿐이다          엽서.md §8-2 의 상태값
     [7] 마지막 말씀의 판단도 남긴다    턴 행이 없어 회차 행에 둔다
     [3] 다시 구우면 옛 바이트를 지운다  회차당 한 장이 저장소에서도 한 장이다
     [3] 행을 못 넣으면 바이트를 되돌린다 photo.save 와 같은 규칙이다
@@ -33,6 +35,7 @@ for _stream in (sys.stdout, sys.stderr):
 from PIL import Image                                                    # noqa: E402
 
 from app.session import photostore, postcard, store                      # noqa: E402
+from tests._auth import AsHeader                                          # noqa: E402
 from tests._nodb import NoDb                                              # noqa: E402
 
 PASS, FAIL = [], []
@@ -126,6 +129,66 @@ def test_compose():
         check("POSTCARD_FONT 가 없으면 후보로 넘어간다", postcard._font_path() != "Z:/없는/글꼴.ttf")
 
 
+def test_photo_branches():
+    """
+    P5-SV-03 — None 은 「회차에 사진 없음」 하나다. 사진이 있는데 못 읽으면 종이로
+    바꿔 굽지 않고 PhotoUnavailable (503 · photo_unavailable) 이다 (태헌 결정 10-26 · 5-C1).
+    """
+    print("\n[1b] 사진 분기 — 없음은 종이 · 못 읽음은 실패")
+    PID = "0191c0de-0000-4abc-8def-0123456789ab"
+    good = art(64, 48)
+
+    class _Ps:
+        def __init__(self, data=None, err=None):
+            self.data, self.err, self.calls = data, err, 0
+
+        async def get(self, key):
+            self.calls += 1
+            if self.err:
+                raise self.err
+            return self.data
+
+    def run(photo_id, meta=None, meta_err=None, ps=None):
+        old_load, old_cur = store.load_photo, photostore.current
+
+        async def load(pid):
+            if meta_err:
+                raise meta_err
+            return meta
+        store.load_photo = load
+        photostore.current = lambda: ps or _Ps(good)
+        try:
+            return asyncio.run(postcard._photo(photo_id))
+        finally:
+            store.load_photo, photostore.current = old_load, old_cur
+
+    def fails(**kw) -> bool:
+        try:
+            run(PID, **kw)
+        except postcard.PhotoUnavailable as e:
+            return e.code == "photo_unavailable"
+        return False
+
+    meta = {"storage_key": "photos/x.png", "mime": "image/png", "clues": {"scene": "잔칫상"}}
+    p = run(PID, meta)
+    check("사진 정상 → 바이트 · 단서", p is not None and p.data == good and p.clues == {"scene": "잔칫상"})
+    check("회차에 사진 없음 (photo_id 없음) → None (종이 바탕)", run(None) is None)
+    check("사진 행 없음 → photo_unavailable", fails(meta=None))
+    check("사진 행 읽기 실패 (DB) → photo_unavailable", fails(meta_err=store.StoreUnavailable("x")))
+    ps = _Ps(err=photostore.PhotoStoreError("x"))
+    check("사진 바이트 읽기 실패 (저장소) → photo_unavailable", fails(meta=meta, ps=ps) and ps.calls == 1)
+    check("바이트는 왔는데 깨짐 → photo_unavailable (모델 전에)", fails(meta=meta, ps=_Ps(b"not an image")))
+    check("PhotoUnavailable 은 PostcardUnavailable 이다 (기존 503 경로)",
+          issubclass(postcard.PhotoUnavailable, postcard.PostcardUnavailable))
+
+    font = postcard._font_path()
+    try:
+        postcard._compose(b"not an image", CARD, "2026. 9. 24.", font)
+        check("합성에서 깨짐 → PhotoUnavailable", False, "통과했다")
+    except postcard.PhotoUnavailable:
+        check("합성에서 깨짐 → PhotoUnavailable", True)
+
+
 def test_key():
     print("\n[2] 저장 키 — 다시 구우면 바뀐다")
 
@@ -163,7 +226,9 @@ class _Fake:
         }
         self.card: dict | None = None
         self.fail = False
+        self.insufficient = False
         self.writes = 0
+        self.saves = 0
         self.gate: asyncio.Event | None = None
 
     def __enter__(self):
@@ -177,14 +242,17 @@ class _Fake:
             return {**self.session, "fragments": list(self.session["fragments"]),
                     "postcard": {"title": card["title"], "text": card["text"],
                                  "caption": card["caption"], "storage_key": card["storage_key"],
-                                 "created_at": "2026-09-24T10:20:00+09:00"} if card else None}
+                                 "style": card["style"] or "spoken",
+                                 "created_at": card["created_at"]} if card else None}
 
         async def save_postcard(rec):
             if self.fail:
                 raise store.StoreUnavailable("일부러 실패")
             old = self.card["storage_key"] if self.card else None
-            self.card = dict(rec)
-            return old
+            self.saves += 1
+            at = f"2026-09-24T10:{20 + self.saves:02d}:00+09:00"     # DB 의 now() 흉내
+            self.card = {**rec, "created_at": at}
+            return old, at
 
         async def load_postcard(sid):
             return self.card if sid == SID else None
@@ -192,6 +260,8 @@ class _Fake:
         async def write(data):
             if self.gate:
                 await self.gate.wait()
+            if self.insufficient:
+                raise postcard.PostcardInsufficient()
             self.writes += 1
             return postcard.Card(title="완행열차", sentences=[f"완행열차를 탔지 {self.writes}."],
                                  caption="", sources=[{"sentence": 0, "turns": [1]}])
@@ -219,25 +289,37 @@ def test_routes():
 
     shutil.rmtree(TMP, ignore_errors=True)
     kim = {"X-User-Id": "kim"}
-    with _Env(AZURE_SPEECH_KEY="", PHOTO_STORE="local", PHOTO_DIR=str(TMP)), _Fake() as fake, NoDb():
+    with _Env(AZURE_SPEECH_KEY="", PHOTO_STORE="local", PHOTO_DIR=str(TMP)), _Fake() as fake, NoDb(), AsHeader():
         photostore.reset()
         with TestClient(app) as c:
             url = f"/api/sessions/{SID}/postcard"
 
             fake.session["closed_at"] = None
             r = c.post(url, headers=kim)
-            check("안 끝난 회차는 409", r.status_code == 409, f"{r.status_code} {r.text[:80]}")
+            check("안 끝난 회차는 409 · code not_closed",
+                  r.status_code == 409 and r.json().get("code") == "not_closed",
+                  f"{r.status_code} {r.text[:80]}")
+            check("409 본문에 detail 은 그대로 있다", bool(r.json().get("detail")), r.text[:80])
             fake.session["closed_at"] = "2026-09-24T10:10:00+09:00"
 
             frs = fake.session["fragments"]
             fake.session["fragments"] = frs[:1]
             r = c.post(url, headers=kim)
-            check("말씀이 없으면 409", r.status_code == 409, f"{r.status_code} {r.text[:80]}")
+            check("말씀이 없으면 409 · code no_answers",
+                  r.status_code == 409 and r.json().get("code") == "no_answers",
+                  f"{r.status_code} {r.text[:80]}")
             fake.session["fragments"] = frs
 
             r = c.post(url, headers={"X-User-Id": "park"})
             check("남의 회차는 404", r.status_code == 404, str(r.status_code))
             check("거절한 뒤에는 모델을 안 불렀다", fake.writes == 0, f"{fake.writes}번")
+
+            fake.insufficient = True
+            r = c.post(url, headers=kim)
+            check("자료 부족은 409 · code insufficient_material · 저장 안 함",
+                  r.status_code == 409 and r.json().get("code") == "insufficient_material"
+                  and fake.card is None, f"{r.status_code} {r.text[:80]}")
+            fake.insufficient = False
 
             r = c.post(url, headers=kim)
             check("구우면 200", r.status_code == 200, r.text[:160])
@@ -248,10 +330,12 @@ def test_routes():
             check("엽서 크기", (first.get("width"), first.get("height")) == (1500, 1000))
             check("저장소에 한 장", len(_blobs()) == 1, f"{len(_blobs())}장")
 
-            got = c.get(first.get("url", url))
-            check("쿠키만으로 받는다", got.status_code == 200
+            bare = c.get(first.get("url", url))
+            check("신원 없이 오면 401", bare.status_code == 401, str(bare.status_code))
+            got = c.get(first.get("url", url), headers=kim)
+            check("주인은 받는다", got.status_code == 200
                   and got.headers.get("content-type", "").startswith("image/jpeg"),
-                  f"{got.status_code} — <img src> 는 헤더를 못 싣는다")
+                  f"{got.status_code}")
             check("받은 바이트가 저장한 바이트", len(got.content) == first.get("bytes"))
             etag = got.headers.get("etag")
             again = c.get(url, headers={**kim, "If-None-Match": etag})
@@ -266,6 +350,11 @@ def test_routes():
             check("기록에 엽서가 딸려 온다", pc.get("url") == first.get("url"), str(pc))
             check("제목도 딸려 온다", pc.get("title") == "완행열차", str(pc))
             check("기록에도 저장 키는 안 나간다", "storage_key" not in pc)
+            check("본문 없이 구우면 구어체 · 응답과 기록에 style", first.get("style") == "spoken"
+                  and pc.get("style") == "spoken", f"{first.get('style')} {pc.get('style')}")
+            check("POST 응답의 created_at 이 기록의 created_at 과 같다 (busy 뒤 판단 기준)",
+                  bool(first.get("created_at")) and first.get("created_at") == pc.get("created_at"),
+                  f"{first.get('created_at')} {pc.get('created_at')}")
 
             r2 = c.post(url, headers=kim)
             second = r2.json() if r2.status_code == 200 else {}
@@ -274,12 +363,53 @@ def test_routes():
             check("옛 바이트를 지운다", len(_blobs()) == 1, f"{len(_blobs())}장")
             stale = c.get(url, headers={**kim, "If-None-Match": etag})
             check("옛 ETag 로는 304 가 안 난다", stale.status_code == 200, str(stale.status_code))
+            check("다시 구우면 created_at 이 바뀐다",
+                  second.get("created_at") not in (None, first.get("created_at")),
+                  f"{first.get('created_at')} → {second.get('created_at')}")
+
+            r = c.post(url, json={"style": "spoken"}, headers=kim)
+            check("style spoken 을 보내면 200 · spoken", r.status_code == 200
+                  and r.json().get("style") == "spoken", f"{r.status_code} {r.text[:80]}")
+
+            # 지원하지 않는 문체 — 모델을 부르지 않고, 옛 엽서를 건드리지 않는다.
+            writes, kept = fake.writes, dict(fake.card)
+            for v in ("novel", "cyworld", "essay", "Spoken", "", 3, ["spoken"]):
+                r = c.post(url, json={"style": v}, headers=kim)
+                check(f"style {v!r} → 400 · code unsupported_style",
+                      r.status_code == 400 and r.json() == {
+                          "detail": "지원하지 않는 문체예요.", "code": "unsupported_style"},
+                      f"{r.status_code} {r.text[:80]}")
+            check("거절한 문체로는 모델을 안 불렀다", fake.writes == writes, f"{fake.writes - writes}번")
+            check("거절한 뒤 옛 엽서가 그대로다", fake.card == kept)
+
+            r = c.post(url, content=b"{not json", headers={**kim, "Content-Type": "application/json"})
+            check("깨진 본문 → 400 · code 없음", r.status_code == 400
+                  and "code" not in r.json(), f"{r.status_code} {r.text[:80]}")
+            r = c.post(url, json=["spoken"], headers=kim)
+            check("객체가 아닌 본문 → 400 · code 없음", r.status_code == 400
+                  and "code" not in r.json(), f"{r.status_code} {r.text[:80]}")
 
             fake.fail = True
             r3 = c.post(url, headers=kim)
             check("행을 못 넣으면 503", r3.status_code == 503, str(r3.status_code))
             check("새 바이트를 되돌린다", len(_blobs()) == 1, f"{len(_blobs())}장")
             fake.fail = False
+
+            # 사진을 못 읽으면 종이로 바꿔 굽지 않는다 — 모델 전에 멈추고 옛 엽서를 둔다.
+            real_photo, writes, kept = postcard._photo, fake.writes, dict(fake.card)
+
+            async def unreadable(photo_id):
+                raise postcard.PhotoUnavailable("회차 사진을 읽지 못했습니다")
+            postcard._photo = unreadable
+            try:
+                r = c.post(url, headers=kim)
+            finally:
+                postcard._photo = real_photo
+            check("사진을 못 읽으면 503 · code photo_unavailable",
+                  r.status_code == 503 and r.json().get("code") == "photo_unavailable",
+                  f"{r.status_code} {r.text[:80]}")
+            check("사진을 못 읽으면 모델을 안 부르고 옛 엽서가 그대로다",
+                  fake.writes == writes and fake.card == kept and len(_blobs()) == 1)
 
         async def twice():
             fake.gate = asyncio.Event()
@@ -288,8 +418,8 @@ def test_routes():
             try:
                 await postcard.make(SID, "kim")
                 check("굽는 중에 또 누르면 409 쪽 오류", False, "두 번 썼다")
-            except postcard.PostcardNotReady:
-                check("굽는 중에 또 누르면 409 쪽 오류", True)
+            except postcard.PostcardNotReady as e:
+                check("굽는 중에 또 누르면 409 쪽 오류 · code busy", e.code == "busy", e.code)
             fake.gate.set()
             await a
             fake.gate = None
@@ -309,9 +439,80 @@ def test_routes():
     shutil.rmtree(TMP, ignore_errors=True)
 
 
+def test_inject():
+    """시험 서버의 실패 · 지연 주입. 모델 값 없이 화면의 busy · 실패 처리를 본다 (4-C1 §6)."""
+    print("\n[S6] 실패 · 지연 주입")
+
+    from fastapi.testclient import TestClient
+
+    from app.main import app
+
+    shutil.rmtree(TMP, ignore_errors=True)
+    kim = {"X-User-Id": "kim"}
+    url = f"/api/sessions/{SID}/postcard"
+    with _Env(AZURE_SPEECH_KEY="", PHOTO_STORE="local", PHOTO_DIR=str(TMP),
+              POSTCARD_FAIL_INJECT="off", POSTCARD_INJECT_DELAY="0"), _Fake() as fake, NoDb(), AsHeader():
+        photostore.reset()
+        with TestClient(app) as c:
+            first = c.post(url, headers=kim).json()
+            kept, writes = dict(fake.card), fake.writes
+
+            with _Env(POSTCARD_FAIL_INJECT="generation_failed"):
+                r = c.post(url, headers=kim)
+                check("generation_failed → 503", r.status_code == 503, f"{r.status_code} {r.text[:80]}")
+                check("503 안내는 실제 실패와 같다 — 주입 이름이 새지 않는다",
+                      "INJECT" not in r.text, r.text[:80])
+            with _Env(POSTCARD_FAIL_INJECT="insufficient_material"):
+                r = c.post(url, headers=kim)
+                check("insufficient_material → 409 · code insufficient_material",
+                      r.status_code == 409 and r.json().get("code") == "insufficient_material",
+                      f"{r.status_code} {r.text[:80]}")
+            check("주입한 실패는 모델을 안 부른다", fake.writes == writes, f"{fake.writes - writes}번")
+            check("주입한 실패 뒤 옛 엽서가 그대로다 (행 · 바이트)",
+                  fake.card == kept and len(_blobs()) == 1, f"{len(_blobs())}장")
+            rec = c.get(f"/api/sessions/{SID}/record", headers=kim).json()["postcard"]
+            check("기록은 옛 엽서의 created_at · 주소 · 문체를 준다",
+                  (rec["created_at"], rec["url"], rec["style"])
+                  == (first["created_at"], first["url"], "spoken"), str(rec))
+
+            with _Env(POSTCARD_FAIL_INJECT="generation_failed"):
+                r = c.post(url, json={"style": "novel"}, headers=kim)
+                check("문체 거절이 주입보다 먼저다 (400)", r.status_code == 400
+                      and r.json().get("code") == "unsupported_style", f"{r.status_code}")
+
+        async def overlap():
+            """늦추는 동안 또 누르면 busy, 첫 요청은 걸어 둔 실패로 끝난다."""
+            a = asyncio.create_task(postcard.make(SID, "kim"))
+            await asyncio.sleep(0.1)
+            try:
+                await postcard.make(SID, "kim")
+                check("늦추는 동안 또 누르면 busy", False, "두 번 들어갔다")
+            except postcard.PostcardNotReady as e:
+                check("늦추는 동안 또 누르면 busy", e.code == "busy", e.code)
+            try:
+                await a
+                check("늦춘 뒤 걸어 둔 실패로 끝난다", False, "성공했다")
+            except postcard.PostcardUnavailable:
+                check("늦춘 뒤 걸어 둔 실패로 끝난다", True)
+            check("끝나면 busy 가 풀린다", SID not in postcard._busy)
+
+        with _Env(POSTCARD_FAIL_INJECT="generation_failed", POSTCARD_INJECT_DELAY="0.4"):
+            asyncio.run(overlap())
+        check("겹친 요청도 모델을 안 부른다", fake.writes == writes, f"{fake.writes - writes}번")
+
+    with _Env(POSTCARD_FAIL_INJECT="nonsense"):
+        check("모르는 주입 값은 끈 것으로 읽는다", postcard.inject() == "")
+    for v, want in (("999", postcard.INJECT_DELAY_MAX), ("-5", 0.0), ("", 0.0)):
+        with _Env(POSTCARD_INJECT_DELAY=v):
+            check(f"늦추기 {v!r} → {want}초", postcard.inject_delay() == want, str(postcard.inject_delay()))
+
+    photostore.reset()
+    shutil.rmtree(TMP, ignore_errors=True)
+
+
 def test_auto():
-    """회차가 닫히면 엽서를 굽는다. 떠난 회차 · 힘든 기억은 굽지 않는다."""
-    print("\n[4] 닫히면 자동으로 굽는다")
+    """회차가 닫히면 closed_fn 이 불린다. 서버의 closed_fn(on_closed)은 엽서를 굽지 않는다."""
+    print("\n[4] 닫혀도 굽지 않는다")
     from app.session.controller import SessionController
 
     async def run():
@@ -364,29 +565,19 @@ def test_auto():
 
     async def fake_make(sid, uid):
         made.append(sid)
-        if sid == "boom":
-            raise RuntimeError("터졌다")
-        if sid == "down":
-            raise store.StoreUnavailable("DB 없음")
         return {}
 
     postcard.make = fake_make
     try:
-        for reason in ("expired", "sensitive"):
-            asyncio.run(postcard.auto("skip-" + reason, "u", reason))
-        asyncio.run(postcard.auto("ok", "u", "finish"))
-        err = None
-        try:
-            asyncio.run(postcard.auto("boom", "u", "abort"))
-            asyncio.run(postcard.auto("down", "u", "info_complete"))
-        except Exception as e:                                   # noqa: BLE001
-            err = f"{type(e).__name__}: {e}"
+        for reason in ("abort", "user_request", "info_complete", "max_turn", "expired", "sensitive"):
+            asyncio.run(postcard.on_closed("s-" + reason, "u", reason))
     finally:
         postcard.make = real
-    check("떠난 회차 · 힘든 기억은 굽지 않는다",
-          not any(s.startswith("skip-") for s in made), str(made))
-    check("그 밖의 사유는 굽는다", "ok" in made, str(made))
-    check("굽다 실패해도 예외가 새지 않는다", err is None, err or "")
+    check("어떤 사유로 닫혀도 굽지 않는다", made == [], str(made))
+
+    import app.main as main
+    check("서버는 on_closed 를 건다 — 마지막 말씀의 판단은 그대로 남긴다",
+          "closed_fn=postcard.on_closed" in Path(main.__file__).read_text(encoding="utf-8"))
 
 
 def test_material():
@@ -488,37 +679,110 @@ def test_closing():
           saved == [{"facts_found": ["말씀 1"]}] and asked[-1] == 1, f"{asked} {saved}")
 
 
+def _out(**kv) -> dict:
+    """엽서.md §8-2 의 8키 응답. 기본은 ready."""
+    out = {"status": "ready", "title": "", "body": "", "sources": [], "to_confirm": [],
+           "missing_context": [], "coverage_notes": [], "caption": ""}
+    out.update(kv)
+    return out
+
+
 def test_checked():
     print("\n[6] 출처 검사 — 문장은 그대로, 틀린 출처만 버린다")
-    card = postcard.parse({
-        "status": "completed", "title": "부산 환갑",
-        "body": "부산에서 환갑 잔치를 했어요.\n온 식구가 모였어요.\n참 좋았어요.",
-        "caption": "", "changed_fields": [], "confirmation_questions": [],
-        "sources": [{"sentence": 0, "turns": [2]}, {"sentence": 1, "turns": [9]},
-                    {"sentence": 2, "turns": [1, 2]}],
-    })
+    card = postcard.parse(_out(
+        title="부산 환갑",
+        body="부산에서 환갑 잔치를 했어요.\n온 식구가 모였어요.\n참 좋았어요.",
+        sources=[{"sentence": 0, "turns": [2]}, {"sentence": 1, "turns": [9]},
+                 {"sentence": 2, "turns": [1, 2]}],
+    ))
     check("본문은 줄바꿈으로 나눈다", len(card.sentences) == 3, str(card.sentences))
     out = postcard.checked(card, {1, 2})
     check("없는 턴을 가리키는 문장도 남긴다", out.sentences == card.sentences, str(out.sentences))
     check("그 출처만 버린다", out.sources == [
         {"sentence": 0, "turns": [2]}, {"sentence": 2, "turns": [1, 2]}], str(out.sources))
 
-    one = postcard.parse({"status": "completed", "title": "", "caption": "",
-                          "body": "환갑이었어요. 부산이었어요.", "sources": []})
+    one = postcard.parse(_out(body="환갑이었어요. 부산이었어요."))
     check("한 줄로 오면 마침표에서 나눈다", len(one.sentences) == 2, str(one.sentences))
     check("근거가 하나도 없어도 굽는다", postcard.checked(one, {1}).sentences == one.sentences)
     try:
         postcard.checked(postcard.Card(title="", sentences=[], caption="", sources=[]), {1})
         check("본문이 비면 409 쪽 오류", False, "구웠다")
-    except postcard.PostcardNotReady:
-        check("본문이 비면 409 쪽 오류", True)
+    except postcard.PostcardInsufficient as e:
+        check("본문이 비면 409 쪽 오류 · 자료 부족과 같은 code", e.code == "insufficient_material")
+
+    print("\n[6] 굽는 것은 ready 뿐이다")
     try:
-        postcard.parse({"status": "needs_confirmation", "confirmation_questions": ["?"]})
-        check("자동 생성에서 확인 요청은 503 쪽 오류", False, "통과했다")
-    except postcard.PostcardUnavailable:
-        check("자동 생성에서 확인 요청은 503 쪽 오류", True)
+        postcard.parse(_out(status="insufficient_material", coverage_notes=["말씀이 없음"]))
+        check("자료 부족은 409 쪽 · 실패와 다른 오류", False, "통과했다")
+    except postcard.PostcardInsufficient:
+        check("자료 부족은 409 쪽 · 실패와 다른 오류", True)
+    for status, key in (("needs_confirmation", "to_confirm"), ("needs_context", "missing_context")):
+        reasons = [{"issue": "누구의 일인지", "turns": [2]}] if key == "to_confirm" else ["원문 없음"]
+        try:
+            postcard.parse(_out(status=status, **{key: reasons}))
+            got = None
+        except postcard.PostcardNotFinal as e:
+            got = e
+        check(f"{status} — 503 쪽 오류 · 상태와 사유를 구분해 들고 간다",
+              isinstance(got, postcard.PostcardUnavailable) and got.status == status
+              and got.reasons == reasons, repr(got))
+    for status in ("completed", ""):
+        try:
+            postcard.parse(_out(status=status))
+            check(f"모르는 status {status!r} 는 503 쪽 오류", False, "통과했다")
+        except postcard.PostcardNotFinal:
+            check(f"모르는 status {status!r} 는 503 쪽 오류", False, "확인 필요로 읽었다")
+        except postcard.PostcardUnavailable:
+            check(f"모르는 status {status!r} 는 503 쪽 오류", True)
+
     p = postcard._prompt()
-    check("프롬프트는 문서의 코드 블록 안이다", p.startswith("당신은 사용자 기억을") and "```" not in p, p[:20])
+    check("프롬프트는 엽서_v3.md 의 실행 절이다 (§2 · §5 · §5-1 · §7-4 · §8-2)",
+          postcard.PROMPT.name == "엽서_v3.md"
+          and p.startswith("당신은 한국어 인생기록 서비스") and "사진 속 기억을 담은" in p
+          and "위 8개 키만 반환한다" in p and "문자 수는 NFC" in p and "상태 우선순위" in p, p[:30])
+    check("다른 역할 절은 싣지 않는다", "자서전 담당" not in p)
+    check("울타리 줄(``` · ~~~)은 싣지 않는다", "~~~" not in p and "```" not in p)
+
+
+def test_list():
+    """목록은 has_postcard · postcard_title 을 싣고, ?has_postcard=1 이면 엽서 있는 회차만 준다."""
+    print("\n[8] 목록에서 엽서 있는 회차 거르기")
+    from fastapi.testclient import TestClient
+
+    from app.main import app
+
+    rows = [{"session_id": "a", "has_postcard": True, "postcard_title": "처음 연 가게"},
+            {"session_id": "b", "has_postcard": False, "postcard_title": None}]
+    got: list[tuple] = []
+    real = store.list_sessions
+
+    async def fake_list(user_id, limit=20, has_postcard=False, elder_id=None):
+        got.append((user_id, limit, has_postcard))
+        return [r for r in rows if r["has_postcard"]] if has_postcard else rows
+
+    store.list_sessions = fake_list
+    try:
+        with _Env(AZURE_SPEECH_KEY=""), NoDb(), AsHeader(), TestClient(app) as c:
+            kim = {"X-User-Id": "kim"}
+            r = c.get("/api/sessions", headers=kim)
+            check("옵션이 없으면 예전처럼 전부 · 회차마다 has_postcard",
+                  r.status_code == 200 and r.json()["sessions"] == rows and got[-1] == ("kim", 20, False),
+                  f"{r.status_code} {got[-1:]}")
+            r = c.get("/api/sessions?has_postcard=1&limit=50", headers=kim)
+            check("has_postcard=1 이면 엽서 있는 회차만",
+                  r.status_code == 200 and [s["session_id"] for s in r.json()["sessions"]] == ["a"]
+                  and got[-1] == ("kim", 50, True), f"{r.status_code} {got[-1:]}")
+            check("엽서가 없어도 postcard_title 칸은 빠지지 않고 null 이다",
+                  all("postcard_title" in s for s in c.get("/api/sessions", headers=kim).json()["sessions"])
+                  and c.get("/api/sessions", headers=kim).json()["sessions"][1]["postcard_title"] is None)
+    finally:
+        store.list_sessions = real
+
+    sql = Path(store.__file__).read_text(encoding="utf-8")
+    check("거르는 것은 DB 다 — limit 안에서 거르면 다시 밀린다",
+          "AND p.session_id IS NOT NULL" in sql)
+    check("엽서 제목은 목록 SQL 이 엽서 표에서 같이 읽는다 (/record 의 postcard.title 과 같은 열)",
+          "p.title AS postcard_title" in sql and '"postcard_title": r["postcard_title"]' in sql)
 
 
 def test_all_checks_passed():
@@ -529,12 +793,15 @@ def test_all_checks_passed():
 def main() -> int:
     print("기억의 조각 — 엽서 검증")
     test_compose()
+    test_photo_branches()
     test_key()
     test_routes()
+    test_inject()
     test_auto()
     test_material()
     test_checked()
     test_closing()
+    test_list()
     print(f"\n{'=' * 52}\n통과 {len(PASS)} · 실패 {len(FAIL)}")
     if FAIL:
         print("실패:", ", ".join(FAIL))
