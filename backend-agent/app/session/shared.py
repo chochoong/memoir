@@ -45,7 +45,11 @@ log = logging.getLogger("shared")
 
 # 문서 §0 「상태값」 참조. emotion 만 not_mentioned 를 더 쓴다 —
 # 어르신이 감정을 말씀하지 않은 것은 정보가 빠진 것과 다르다.
-INFO_KEYS = ("event", "when", "who", "place", "emotion")
+#
+# how · why 는 육하원칙 판(인터뷰_육하원칙.md)이 적어 오는 두 칸이다. 첫 상태(initial)
+# 에는 넣지 않는다 — v3 에게 모르는 칸을 보이지 않으려는 것이다. 모델이 적어 올
+# 때만 쌓이고, 육하원칙 판은 「없는 칸은 missing」으로 읽는다.
+INFO_KEYS = ("event", "when", "who", "place", "how", "why", "emotion")
 
 NO_SENSE = "없음"
 SENSES = ("시각", "청각", "후각", "미각", "촉각")

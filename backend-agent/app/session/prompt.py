@@ -41,6 +41,7 @@ from __future__ import annotations
 
 import json
 import logging
+import os
 import re
 from dataclasses import dataclass
 from functools import lru_cache
@@ -49,7 +50,20 @@ from pathlib import Path
 log = logging.getLogger("prompt")
 
 # app/session/prompt.py → backend-agent/
-DOC = Path(__file__).resolve().parents[2] / "첨부프롬프트_md" / "인터뷰_v3.md"
+_DIR = Path(__file__).resolve().parents[2] / "첨부프롬프트_md"
+DOC = _DIR / "인터뷰_v3.md"
+
+
+def _doc() -> Path:
+    """
+    읽을 판. INTERVIEW_PROMPT 로 같은 폴더의 다른 판(예: 인터뷰_육하원칙.md)을 고른다.
+    실험본을 운영과 같은 코드로 시험하려고 둔 것이다. 비우면 지금 판이다.
+
+    파일 **이름만** 받는다 — 경로를 받으면 폴더 밖 아무 파일이나 지시로 읽게 된다.
+    load() 안에서 읽는다. import 때 읽으면 .env 가 아직 안 올라왔을 수 있다.
+    """
+    name = Path(os.environ.get("INTERVIEW_PROMPT") or "").name
+    return _DIR / name if name else DOC
 
 COMMON = "0"            # 공통 지시어
 INTERVIEW = "1"         # 인터뷰 에이전트
@@ -139,25 +153,26 @@ def load() -> Prompt:
 
     문서가 없거나 모양이 다르면 PromptError 로 죽는다 — 위 2번 참조.
     """
+    doc = _doc()
     try:
-        text = DOC.read_text(encoding="utf-8")
+        text = doc.read_text(encoding="utf-8")
     except FileNotFoundError as e:
-        raise PromptError(f"프롬프트 문서를 찾을 수 없다: {DOC}") from e
+        raise PromptError(f"프롬프트 문서를 찾을 수 없다: {doc}") from e
     except UnicodeDecodeError as e:
-        raise PromptError(f"프롬프트 문서가 UTF-8 이 아니다: {DOC}") from e
+        raise PromptError(f"프롬프트 문서가 UTF-8 이 아니다: {doc}") from e
 
     blocks = _blocks(text)
     missing = [n for n in (COMMON, INTERVIEW) if not blocks.get(n)]
     if missing:
         raise PromptError(
-            f"{DOC.name} 에 §{' · §'.join(missing)} 의 ``` 블록이 없다 "
+            f"{doc.name} 에 §{' · §'.join(missing)} 의 ``` 블록이 없다 "
             f"(찾은 절: {sorted(blocks) or '없음'})")
 
     head, block = _split_state(blocks[COMMON])
     system = f"{head}\n\n{blocks[INTERVIEW]}"
 
     log.info("프롬프트 로드 — %s (지시 %d자 · 상태틀 %d자)",
-             DOC.name, len(system), len(block))
+             doc.name, len(system), len(block))
     return Prompt(system=system, state_block=block)
 
 
