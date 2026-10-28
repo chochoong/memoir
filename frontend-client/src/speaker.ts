@@ -1,5 +1,10 @@
 // 낭독 — 서버가 만든 mp3 를 틀고, 끝나면 알려준다
 //
+// **두 갈래다.** 평소(Azure)는 파일 하나를 <audio> 로 튼다 — play(). 서버가
+// 흘려 읽기(TTS_STREAM)면 날 PCM 조각을 받는 대로 Web Audio 에 이어 붙인다 —
+// playStream(). Gemini 는 다 만드는 데 2~3초라, 다 받고 틀면 늘 늦는다.
+// 첫 조각은 1초 안팎에 온다.
+//
 // **iOS 사파리는 사용자 동작 없이 소리를 내주지 않는다.** 그래서 회차를 여는
 // 탭에서 `unlock()` 을 한 번 부른다. 무음 wav 를 아주 잠깐 틀어 두면 그 뒤로는
 // 같은 <audio> 요소로 언제든 소리를 낼 수 있다. 요소를 매번 새로 만들면 잠금이
@@ -21,6 +26,39 @@ const SILENCE =
 
 let el: HTMLAudioElement | null = null
 let unlocked = false
+
+// 흘려 읽기용. <audio> 와 따로 잠금을 풀어야 한다 — 사파리는 AudioContext 를
+// 사용자 동작 안에서 resume 해야 소리를 낸다. 하나를 만들어 끝까지 돌려쓴다.
+let ctx: AudioContext | null = null
+/** 지금 흘려 읽는 중이면 그걸 끊는 함수. */
+let streamStop: (() => void) | null = null
+
+function audioCtx(): AudioContext {
+  if (!ctx) {
+    const AC = window.AudioContext
+      ?? (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext
+    ctx = new AC()
+  }
+  return ctx
+}
+
+/**
+ * AudioContext 잠금을 푼다. 사용자 동작 안에서 불려야 한다 (unlock 이 부른다).
+ * 1표본짜리 무음 버퍼를 한 번 틀어 두는 것이 iOS 에서 확실한 방법이다.
+ */
+async function unlockCtx(): Promise<void> {
+  try {
+    const c = audioCtx()
+    if (c.state !== 'running') await c.resume()
+    const b = c.createBuffer(1, 1, 22050)
+    const src = c.createBufferSource()
+    src.buffer = b
+    src.connect(c.destination)
+    src.start(0)
+  } catch (e) {
+    logbook.warn('소리', `AudioContext 잠금 해제 실패 · ${why(e)}`)
+  }
+}
 
 /** 지금 돌고 있는 재생의 뒷정리. 새 재생이 끼어들면 이걸로 먼저 매듭짓는다. */
 let settle: ((finished: boolean) => void) | null = null
@@ -50,6 +88,8 @@ function why(e: unknown): string {
  * 들리는 것은 없다.
  */
 export async function unlock(): Promise<boolean> {
+  // 흘려 읽기 쪽은 매번 확인한다. 화면을 덮었다 열면 사파리가 다시 재운다.
+  if (!ctx || ctx.state !== 'running') void unlockCtx()
   if (unlocked) return true
   const a = element()
   // 낭독이 돌고 있으면 손대지 않는다. src 를 갈아 끼우면 그 재생이 죽는다.
@@ -123,7 +163,102 @@ export function play(blob: Blob): Promise<Spoken> {
   })
 }
 
+/**
+ * 흘려 오는 낭독을 받는 대로 튼다. 응답 본문은 날 PCM 16비트 모노 리틀엔디언,
+ * rate 는 Content-Type 의 `rate=` 다.
+ *
+ * 되돌려주는 약속은 play() 와 같다 — **마지막 조각까지 다 틀어야** 풀린다.
+ * 다 받은 때가 아니다. 받기는 재생보다 먼저 끝나므로, 그 시각에 tts-done 을
+ * 올리면 어르신 귀에는 아직 말이 남았는데 수음이 열려 스피커 소리가 첫마디로
+ * 들어간다.
+ *
+ * **조각 사이가 비면(언더런) 그만큼 늦춰 이어 튼다.** 조각이 재생보다 늦게
+ * 온 것이다. 실측에서는 없었지만 망이 흔들리면 생길 수 있어, 몇 번 났는지
+ * 로그에 남긴다 — 말이 중간에 끊겨 들렸다면 여기 숫자가 올라가 있다.
+ */
+export async function playStream(res: Response): Promise<Spoken> {
+  settle?.(false)
+  streamStop?.()
+
+  const c = audioCtx()
+  if (c.state !== 'running') {
+    try { await c.resume() } catch { /* 아래에서 말한다 */ }
+  }
+  if (c.state !== 'running') throw new Error(`재생 거부 · AudioContext ${c.state}`)
+
+  const rate = Number(/rate=(\d+)/.exec(res.headers.get('content-type') ?? '')?.[1] ?? 24000)
+  const reader = res.body!.getReader()
+  const sources: AudioBufferSourceNode[] = []
+  const LEAD = 0.06              // 첫 조각 앞 여유(초). 스케줄이 지금보다 앞서면 앞이 잘린다
+  const t0 = performance.now()
+  let next = 0
+  let gaps = 0
+  let stopped = false
+  let odd: Uint8Array | null = null   // 조각 경계가 표본 한가운데 걸리면 남는 1바이트
+
+  const stop = () => {
+    if (stopped) return
+    stopped = true
+    reader.cancel().catch(() => {})
+    for (const s of sources) { try { s.stop() } catch { /* 아직 시작 전 */ } }
+  }
+  streamStop = stop
+
+  try {
+    for (;;) {
+      const { value, done } = await reader.read()
+      if (done || stopped) break
+      let bytes = value
+      if (odd) {
+        const m = new Uint8Array(odd.length + bytes.length)
+        m.set(odd); m.set(bytes, odd.length)
+        bytes = m; odd = null
+      }
+      if (bytes.length % 2) { odd = bytes.slice(-1); bytes = bytes.subarray(0, bytes.length - 1) }
+      if (!bytes.length) continue
+
+      const n = bytes.length / 2
+      const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength)
+      const buf = c.createBuffer(1, n, rate)
+      const ch = buf.getChannelData(0)
+      for (let i = 0; i < n; i++) ch[i] = view.getInt16(i * 2, true) / 32768
+
+      const src = c.createBufferSource()
+      src.buffer = buf
+      src.connect(c.destination)
+      const now = c.currentTime
+      if (!next) {
+        next = now + LEAD
+        logbook.dim('낭독', `첫 소리 · 받기 시작 후 ${(performance.now() - t0).toFixed(0)}ms`
+          + ` · ${rate}Hz · ${res.headers.get('x-speech-source') ?? '?'}`)
+      } else if (next < now + 0.005) {
+        gaps++
+        next = now + 0.02
+      }
+      src.start(next)
+      next += buf.duration
+      sources.push(src)
+    }
+  } catch (e) {
+    if (!stopped) { stop(); streamStop = null; throw new Error(`받다 끊김 · ${why(e)}`) }
+  }
+
+  // 받기는 끝났다. 마지막 조각이 다 울릴 때까지 기다린다.
+  const last = sources[sources.length - 1]
+  if (last && !stopped) {
+    await new Promise<void>(r => {
+      last.onended = () => r()
+      // 끊기면(stop) onended 가 바로 온다. 혹시 안 와도 매달리지 않게 시계로 한 번 더.
+      window.setTimeout(r, Math.max(0, (next - c.currentTime) * 1000) + 500)
+    })
+  }
+  if (streamStop === stop) streamStop = null
+  logbook.log('낭독', `흘려 읽기 · ${sources.length}조각${gaps ? ` · 끊김 ${gaps}번` : ''}`)
+  return { finished: !stopped }
+}
+
 /** 어르신이 낭독을 건너뛰었다. play() 의 약속은 finished=false 로 풀린다. */
 export function stop(): void {
   if (el && !el.paused) el.pause()
+  streamStop?.()
 }
