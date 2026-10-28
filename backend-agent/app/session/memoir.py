@@ -18,6 +18,12 @@
 **빼기 요청에는 개수 상한이 없다** (최충 · 태헌 10-28). 어느 쪽이든 응답의
 run.session_ids 에 실제로 쓴 회차를 전부 싣는다 — 화면이 늦게 온 결과를 알아본다.
 
+**쓰는 엔진은 둘이다** (MEMOIR_ENGINE). 비우거나 single 이면 위의 한 번 호출, pipeline 이면
+다섯 단계(memoir_pipeline.run · 단위 8S 연결). 고르기 · 조회 · 합치기는 같다. 파이프라인 결과는
+7-C1 §3 모양(장 · 문단 · 문장, body · sources 는 장을 펼친 것)으로 바꿔 내보낸다
+(pipeline_result). 일부 장 실패는 503 incomplete (태헌 10-26 A — 장 내용 없이). 실행 기록은
+메모리에만 두고 디스크에 남기지 않는다 — 원문이 들어 있다 (8P 인계 5번, 보관 정책 미정).
+
 **저장하지 않는다.** 초안은 응답으로만 나간다. 자서전 표도, 작업 ID 도 없다.
 
 **전역 턴은 이 요청 안에서만 뜻이 있다.** 회차마다 턴이 1부터라 그대로 합치면
@@ -148,6 +154,15 @@ class NotFinal(MemoirError):
         super().__init__(f"{status} — {json.dumps(reasons, ensure_ascii=False)[:200]}")
         self.status = status
         self.reasons = reasons
+
+
+class Incomplete(MemoirError):
+    """파이프라인의 일부 장이 실패했다 (partial). 503 incomplete — 만든 장도 내보내지 않는다."""
+
+
+def engine() -> str:
+    """MEMOIR_ENGINE — pipeline 이 아니면 전부 single (예전 한 번 호출)."""
+    return "pipeline" if env_str("MEMOIR_ENGINE").strip().lower() == "pipeline" else "single"
 
 
 def inject() -> str:
@@ -509,6 +524,8 @@ async def preview_all(elder_id, exclude, user_id: str, style: str = "spoken") ->
 
 async def _draft(ids: list[str], user_id: str, style: str) -> dict:
     recs = await collect(ids, user_id)
+    if engine() == "pipeline":
+        return await _draft_pipeline(recs, ids, style)
     data, turn_map = merge(recs)
     turns = {t["global_turn"] for t in turn_map}
     log.info("자서전 요청 — 회차 %d개 %s · 말씀 %d턴 · 모델 %s",
@@ -519,3 +536,85 @@ async def _draft(ids: list[str], user_id: str, style: str) -> dict:
              out["status"], len(out["body"].split("\n")) if out["body"] else 0,
              len(out["to_confirm"]), out["coverage_notes"])
     return {**{k: out[k] for k in SHOWN}, "style": style, "run": {"session_ids": ids}}
+
+
+# ---------------------------------------------------------------- 다섯 단계 (MEMOIR_ENGINE=pipeline)
+
+
+async def _draft_pipeline(recs: list[dict], ids: list[str], style: str) -> dict:
+    """
+    다섯 단계로 쓴다. 입력은 한 번 호출과 같은 merge 다 (memoir_pipeline.build_input 과 같다).
+
+    로그에는 회차 수 · 단계별 시간 · 결과 상태만 남긴다. 원문 · 본문은 남기지 않는다.
+    """
+    from . import memoir_pipeline as mp
+    import time
+
+    data, turn_map = merge(recs)
+    hook = inject()
+    if hook == INJECT_FAILED:
+        raise GenerationFailed("MEMOIR_FAIL_INJECT=generation_failed")
+    if hook == INJECT_TIMEOUT:
+        raise GenerationTimeout("MEMOIR_FAIL_INJECT=generation_timeout")
+    rec = mp.Recorder()                      # folder 없음 — 메모리에만
+    t0 = time.monotonic()
+    log.info("자서전 다섯 단계 요청 — 회차 %d개 %s · 말씀 %d턴 · 모델 %s", len(ids),
+             ",".join(s[:8] for s in ids), len(turn_map), mp.settings()["MEMOIR_PIPE_TEXT_MODEL"])
+    res = await mp.run(data, turn_map, recorder=rec)
+    try:
+        steps = json.loads(rec.files.get("run.json", "{}")).get("steps", [])
+    except ValueError:
+        steps = []
+    log.info("자서전 다섯 단계 응답 — %s · %.1f초 · 호출 %d · 단계 %s · 검증 %s · 실패 %s",
+             res["generation_state"], time.monotonic() - t0, res.get("calls", 0),
+             " ".join(f"{x['stage']}{'/' + x['chapter_key'] if x.get('chapter_key') else ''}"
+                      f"={x['ms'] / 1000:.1f}s" for x in steps),
+             (res.get("verification") or {}).get("state"),
+             json.dumps(res.get("failure"), ensure_ascii=False)[:200] if res.get("failure") else "-")
+    return pipeline_result(res, ids, style)
+
+
+def pipeline_result(res: dict, ids: list[str], style: str) -> dict:
+    """
+    파이프라인 result → 7-C1 §3 응답. 고치지 않는다 — 모양이 어긋나면 502 다.
+
+    generated     → 200 ready (검증 실패 · 사람 검토 전이어도 생성된 글이다. verification.state 로 남긴다)
+    insufficient  → 200 insufficient_material
+    partial       → 503 incomplete
+    needs_context → 503 not_final
+    failed        → 시간(timeout · budget)이면 504, 그 밖은 502
+    """
+    from . import memoir_pipeline as mp
+
+    state = res.get("generation_state")
+    run = {"session_ids": ids, "chapters_requested": 0}
+    if state == mp.INSUFFICIENT:
+        return {"status": INSUFFICIENT, "style": style, "title": "", "chapters": [], "to_confirm": [],
+                "body": "", "sources": [], "run": run}
+    failure = res.get("failure") or {}
+    if state == mp.PARTIAL:
+        raise Incomplete(f"partial — {failure.get('stage')}/{failure.get('chapter_key')} {failure.get('kind')}")
+    if state == mp.NEEDS_CONTEXT:
+        raise NotFinal("needs_context", [failure.get("message", "")])
+    if state != mp.GENERATED:
+        why = f"{state} — {failure.get('stage')} {failure.get('kind')} {str(failure.get('message', ''))[:120]}"
+        if failure.get("kind") in ("timeout", "budget"):
+            raise GenerationTimeout(why)
+        raise GenerationFailed(why)
+    try:
+        title = res["title"]["text"].strip()
+        chapters = [{"no": i, "title": ch["title"]["text"].strip(), "status": "ready",
+                     "paragraphs": [{"sentences": [{"text": x["text"].strip(), "turns": list(x.get("turns") or [])}
+                                                   for x in para]} for para in ch["paragraphs"]]}
+                    for i, ch in enumerate(res["chapters"], start=1)]
+    except (KeyError, TypeError, AttributeError) as e:
+        raise GenerationFailed(f"파이프라인 결과 모양이 다르다 ({type(e).__name__}: {e})") from e
+    flat = [x for ch in chapters for p in ch["paragraphs"] for x in p["sentences"]]
+    if not title or not chapters or not flat or not all(x["text"] for x in flat):
+        raise GenerationFailed("파이프라인 결과에 제목 · 장 · 문장이 비었다")
+    run["chapters_requested"] = len(chapters)
+    return {"status": READY, "style": style, "title": title, "chapters": chapters, "to_confirm": [],
+            "body": "\n".join(x["text"] for x in flat),
+            "sources": [{"sentence": i, "turns": x["turns"]} for i, x in enumerate(flat)],
+            "verification": {"state": (res.get("verification") or {}).get("state") or "not_run"},
+            "run": run}

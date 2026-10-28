@@ -49,7 +49,7 @@ from . import memoir
 from .conf import env_float, env_int, env_str
 
 PROMPTS = Path(__file__).resolve().parents[2] / "첨부프롬프트_md"
-COMMON_DOC = PROMPTS / "자서전_v2.md"
+COMMON_DOC = PROMPTS / "자서전_v4.md"
 ROLE_DIR = PROMPTS / "파이프라인"
 # v1 — 첫 실측(fe94baf). v2 — 구성 · 제외(9231a70). v3 — 편집 메모 작업 종류 · 장 분할 원칙 ·
 # 목차 메모 혼입 방지(5ae6c1c · d3deb2b). v4 — 1인칭 회고 수필체 · 사건과 끈 · code_gate(84c2f11).
@@ -225,7 +225,7 @@ def settings() -> dict:
 
 
 def common_rules() -> str:
-    """자서전_v2.md 의 「## 2. 공통 지침」 절 본문만. 다른 절은 장 구조와 부딪혀 싣지 않는다."""
+    """자서전_v4.md 의 「## 2. 공통 지침」 절 본문만. 다른 절은 장 구조와 부딪혀 싣지 않는다."""
     try:
         doc = COMMON_DOC.read_text(encoding="utf-8")
     except OSError as e:

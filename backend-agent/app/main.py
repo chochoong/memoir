@@ -885,6 +885,7 @@ _MEMOIR_STATUS = (
     (memoir.SourceUnavailable, 422, "source_unavailable"),
     (memoir.GenerationTimeout, 504, "generation_timeout"),
     (memoir.GenerationFailed, 502, "invalid_model_output"), (memoir.NotFinal, 503, "not_final"),
+    (memoir.Incomplete, 503, "incomplete"),     # 다섯 단계의 일부 장 실패 — 화면은 「일부 장」 안내 (태헌 10-26 A)
 )
 
 

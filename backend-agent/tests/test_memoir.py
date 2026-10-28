@@ -677,6 +677,102 @@ def test_exclude():
                   r2.status_code == 200 and r2.json() == {"sessions": []}, f"{r2.status_code} {r2.text[:80]}")
 
 
+def test_pipeline_engine():
+    print("\n[다섯 단계] MEMOIR_ENGINE=pipeline — 같은 고르기 · 7-C1 §3 응답 (단위 8S)")
+    from fastapi.testclient import TestClient
+
+    from app.main import app
+    from app.session import memoir_pipeline as mp
+
+    url = "/api/memoirs/preview"
+    me = {"X-User-Id": ME}
+    base = json.loads((ROOT / "tests" / "data" / "v5_edit_pro_20261027T024949Z" / "result.json")
+                      .read_text(encoding="utf-8"))
+    done = {**base, "generation_state": mp.GENERATED, "verification": {"state": "completed"}}
+
+    def failed(r, code: str) -> bool:
+        body = r.json()
+        return set(body) == {"detail", "code"} and body["code"] == code
+
+    saved_run = mp.run
+    calls: list[tuple[dict, list]] = []
+    out = {"res": done}
+
+    async def run(data, turn_map, **kv):
+        calls.append((data, turn_map))
+        return copy.deepcopy(out["res"])
+
+    mp.run = run
+    try:
+        with _Env(AZURE_SPEECH_KEY="", GEMINI_API_KEY="", MEMOIR_FAIL_INJECT="off", MEMOIR_ENGINE="pipeline"),                 _Fake() as fake, NoDb(), AsHeader(), TestClient(app) as c:
+            three = fake.pick("s-a", "s-b", "s-c")
+            r = c.post(url, json=three, headers=me)
+            body = r.json()
+            ch = base["chapters"][0]
+            check("200 · status ready · 장 · 문단 · 문장 (7-C1 §3)",
+                  r.status_code == 200 and body["status"] == "ready" and body["title"] == base["title"]["text"]
+                  and body["chapters"][0]["title"] == ch["title"]["text"]
+                  and body["chapters"][0]["paragraphs"][0]["sentences"][0]["text"] == ch["paragraphs"][0][0]["text"],
+                  f"{r.status_code} {r.text[:100]}")
+            n = sum(len(p) for c_ in base["chapters"] for p in c_["paragraphs"])
+            check("body · sources 는 장을 펼친 것 — 문장 수가 같다",
+                  len(body["body"].split("\n")) == n == len(body["sources"]), f"{n}")
+            check("run — 실제로 쓴 회차 · 장 수", body["run"] == {"session_ids": three["session_ids"],
+                                                         "chapters_requested": len(base["chapters"])})
+            check("모델 쪽 메모 (facts · kind · diagnosis · 검증 이슈) 는 내보내지 않는다",
+                  "facts" not in r.text and "diagnosis" not in body and body["verification"] == {"state": "completed"})
+            check("파이프라인 입력은 한 번 호출과 같은 merge (회차 3개 · 말씀 6개)",
+                  len(calls[-1][0]["sessions"]) == 3 and len(calls[-1][0]["utterances"]) == 6)
+            check("한 번 호출(write)은 부르지 않았다", fake.writes == 0, str(fake.writes))
+
+            for name, res, status, code in (
+                ("partial (일부 장 실패)", {**done, "generation_state": mp.PARTIAL, "chapters": [],
+                                             "failure": {"stage": "chapter", "kind": "timeout", "chapter_key": "ch-2"}},
+                 503, "incomplete"),
+                ("failed · timeout", {**done, "generation_state": mp.FAILED, "chapters": [],
+                                      "failure": {"stage": "edit", "kind": "timeout"}}, 504, "generation_timeout"),
+                ("failed · budget (전체 시간)", {**done, "generation_state": mp.FAILED, "chapters": [],
+                                                "failure": {"stage": "verify", "kind": "budget"}}, 504, "generation_timeout"),
+                ("failed · format", {**done, "generation_state": mp.FAILED, "chapters": [],
+                                     "failure": {"stage": "analysis", "kind": "format"}}, 502, "invalid_model_output"),
+                ("needs_context", {**done, "generation_state": mp.NEEDS_CONTEXT, "chapters": [],
+                                   "failure": {"stage": "analysis", "kind": "context", "message": "…"}}, 503, "not_final"),
+                ("generated 인데 장이 비었다", {**done, "chapters": []}, 502, "invalid_model_output"),
+                ("generated 인데 문장 모양이 다르다", {**done, "chapters": [{"title": "문자열", "paragraphs": []}]},
+                 502, "invalid_model_output"),
+            ):
+                out["res"] = res
+                r = c.post(url, json=three, headers=me)
+                check(f"{name} → {status} · {code}", r.status_code == status and failed(r, code),
+                      f"{r.status_code} {r.text[:80]}")
+            out["res"] = {**done, "generation_state": mp.INSUFFICIENT, "chapters": [], "title": None}
+            r = c.post(url, json=three, headers=me)
+            check("자료 부족 → 200 insufficient_material · 빈 장",
+                  r.status_code == 200 and r.json()["status"] == "insufficient_material" and r.json()["chapters"] == [],
+                  f"{r.status_code} {r.text[:80]}")
+
+            out["res"] = done
+            for s in fake.recs.values():
+                s["elder_id"] = "e_mom"
+            r = c.post(url, json={"elder_id": "e_mom", "exclude_session_ids": [fake.ids["s-e"]]}, headers=me)
+            check("빼기 요청도 다섯 단계로 — 네 회차", r.status_code == 200
+                  and len(r.json()["run"]["session_ids"]) == 4 and len(calls[-1][0]["sessions"]) == 4,
+                  f"{r.status_code} {r.text[:80]}")
+            n_calls = len(calls)
+            r = c.post(url, json=fake.pick("s-a", "s-b"), headers=me)
+            check("잘못 고르면 400 · 파이프라인을 부르지 않는다", r.status_code == 400 and len(calls) == n_calls)
+            with _Env(MEMOIR_FAIL_INJECT="generation_timeout"):
+                r = c.post(url, json=three, headers=me)
+                check("주입 generation_timeout → 504 · 부르지 않는다",
+                      r.status_code == 504 and len(calls) == n_calls, f"{r.status_code}")
+        with _Env(MEMOIR_ENGINE="single"):
+            check("MEMOIR_ENGINE 이 pipeline 이 아니면 single", memoir.engine() == "single")
+        with _Env(MEMOIR_ENGINE=" Pipeline "):
+            check("대소문자 · 공백은 맞춘다", memoir.engine() == "pipeline")
+    finally:
+        mp.run = saved_run
+
+
 def test_all_checks_passed():
     """pytest 안전판 — test_flow.py 의 같은 함수 주석 참조."""
     assert not FAIL, "실패: " + ", ".join(FAIL)
@@ -689,6 +785,7 @@ def main() -> int:
     test_check()
     test_routes()
     test_exclude()
+    test_pipeline_engine()
     print(f"\n{'=' * 52}\n통과 {len(PASS)} · 실패 {len(FAIL)}")
     if FAIL:
         print("실패:", ", ".join(FAIL))
