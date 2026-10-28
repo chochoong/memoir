@@ -884,7 +884,7 @@
           </div>
           <span class="prep-k" id="themeLabel">테마</span>
           <div class="tabs" id="themeTabs" role="group" aria-labelledby="themeLabel"></div>
-          <label class="prep-k" for="topicInput">구체 주제</label>
+          <label class="prep-k" for="topicInput" id="topicLabel">구체 주제</label>
           <input class="topic" id="topicInput" type="text" autocomplete="off" placeholder="예: 첫 직장, 결혼식 날, 사진 찍기" />
           <p class="prep-note" id="prepNote">테마를 고르고 주제를 적어 주세요.</p>
         </div>
@@ -1399,7 +1399,7 @@
   const CONFIG = {
     // 화면 아래와 개발용 패널에 그대로 찍힌다. 「고친 게 반영이 안 된 것 같다」는
     // 대부분 예전 파일이 열려 있는 경우라서, 눈으로 확인할 자리를 만들어 둔다.
-    version: 'v0.45 · 2026-10-27 (낱말 카드 고르기 — 이 기기에서 시작 · 어르신 링크)',
+    version: 'v0.46 · 2026-10-28 (준비 화면 — 부모님께 궁금한 낱말)',
 
     // 이 화면을 백엔드가 직접 서빙하면(web/ 폴더) 빈 문자열 그대로 둔다.
     // 다른 포트에서 열어 시험할 때만 'http://127.0.0.1:8010' 처럼 채운다.
@@ -1434,6 +1434,11 @@
       //     읽기 전까지 링크 회차의 주제는 링크를 만들 때 적은 구체 주제다.
       // 준비 화면에 적은 구체 주제는 「자녀가 궁금한 낱말」 맨 앞 카드로 나온다. false 면 예전처럼 바로 시작한다.
       wordPick: true,
+      // 준비 화면을 「부모님께 궁금한 낱말」 칸 하나로 바꾼다. 테마 단추는 숨기고 wordTheme 으로 연다
+      // (서버 theme 은 family · self · hobby 셋뿐이라 themes 중 하나여야 한다).
+      // 쉼표로 나누거나 띄어 쓰면 낱말마다 카드가 된다. false 면 예전 준비 화면(테마 · 구체 주제)이다.
+      wordOnly: true,
+      wordTheme: '가족',
       // 기본 낱말 카드. 묶음(group)마다 이름 단추가 하나씩 생기고, 누르면 그 묶음 카드가 나온다
       wordDefaults: [
         { group: '어린 시절',  words: ['고향', '우리 집', '골목', '동무', '첫 기억', '별명', '꾸중', '심부름'] },
@@ -6062,10 +6067,32 @@
   const words = { pickFor: 'here', go: '', featured: '' };
   const wordKey = (w) => String(w).replace(/\s+/g, '');   // 띄어쓰기만 다른 낱말은 같은 카드로 본다
 
+  /** 「첫 직장, 보릿고개」 · 「첫 직장 보릿고개」 → ['첫 직장', '보릿고개'].
+      쉼표가 있으면 쉼표로만 나눈다. 없으면 띄어쓰기로 나누되, 이어 붙여 기본 낱말이 되는 조각은
+      한 장으로 둔다 (「학교 가는 길」 이 세 장이 되지 않게). 같은 낱말은 한 번만. */
+  function splitWords(s) {
+    const text = String(s || '').trim();
+    if (!text) return [];
+    let parts;
+    if (/[,，、;]/.test(text)) parts = text.split(/[,，、;]+/).map(x => x.trim().replace(/\s+/g, ' '));
+    else {
+      const known = new Set(CONFIG.interview.wordDefaults.flatMap(g => g.words.map(wordKey)));
+      const tok = text.split(/\s+/);
+      parts = [];
+      for (let i = 0; i < tok.length;) {
+        let j = tok.length;
+        while (j > i + 1 && !known.has(wordKey(tok.slice(i, j).join('')))) j--;
+        parts.push(tok.slice(i, j).join(' ')); i = j;
+      }
+    }
+    const seen = new Set();
+    return parts.filter(w => w && !seen.has(wordKey(w)) && seen.add(wordKey(w)));
+  }
+
   function wordGroups() {
-    const feat = words.featured;
-    const same = (w) => feat && wordKey(w) === wordKey(feat);
-    const out = feat ? [{ group: '자녀가 궁금한 낱말', words: [feat], mine: true }] : [];
+    const feats = splitWords(words.featured);
+    const same = (w) => feats.some(f => wordKey(w) === wordKey(f));
+    const out = feats.length ? [{ group: '자녀가 궁금한 낱말', words: feats, mine: true }] : [];
     for (const g of CONFIG.interview.wordDefaults) {
       const ws = g.words.filter(w => !same(w));         // 맨 앞에 올린 낱말은 기본 묶음에서 뺀다
       if (ws.length) out.push({ group: g.group, words: ws });
@@ -6115,7 +6142,8 @@
   }
   function openPick(kind) {
     words.pickFor = kind; words.go = '';
-    words.featured = String(prepInfo.topic || '').trim();
+    // 이 기기에서는 칸에 적힌 글 그대로 (카드를 골랐다 돌아와도 다른 낱말이 남게)
+    words.featured = kind === 'here' && CONFIG.interview.wordOnly ? $('#topicInput').value : String(prepInfo.topic || '');
     renderWordPick();
     show('wordpick');
   }
@@ -6123,18 +6151,25 @@
   function pickAndGo(w) {
     words.go = w;
     prepInfo.topic = w;
-    if (words.pickFor === 'here') $('#topicInput').value = w;
+    if (words.pickFor === 'here' && !CONFIG.interview.wordOnly) $('#topicInput').value = w;
     log('낱말', `${words.pickFor === 'elder' ? '어르신' : '이 기기'} · 「${w}」`);
     if (words.pickFor === 'elder') void linkGo(); else void beginInterview();
   }
-  $('#wpClose').addEventListener('click', () => show(words.pickFor === 'elder' ? 'link' : 'ready'));
+  $('#wpClose').addEventListener('click', () => {
+    if (words.pickFor === 'elder') { show('link'); return; }
+    if (CONFIG.interview.wordOnly) prepInfo.topic = $('#topicInput').value.trim();   // 고른 낱말 말고 적어 둔 글로
+    renderPrep(); show('ready');
+  });
 
   /* ── 1차 인터뷰 흐름 — 준비 화면 · 키보드 (업무지시서 03) ── */
   function renderPrep() {
     if (!NEW_FLOW) return;
     const ok = !!(prepInfo.theme && prepInfo.topic);
     // 시작 전에 고른 값을 한 줄로 읽어 준다
-    $('#prepNote').textContent = ok ? `「${prepInfo.theme}」 테마로 「${prepInfo.topic}」 이야기를 시작해요.`
+    $('#prepNote').textContent = CONFIG.interview.wordOnly
+      ? (ok ? `낱말 카드 ${splitWords(prepInfo.topic).length}장을 맨 앞에 올려요. 쉼표나 띄어쓰기로 여러 개 적을 수 있어요.`
+            : '부모님께 여쭤보고 싶은 낱말을 적어 주세요. 예: 첫 직장, 보릿고개')
+      : ok ? `「${prepInfo.theme}」 테마로 「${prepInfo.topic}」 이야기를 시작해요.`
       : !prepInfo.theme ? '테마를 하나 골라 주세요.' : '이야기할 주제를 적어 주세요.';
     if (!sessionId) $('#startBtn').disabled = !ok;
     $('#linkOutBtn').disabled = !ok || loBusy;
@@ -6167,6 +6202,13 @@
     });
     const topic = $('#topicInput');
     topic.maxLength = CONFIG.interview.topicMax;
+    if (CONFIG.interview.wordOnly) {
+      // 테마 단추는 숨기고 wordTheme 으로 고정한다 (서버가 링크 · 회차에 theme 을 받는다)
+      prepInfo.theme = CONFIG.interview.wordTheme;
+      $('#themeLabel').style.display = 'none'; tabs.style.display = 'none';   // .tabs 의 display 가 hidden 을 덮는다
+      $('#topicLabel').textContent = '부모님께 궁금한 낱말';
+      topic.placeholder = '예: 첫 직장, 보릿고개';
+    }
     topic.addEventListener('input', () => { prepInfo.topic = topic.value.trim(); renderPrep(); });
     // 한글 조합 중의 Enter 는 글자를 확정하는 키다 — 다른 동작으로 받지 않는다
     topic.addEventListener('keydown', (e) => {
