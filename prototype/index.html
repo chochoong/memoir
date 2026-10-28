@@ -339,6 +339,8 @@
     .mm-sample { display: inline-block; margin: 0 0 14px; padding: 6px 12px; border-radius: 12px;
                  background: #fbeede; color: #a0741e; font-size: .9rem; font-weight: 700; }
     .mm-sample[hidden], #mmMain[hidden] { display: none; }
+    .mm-stage { margin: 14px 0 0; font-weight: 700; color: var(--ink); }
+    #mmCancel { margin-top: 18px; }
     #themeLabel[hidden], #themeTabs[hidden] { display: none; }   /* 테마 고르기를 끈 화면 (interview.themePick) */   /* display 를 준 요소는 hidden 이 안 먹는다 */
     .piece[aria-pressed="true"] { border: 3px solid var(--ink); background: #fff; }
     .pick-mark { flex: 0 0 40px; width: 40px; height: 40px; border-radius: 50%; align-self: center;
@@ -1137,6 +1139,7 @@
         <div data-mm="pick" hidden>
           <p class="mm-guide" id="mmGuide">이야기 3~5개를 골라 주세요.</p>
           <p class="prep-note" id="mmUnassigned" hidden></p>
+          <p class="prep-note" id="mmOutside" hidden></p>
           <div class="mm-all" id="mmPickAll" hidden><button type="button" class="btn-line" data-all="on">모두 고르기</button><button type="button" class="btn-line" data-all="off">모두 빼기</button></div>
           <div class="tabs style-pick" id="mmStyle" role="radiogroup" aria-label="문체" hidden></div>
           <div id="mmList"></div>
@@ -1162,7 +1165,9 @@
           <div class="blank">
             <div class="blank-face" aria-hidden="true">&#9997;&#65039;</div>
             <h2>자서전 초안을<br />쓰고 있어요.</h2>
-            <p>잠시 기다려 주세요.</p>
+            <p id="mmWaitMsg">잠시 기다려 주세요.</p>
+            <p class="mm-stage" id="mmStage" role="status" aria-live="polite" hidden></p>
+            <button type="button" class="btn-line" id="mmCancel" hidden>그만 만들기</button>
           </div>
         </div>
 
@@ -1411,7 +1416,7 @@
   const CONFIG = {
     // 화면 아래와 개발용 패널에 그대로 찍힌다. 「고친 게 반영이 안 된 것 같다」는
     // 대부분 예전 파일이 열려 있는 경우라서, 눈으로 확인할 자리를 만들어 둔다.
-    version: 'v0.48 · 2026-10-28 (v0.47 위 · 자서전 「상한 없음 · 뺄 것만」 바꾸는 날 준비 · 화면 대기 120초)',
+    version: 'v0.49 · 2026-10-28 (자서전 시작하고 나중에 받기 · 단계 표시 · 서버가 정한 상한 · has_words · 목록 밖 회차 안내)',
 
     // 이 화면을 백엔드가 직접 서빙하면(web/ 폴더) 빈 문자열 그대로 둔다.
     // 다른 포트에서 열어 시험할 때만 'http://127.0.0.1:8010' 처럼 채운다.
@@ -1529,17 +1534,24 @@
       // 장이라 따로 ID 가 없고, postcard 표의 키가 session_id 다.
       idsField: 'session_ids',
       min: 3,
-      // **서버 상한 MEMOIR_MAX_SESSIONS 와 같아야 한다** (지금 기본 5 — 단일 호출 구조의 임시 시험 제한).
-      // 화면만 올리면 6개부터 400 bad_selection 이다. 6개 이상이면 「모두 고르기 · 모두 빼기」 가 나온다.
-      // 정해진 것 (최충 · 태헌 10-28): 다섯 단계 파이프라인(PR #8)을 서비스에 붙이는 날 서버와 같이
-      //   max: Infinity (상한 없음 — 같은 화자의 회차 전부) · requestShape: 'exclude' 두 줄을 바꾼다.
-      //   그 전 임시 시험(10개 등)은 하지 않는다. 그날까지는 5 · 'ids' 그대로 둔다.
+      // 상한 · 요청 모양은 **서버가 정한다** (PR #14 · 501f13e). 화자별 목록(?elder_id=) 응답의
+      //   memoir_max — null 이면 상한 없음(다섯 단계 · 같은 화자 전체 선택 후 제외 · 'exclude'),
+      //   숫자면 그 개수까지 고른 것('ids'). 다섯 단계는 시험 대상 계정만 써서 사람마다 다르다 (태헌 10-28).
+      // 아래 max · requestShape 는 그 칸이 없는 서버(예전 · 개발 모드)에서만 쓴다 — 서버 MEMOIR_MAX_SESSIONS 와 같게.
+      // 6개 이상이면 「모두 고르기 · 모두 빼기」 가 나온다.
       max: 5,
       // 요청 모양. 'ids' = {session_ids, style} (지금) ·
       // 'exclude' = {elder_id, exclude_session_ids, style} — 최종 정책 「같은 화자 전체 선택 후 제외」 (7-C1 §4 · 태헌 10-26).
-      // 다섯 단계 구조가 서버에 들어오면 서버가 전체를 정하고 화면은 뺄 것만 보낸다. 서버와 같이 바꾼다.
       // 'exclude' 면 고르기 화면이 **처음부터 전부 골라진 채** 열리고, 넣지 않을 것만 눌러 뺀다
       requestShape: 'ids',
+      // 시작하고 나중에 받기 (PR #14 · 최충 10-28). 다섯 단계는 몇 분 걸리고(39회차 약 6분)
+      // Cloudflare 가 100초 넘는 응답을 끊는다 → POST /memoirs 202 {job_id} · GET /memoirs/{job_id} 를 몇 초마다.
+      // 'auto' — 작업 주소가 없는 서버(404 · 405, code 없음)면 예전 기다리는 요청(path)으로. 'preview' — 늘 예전 길
+      flow: 'auto',
+      jobPath: '/memoirs',
+      pollMs: 4000,
+      // 작업 방식에서 화면이 기다리는 끝. 서버 전체 상한 30분(MEMOIR_PIPE_TOTAL_TIMEOUT=1800)보다 길게
+      jobMaxMs: 35 * 60 * 1000,
       // 고를 엽서 수 (서버 상한 100). 서버에 「엽서 있는 회차만」(?has_postcard=1) 을 달라고 하므로
       // 최근 회차에 엽서 없는 회차가 많아도 밀려나지 않는다. (v0.26 에서 잠깐 100 으로 늘렸다가 되돌림)
       listLimit: 100,
@@ -1548,7 +1560,7 @@
       // 화면 쪽 안전장치일 뿐이다. 모델 호출 제한(서버 MEMOIR_TEXT_TIMEOUT)을 넘기면 서버가 504 로
       // 먼저 답한다. 연결이 걸려 버렸을 때만 여기서 접는다 — **서버 제한보다 길어야 한다.**
       // 운영 .env 는 100초 (최충 10-28 · 기본 20초). 60초였을 때는 서버가 61~100초에 만든 글을 화면이 먼저 버렸다.
-      // 파이프라인을 붙이는 날 전체 걸리는 시간에 맞춰 다시 정한다
+      // 예전 기다리는 요청(path)에만 쓴다. 작업 방식은 jobMaxMs
       timeoutMs: 120000,
       // '' 이면 실제 서버를 부른다 (기본). 서버 없이 화면만 볼 때 예시 응답을 고른다:
       //   ready · 400 · 404 · 422 · 502 · 503 · 504 · invalid · timeout · insufficient · unsupported(400 문체)
@@ -1804,12 +1816,20 @@
         (typeof d === 'string' ? d : d && d.message) || '요청에 실패했습니다',
         Number(res.headers.get('Retry-After')) || 0);
       err.code = String(body.code || (d && typeof d === 'object' && d.code) || '');
+      err.body = body;          // 409 busy 의 job_id 처럼 code 말고 더 실려 오는 것
       // 로그인 모드에서 자녀 경로가 401 이면 로그인 화면으로 (3-C1 — 「다른 API 도 401 이면 로그인으로」)
       if (res.status === 401 && AUTH.mode === 'session' && !path.startsWith('/auth/') && !path.startsWith('/i/')) authLost(err.code);
       throw err;
     }
     if (res.status === 204) return null;          // 로그아웃 등 본문 없는 성공
     return res.json();
+  }
+
+  // 자서전 요청 본문 — 고른 것 {session_ids} · 화자의 전부에서 뺄 것 {elder_id, exclude_session_ids}
+  function memoirBody(req, style) {
+    return JSON.stringify(Object.assign(req.exclude
+      ? { elder_id: req.elderId, exclude_session_ids: req.exclude }
+      : { [CONFIG.memoir.idsField]: req.ids }, style ? { style } : {}));
   }
 
   const api = {
@@ -1919,12 +1939,13 @@
     // 다른 API 와 같은 call() 을 쓴다. 실패는 HTTP 상태 + {"detail": …} 로 온다.
     // 화면 안내는 상태로만 고르고 detail 은 화면에 내지 않는다 (mmWhy).
     // 사용자 신원은 본문이 아니라 call() 이 붙인다 (dev 모드 X-User-Id · 로그인 모드 msid 쿠키).
-    // req = { ids } 또는 { elderId, exclude } (CONFIG.memoir.requestShape — mmRequest 가 만든다)
+    // 작업 방식 (PR #14) — 본문은 preview 와 같다. 202 {job_id, status, stage, run}
+    memoirStart: (req, style) => call(CONFIG.memoir.jobPath, { method: 'POST', body: memoirBody(req, style) }),
+    memoirJob: (id) => call(`${CONFIG.memoir.jobPath}/${encodeURIComponent(id)}`),
+    memoirCancel: (id) => call(`${CONFIG.memoir.jobPath}/${encodeURIComponent(id)}`, { method: 'DELETE' }),
+    // req = { ids } 또는 { elderId, exclude } (mmRequest 가 만든다)
     memoirPreview: (req, signal, style) => call(CONFIG.memoir.path, {
-      method: 'POST', signal,
-      body: JSON.stringify(Object.assign(req.exclude
-        ? { elder_id: req.elderId, exclude_session_ids: req.exclude }
-        : { [CONFIG.memoir.idsField]: req.ids }, style ? { style } : {})),
+      method: 'POST', signal, body: memoirBody(req, style),
     }),
 
     // 이 회차에 엽서가 있나. GET /postcard 는 JPEG 라 json() 으로 읽지 않는다.
@@ -4457,6 +4478,10 @@
   let mmPicked = [];          // 고른 회차 ID, 고른 순서대로. 중복은 들어가지 않는다
   let mmView = 'load';
   let mmReq = 0;              // 요청 번호 — 화면을 떠났거나 다시 고른 뒤 늦게 온 응답을 버린다
+  let mmLim = null;           // 서버가 목록에 실어 준 { memoir_engine, memoir_max, memoir_max_chars } (없으면 null)
+  let mmTotal = null;         // 이 화자의 자서전 회차 전체 수 (memoir_total) — 목록 100개 밖까지
+  let mmJobOk = null;         // 작업 방식(POST /memoirs) 이 있는 서버인가 — 모르면 null
+  let mmJobId = '';           // 만드는 중인 작업. 화면을 나갔다 오면 이어서 본다 (서버가 30분 보관)
 
   /** 지금 예시 응답으로 도는가. 주소의 ?memoirMock= 이 설정보다 먼저다. */
   function mmMock() {
@@ -4477,7 +4502,10 @@
                      : after ? '이야기 선택으로 돌아가기'
                      : '자서전 만들기';
     main.disabled = view === 'load' || view === 'wait';
-    back.hidden = view === 'wait' || after;
+    // 작업 방식은 나가도 서버가 계속 만든다 — 기다리는 동안에도 나갈 수 있다
+    back.hidden = (view === 'wait' && !mmJobId) || after;
+    $('#mmCancel').hidden = !(view === 'wait' && mmJobId);
+    if (view !== 'wait') $('#mmStage').hidden = true;
     if (view === 'pick') mmSync();
     $('#mmStyle').hidden = !stylePickable() || view !== 'pick';
     window.scrollTo(0, 0);
@@ -4485,7 +4513,7 @@
 
   /** 고른 개수에 따라 안내 · 체크 · 버튼을 맞춘다. */
   function mmSync() {
-    const n = mmPicked.length, { min, max } = CONFIG.memoir;
+    const n = mmPicked.length, min = CONFIG.memoir.min, max = mmMax();
     $$('#mmList .piece').forEach(b => {
       const i = mmPicked.indexOf(b.dataset.id);
       b.setAttribute('aria-pressed', String(i >= 0));
@@ -4503,13 +4531,21 @@
     $('#mmPickAll').querySelector('[data-all="off"]').disabled = n === 0;
   }
 
-  /** 고를 수 있는 수를 글로 — 「3~5개를」 · 상한이 없으면(max: Infinity) 「3개 이상」 */
+  /** 고를 수 있는 수를 글로 — 「3~5개를」 · 상한이 없으면 「3개 이상」 */
   function mmRange() {
-    const { min, max } = CONFIG.memoir;
+    const min = CONFIG.memoir.min, max = mmMax();
     return Number.isFinite(max) ? `${min}~${max}개를` : `${min}개 이상`;
   }
-  /** 「전체 중 뺄 것」 으로 보내나 — 'exclude' 이고 화자별 목록일 때만. 그 밖(개발 모드 · 예전 서버)은 고른 것 */
-  const mmExclude = () => CONFIG.memoir.requestShape === 'exclude' && !!mmElder;
+  const mmServerSays = () => !!mmLim && 'memoir_max' in mmLim;
+  /** 고를 수 있는 최대 — 서버가 준 memoir_max (null = 상한 없음). 그 칸이 없는 서버면 CONFIG.memoir.max */
+  function mmMax() {
+    if (!mmServerSays()) return CONFIG.memoir.max;
+    const m = mmLim.memoir_max;
+    return m === null || m === undefined ? Infinity : (Number(m) || CONFIG.memoir.max);
+  }
+  /** 「전체 중 뺄 것」 으로 보내나 — 화자별 목록이고, 서버가 상한 없음(다섯 단계)이라고 했을 때.
+      서버가 말하지 않으면 CONFIG.memoir.requestShape. 개발 모드 · 예전 서버는 고른 것 */
+  const mmExclude = () => !!mmElder && (mmServerSays() ? !Number.isFinite(mmMax()) : CONFIG.memoir.requestShape === 'exclude');
   /** 요청 모양 — mmExclude 면 { elderId, exclude }, 아니면 { ids } */
   function mmRequest(ids) {
     if (mmExclude()) {
@@ -4520,8 +4556,9 @@
   /** 모두 고르기 · 모두 빼기 — 상한이 6개 이상일 때만 (30~50개를 하나씩 누르지 않게) */
   function mmPickAll(on) {
     if (mmView !== 'pick') return;
-    mmPicked = on ? mmRows.map(r => r.session_id).slice(0, CONFIG.memoir.max) : [];
-    if (on && mmRows.length > CONFIG.memoir.max) toast(`최대 ${CONFIG.memoir.max}개까지라 최근 ${CONFIG.memoir.max}개를 골랐어요.`);
+    const max = mmMax();
+    mmPicked = on ? mmRows.map(r => r.session_id).slice(0, max) : [];
+    if (on && mmRows.length > max) toast(`최대 ${max}개까지라 최근 ${max}개를 골랐어요.`);
     mmSync();
   }
 
@@ -4529,8 +4566,8 @@
     if (mmView !== 'pick') return;                    // 생성 중에는 선택을 바꾸지 않는다
     const i = mmPicked.indexOf(id);
     if (i >= 0) mmPicked.splice(i, 1);
-    else if (mmPicked.length >= CONFIG.memoir.max) {
-      toast(`최대 ${CONFIG.memoir.max}개까지 선택할 수 있어요.`);
+    else if (mmPicked.length >= mmMax()) {
+      toast(`최대 ${mmMax()}개까지 선택할 수 있어요.`);
       return;
     } else mmPicked.push(id);
     mmSync();
@@ -4599,7 +4636,7 @@
        그 밖(개발 모드 · 예전 서버) → 예전처럼 엽서 있는 회차
      화자 미지정 회차는 화자별 목록에 들지 않는다 — 몇 개인지 알려 주고 「나눈 이야기」 에서 정하게 한다.
      최종 정책은 「같은 화자 전체 선택 후 제외」 — 다섯 단계 구조가 나오면 요청이 {elder_id, exclude_session_ids} 로 바뀐다.
-     그 전까지는 지금처럼 3~5개를 고른다 (CONFIG.memoir.max · 서버 MEMOIR_MAX_SESSIONS 임시 상한). */
+     상한 · 요청 모양은 목록 응답의 memoir_max 로 서버가 정한다 (PR #14). 그 칸이 없으면 CONFIG.memoir.max. */
   let mmElder = null;          // 화자별 목록일 때 그 화자
   async function openMemoir() {
     const my = ++mmReq;
@@ -4608,14 +4645,18 @@
     show('memoir');
     mmShow('load');
     $('#mmUnassigned').hidden = true;
+    $('#mmOutside').hidden = true;
+    mmLim = null; mmTotal = null;
     try {
       const el = AUTH.mode === 'session' && !listMock() ? curElder() : null;
       const res = await api.sessions(CONFIG.memoir.listLimit, undefined, el ? { elderId: el.elder_id } : { hasPostcard: true });
       const rows = (res && res.sessions) || [];
       const byElder = !!el && rows.every(s => 'elder_id' in s);   // 화자 칸을 아는 서버
       mmElder = byElder ? el : null;
+      if (byElder && res && 'memoir_max' in res) mmLim = { memoir_engine: res.memoir_engine, memoir_max: res.memoir_max, memoir_max_chars: res.memoir_max_chars };
+      if (byElder && res && Number.isFinite(res.memoir_total)) mmTotal = res.memoir_total;
       const closed = byElder
-        ? rows.filter(s => s.closed_at && s.elder_id === el.elder_id && (s.fragment_count || 0) > 0)
+        ? rows.filter(s => s.closed_at && s.elder_id === el.elder_id && mmHasWords(s))
         : rows.filter(s => s.closed_at && s.has_postcard !== false);
       // 엽서 그림은 엽서 있는 회차만 받는다. 화자별 목록에서는 엽서가 없어도 고를 수 있다 (그림 자리에 사진 · 「엽서 없음」).
       // 예전 길은 404 면 「엽서 없음」 이라 빼고, 그 밖의 실패가 하나라도 있으면 목록 전체를 「불러오지 못했다」 로 본다.
@@ -4633,26 +4674,36 @@
       if (byElder) void mmCountUnassigned(my);
       if (!mmRows.length) { mmShow('none'); log('자서전', '고를 이야기 없음'); return; }
       // 「같은 화자 전체 선택 후 제외」 — 처음부터 전부 골라 둔다
-      if (mmExclude()) mmPicked = mmRows.map(r => r.session_id).slice(0, CONFIG.memoir.max);
-      // 서버는 이 화자의 회차 **전부**에서 뺀다. 목록이 상한에 닿았으면 화면에 안 보인 더 오래된 회차도 들어간다
-      if (mmExclude() && rows.length >= CONFIG.memoir.listLimit)
+      if (mmExclude()) mmPicked = mmRows.map(r => r.session_id).slice(0, mmMax());
+      // 서버는 이 화자의 회차 **전부**에서 뺀다. 목록(100개) 밖의 더 오래된 회차도 들어간다 — memoir_total 로 알린다
+      const outside = mmExclude() && mmTotal !== null ? Math.max(0, mmTotal - mmRows.length) : 0;
+      $('#mmOutside').hidden = !outside;
+      $('#mmOutside').textContent = outside ? `오래된 이야기 ${outside}개는 목록에 없지만 함께 들어가요.` : '';
+      if (!outside && mmExclude() && mmTotal === null && rows.length >= CONFIG.memoir.listLimit)
         log('자서전', `목록이 ${CONFIG.memoir.listLimit}개 상한에 닿았습니다 — 더 오래된 회차는 화면에 없어 뺄 수 없지만 서버는 넣습니다`);
       titleAudit('자서전', mmRows);
       mmDraw();
       mmShow('pick');
-      log('자서전', `고를 수 있는 이야기 ${mmRows.length}개${byElder ? ` · 「${el.name}」` : ' · 엽서 있는 회차 (예전 길)'}`);
+      log('자서전', `고를 수 있는 이야기 ${mmRows.length}개${byElder ? ` · 「${el.name}」` : ' · 엽서 있는 회차 (예전 길)'}`
+        + (mmLim ? ` · 서버 엔진 ${mmLim.memoir_engine || '?'} · 상한 ${mmLim.memoir_max === null ? '없음' : mmLim.memoir_max}` : '')
+        + (outside ? ` · 목록 밖 ${outside}개` : ''));
+      // 만들던 작업이 있으면 이어서 본다 (화면을 나갔다 왔다 · 새로고침)
+      if (mmJobId) void mmResume(my);
     } catch (e) {
       if (my !== mmReq) return;
       mmShow('loadfail');
       log('자서전', `목록 실패 · ${e.status || ''} ${e.message || e}`);
     }
   }
+  /** 자서전에 넣을 수 있는 회차인가 — 어르신 말씀이 있다. 서버 has_words (PR #14) 가 있으면 그것,
+      없는 서버면 조각 수 (씨앗만 있는 회차도 1이라 조금 넓다) */
+  const mmHasWords = (s) => ('has_words' in s) ? !!s.has_words : (s.fragment_count || 0) > 0;
   /** 화자 미지정인 말씀 있는 회차 수 — 화자별 목록에 안 들어오니 알려 준다 */
   async function mmCountUnassigned(my) {
     try {
       const all = await api.sessions(CONFIG.memoir.listLimit);
       if (my !== mmReq) return;
-      const n = ((all && all.sessions) || []).filter(s => s.closed_at && s.elder_id === null && (s.fragment_count || 0) > 0).length;
+      const n = ((all && all.sessions) || []).filter(s => s.closed_at && s.elder_id === null && mmHasWords(s)).length;
       const p = $('#mmUnassigned');
       p.hidden = !n;
       p.textContent = n ? `누구의 이야기인지 정하지 않은 기록이 ${n}개 있어요. 지난 이야기에서 열어 정하면 여기에 나와요.` : '';
@@ -4817,6 +4868,10 @@
   const MM_SAYS = {
     mixed_speakers: '한 분의 이야기만 골라 주세요. 서로 다른 분의 이야기는 한 자서전에 넣을 수 없어요.',
     speaker_unassigned: '누구의 이야기인지 정하지 않은 기록이 섞여 있어요. 지난 이야기에서 그 기록을 열어 정해 주세요.',
+    // PR #14 — 말씀 글자 수가 상한(memoir_max_chars)을 넘었다. 서버가 임의로 빼지 않는다
+    too_much: '이야기가 너무 많아 한 번에 만들 수 없어요. 넣지 않을 이야기를 몇 개 빼 주세요.',
+    // 작업이 없다 — 서버를 다시 켰거나 보관 시간(30분)이 지났다
+    job_not_found: '만들던 자서전을 찾을 수 없어요. 다시 만들어 주세요.',
   };
   const MM_CODE = { bad_selection: 400, not_found: 404, source_unavailable: 422, invalid_model_output: 502,
                     not_final: 503, needs_confirmation: 503, needs_context: 503, generation_timeout: 504 };
@@ -4895,29 +4950,146 @@
 
   async function mmMake() {
     const ids = [...new Set(mmPicked)];
-    const { min, max, timeoutMs } = CONFIG.memoir;
+    const min = CONFIG.memoir.min, max = mmMax();
     if (mmView !== 'pick' || ids.length < min || ids.length > max) return;
     const my = ++mmReq;
     mmShow('wait');                                  // 여기서 버튼과 선택이 잠긴다 — 두 번 눌러도 한 번만 간다
     const kind = mmMock();
-    log('자서전', `요청 · ${ids.length}장${kind ? ` · 예시 응답(${kind})` : ''}`);
+    const style = CONFIG.style.pick ? mmStyle : '';
+    log('자서전', `요청 · ${ids.length}장${mmExclude() ? ' (뺄 것만 보냄)' : ''}${kind ? ` · 예시 응답(${kind})` : ''}`);
 
+    let out = null;
+    if (!kind && CONFIG.memoir.flow !== 'preview' && mmJobOk !== false) out = await mmJobStart(ids, style, my);
+    if (!out) out = await mmPreviewRun(ids, style, kind);
+    if (my !== mmReq) { log('자서전', '늦게 온 응답을 버립니다'); return; }
+    mmRender(out, kind);
+  }
+
+  /** 예전 길 — 다 쓸 때까지 기다리는 요청 하나 (POST /memoirs/preview) */
+  async function mmPreviewRun(ids, style, kind) {
     const ctl = new AbortController();
-    const timer = setTimeout(() => ctl.abort(), timeoutMs);
-    let out;
+    const timer = setTimeout(() => ctl.abort(), CONFIG.memoir.timeoutMs);
     try {
-      const style = CONFIG.style.pick ? mmStyle : '';
       const res = kind ? await mmFake(kind, ctl.signal, style, ids) : await api.memoirPreview(mmRequest(ids), ctl.signal, style);
       if (!kind && res && typeof res === 'object') capSeen('memoirChapters', Array.isArray(res.chapters) && res.chapters.length > 0 && !!res.run);
-      out = mmRead(res, ids);
+      return mmRead(res, ids);
     } catch (e) {
-      out = e && e.code === 'incomplete' ? { view: 'partial' } : { view: 'fail', why: mmWhy(e) };
-      log('자서전', `실패 · ${e.name === 'AbortError' ? '화면 쪽 시간 초과' : `HTTP ${e.status || '응답 없음'}`}`);
+      log('자서전', `실패 · ${e.name === 'AbortError' ? '화면 쪽 시간 초과' : `HTTP ${e.status || '응답 없음'} ${e.code || ''}`}`);
+      return e && e.code === 'incomplete' ? { view: 'partial' } : { view: 'fail', why: mmWhy(e) };
     } finally {
       clearTimeout(timer);
     }
+  }
 
-    if (my !== mmReq) { log('자서전', '늦게 온 응답을 버립니다'); return; }
+  /** 작업 방식 (PR #14) — 시작하고(202) 몇 초마다 확인. 작업 주소가 없는 서버면 null (예전 길로) */
+  async function mmJobStart(ids, style, my) {
+    let job;
+    try {
+      job = await api.memoirStart(mmRequest(ids), style);
+      mmJobOk = true;
+    } catch (e) {
+      if ((e.status === 404 || e.status === 405) && !e.code) {
+        mmJobOk = false;
+        log('자서전', '작업 주소(POST /memoirs)가 없는 서버 — 기다리는 요청으로 갑니다');
+        return null;
+      }
+      if (e.code === 'busy' && e.body && e.body.job_id) {
+        // 이 계정이 이미 만드는 중이다 (다른 탭 · 앞서 누른 것). 새로 열지 않고 그 작업을 이어서 본다.
+        // 고른 것이 다를 수 있어 회차 비교는 하지 않는다 (ids = null)
+        log('자서전', '이미 만드는 중인 자서전이 있어 그것을 이어서 봅니다');
+        toast('이미 만들고 있는 자서전이 있어요. 그것을 이어서 보여 드릴게요.');
+        mmJobOk = true;
+        return mmJobWait({ job_id: e.body.job_id, status: 'running' }, null, my);
+      }
+      log('자서전', `실패 · HTTP ${e.status || '응답 없음'} ${e.code || ''}`);
+      return e && e.code === 'incomplete' ? { view: 'partial' } : { view: 'fail', why: mmWhy(e) };
+    }
+    log('자서전', `작업 시작 · ${String(job.job_id || '').slice(0, 8)} · ${job.stage || ''}`);
+    return mmJobWait(job, ids, my);
+  }
+
+  const MM_STAGE = { analysis: '이야기를 정리하고 있어요', outline: '목차를 짜고 있어요', edit: '글을 다듬고 있어요',
+                     verify: '마지막으로 확인하고 있어요', write: '글을 쓰고 있어요' };
+  /** 「만드는 중」 — 지금 단계와 지난 시간 */
+  function mmWaitPaint(job) {
+    const st = job.stage === 'chapter' && job.chapters ? `${job.chapters}장 중 ${job.chapter}장을 쓰고 있어요`
+      : MM_STAGE[job.stage] || '자서전을 만들고 있어요';
+    const sec = Number(job.elapsed) || 0;
+    const t = sec >= 60 ? `${Math.floor(sec / 60)}분 ${sec % 60}초` : `${sec}초`;
+    $('#mmStage').hidden = false;
+    $('#mmStage').textContent = `${st} · ${t} 지났어요`;
+  }
+  /** 작업이 끝날 때까지 몇 초마다 묻는다. 화면을 떠나면(mmReq 가 바뀜) 묻기만 멈춘다 — 서버는 계속 만든다 */
+  async function mmJobWait(job, ids, my) {
+    mmJobId = job.job_id;
+    mmJobKeep(mmJobId);
+    $('#mmWaitMsg').textContent = '몇 분 걸릴 수 있어요. 이 화면을 나가도 계속 만들고, 다시 들어오면 이어서 볼 수 있어요.';
+    mmShow('wait');
+    const t0 = Date.now();
+    let misses = 0;
+    for (;;) {
+      if (my !== mmReq) return { view: 'gone' };
+      if (job.status === 'done') {
+        mmJobDone();
+        const res = job.result;
+        if (res && typeof res === 'object') capSeen('memoirChapters', Array.isArray(res.chapters) && res.chapters.length > 0 && !!res.run);
+        log('자서전', `작업 끝 · ${job.elapsed || '?'}초`);
+        return mmRead(res, ids);
+      }
+      if (job.status === 'failed') {
+        mmJobDone();
+        log('자서전', `작업 실패 · ${job.code || '?'} · ${job.elapsed || '?'}초`);
+        if (job.code === 'cancelled') return { view: 'pick' };
+        if (job.code === 'incomplete') return { view: 'partial' };
+        return { view: 'fail', why: mmWhy({ code: job.code, status: MM_CODE[job.code] }) };
+      }
+      mmWaitPaint(job);
+      if (Date.now() - t0 > CONFIG.memoir.jobMaxMs) return { view: 'fail', why: MM_FAIL[504] };
+      await sleep(CONFIG.memoir.pollMs);
+      if (my !== mmReq) return { view: 'gone' };
+      try {
+        job = await api.memoirJob(mmJobId);
+        misses = 0;
+      } catch (e) {
+        if (e.code === 'job_not_found') { mmJobDone(); return { view: 'fail', why: MM_SAYS.job_not_found }; }
+        // 잠깐 끊긴 것은 다시 묻는다. 계속 안 되면 멈추되 작업 번호는 남겨 둔다 — 다시 들어오면 이어서 본다
+        if (++misses >= 5) return { view: 'fail', why: '연결이 끊겨 자서전을 받지 못했어요. 잠시 뒤 자서전 만들기를 다시 열면 이어서 볼 수 있어요.' };
+        log('자서전', `확인 실패 · HTTP ${e.status || '응답 없음'} — 다시 묻습니다`);
+      }
+    }
+  }
+  /** 화면을 다시 열었을 때 만들던 작업 이어 보기 */
+  async function mmResume(my) {
+    let job;
+    try { job = await api.memoirJob(mmJobId); } catch (e) {
+      if (e.code === 'job_not_found') mmJobDone();
+      log('자서전', `만들던 작업을 찾지 못했습니다 · ${e.code || e.status || ''}`);
+      return;
+    }
+    if (my !== mmReq || mmView !== 'pick') return;
+    log('자서전', `만들던 작업을 이어서 봅니다 · ${job.status}`);
+    my = ++mmReq;
+    const out = await mmJobWait(job, null, my);
+    if (my !== mmReq) return;
+    mmRender(out, '');
+  }
+  $('#mmCancel').addEventListener('click', async () => {
+    const id = mmJobId;
+    if (!id) return;
+    mmReq++;                                  // 묻기를 멈춘다
+    mmJobDone();
+    mmShow('pick');
+    toast('자서전 만들기를 그만두었어요.');
+    try { await api.memoirCancel(id); log('자서전', '작업 그만둠'); } catch (e) { log('자서전', `그만두기 실패 · ${e.code || e.status || ''}`); }
+  });
+  // 작업 번호를 남겨 둔다 — 새로고침해도 30분 안이면 이어서 본다. 저장이 막힌 브라우저면 이 화면 안에서만
+  function mmJobKeep(id) { try { sessionStorage.setItem('memoirJob', id); } catch (_) {} }
+  function mmJobDone() { mmJobId = ''; try { sessionStorage.removeItem('memoirJob'); } catch (_) {} }
+  try { mmJobId = sessionStorage.getItem('memoirJob') || ''; } catch (_) {}
+
+  /** 결과 · 실패를 화면에 */
+  function mmRender(out, kind) {
+    if (!out || out.view === 'gone') return;
     if (out.view === 'result') {
       if (out.chapters) mmPaintChapters(out); else mmPaint(out.title, out.body);
       mmMark(kind ? 'mock' : 'server', out);
