@@ -338,7 +338,8 @@
     .mm-guide { font-size: 1.1rem; line-height: 1.5; margin: 4px 0 16px; }
     .mm-sample { display: inline-block; margin: 0 0 14px; padding: 6px 12px; border-radius: 12px;
                  background: #fbeede; color: #a0741e; font-size: .9rem; font-weight: 700; }
-    .mm-sample[hidden], #mmMain[hidden] { display: none; }   /* display 를 준 요소는 hidden 이 안 먹는다 */
+    .mm-sample[hidden], #mmMain[hidden] { display: none; }
+    #themeLabel[hidden], #themeTabs[hidden] { display: none; }   /* 테마 고르기를 끈 화면 (interview.themePick) */   /* display 를 준 요소는 hidden 이 안 먹는다 */
     .piece[aria-pressed="true"] { border: 3px solid var(--ink); background: #fff; }
     .pick-mark { flex: 0 0 40px; width: 40px; height: 40px; border-radius: 50%; align-self: center;
                  border: 2px solid var(--line); display: grid; place-items: center;
@@ -394,11 +395,15 @@
     /* 낱말 카드 고르기 — 이 기기에서 시작 · 어르신 링크에서 시작을 누르면 먼저 나온다 */
     .screen[data-screen="wordpick"] { padding-bottom: calc(168px + env(safe-area-inset-bottom)); }
     .wd-group[hidden], .wp-msg[hidden], .mm-all[hidden] { display: none; }
+    .wd-group { margin: 0 0 18px; }
+    .link-words { margin: 18px 0 0; text-align: left; }
+    .link-words .wd-card[aria-pressed="true"], .wd-select .wd-card[aria-pressed="true"] { border-color: var(--ink); background: var(--ink); color: #fff; }
+    .link-words-go { position: sticky; bottom: calc(12px + env(safe-area-inset-bottom)); margin-top: 8px; }
+    .wd-group[hidden], .wp-msg[hidden], .mm-all[hidden] { display: none; }
     .mm-all { display: flex; gap: 8px; margin: 0 0 12px; }
     .mm-all .btn-line { flex: 1; margin: 0; }
     .lk-picked { display: block; margin: 2px 0 6px; font-size: .92rem; color: #4a3d78; font-weight: 600; }
     .wp-msg { margin: 0 0 14px; padding: 10px 14px; border-radius: 14px; background: #fbeee8; color: #8a3b1e; font-weight: 600; }
-    .wd-group { margin: 0 0 18px; }
     .wd-group h3 { margin: 0 0 8px; font-size: .95rem; font-weight: 700; color: var(--ink); }
     .wd-list { list-style: none; padding: 0; margin: 0; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
     .wd-card { width: 100%; min-height: 84px; padding: 16px 12px; border-radius: 18px; border: 2px solid var(--line);
@@ -854,14 +859,15 @@
         </div>
       </section>
 
-      <!-- 낱말 카드 고르기 — 「이 기기에서 시작」 · 어르신 링크의 「이야기 시작하기」 뒤에 나온다.
-           카드를 누르면 그 낱말을 구체 주제로 바로 인터뷰를 연다. 버튼은 「돌아가기」 하나 -->
+      <!-- 낱말 카드 고르기 — 「이 기기에서 시작」 뒤에 나온다 (어르신 링크는 첫 화면 안에 카드가 있다).
+           카드는 고르기만 하고, 「이야기 시작하기」 를 눌러야 그 낱말을 구체 주제로 인터뷰를 연다 -->
       <section class="screen" data-screen="wordpick">
         <h1>어떤 낱말 이야기를<br />들려주실래요?</h1>
-        <p class="lead" style="margin:0 0 14px">하나를 누르면 바로 이야기를 시작해요.</p>
+        <p class="lead" style="margin:0 0 14px">낱말을 고르고 아래 「이야기 시작하기」를 눌러 주세요.</p>
         <p class="prep-note wp-msg" id="wpMsg" role="status" aria-live="polite" hidden></p>
-        <div id="wpList"></div>
+        <div id="wpList" class="wd-select"></div>
         <div class="dock">
+          <button class="btn btn-primary" id="wpGo">이야기 시작하기</button>
           <button class="btn-ghost" id="wpClose">돌아가기</button>
         </div>
       </section>
@@ -889,9 +895,9 @@
           </div>
           <span class="prep-k" id="themeLabel">테마</span>
           <div class="tabs" id="themeTabs" role="group" aria-labelledby="themeLabel"></div>
-          <label class="prep-k" for="topicInput">구체 주제</label>
+          <label class="prep-k" for="topicInput">궁금한 주제</label>
           <input class="topic" id="topicInput" type="text" autocomplete="off" placeholder="예: 첫 직장, 결혼식 날, 사진 찍기" />
-          <p class="prep-note" id="prepNote">테마를 고르고 주제를 적어 주세요.</p>
+          <p class="prep-note" id="prepNote">궁금한 주제를 적어 주세요.</p>
         </div>
         <span class="prep-k photo-label" id="photoLabel" hidden>보조 사진 <span style="font-weight:600;color:var(--muted)">(없어도 시작할 수 있어요)</span></span>
         <button class="photo-card" id="photoCard" type="button" aria-label="오늘의 사진 고르기">
@@ -1405,7 +1411,7 @@
   const CONFIG = {
     // 화면 아래와 개발용 패널에 그대로 찍힌다. 「고친 게 반영이 안 된 것 같다」는
     // 대부분 예전 파일이 열려 있는 경우라서, 눈으로 확인할 자리를 만들어 둔다.
-    version: 'v0.46 · 2026-10-28 (v0.45 낱말 카드 이어받음 · 허용 안 된 낱말 안내 · 고르신 낱말 · 자서전 많이 고르기 준비)',
+    version: 'v0.48 · 2026-10-28 (v0.47 위 · 자서전 「상한 없음 · 뺄 것만」 바꾸는 날 준비 · 화면 대기 120초)',
 
     // 이 화면을 백엔드가 직접 서빙하면(web/ 폴더) 빈 문자열 그대로 둔다.
     // 다른 포트에서 열어 시험할 때만 'http://127.0.0.1:8010' 처럼 채운다.
@@ -1459,6 +1465,9 @@
       ],
       // 서버 C1 §1 의 theme 값 (feature/theme-interview 8e55163). 모르는 값은 422.
       themeCodes: { '가족': 'family', '나': 'self', '취미': 'hobby' },
+      // 준비 화면에서 테마를 고르나. false 면 「궁금한 주제」 하나만 받는다 — 서버는 theme 없이도 연다
+      // (StartReq · LinkReq 의 theme 은 선택). 회차 제목(title)은 주제를 쓴다.
+      themePick: false,
       // C1 §1 의 theme · topic 칸에도 싣는다. 이 칸이 없는 예전 서버는 모르는 칸을 그냥 버리므로
       // 켜 둬도 안전하다 (StartReq 에 extra 금지가 없음을 확인).
       sendC1: true,
@@ -1521,21 +1530,26 @@
       idsField: 'session_ids',
       min: 3,
       // **서버 상한 MEMOIR_MAX_SESSIONS 와 같아야 한다** (지금 기본 5 — 단일 호출 구조의 임시 시험 제한).
-      // 팀 요청은 30~50개까지. 서버가 상한을 올리면 이 숫자만 같이 올린다. 화면만 올리면 6개부터 400 bad_selection 이다.
-      // 6개 이상이면 고르기 화면에 「모두 고르기 · 모두 빼기」 가 나온다 (하나씩 50번 누르지 않게)
+      // 화면만 올리면 6개부터 400 bad_selection 이다. 6개 이상이면 「모두 고르기 · 모두 빼기」 가 나온다.
+      // 정해진 것 (최충 · 태헌 10-28): 다섯 단계 파이프라인(PR #8)을 서비스에 붙이는 날 서버와 같이
+      //   max: Infinity (상한 없음 — 같은 화자의 회차 전부) · requestShape: 'exclude' 두 줄을 바꾼다.
+      //   그 전 임시 시험(10개 등)은 하지 않는다. 그날까지는 5 · 'ids' 그대로 둔다.
       max: 5,
       // 요청 모양. 'ids' = {session_ids, style} (지금) ·
       // 'exclude' = {elder_id, exclude_session_ids, style} — 최종 정책 「같은 화자 전체 선택 후 제외」 (7-C1 §4 · 태헌 10-26).
-      // 다섯 단계 구조가 서버에 들어오면 서버가 전체를 정하고 화면은 뺄 것만 보낸다. 서버와 같이 바꾼다
+      // 다섯 단계 구조가 서버에 들어오면 서버가 전체를 정하고 화면은 뺄 것만 보낸다. 서버와 같이 바꾼다.
+      // 'exclude' 면 고르기 화면이 **처음부터 전부 골라진 채** 열리고, 넣지 않을 것만 눌러 뺀다
       requestShape: 'ids',
       // 고를 엽서 수 (서버 상한 100). 서버에 「엽서 있는 회차만」(?has_postcard=1) 을 달라고 하므로
       // 최근 회차에 엽서 없는 회차가 많아도 밀려나지 않는다. (v0.26 에서 잠깐 100 으로 늘렸다가 되돌림)
       listLimit: 100,
       // 엽서 그림(썸네일)을 한 번에 몇 장씩 받나. 100장을 한꺼번에 받지 않는다
       thumbParallel: 6,
-      // 화면 쪽 안전장치일 뿐이다. 모델 호출 제한(서버 MEMOIR_TEXT_TIMEOUT, 지금 20초)을
-      // 넘기면 서버가 504 로 먼저 답한다. 연결이 걸려 버렸을 때만 여기서 접는다.
-      timeoutMs: 60000,
+      // 화면 쪽 안전장치일 뿐이다. 모델 호출 제한(서버 MEMOIR_TEXT_TIMEOUT)을 넘기면 서버가 504 로
+      // 먼저 답한다. 연결이 걸려 버렸을 때만 여기서 접는다 — **서버 제한보다 길어야 한다.**
+      // 운영 .env 는 100초 (최충 10-28 · 기본 20초). 60초였을 때는 서버가 61~100초에 만든 글을 화면이 먼저 버렸다.
+      // 파이프라인을 붙이는 날 전체 걸리는 시간에 맞춰 다시 정한다
+      timeoutMs: 120000,
       // '' 이면 실제 서버를 부른다 (기본). 서버 없이 화면만 볼 때 예시 응답을 고른다:
       //   ready · 400 · 404 · 422 · 502 · 503 · 504 · invalid · timeout · insufficient · unsupported(400 문체)
       // 주소 뒤에 ?memoirMock=ready 처럼 붙여도 된다. 예시일 때는 화면 위에 「예시 응답 모드」가 뜬다.
@@ -1826,6 +1840,17 @@
       return blob.size ? blob : null;
     },
 
+    // 낭독을 조각으로 (서버 TTS_STREAM=1). **본문을 읽지 않고 응답째 돌려준다** — 다 받고
+    // 나서 틀면 흘려 받는 뜻이 없다. 204 면 null (소리 없음, 오류 아님). 본문은 날 PCM
+    // 16비트 모노이고 rate 는 Content-Type 에 실려 온다.
+    questionStream: async (id) => {
+      const path = `${sp(id)}/question/stream`;
+      const res = await fetch(`${CONFIG.apiBase}/api${path}`, { credentials: 'include', headers: idHeaders(path) });
+      if (res.status === 204) return null;
+      if (!res.ok || !res.body) throw new ApiError(res.status, '소리를 받지 못했습니다');
+      return res;
+    },
+
     done: (id) => call(`${sp(id)}/done`, { method: 'POST' }),
     abort: (id) => call(`${sp(id)}/abort`, { method: 'POST' }),
 
@@ -2005,6 +2030,25 @@
   const SILENCE = 'data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YQAAAAA=';
   const speaker = (function () {
     let el = null, unlocked = false, settle = null;
+    // 흘려 읽기용 (src/speaker.ts 의 playStream 을 옮긴 것). <audio> 와 따로 잠금을 풀어야
+    // 한다 — 사파리는 AudioContext 를 사용자 동작 안에서 resume 해야 소리를 낸다.
+    // 하나를 만들어 끝까지 돌려쓴다.
+    let ctx = null, streamStop = null;
+    function audioCtx() {
+      if (!ctx) ctx = new (window.AudioContext || window.webkitAudioContext)();
+      return ctx;
+    }
+    // 1표본짜리 무음 버퍼를 한 번 틀어 두는 것이 iOS 에서 확실한 방법이다.
+    async function unlockCtx() {
+      try {
+        const c = audioCtx();
+        if (c.state !== 'running') await c.resume();
+        const src = c.createBufferSource();
+        src.buffer = c.createBuffer(1, 1, 22050);
+        src.connect(c.destination);
+        src.start(0);
+      } catch (e) { log('소리', 'AudioContext 잠금 해제 실패 · ' + e); }
+    }
     function element() {
       if (!el) {
         el = new Audio();
@@ -2018,6 +2062,8 @@
       isUnlocked: () => unlocked,
       // 반드시 사용자 동작(클릭) 안에서 부른다. 브라우저 자동재생 차단을 푼다.
       async unlock() {
+        // 흘려 읽기 쪽은 매번 확인한다. 화면을 덮었다 열면 사파리가 다시 재운다.
+        if (!ctx || ctx.state !== 'running') void unlockCtx();
         if (unlocked) return true;
         const a = element();
         if (!a.paused) return unlocked;
@@ -2046,7 +2092,92 @@
           a.play().catch((e) => { log('낭독', '재생 거부 · ' + e); finish(false); });
         });
       },
-      stop() { const a = element(); try { a.pause(); } catch (_) {} if (settle) { settle(false); settle = null; } },
+      /**
+       * 흘려 오는 낭독을 받는 대로 튼다. 약속은 play() 와 같다 — **마지막 조각까지 다 틀어야**
+       * 풀린다. 받기는 재생보다 먼저 끝나므로, 그 시각에 tts-done 을 올리면 아직 말이 남았는데
+       * 수음이 열려 스피커 소리가 첫마디로 들어간다.
+       * 조각 사이가 비면(언더런) 그만큼 늦춰 이어 틀고, 몇 번 났는지 로그에 남긴다.
+       */
+      async playStream(res) {
+        if (settle) { settle(false); settle = null; }
+        if (streamStop) streamStop();
+        const c = audioCtx();
+        if (c.state !== 'running') { try { await c.resume(); } catch (_) { /* 아래에서 말한다 */ } }
+        if (c.state !== 'running') throw new Error('재생 거부 · AudioContext ' + c.state);
+
+        const m = /rate=(\d+)/.exec(res.headers.get('content-type') || '');
+        const rate = Number(m ? m[1] : 24000);
+        const reader = res.body.getReader();
+        const sources = [];
+        const LEAD = 0.06;            // 첫 조각 앞 여유(초). 스케줄이 지금보다 앞서면 앞이 잘린다
+        const t0 = performance.now();
+        let next = 0, gaps = 0, stopped = false;
+        let odd = null;               // 조각 경계가 표본 한가운데 걸리면 남는 1바이트
+        const stop = () => {
+          if (stopped) return;
+          stopped = true;
+          reader.cancel().catch(() => {});
+          for (const s of sources) { try { s.stop(); } catch (_) { /* 아직 시작 전 */ } }
+        };
+        streamStop = stop;
+
+        try {
+          for (;;) {
+            const { value, done } = await reader.read();
+            if (done || stopped) break;
+            let bytes = value;
+            if (odd) {
+              const j = new Uint8Array(odd.length + bytes.length);
+              j.set(odd); j.set(bytes, odd.length);
+              bytes = j; odd = null;
+            }
+            if (bytes.length % 2) { odd = bytes.slice(-1); bytes = bytes.subarray(0, bytes.length - 1); }
+            if (!bytes.length) continue;
+
+            const n = bytes.length / 2;
+            const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+            const buf = c.createBuffer(1, n, rate);
+            const ch = buf.getChannelData(0);
+            for (let i = 0; i < n; i++) ch[i] = view.getInt16(i * 2, true) / 32768;
+
+            const src = c.createBufferSource();
+            src.buffer = buf;
+            src.connect(c.destination);
+            const now = c.currentTime;
+            if (!next) {
+              next = now + LEAD;
+              log('낭독', `첫 소리 · 받기 시작 후 ${(performance.now() - t0).toFixed(0)}ms`
+                + ` · ${rate}Hz · ${res.headers.get('x-speech-source') || '?'}`);
+            } else if (next < now + 0.005) {
+              gaps++;
+              next = now + 0.02;
+            }
+            src.start(next);
+            next += buf.duration;
+            sources.push(src);
+          }
+        } catch (e) {
+          if (!stopped) { stop(); streamStop = null; throw new Error('받다 끊김 · ' + (e.message || e)); }
+        }
+
+        // 받기는 끝났다. 마지막 조각이 다 울릴 때까지 기다린다.
+        const last = sources[sources.length - 1];
+        if (last && !stopped) {
+          await new Promise((r) => {
+            last.onended = () => r();
+            // 끊기면(stop) onended 가 바로 온다. 혹시 안 와도 매달리지 않게 시계로 한 번 더.
+            setTimeout(r, Math.max(0, (next - c.currentTime) * 1000) + 500);
+          });
+        }
+        if (streamStop === stop) streamStop = null;
+        log('낭독', `흘려 읽기 · ${sources.length}조각${gaps ? ` · 끊김 ${gaps}번` : ''}`);
+        return { finished: !stopped };
+      },
+      stop() {
+        const a = element(); try { a.pause(); } catch (_) {}
+        if (settle) { settle(false); settle = null; }
+        if (streamStop) streamStop();
+      },
     };
   })();
 
@@ -2844,7 +2975,7 @@
     clearBanner();
     // 1차 흐름은 테마와 주제가 있어야 연다. 버튼도 그전엔 눌리지 않는다 (renderPrep).
     // 링크로 연 인터뷰는 자녀가 이미 정해 두었다 (미리보기에서 받은 값).
-    if (NEW_FLOW && !LINK.on && !(prepInfo.theme && prepInfo.topic)) { renderPrep(); return; }
+    if (NEW_FLOW && !LINK.on && !prepReady()) { renderPrep(); return; }
     // 로그인 모드에서는 회차 시작에 elder_id 가 필수다 (최충 10-26 — 없으면 400). 화자가 없으면 먼저 등록하게 한다
     if (AUTH.mode === 'session' && !LINK.on && !curElder()) { toast('누구의 이야기인지 먼저 정해 주세요.'); show('elder'); return; }
     // 낱말 카드를 먼저 고른다 (CONFIG.interview.wordPick). 고르면 pickAndGo 가 다시 부른다
@@ -2910,7 +3041,7 @@
     // 1차 흐름 — 고른 테마 · 주제를 싣는다. 어느 키에 싣는지는 CONFIG.interview.startKeys (C1 전 임시)
     if (NEW_FLOW) {
       const k = CONFIG.interview.startKeys;
-      body[k.theme] = prepInfo.theme;
+      body[k.theme] = prepInfo.theme || prepInfo.topic;     // 테마를 고르지 않으면 제목은 주제
       body[k.topic] = prepInfo.topic;
       // C1 §1 — 서버가 질문을 만들 때 읽는 칸 (테마는 영문 코드)
       if (CONFIG.interview.sendC1) {
@@ -2955,7 +3086,7 @@
       startVisualLoop();
       show('talk');
       if (NEW_FLOW) {
-        $('#talkTopic').textContent = `${prepInfo.theme} · ${prepInfo.topic}`;
+        $('#talkTopic').textContent = prepLine();
         $('#talkTopic').hidden = false;
       }
       applySnapshot(s);
@@ -3078,7 +3209,7 @@
     // 질문 낭독 — 새 질문이 나왔을 때 한 번만
     if (s.state === 'SPEAKING' && s.next_question && spoken !== s.next_question) {
       spoken = s.next_question;
-      void readQuestion(s.session_id, s.next_question);
+      void readQuestion(s.session_id, s.next_question, !!s.question_audio_stream);
     }
   }
 
@@ -3330,11 +3461,28 @@
    * 질문 mp3 를 받아 틀고, 다 읽으면 tts-done 을 올린다.
    * 낭독이 끝나는 시각은 서버가 알 수 없다 — 끝까지 튼 쪽이 화면이라 여기서 알린다.
    */
-  async function readQuestion(id, q) {
+  async function readQuestion(id, q, stream) {
     // 정지를 누른 뒤에는 회차가 닫히는 중이라 tts-done 이 409 로 거절된다.
     // 낭독이 정지 때문에 끊긴 것이므로 아무것도 올리지 않는다.
     const stopped = () => stopping || closing || id !== sessionId;
     try {
+      // 흘려 읽는 회차(서버 TTS_STREAM=1)는 받는 대로 튼다. 소리가 없으면(204) 아래 갈래와 같다.
+      if (stream) {
+        const t0 = performance.now();
+        const res = await api.questionStream(id);
+        if (stopped()) { if (res) void res.body.cancel(); return; }
+        if (!res) {
+          log('소리', '없음 — 글자로만 나갑니다');
+          $('#questionSub').textContent = '(소리 없이 글자로만 나갑니다)';
+          await api.ttsDone(id).then(applySnapshot);
+          return;
+        }
+        const r = await speaker.playStream(res);
+        log('낭독', `${r.finished ? '끝까지 읽었습니다' : '중간에 멈췄습니다'} · 요청부터 ${((performance.now() - t0) / 1000).toFixed(1)}초`);
+        if (stopped()) return;
+        applySnapshot(await api.ttsDone(id));
+        return;
+      }
       const blob = await api.questionAudio(id);
       if (stopped()) return;
       if (!blob) {
@@ -4279,7 +4427,7 @@
   // 실패 안내는 HTTP 상태로 고른다 (C1 v1.1). 서버의 detail 은 화면에 내지 않는다 —
   // 문자열이 아니거나 내부 사정이 섞일 수 있다.
   const MM_FAIL = {
-    400: '선택한 이야기를 확인해 주세요. 3~5개를 고를 수 있고, 말씀이 없는 기록은 넣을 수 없어요.',
+    get 400() { return `선택한 이야기를 확인해 주세요. ${mmRange()} 고를 수 있고, 말씀이 없는 기록은 넣을 수 없어요.`; },
     404: '선택한 이야기를 찾을 수 없어요. 목록에서 다시 골라 주세요.',
     422: '선택한 이야기의 자료를 불러오지 못했어요.',
     502: '자서전을 만드는 중 문제가 생겼어요. 이야기 선택 화면으로 돌아가 주세요.',
@@ -4344,8 +4492,9 @@
       b.querySelector('.pick-mark').textContent = i >= 0 ? String(i + 1) : '';
     });
     const who = mmElder ? `${mmElder.name} 님의 이야기 중 ` : '이야기 ';
-    $('#mmGuide').textContent = n === 0 ? `${who}${min}~${max}개를 골라 주세요.`
-      : n < min ? `${n}개 골랐어요. ${min}~${max}개를 골라 주세요.`
+    $('#mmGuide').textContent = n === 0 ? `${who}${mmRange()} 골라 주세요.`
+      : n < min ? `${n}개 골랐어요. ${mmRange()} 골라 주세요.`
+      : mmExclude() ? `${n}개 골랐어요. 넣지 않을 이야기는 눌러서 빼 주세요.`
       : `${n}개 골랐어요. 자서전을 만들 수 있어요.`;
     if (mmView === 'pick') $('#mmMain').disabled = n < min || n > max;
     // 많이 고를 수 있을 때만 (상한 6개 이상 · 고를 것이 2개 이상)
@@ -4354,9 +4503,16 @@
     $('#mmPickAll').querySelector('[data-all="off"]').disabled = n === 0;
   }
 
-  /** 요청 모양 — 'exclude' 이고 화자별 목록일 때만 「전체 중 뺄 것」 으로 보낸다. 그 밖은 고른 것 */
+  /** 고를 수 있는 수를 글로 — 「3~5개를」 · 상한이 없으면(max: Infinity) 「3개 이상」 */
+  function mmRange() {
+    const { min, max } = CONFIG.memoir;
+    return Number.isFinite(max) ? `${min}~${max}개를` : `${min}개 이상`;
+  }
+  /** 「전체 중 뺄 것」 으로 보내나 — 'exclude' 이고 화자별 목록일 때만. 그 밖(개발 모드 · 예전 서버)은 고른 것 */
+  const mmExclude = () => CONFIG.memoir.requestShape === 'exclude' && !!mmElder;
+  /** 요청 모양 — mmExclude 면 { elderId, exclude }, 아니면 { ids } */
   function mmRequest(ids) {
-    if (CONFIG.memoir.requestShape === 'exclude' && mmElder) {
+    if (mmExclude()) {
       return { elderId: mmElder.elder_id, exclude: mmRows.map(r => r.session_id).filter(id => !ids.includes(id)) };
     }
     return { ids };
@@ -4476,6 +4632,11 @@
       if (!byElder) mmRows = mmRows.filter(s => s.thumb);
       if (byElder) void mmCountUnassigned(my);
       if (!mmRows.length) { mmShow('none'); log('자서전', '고를 이야기 없음'); return; }
+      // 「같은 화자 전체 선택 후 제외」 — 처음부터 전부 골라 둔다
+      if (mmExclude()) mmPicked = mmRows.map(r => r.session_id).slice(0, CONFIG.memoir.max);
+      // 서버는 이 화자의 회차 **전부**에서 뺀다. 목록이 상한에 닿았으면 화면에 안 보인 더 오래된 회차도 들어간다
+      if (mmExclude() && rows.length >= CONFIG.memoir.listLimit)
+        log('자서전', `목록이 ${CONFIG.memoir.listLimit}개 상한에 닿았습니다 — 더 오래된 회차는 화면에 없어 뺄 수 없지만 서버는 넣습니다`);
       titleAudit('자서전', mmRows);
       mmDraw();
       mmShow('pick');
@@ -4583,8 +4744,20 @@
     }
     // 늦게 온 다른 요청의 결과인가 (7-C1 run) — 고른 회차와 다르면 보여 주지 않는다
     if (!legacy && ids && res.run && Array.isArray(res.run.session_ids)) {
-      const a = [...res.run.session_ids].sort().join(), b = [...ids].sort().join();
-      if (a !== b) { log('자서전', '고른 엽서와 다른 회차의 결과가 왔습니다 — 보여 주지 않습니다'); return { state: 'fail' }; }
+      const got = res.run.session_ids.map(String);
+      if (mmExclude()) {
+        // 뺄 것만 보냈다 — 서버가 전체를 정하므로 같은 목록일 필요는 없다. 고른 것이 다 있고 뺀 것이 없으면 이 요청의 결과다.
+        // 화면 목록에 없던 회차(상한 밖 · 화면이 거른 것)가 더 들어 있으면 개수만 남긴다
+        const shown = new Set(mmRows.map(r => r.session_id)), sent = new Set(ids);
+        if (!ids.every(id => got.includes(id)) || got.some(id => shown.has(id) && !sent.has(id))) {
+          log('자서전', '고른 것 · 뺀 것과 맞지 않는 결과가 왔습니다 — 보여 주지 않습니다'); return { state: 'fail' };
+        }
+        const extra = got.filter(id => !shown.has(id)).length;
+        if (extra) log('자서전', `서버가 화면 목록에 없던 회차 ${extra}개를 더 넣었습니다`);
+      } else {
+        const a = [...got].sort().join(), b = [...ids].sort().join();
+        if (a !== b) { log('자서전', '고른 엽서와 다른 회차의 결과가 왔습니다 — 보여 주지 않습니다'); return { state: 'fail' }; }
+      }
     }
     const sentences = p => Array.isArray(p) ? p : (p && Array.isArray(p.sentences) ? p.sentences : null);
     const chs = res.chapters, title = txt(res.title).trim();
@@ -5140,7 +5313,8 @@
     other: '지금은 로그인할 수 없어요. 잠시 뒤 다시 시도해 주세요.',
   };
   const LINK_SAYS = {
-    ready:       { h: '들려주실 이야기', p: '준비되시면 아래 버튼을 눌러 주세요. 누르면 마이크를 써도 되는지 여쭤봐요.', btn: '이야기 시작하기', topic: true, friend: true },
+    ready:       { h: '들려주실 이야기', p: '준비되시면 아래 버튼을 눌러 주세요. 누르면 마이크를 써도 되는지 여쭤봐요.', btn: '이야기 시작하기', topic: true, friend: true,
+                   pick: '이야기하고 싶은 낱말을 고르고 아래 「이야기 시작하기」를 눌러 주세요. 누르면 마이크를 써도 되는지 여쭤봐요.' },
     in_progress: { h: '이야기를 이어서 해요', p: '이 기기에서 하던 이야기가 남아 있어요.', btn: '이어서 하기', topic: true, friend: true },
     in_progress_elsewhere: { h: '다른 곳에서 진행 중이에요', p: '처음 시작한 기기에서 이어서 해 주세요.' },
     interrupted: { h: '연결이 끊겼어요', p: '링크를 보내 주신 분께 새 링크를 부탁해 주세요.' },
@@ -5189,8 +5363,22 @@
       const t = [THEME_LABEL[info.theme] || '', info.topic || ''].filter(Boolean).join(' · ');
       if (t) host.append(el('p', 'fe03-acct', t));
     }
-    host.append(el('p', 'lead', say.p));
-    if (say.btn && onBtn) {
+    // 낱말 카드를 이 화면 안에 바로 놓는다 (CONFIG.interview.wordPick). 다른 화면으로 넘기지 않고,
+    // 카드를 누르는 그 동작이 곧 「시작」이다 — 마이크 · 소리 허락도 그 탭에서 이어진다
+    const inlineWords = host.id === 'linkView' && state === 'ready' && onBtn && NEW_FLOW && CONFIG.interview.wordPick;   // 개발 시안(fe03) 은 예전 버튼 그대로
+    host.append(el('p', 'lead', inlineWords ? say.pick : say.p));
+    if (inlineWords) {
+      // 카드는 고르기만 한다 (자녀가 적은 주제가 처음부터 골라져 있다). 「이야기 시작하기」 를 눌러야 넘어간다
+      words.pickFor = 'elder'; words.go = '';
+      words.featured = String((info && info.topic) || '').trim();
+      if (!words.inline) words.inline = words.featured;   // 사진이 뒤늦게 와서 다시 그려도 고른 것은 남긴다
+      const box = el('div', 'link-words');
+      renderWordPick(box);
+      host.append(box);
+      const b = el('button', 'btn btn-primary link-words-go', say.btn);
+      b.addEventListener('click', () => { words.go = words.inline; onBtn(); });
+      host.append(b);
+    } else if (say.btn && onBtn) {
       const b = el('button', 'btn btn-primary', say.btn);
       b.addEventListener('click', onBtn);
       host.append(b);
@@ -5227,7 +5415,7 @@
     if (linkBusy) return;                 // 연속 클릭 — 서버도 같은 회차를 돌려주지만 화면에서도 한 번만
     // 낱말 카드를 먼저 고르신다 (CONFIG.interview.wordPick). 고르시면 pickAndGo 가 다시 부른다
     if (NEW_FLOW && CONFIG.interview.wordPick && LINK.preview && LINK.preview.state === 'ready') {
-      if (!words.go) { openPick('elder'); return; }
+      if (!words.go) { openPick('elder'); return; }   // 카드는 첫 화면에 있다 — 여기는 그 밖에서 부른 경우뿐
       LINK.topic = words.go; words.go = '';
     }
     linkBusy = true;
@@ -5469,7 +5657,7 @@
   // 배포 때는 서버가 PUBLIC_ORIGIN 으로 완전한 주소(https://…/i#…)를 준다. / 로 시작할 때만 지금 주소를 붙인다
   const absUrl = (u) => !u ? '' : u.startsWith('/') ? `${location.origin}${u}` : u;
   async function linkOut() {
-    if (loBusy || !(prepInfo.theme && prepInfo.topic)) return;
+    if (loBusy || !prepReady()) return;
     const elder = curElder();
     if (!elder || !elder.elder_id) { toast('화자를 먼저 정해 주세요.'); return; }
     loBusy = true; renderPrep();
@@ -5478,12 +5666,12 @@
       if (photo.file && CONFIG.photo.upload && !photo.photo_id && photoUpload) {
         await Promise.race([photoUpload, sleep(CONFIG.photo.waitBeforeStartMs)]).catch(() => {});
       }
-      const body = { elder_id: elder.elder_id, title: prepInfo.theme, seed: prepInfo.topic,
+      const body = { elder_id: elder.elder_id, title: prepInfo.theme || prepInfo.topic, seed: prepInfo.topic,
                      theme: CONFIG.interview.themeCodes[prepInfo.theme], topic: prepInfo.topic };
       if (photo.photo_id) body.photo_id = photo.photo_id;
       const r = await api.linkCreate(body);
       lo.rec = r; lo.url = absUrl(r && r.url); lo.state = 'issued';
-      $('#loTopic').textContent = `${prepInfo.theme} · ${prepInfo.topic}`;
+      $('#loTopic').textContent = prepLine();
       $('#loMsg').textContent = '이 화면을 나가면 링크를 다시 볼 수 없어요. 잃어버리면 「링크 취소」 뒤 다시 만들 수 있어요.';
       loDraw();
       show('linkout');
@@ -6105,7 +6293,7 @@
      이름 단추로 접어 둔다. 카드를 누르면 그 낱말을 구체 주제로 바로 이어 간다. */
   // pickFor — here(이 기기에서 시작) · elder(어르신 링크). go — 고른 낱말. beginInterview · linkGo 가 한 번 읽고 비운다
   // featured — 맨 앞에 올릴 낱말(적어 둔 구체 주제)
-  const words = { pickFor: 'here', go: '', featured: '' };
+  const words = { pickFor: 'here', go: '', featured: '', inline: '' };   // inline — 링크 첫 화면에서 골라 둔 낱말
   const wordKey = (w) => String(w).replace(/\s+/g, '');   // 띄어쓰기만 다른 낱말은 같은 카드로 본다
 
   function wordGroups() {
@@ -6122,7 +6310,15 @@
     const li = document.createElement('li');
     const b = document.createElement('button');
     b.type = 'button'; b.className = 'wd-card'; b.textContent = w;   // 자녀가 적은 글 — textContent 로만
-    b.addEventListener('click', () => pickAndGo(w));
+    // 링크 첫 화면 · 낱말 화면의 카드는 고르기만 한다 — 시작은 아래 「이야기 시작하기」 가 한다
+    b.addEventListener('click', () => {
+      const box = b.closest('.link-words, .wd-select');
+      if (!box) { pickAndGo(w); return; }
+      words.inline = w;
+      box.querySelectorAll('.wd-card').forEach(x => x.setAttribute('aria-pressed', String(x === b)));
+      log('낱말', `${words.pickFor === 'elder' ? '어르신' : '이 기기'} · 「${w}」 고름`);
+    });
+    if (words.inline && wordKey(w) === wordKey(words.inline)) b.setAttribute('aria-pressed', 'true');
     li.append(b);
     return li;
   }
@@ -6137,8 +6333,7 @@
     return sec;
   }
   /** 단추를 누르면 그 묶음 카드가 나오고, 다시 누르면 접힌다. 한 번에 한 묶음만 편다. */
-  function renderWordPick() {
-    const box = $('#wpList');
+  function renderWordPick(box = $('#wpList')) {
     const groups = wordGroups();
     const cats = groups.filter(g => !g.mine);
     const parts = groups.filter(g => g.mine).map(groupSection);
@@ -6163,6 +6358,7 @@
     words.pickFor = kind; words.go = '';
     $('#wpMsg').hidden = true;
     words.featured = String(prepInfo.topic || '').trim();
+    words.inline = words.featured;          // 적어 둔 주제가 처음부터 골라져 있다
     renderWordPick();
     show('wordpick');
   }
@@ -6174,14 +6370,25 @@
     log('낱말', `${words.pickFor === 'elder' ? '어르신' : '이 기기'} · 「${w}」`);
     if (words.pickFor === 'elder') void linkGo(); else void beginInterview();
   }
+  // 고른 낱말로 시작한다. 누른 그 동작 안에서 부르므로 마이크 · 소리 허락이 이어진다
+  $('#wpGo').addEventListener('click', () => {
+    if (!words.inline) { toast('이야기하고 싶은 낱말을 하나 골라 주세요.'); return; }
+    pickAndGo(words.inline);
+  });
   $('#wpClose').addEventListener('click', () => show(words.pickFor === 'elder' ? 'link' : 'ready'));
 
   /* ── 1차 인터뷰 흐름 — 준비 화면 · 키보드 (업무지시서 03) ── */
+  // 시작할 수 있나 — 테마를 고르지 않는 화면(themePick false)은 주제만 있으면 된다
+  function prepReady() { return !!prepInfo.topic && (!CONFIG.interview.themePick || !!prepInfo.theme); }
+  // 화면 위에 띄우는 한 줄 — 「가족 · 첫 직장」, 테마가 없으면 「첫 직장」
+  function prepLine() { return [prepInfo.theme, prepInfo.topic].filter(Boolean).join(' · '); }
   function renderPrep() {
     if (!NEW_FLOW) return;
-    const ok = !!(prepInfo.theme && prepInfo.topic);
+    const ok = prepReady();
     // 시작 전에 고른 값을 한 줄로 읽어 준다
-    $('#prepNote').textContent = ok ? `「${prepInfo.theme}」 테마로 「${prepInfo.topic}」 이야기를 시작해요.`
+    $('#prepNote').textContent = !CONFIG.interview.themePick
+      ? (ok ? `「${prepInfo.topic}」 이야기를 시작해요.` : '궁금한 주제를 적어 주세요.')
+      : ok ? `「${prepInfo.theme}」 테마로 「${prepInfo.topic}」 이야기를 시작해요.`
       : !prepInfo.theme ? '테마를 하나 골라 주세요.' : '이야기할 주제를 적어 주세요.';
     if (!sessionId) $('#startBtn').disabled = !ok;
     $('#linkOutBtn').disabled = !ok || loBusy;
@@ -6201,7 +6408,8 @@
     $('#photoHint').lastChild.textContent = ' 사진 넣기';
 
     const tabs = $('#themeTabs');
-    CONFIG.interview.themes.forEach(t => {
+    $('#themeLabel').hidden = tabs.hidden = !CONFIG.interview.themePick;
+    if (CONFIG.interview.themePick) CONFIG.interview.themes.forEach(t => {
       const b = document.createElement('button');
       b.type = 'button'; b.className = 'tab'; b.textContent = t;
       b.setAttribute('aria-pressed', 'false');
