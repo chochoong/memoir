@@ -522,10 +522,29 @@ async def preview_all(elder_id, exclude, user_id: str, style: str = "spoken") ->
     return await _draft(await pick_all(elder, gone, user_id), user_id, style)
 
 
+async def select(body: dict, user_id: str) -> list[str]:
+    """
+    요청 본문 → 쓸 회차. exclude_session_ids 칸이 있으면 빼기 요청, 없으면 고른 것.
+    작업으로 시작할 때(memoir_jobs) 모델을 부르기 전에 400 · 404 · 422 를 바로 내려고 따로 둔다.
+    """
+    if "exclude_session_ids" in body:
+        elder, gone = check_exclusion(body.get("elder_id"), body["exclude_session_ids"])
+        return await pick_all(elder, gone, user_id)
+    return check_selection(body.get("session_ids"))
+
+
 async def _draft(ids: list[str], user_id: str, style: str) -> dict:
-    recs = await collect(ids, user_id)
+    return await generate(await collect(ids, user_id), ids, style)
+
+
+async def generate(recs: list[dict], ids: list[str], style: str, progress=None) -> dict:
+    """
+    collect 를 지난 회차로 쓴다. 엔진은 MEMOIR_ENGINE.
+
+    progress(stage, chapter, chapters) 는 다섯 단계가 한 단계를 마칠 때마다 불린다 (작업 화면용).
+    """
     if engine() == "pipeline":
-        return await _draft_pipeline(recs, ids, style)
+        return await _draft_pipeline(recs, ids, style, progress)
     data, turn_map = merge(recs)
     turns = {t["global_turn"] for t in turn_map}
     log.info("자서전 요청 — 회차 %d개 %s · 말씀 %d턴 · 모델 %s",
@@ -541,7 +560,7 @@ async def _draft(ids: list[str], user_id: str, style: str) -> dict:
 # ---------------------------------------------------------------- 다섯 단계 (MEMOIR_ENGINE=pipeline)
 
 
-async def _draft_pipeline(recs: list[dict], ids: list[str], style: str) -> dict:
+async def _draft_pipeline(recs: list[dict], ids: list[str], style: str, progress=None) -> dict:
     """
     다섯 단계로 쓴다. 입력은 한 번 호출과 같은 merge 다 (memoir_pipeline.build_input 과 같다).
 
@@ -556,7 +575,7 @@ async def _draft_pipeline(recs: list[dict], ids: list[str], style: str) -> dict:
         raise GenerationFailed("MEMOIR_FAIL_INJECT=generation_failed")
     if hook == INJECT_TIMEOUT:
         raise GenerationTimeout("MEMOIR_FAIL_INJECT=generation_timeout")
-    rec = mp.Recorder()                      # folder 없음 — 메모리에만
+    rec = _progress_recorder(progress)                # folder 없음 — 메모리에만
     t0 = time.monotonic()
     log.info("자서전 다섯 단계 요청 — 회차 %d개 %s · 말씀 %d턴 · 모델 %s", len(ids),
              ",".join(s[:8] for s in ids), len(turn_map), mp.settings()["MEMOIR_PIPE_TEXT_MODEL"])
@@ -572,6 +591,42 @@ async def _draft_pipeline(recs: list[dict], ids: list[str], style: str) -> dict:
              (res.get("verification") or {}).get("state"),
              json.dumps(res.get("failure"), ensure_ascii=False)[:200] if res.get("failure") else "-")
     return pipeline_result(res, ids, style)
+
+
+def _progress_recorder(progress):
+    """
+    실행 기록(Recorder)이 단계 파일을 남길 때 다음 단계를 알린다. 파이프라인 코드를 고치지 않고
+    파일 이름으로 읽는다 — 01_analysis → 목차 · 02_outline → 장(장 수) · 03_ch-k → k+1 장 ·
+    03_checks → 편집 · 04_code_gate → 검증.
+    """
+    from . import memoir_pipeline as mp
+
+    class Rec(mp.Recorder):
+        chapters = 0
+
+        def text(self, name: str, body: str) -> str:
+            out = super().text(name, body)
+            if progress is None or not name.endswith(".json"):
+                return out
+            try:
+                if name == "01_analysis.json":
+                    progress("outline", 0, 0)
+                elif name == "02_outline.json":
+                    self.chapters = len(json.loads(body).get("chapters") or [])
+                    progress("chapter", 1, self.chapters)
+                elif name.startswith("03_ch-"):
+                    k = int(name[len("03_ch-"):-len(".json")])
+                    if k < self.chapters:
+                        progress("chapter", k + 1, self.chapters)
+                elif name == "03_checks.json":
+                    progress("edit", 0, self.chapters)
+                elif name == "04_code_gate.json":
+                    progress("verify", 0, self.chapters)
+            except (ValueError, AttributeError):
+                pass                                    # 진행 표시는 덤이다 — 생성을 막지 않는다
+            return out
+
+    return Rec()
 
 
 def pipeline_result(res: dict, ids: list[str], style: str) -> dict:

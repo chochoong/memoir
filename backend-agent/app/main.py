@@ -34,7 +34,7 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
 from app.session import controller as sc
-from app.session import auth, limits, link, memoir, photo, photostore, postcard, prompt, store, stt, tts
+from app.session import auth, limits, link, memoir, memoir_jobs, photo, photostore, postcard, prompt, store, stt, tts
 from app.session import style as styles
 from app.session.conf import env_flag, env_int, env_str
 from app.session.machine import State, TransitionError
@@ -905,13 +905,7 @@ async def memoir_preview(request: Request, who: str = Depends(auth.current_user)
     자료 부족은 200 의 insufficient_material 이고 실패가 아니다. 실패는 상태 코드와
     `{"detail": 안내, "code": 갈래}` 로만 나간다. 둘을 서로 바꿔 내보내지 않는다.
     """
-    try:
-        # 빼기 요청은 뺄 회차 수만큼 길어진다 (UUID 하나 40바이트쯤 — 64KB 면 1,500개)
-        body = json.loads(await _body_capped(request, 64 * 1024) or b"null")
-    except ValueError:
-        body = None
-    if not isinstance(body, dict):
-        body = {}
+    body = await _memoir_body(request)
     try:
         chosen = styles.pick(body.get("style"))
     except styles.UnsupportedStyle:
@@ -921,10 +915,101 @@ async def memoir_preview(request: Request, who: str = Depends(auth.current_user)
             return await memoir.preview_all(body.get("elder_id"), body["exclude_session_ids"], who, chosen)
         return await memoir.preview(body.get("session_ids"), who, chosen)
     except memoir.MemoirError as e:
-        status, code = next((s, c) for kind, s, c in _MEMOIR_STATUS if isinstance(e, kind))
-        code = code or e.code      # 400 은 갈래가 여럿이다 — bad_selection · mixed_speakers · speaker_unassigned
-        log.warning("자서전 %d %s — %s", status, type(e).__name__, str(e)[:200])
+        status, code = _memoir_failure(e)
         return JSONResponse({"detail": _MEMOIR_SAYS[status], "code": code}, status_code=status)
+
+
+async def _memoir_body(request: Request) -> dict:
+    try:
+        # 빼기 요청은 뺄 회차 수만큼 길어진다 (UUID 하나 40바이트쯤 — 64KB 면 1,500개)
+        body = json.loads(await _body_capped(request, 64 * 1024) or b"null")
+    except ValueError:
+        body = None
+    return body if isinstance(body, dict) else {}
+
+
+def _memoir_failure(e: memoir.MemoirError) -> tuple[int, str]:
+    status, code = next((s, c) for kind, s, c in _MEMOIR_STATUS if isinstance(e, kind))
+    code = code or e.code      # 400 은 갈래가 여럿이다 — bad_selection · mixed_speakers · speaker_unassigned
+    log.warning("자서전 %d %s — %s", status, type(e).__name__, str(e)[:200])
+    return status, code
+
+
+@app.post("/api/memoirs")
+async def memoir_start(request: Request, who: str = Depends(auth.current_user)):
+    """
+    자서전 작업을 연다 — **기다리지 않는다.** 본문은 /api/memoirs/preview 와 같다.
+
+    고르기 · 조회 검사는 여기서 끝낸다 — 400 · 404 · 422 는 지금처럼 바로 나간다. 통과하면
+    202 `{job_id, status: "running", stage, ...}` 이고, 결과는 GET /api/memoirs/{job_id} 로 받는다.
+    만드는 중인 작업이 있으면 새로 열지 않고 409 `{code: "busy", job_id}` 다. memoir_jobs.py 머리 참조.
+    """
+    body = await _memoir_body(request)
+    try:
+        chosen = styles.pick(body.get("style"))
+    except styles.UnsupportedStyle:
+        return _unsupported_style()
+    busy = memoir_jobs.running(who)
+    if busy is not None:
+        return JSONResponse({"detail": "자서전을 만들고 있어요. 다 만들어지면 볼 수 있어요.", "code": "busy",
+                             "job_id": busy.job_id}, status_code=409)
+    try:
+        ids = await memoir.select(body, who)
+        recs = await memoir.collect(ids, who)
+    except memoir.MemoirError as e:
+        status, code = _memoir_failure(e)
+        return JSONResponse({"detail": _MEMOIR_SAYS[status], "code": code}, status_code=status)
+    job = await memoir_jobs.start(recs, ids, who, chosen)
+    return JSONResponse(_memoir_job_view(job), status_code=202)
+
+
+@app.get("/api/memoirs/{job_id}")
+async def memoir_job(job_id: str, who: str = Depends(auth.current_user)):
+    """
+    작업 하나. 늘 200 이고 상태는 본문의 status 다 — 화면이 몇 초마다 부른다.
+
+        running  stage (analysis · outline · chapter · edit · verify · write), chapter / chapters, elapsed
+        done     result — /api/memoirs/preview 의 200 본문과 같다 (7-C1 §3)
+        failed   code · detail — preview 의 실패와 같은 code. 그만두었으면 cancelled
+
+    없거나 남의 것이거나 서버를 다시 켜서 사라졌으면 404 `{code: "job_not_found"}`.
+    """
+    job = memoir_jobs.get(job_id, who)
+    if job is None:
+        return JSONResponse({"detail": "자서전 작업을 찾을 수 없어요. 다시 만들어 주세요.",
+                             "code": "job_not_found"}, status_code=404)
+    return _memoir_job_view(job)
+
+
+@app.delete("/api/memoirs/{job_id}")
+async def memoir_job_cancel(job_id: str, who: str = Depends(auth.current_user)):
+    """만드는 중인 작업을 그만둔다. 이미 끝난 작업은 그대로다. 결과는 GET 과 같다."""
+    job = memoir_jobs.get(job_id, who)
+    if job is None:
+        return JSONResponse({"detail": "자서전 작업을 찾을 수 없어요. 다시 만들어 주세요.",
+                             "code": "job_not_found"}, status_code=404)
+    memoir_jobs.cancel(job)
+    if job.task is not None and not job.task.done():
+        try:
+            await asyncio.wait_for(asyncio.shield(job.task), timeout=2)
+        except (asyncio.CancelledError, asyncio.TimeoutError):
+            pass
+    return _memoir_job_view(job)
+
+
+def _memoir_job_view(job: memoir_jobs.Job) -> dict:
+    out = {"job_id": job.job_id, "status": job.status, "style": job.style,
+           "run": {"session_ids": job.ids}, "elapsed": memoir_jobs.elapsed(job)}
+    if job.status == memoir_jobs.RUNNING:
+        out.update(stage=job.stage, chapter=job.chapter, chapters=job.chapters)
+    elif job.status == memoir_jobs.DONE:
+        out["result"] = job.result
+    elif isinstance(job.error, memoir_jobs.Cancelled):
+        out.update(code="cancelled", detail="자서전 만들기를 그만두었어요.")
+    else:
+        status, code = _memoir_failure(job.error)
+        out.update(code=code, detail=_MEMOIR_SAYS[status])
+    return out
 
 
 # ---------------------------------------------------------------- 인터뷰 링크 (자녀)

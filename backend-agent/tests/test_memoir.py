@@ -773,6 +773,126 @@ def test_pipeline_engine():
         mp.run = saved_run
 
 
+def test_jobs():
+    print("\n[작업] POST /api/memoirs → GET /api/memoirs/{job_id} — 기다리지 않는다 (단위 8S)")
+    import threading
+    import time as _time
+
+    from fastapi.testclient import TestClient
+
+    from app.main import app
+    from app.session import memoir_jobs
+    from app.session import memoir_pipeline as mp
+
+    me, other = {"X-User-Id": ME}, {"X-User-Id": OTHER}
+    base = json.loads((ROOT / "tests" / "data" / "v5_edit_pro_20261027T024949Z" / "result.json")
+                      .read_text(encoding="utf-8"))
+    done = {**base, "generation_state": mp.GENERATED, "verification": {"state": "completed"}}
+    gate, at_chapter = threading.Event(), threading.Event()
+    out = {"res": done}
+
+    async def run(data, turn_map, recorder=None, **kv):
+        import asyncio
+        recorder.json("01_analysis.json", {})
+        recorder.json("02_outline.json", {"chapters": [{}, {}, {}, {}]})
+        recorder.json("03_ch-1.json", {})
+        at_chapter.set()
+        while not gate.is_set():
+            await asyncio.sleep(0.01)
+        return copy.deepcopy(out["res"])
+
+    def wait(c, job_id, who=me, until=("done", "failed")):
+        for _ in range(300):
+            r = c.get(f"/api/memoirs/{job_id}", headers=who)
+            if r.status_code != 200 or r.json()["status"] in until:
+                return r
+            _time.sleep(0.01)
+        return r
+
+    saved_run = mp.run
+    mp.run = run
+    try:
+        with _Env(AZURE_SPEECH_KEY="", GEMINI_API_KEY="", MEMOIR_FAIL_INJECT="off", MEMOIR_ENGINE="pipeline"), \
+                _Fake() as fake, NoDb(), AsHeader(), TestClient(app) as c:
+            three = fake.pick("s-a", "s-b", "s-c")
+            r = c.post("/api/memoirs", json=three, headers=me)
+            job = r.json()
+            check("시작 → 202 · running · 작업 번호 · 회차", r.status_code == 202 and job["status"] == "running"
+                  and len(job["job_id"]) == 32 and job["run"]["session_ids"] == three["session_ids"],
+                  f"{r.status_code} {r.text[:80]}")
+            at_chapter.wait(2)
+            r = c.get(f"/api/memoirs/{job['job_id']}", headers=me)
+            check("만드는 중 → stage chapter · 2/4 장 (단계 파일로 읽는다)",
+                  r.json()["status"] == "running" and r.json()["stage"] == "chapter"
+                  and (r.json()["chapter"], r.json()["chapters"]) == (2, 4), r.text[:120])
+            r = c.post("/api/memoirs", json=three, headers=me)
+            check("만드는 중에 또 시작 → 409 busy · 그 job_id", r.status_code == 409
+                  and r.json()["code"] == "busy" and r.json()["job_id"] == job["job_id"], f"{r.status_code}")
+            r = c.get(f"/api/memoirs/{job['job_id']}", headers=other)
+            check("남의 작업 → 404 job_not_found", r.status_code == 404 and r.json()["code"] == "job_not_found")
+            gate.set()
+            r = wait(c, job["job_id"])
+            res = r.json()
+            check("다 되면 → done · result 는 preview 응답과 같다 (7-C1 §3)",
+                  res["status"] == "done" and res["result"]["status"] == "ready"
+                  and res["result"]["title"] == base["title"]["text"]
+                  and res["result"]["run"]["session_ids"] == three["session_ids"], r.text[:120])
+            check("끝난 작업에는 stage 가 없다", "stage" not in res)
+            r = c.get("/api/memoirs/" + "0" * 32, headers=me)
+            check("없는 작업 → 404 job_not_found", r.status_code == 404 and r.json()["code"] == "job_not_found")
+
+            n = len(memoir_jobs._JOBS)
+            r = c.post("/api/memoirs", json=fake.pick("s-a", "s-b"), headers=me)
+            check("잘못 고르면 바로 400 bad_selection · 작업을 열지 않는다",
+                  r.status_code == 400 and r.json()["code"] == "bad_selection" and len(memoir_jobs._JOBS) == n)
+            r = c.post("/api/memoirs", json={**three, "style": "novel"}, headers=me)
+            check("문체 거절 → 400 unsupported_style", r.status_code == 400 and r.json()["code"] == "unsupported_style")
+            r = c.post("/api/memoirs", json=three, headers=other)
+            check("남의 회차 → 404 not_found (바로)", r.status_code == 404 and r.json()["code"] == "not_found")
+
+            out["res"] = {**done, "generation_state": mp.FAILED, "chapters": [],
+                          "failure": {"stage": "analysis", "kind": "timeout"}}
+            r = c.post("/api/memoirs", json=three, headers=me)
+            r = wait(c, r.json()["job_id"])
+            check("실패 → failed · code generation_timeout · 안내 문장",
+                  r.json()["status"] == "failed" and r.json()["code"] == "generation_timeout"
+                  and "요" in r.json()["detail"], r.text[:120])
+            out["res"] = {**done, "generation_state": mp.PARTIAL, "chapters": [], "failure": {"kind": "timeout"}}
+            r = wait(c, c.post("/api/memoirs", json=three, headers=me).json()["job_id"])
+            check("일부 장 실패 → failed · code incomplete", r.json()["code"] == "incomplete", r.text[:80])
+            out["res"] = done
+
+            gate.clear()
+            at_chapter.clear()
+            j = c.post("/api/memoirs", json=three, headers=me).json()["job_id"]
+            at_chapter.wait(2)
+            r = c.delete(f"/api/memoirs/{j}", headers=me)
+            check("그만두기 → failed · cancelled", r.status_code == 200 and r.json()["status"] == "failed"
+                  and r.json()["code"] == "cancelled", r.text[:120])
+            r = c.post("/api/memoirs", json=three, headers=me)
+            check("그만둔 뒤에는 다시 시작할 수 있다 (202)", r.status_code == 202, f"{r.status_code}")
+            gate.set()
+            wait(c, r.json()["job_id"])
+
+            with _Env(MEMOIR_ENGINE="single"):
+                r = c.post("/api/memoirs", json=three, headers=me)
+                check("single 엔진도 작업으로 — stage write", r.status_code == 202 and r.json()["stage"] == "write")
+                r = wait(c, r.json()["job_id"])
+                check("single 결과 — 예전 다섯 키 + style + run",
+                      r.json()["status"] == "done" and r.json()["result"] == shown(READY, three["session_ids"]),
+                      r.text[:120])
+
+            with _Env(MEMOIR_JOB_KEEP_SECONDS="0"):
+                j = c.post("/api/memoirs", json=three, headers=me).json()["job_id"]
+                wait(c, j)
+                _time.sleep(0.05)        # Windows 시계 한 칸은 약 16ms 다
+                r = c.get(f"/api/memoirs/{j}", headers=me)
+                check("보관 시간이 지나면 → 404 job_not_found", r.status_code == 404, f"{r.status_code}")
+    finally:
+        mp.run = saved_run
+        memoir_jobs._JOBS.clear()
+
+
 def test_all_checks_passed():
     """pytest 안전판 — test_flow.py 의 같은 함수 주석 참조."""
     assert not FAIL, "실패: " + ", ".join(FAIL)
@@ -786,6 +906,7 @@ def main() -> int:
     test_routes()
     test_exclude()
     test_pipeline_engine()
+    test_jobs()
     print(f"\n{'=' * 52}\n통과 {len(PASS)} · 실패 {len(FAIL)}")
     if FAIL:
         print("실패:", ", ".join(FAIL))
