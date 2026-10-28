@@ -32,6 +32,7 @@ for _stream in (sys.stdout, sys.stderr):
         _stream.reconfigure(encoding="utf-8")
 
 from app.session import memoir, store                                     # noqa: E402
+from tests._auth import AsHeader                                          # noqa: E402
 from tests._nodb import NoDb                                              # noqa: E402
 from tools import seed_sessions as seed                                   # noqa: E402
 
@@ -234,8 +235,8 @@ def test_merge():
     check("원문은 자료 메시지에만 있고 시스템 지시에는 없다",
           "광주 인쇄소" in text and "광주 인쇄소" not in memoir._prompt())
     p = memoir._prompt()
-    check("시스템 지시는 자서전_v2.md 의 실행 절이다 (§2 · §5 · §5-2 · §7-4 · §8-2)",
-          memoir.PROMPT.name == "자서전_v2.md"
+    check("시스템 지시는 자서전_v4.md 의 실행 절이다 (§2 · §5 · §5-2 · §7-4 · §8-2)",
+          memoir.PROMPT.name == "자서전_v4.md"
           and p.startswith("당신은 한국어 인생기록 서비스") and "전달된 같은 화자의 회차만" in p
           and "자서전은 위 7개 키" in p and "회차당 3~8문장" in p and "상태 우선순위" in p, p[:30])
     check("다른 역할 절은 싣지 않는다", "사진 속 기억을 담은" not in p)
@@ -266,8 +267,9 @@ EMPTY = {"status": "insufficient_material", "title": "", "body": "", "sources": 
          "missing_context": [], "coverage_notes": []}
 
 
-def shown(out: dict) -> dict:
-    return {k: out[k] for k in memoir.SHOWN}
+def shown(out: dict, style: str = "spoken") -> dict:
+    """화면에 나가는 6키 — 모델 응답의 다섯 키에 요청받은 문체."""
+    return {**{k: out[k] for k in memoir.SHOWN}, "style": style}
 TURNS = {1, 2, 3, 4, 5, 6}
 
 
@@ -401,22 +403,38 @@ def test_routes():
     url = "/api/memoirs/preview"
     me, other = {"X-User-Id": ME}, {"X-User-Id": OTHER}
 
-    with _Env(AZURE_SPEECH_KEY="", GEMINI_API_KEY="", MEMOIR_FAIL_INJECT="off"), _Fake() as fake, NoDb():
+    with _Env(AZURE_SPEECH_KEY="", GEMINI_API_KEY="", MEMOIR_FAIL_INJECT="off"), _Fake() as fake, NoDb(), AsHeader():
         with TestClient(app) as c:
             three = fake.pick("s-a", "s-b", "s-c")
 
-            def only_detail(r) -> bool:
+            def failed(r, code: str) -> bool:
+                """안내 문장 + 갈래 code 둘만 나간다."""
                 body = r.json()
-                return list(body) == ["detail"] and isinstance(body["detail"], str) and "요" in body["detail"]
+                return (set(body) == {"detail", "code"} and body["code"] == code
+                        and isinstance(body["detail"], str) and "요" in body["detail"])
 
             r = c.post(url, json=three, headers=me)
-            check("3개를 고르면 200 · 모델 응답의 다섯 키", r.status_code == 200 and r.json() == shown(READY),
+            check("3개를 고르면 200 · 다섯 키 + style", r.status_code == 200 and r.json() == shown(READY),
                   f"{r.status_code} {r.text[:80]}")
             check("모델은 한 번만 부른다", fake.writes == 1, str(fake.writes))
             check("모델에 간 입력은 합치기 결과다 (말씀 6개 · 회차 3개)",
                   len(fake.seen["utterances"]) == 6 and len(fake.seen["sessions"]) == 3)
             check("응답에 turn_map · missing_context · coverage_notes 가 실리지 않는다",
-                  set(r.json()) == set(memoir.SHOWN))
+                  set(r.json()) == {*memoir.SHOWN, "style"})
+
+            r = c.post(url, json={**three, "style": "spoken"}, headers=me)
+            check("style spoken 을 보내면 200 · 응답 style spoken",
+                  r.status_code == 200 and r.json() == shown(READY), f"{r.status_code} {r.text[:80]}")
+
+            # 지원하지 않는 문체 — 고른 회차가 틀린 400 과 code 로 갈린다.
+            fake.writes = 0
+            for v in ("novel", "cyworld", "essay", "Spoken", "", 3, ["spoken"]):
+                r = c.post(url, json={**three, "style": v}, headers=me)
+                check(f"style {v!r} → 400 · code unsupported_style",
+                      r.status_code == 400 and r.json() == {
+                          "detail": "지원하지 않는 문체예요.", "code": "unsupported_style"},
+                      f"{r.status_code} {r.text[:80]}")
+            check("거절한 문체로는 모델을 안 불렀다", fake.writes == 0, str(fake.writes))
 
             r = c.post(url, json=fake.pick("s-a", "s-b", "s-c", "s-d", "s-e"), headers=me)
             check("5개를 고르면 말씀 8개가 전부 간다",
@@ -431,24 +449,68 @@ def test_routes():
                 "session_ids 가 없는 본문": {"ids": three["session_ids"]},
             }.items():
                 r = c.post(url, json=body, headers=me)
-                check(f"{name} → 400 · detail", r.status_code == 400 and only_detail(r),
+                check(f"{name} → 400 · code bad_selection", r.status_code == 400 and failed(r, "bad_selection"),
                       f"{r.status_code} {r.text[:60]}")
             r = c.post(url, content=b"{not json", headers={**me, "Content-Type": "application/json"})
-            check("깨진 본문 → 400 · detail", r.status_code == 400 and only_detail(r), f"{r.status_code}")
+            check("깨진 본문 → 400 · bad_selection", r.status_code == 400 and failed(r, "bad_selection"), f"{r.status_code}")
 
             ghost = {"session_ids": three["session_ids"][:2] + ["00000000-0000-4000-8000-0000000000ff"]}
             r = c.post(url, json=ghost, headers=me)
-            check("없는 회차 → 404 · detail", r.status_code == 404 and only_detail(r), f"{r.status_code}")
+            check("없는 회차 → 404 · not_found", r.status_code == 404 and failed(r, "not_found"), f"{r.status_code}")
 
             r = c.post(url, json=three, headers=other)
-            check("다른 X-User-Id → 404 · detail (S4)", r.status_code == 404 and only_detail(r),
+            check("다른 X-User-Id → 404 · not_found (S4)", r.status_code == 404 and failed(r, "not_found"),
                   f"{r.status_code}")
 
+            check("잘못 고른 요청은 모델을 부르지 않는다", fake.writes == 0, str(fake.writes))
+
+            # 엽서는 조건이 아니다 — 근거는 말씀이다 (태헌 10-26).
             fake.recs[fake.ids["s-b"]]["postcard"] = None
             r = c.post(url, json=three, headers=me)
-            check("엽서가 없는 회차 → 404", r.status_code == 404, f"{r.status_code}")
+            check("엽서가 없어도 말씀이 있으면 200", r.status_code == 200, f"{r.status_code} {r.text[:60]}")
             fake.recs[fake.ids["s-b"]] = record(SEED_A["sessions"][1], fake.ids["s-b"])
-            check("잘못 고른 요청은 모델을 부르지 않는다", fake.writes == 0, str(fake.writes))
+
+            fake.writes = 0
+            mute = fake.recs[fake.ids["s-b"]]
+            kept_frags = mute["fragments"]
+            mute["fragments"] = [f for f in kept_frags if f["idx"] == 0]
+            r = c.post(url, json=three, headers=me)
+            check("말씀이 없는 회차 → 400 · bad_selection", r.status_code == 400 and failed(r, "bad_selection"),
+                  f"{r.status_code} {r.text[:60]}")
+            mute["fragments"] = kept_frags
+
+            # 한 자서전 = 한 사람. 화자가 섞이면 꺼져 있어도 거절한다.
+            a, b = fake.ids["s-a"], fake.ids["s-b"]
+            fake.recs[a]["elder_id"], fake.recs[b]["elder_id"] = "e_mom", "e_dad"
+            r = c.post(url, json=three, headers=me)
+            check("화자가 다르면 → 400 · mixed_speakers", r.status_code == 400 and failed(r, "mixed_speakers"),
+                  f"{r.status_code} {r.text[:60]}")
+            fake.recs[b]["elder_id"] = None
+            r = c.post(url, json=three, headers=me)
+            check("화자 있는 회차 + 미지정 회차 → 400 · speaker_unassigned",
+                  r.status_code == 400 and failed(r, "speaker_unassigned"), f"{r.status_code} {r.text[:60]}")
+            for s in three["session_ids"]:
+                fake.recs[s]["elder_id"] = "e_mom"
+            r = c.post(url, json=three, headers=me)
+            check("모두 같은 화자면 200", r.status_code == 200, f"{r.status_code}")
+            for s in three["session_ids"]:
+                fake.recs[s]["elder_id"] = None
+            r = c.post(url, json=three, headers=me)
+            check("모두 미지정이면 지금은 200 (MEMOIR_REQUIRE_SPEAKER 꺼짐)", r.status_code == 200, f"{r.status_code}")
+            with _Env(MEMOIR_REQUIRE_SPEAKER="1"):
+                r = c.post(url, json=three, headers=me)
+                check("MEMOIR_REQUIRE_SPEAKER=1 이면 미지정 → 400 · speaker_unassigned",
+                      r.status_code == 400 and failed(r, "speaker_unassigned"), f"{r.status_code}")
+            check("화자 거절은 모델을 부르지 않는다 (통과한 2번만 불렀다)", fake.writes == 2, str(fake.writes))
+
+            # 5 는 임시 시험 제한이다 — 설정으로 바뀐다.
+            r = c.post(url, json=fake.pick("s-a", "s-b", "s-c", "s-d"), headers=me)
+            with _Env(MEMOIR_MAX_SESSIONS="3"):
+                r2 = c.post(url, json=fake.pick("s-a", "s-b", "s-c", "s-d"), headers=me)
+            check("MEMOIR_MAX_SESSIONS 로 상한이 바뀐다 (4개: 기본 200 · 상한 3 이면 400)",
+                  r.status_code == 200 and r2.status_code == 400 and failed(r2, "bad_selection"),
+                  f"{r.status_code} {r2.status_code}")
+            fake.writes = 0
 
             fake.out = copy.deepcopy(EMPTY)
             r = c.post(url, json=three, headers=me)
@@ -458,28 +520,27 @@ def test_routes():
             for name in ("없는 턴을 가리키는 출처", "sentence 번호가 겹치는 출처"):
                 fake.out = copy.deepcopy(BROKEN[name])
                 r = c.post(url, json=three, headers=me)
-                check(f"{name} → 502 · detail", r.status_code == 502 and only_detail(r),
+                check(f"{name} → 502 · invalid_model_output", r.status_code == 502 and failed(r, "invalid_model_output"),
                       f"{r.status_code} {r.text[:60]}")
-            check("실패 응답에 본문이나 원문이 새지 않는다",
-                  "광주" not in r.text and "invalid_model_output" not in r.text)
+            check("실패 응답에 본문이나 원문이 새지 않는다", "광주" not in r.text)
             for status in ("needs_confirmation", "needs_context"):
                 fake.out = _with(EMPTY, status=status)
                 r = c.post(url, json=three, headers=me)
-                check(f"{status} → 503 · detail", r.status_code == 503 and only_detail(r),
+                check(f"{status} → 503 · not_final", r.status_code == 503 and failed(r, "not_final"),
                       f"{r.status_code} {r.text[:60]}")
             fake.out = copy.deepcopy(READY)
 
             fake.db_down = True
             fake.writes = 0
             r = c.post(url, json=three, headers=me)
-            check("DB 를 못 읽으면 422 · detail", r.status_code == 422 and only_detail(r), f"{r.status_code}")
+            check("DB 를 못 읽으면 422 · source_unavailable", r.status_code == 422 and failed(r, "source_unavailable"), f"{r.status_code}")
             check("못 읽었으면 모델을 부르지 않는다", fake.writes == 0)
             fake.db_down = False
 
             with _Env(MEMOIR_FAIL_INJECT="source_material_unavailable"):
                 r = c.post(url, json=three, headers=me)
                 check("주입 source_material_unavailable → 422 (S8)",
-                      r.status_code == 422 and only_detail(r), f"{r.status_code}")
+                      r.status_code == 422 and failed(r, "source_unavailable"), f"{r.status_code}")
                 check("S8 — 모델을 부르지 않는다", fake.writes == 0)
                 r = c.post(url, json=fake.pick("s-a", "s-b"), headers=me)
                 check("S8 — 선택 검사가 주입보다 먼저다 (400)", r.status_code == 400, f"{r.status_code}")
@@ -488,11 +549,12 @@ def test_routes():
 
             # S9 는 진짜 write 로 본다. 주입은 모델을 부르기 전에 걸린다.
             memoir.write = fake._saved[1]
-            for hook, code in (("generation_failed", 502), ("generation_timeout", 504)):
+            for hook, code, kind in (("generation_failed", 502, "invalid_model_output"),
+                                     ("generation_timeout", 504, "generation_timeout")):
                 with _Env(MEMOIR_FAIL_INJECT=hook):
                     r = c.post(url, json=three, headers=me)
-                    check(f"주입 {hook} → {code} · detail (S9)",
-                          r.status_code == code and only_detail(r), f"{r.status_code} {r.text[:60]}")
+                    check(f"주입 {hook} → {code} · {kind} (S9)",
+                          r.status_code == code and failed(r, kind), f"{r.status_code} {r.text[:60]}")
                     check(f"{hook} — 가짜 본문도 자료 부족도 아니다", "status" not in r.json())
 
     with _Env(MEMOIR_FAIL_INJECT="nonsense"):

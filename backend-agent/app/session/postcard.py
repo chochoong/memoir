@@ -4,7 +4,7 @@
     DB 기록 ─→ 자료 묶기 ─→ 카드 작성 (Gemini 글, CardAgent v3) ─→ 검사 ─→ 굽기 (Pillow) ─→ 저장
                사실·발화·사진분석   title · body · caption · sources     출처    회차 사진 + 글
 
-**프롬프트는 `첨부프롬프트_md/엽서_v2.md` 다.** 실행할 절(§2 · §5 · §5-1 · §7-4 ·
+**프롬프트는 `첨부프롬프트_md/엽서_v3.md` 다.** 실행할 절(§2 · §5 · §5-1 · §7-4 ·
 §8-2)만 담긴 문서를 roledoc 이 잇는다. 새 판이 오면 파일만 바꾸면 된다.
 
 **그림은 그리지 않는다.** 회차를 연 사진이 있으면 그 사진을 얹고, 없으면 종이
@@ -39,6 +39,7 @@ import io
 import json
 import logging
 import re
+import time
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from functools import lru_cache
@@ -46,14 +47,14 @@ from pathlib import Path
 
 from PIL import Image, ImageDraw, ImageFont, ImageOps
 
-from . import photostore, roledoc, store
+from . import photostore, roledoc, store, style as styles
 from .conf import env_float, env_str
 from .question import _client
 from .shared import _facts
 
 log = logging.getLogger("postcard")
 
-PROMPT = Path(__file__).resolve().parents[2] / "첨부프롬프트_md" / "엽서_v2.md"
+PROMPT = Path(__file__).resolve().parents[2] / "첨부프롬프트_md" / "엽서_v3.md"
 
 # 엽서.md §8-2 — 작성 공통 7키에 caption.
 KEYS = ("status", "title", "body", "sources", "to_confirm",
@@ -63,6 +64,12 @@ NOT_FINAL = ("needs_confirmation", "needs_context")
 
 DEFAULT_TEXT_MODEL = "gemini-3.5-flash-lite"
 DEFAULT_TEXT_TIMEOUT = 15.0
+
+# POSTCARD_FAIL_INJECT · POSTCARD_INJECT_DELAY — 시험 서버에서만 켠다. 요청으로는
+# 고를 수 없다. 화면의 busy · 실패 처리를 모델 값 없이 재현하는 자리다 (4-C1 §6).
+INJECT_FAILED = "generation_failed"
+_INJECTS = (INJECT_FAILED, INSUFFICIENT)
+INJECT_DELAY_MAX = 120.0
 
 # v3 「분량」. 넘으면 로그만 남긴다 — 잘라 내면 말씀의 뜻이 바뀐다.
 TITLE_MAX, BODY_MAX, CAPTION_MAX = 15, 120, 20
@@ -116,6 +123,18 @@ class PostcardUnavailable(PostcardError):
     """모델·글꼴·저장소 쪽 사정이다. 라우트가 503 으로 바꾼다."""
 
 
+class PhotoUnavailable(PostcardUnavailable):
+    """
+    회차에 사진이 있는데 읽지 못했다. 503 · code photo_unavailable.
+
+    「사진 없음」 으로 바꿔 종이 바탕으로 굽지 않는다 — 어르신이 올린 사진이 빠진
+    엽서가 나가고, 그림 생성이 붙으면 모르는 그림이 대신 들어간다. 사진과 원문은
+    그대로이므로 다시 누르면 된다.
+    """
+
+    code = "photo_unavailable"
+
+
 class PostcardInsufficient(PostcardNotReady):
     """모델이 insufficient_material 로 답했다 — 쓸 원문이 없다. 409. 실패가 아니다."""
 
@@ -162,14 +181,53 @@ class Photo:
 _busy: set[str] = set()
 
 
+def inject() -> str:
+    """지금 걸린 실패 주입. 모르는 값은 끈 것으로 읽고 로그에 남긴다 (memoir.inject 와 같다)."""
+    v = env_str("POSTCARD_FAIL_INJECT").strip().lower()
+    if v in ("", "off"):
+        return ""
+    if v not in _INJECTS:
+        log.error("POSTCARD_FAIL_INJECT=%s 는 모르는 값이다 — 끈 것으로 읽는다", v)
+        return ""
+    return v
+
+
+def inject_delay() -> float:
+    """모델을 부르기 전에 쉴 초. 굽는 중(busy)인 시간을 늘려 겹친 요청을 재현한다."""
+    return min(max(env_float("POSTCARD_INJECT_DELAY", 0.0), 0.0), INJECT_DELAY_MAX)
+
+
+async def _injected() -> None:
+    """
+    모델을 부르기 바로 전 — 회차 · 말씀 검사와 busy 표시를 지난 자리다. 그래서 늦춘
+    동안 같은 회차를 또 누르면 진짜와 같은 409 busy 가 난다.
+
+    실패를 걸면 모델도 저장소도 건드리지 않는다. 옛 엽서는 그대로 남는다.
+    늦추기만 걸면 그 뒤에 **실제 모델을 부른다** — 값이 든다.
+    """
+    delay = inject_delay()
+    if delay:
+        log.warning("POSTCARD_INJECT_DELAY — %.0f초 늦춘다", delay)
+        await asyncio.sleep(delay)
+    hook = inject()
+    if hook == INJECT_FAILED:
+        # 화면에는 실제 실패와 같은 문구가 나간다. 주입인 것은 로그로만 안다.
+        log.warning("POSTCARD_FAIL_INJECT=generation_failed — 모델을 부르지 않고 실패한다")
+        raise PostcardUnavailable("엽서 글을 만들지 못했습니다")
+    if hook == INSUFFICIENT:
+        raise PostcardInsufficient()
+
+
 # ---------------------------------------------------------------- 만들기
 
 
-async def make(session_id: str, user_id: str) -> dict:
+async def make(session_id: str, user_id: str, style: str = styles.DEFAULT) -> dict:
     """
     회차 하나의 엽서를 굽고 저장한다. 저장된 행을 돌려준다.
 
     회차가 없거나 남의 것이면 None 대신 LookupError 다 — 라우트가 404 로 바꾼다.
+    style 은 라우트가 styles.pick 으로 거른 값이다. 지금은 spoken 뿐이라 모델에
+    보내지 않고 행에만 남긴다 (style.py 머리).
     """
     rec = await store.load_session(session_id)
     if rec is None or rec["user_id"] != user_id:
@@ -185,7 +243,7 @@ async def make(session_id: str, user_id: str) -> dict:
         raise PostcardNotReady("엽서를 만드는 중입니다. 잠시 기다려 주세요", "busy")
     _busy.add(session_id)
     try:
-        return await _make(rec, said)
+        return await _make(rec, said, style)
     finally:
         _busy.discard(session_id)
 
@@ -201,17 +259,23 @@ async def on_closed(session_id: str, user_id: str, reason: str) -> None:
     log.info("엽서 %s — %s 로 닫혔다. 「엽서 만들기」를 누를 때 굽는다", session_id[:8], reason)
 
 
-async def _make(rec: dict, said: list[dict]) -> dict:
+async def _make(rec: dict, said: list[dict], style: str) -> dict:
     session_id = rec["session_id"]
     font_path = _font_path()                 # 모델 값을 쓰기 전에 먼저 본다
+    t0 = time.perf_counter()
 
     photo = await _photo(rec.get("photo_id"))
+    t1 = time.perf_counter()
+    await _injected()
     card = await write(material(rec["fragments"], photo.clues if photo else None,
                                 rec.get("closing_decision")))
     card = checked(card, {f["idx"] for f in said})
+    t2 = time.perf_counter()
 
     data, w, h = await asyncio.to_thread(
         _compose, photo.data if photo else None, card, _date(rec["created_at"]), font_path)
+
+    t3 = time.perf_counter()
 
     key = storage_key(session_id, data)
     ps = photostore.current()
@@ -235,9 +299,10 @@ async def _make(rec: dict, said: list[dict]) -> dict:
         "photo_id": rec.get("photo_id") if photo else None,
         "text_model": _text_model(),
         "image_model": None,
+        "style": style,
     }
     try:
-        old = await store.save_postcard(row)
+        old, row["created_at"] = await store.save_postcard(row)
     except store.StoreUnavailable:
         # photo.save 와 같은 보상 삭제. 행이 없으면 이 바이트를 가리킬 것이 없다.
         await _forget(key)
@@ -248,6 +313,11 @@ async def _make(rec: dict, said: list[dict]) -> dict:
 
     log.info("엽서 %s — %d×%d %.0fKB · 「%s」 %s",
              session_id[:8], w, h, len(data) / 1024, card.title, " / ".join(card.sentences))
+    # 화면의 엽서 대기 한도 (CONFIG.card.waitMs) 를 실제 시간에 맞추는 근거
+    t4 = time.perf_counter()
+    log.info("엽서 %s 시간 %.0fms  (사진 %.0f · 글 %.0f · 합성 %.0f · 저장 %.0f)",
+             session_id[:8], (t4 - t0) * 1000, (t1 - t0) * 1000, (t2 - t1) * 1000,
+             (t3 - t2) * 1000, (t4 - t3) * 1000)
     return row
 
 
@@ -273,23 +343,33 @@ async def _forget(key: str) -> None:
 
 async def _photo(photo_id: str | None) -> Photo | None:
     """
-    회차 사진의 바이트와 분석 단서. **없거나 못 읽으면 None 이다.**
+    회차 사진의 바이트와 분석 단서. **None 은 회차에 사진이 없다는 뜻 하나다.**
 
-    사진은 있으면 좋은 것이지 엽서의 조건이 아니다. 사진 없이 연 회차가 원래
-    길이고, 그때 엽서는 종이 바탕에 글만 얹는다.
+    사진 없이 연 회차가 원래 길이고, 그때 엽서는 종이 바탕에 글만 얹는다.
+    사진이 있는데 못 읽으면 (행 없음 · DB · 저장소 · 깨진 바이트) PhotoUnavailable 이다.
+    모델을 부르기 전에 여기서 걸러 실패할 엽서에 글 비용을 쓰지 않는다.
     """
     if not photo_id:
         return None
     try:
         meta = await store.load_photo(photo_id)
         if meta is None:
-            return None
+            raise PhotoUnavailable("회차 사진을 찾지 못했습니다")
         data = await photostore.current().get(meta["storage_key"])
-        return Photo(data=data, mime=meta["mime"], clues=meta.get("clues"))
+        with Image.open(io.BytesIO(data)) as im:
+            im.verify()
+    except PhotoUnavailable:
+        log.warning("회차 사진 행이 없다 %s — 엽서를 굽지 않는다", photo_id[:8])
+        raise
     except (store.StoreUnavailable, photostore.PhotoStoreError) as e:
-        log.warning("회차 사진을 못 읽었다 %s (%s) — 사진 없이 굽는다",
+        log.warning("회차 사진을 못 읽었다 %s (%s) — 엽서를 굽지 않는다",
                     photo_id[:8], type(e).__name__)
-        return None
+        raise PhotoUnavailable("회차 사진을 읽지 못했습니다") from e
+    except Exception as e:                                   # noqa: BLE001 — PIL 은 여러 예외를 낸다
+        log.warning("회차 사진이 깨졌다 %s (%s) — 엽서를 굽지 않는다",
+                    photo_id[:8], type(e).__name__)
+        raise PhotoUnavailable("회차 사진을 읽지 못했습니다") from e
+    return Photo(data=data, mime=meta["mime"], clues=meta.get("clues"))
 
 
 def _date(created_at: str) -> str:
@@ -567,7 +647,7 @@ def _mounted(photo: bytes) -> Image.Image:
             pic = ImageOps.contain(ImageOps.exif_transpose(im).convert("RGB"),
                                    box, Image.Resampling.LANCZOS)
     except Exception as e:                                   # noqa: BLE001
-        raise PostcardUnavailable("회차 사진을 읽지 못했습니다") from e
+        raise PhotoUnavailable("회차 사진을 읽지 못했습니다") from e
     return ImageOps.expand(pic, border=border, fill=MOUNT)
 
 

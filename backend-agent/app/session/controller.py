@@ -104,7 +104,7 @@ OPENING = "오늘은 어떤 이야기를 들려주시겠어요?"
 OPENING_PHOTO = "사진 잘 받았습니다. 이 사진은 어떤 사진인가요?"
 
 # 가족이 고른 주제가 있으면 여는 말은 그 주제다. **사진 질문보다 앞선다** — 사진
-# 내용이 다르다고 고른 주제가 바뀌면 안 된다 (인터뷰_v3.md [질문 방향과 자료 구분]).
+# 내용이 다르다고 고른 주제가 바뀌면 안 된다 (인터뷰_v4.md [질문 방향과 자료 구분]).
 # 「떠오르는 것이 있으면」은 그 경험이 있었다고 전제하지 않으려고 붙였다.
 OPENING_TOPIC = "오늘은 「{topic}」 이야기를 나눠 볼까요? 떠오르는 것이 있으면 편하게 들려주세요."
 
@@ -165,7 +165,7 @@ async def fixed_questions(ctl: "SessionController") -> str | None:
 
     **어르신 말씀 뒤에만 나간다.** 시작할 때 나가는 말은 여는 말(OPENING · topic_opening)
     이고, 이 목록은 턴 1(첫 답을 들은 뒤)부터 쓴다. 그래서 첫 항목도 들은 말씀을
-    이어 받는 말이다. 인터뷰_v3.md 개발 인계의 예비 질문(「이 주제로 어떤 이야기를
+    이어 받는 말이다. 인터뷰_v4.md 개발 인계의 예비 질문(「이 주제로 어떤 이야기를
     나누고 싶으세요?」)은 답이 아직 없을 때의 말이라 여기에 두지 않는다.
     """
     await asyncio.sleep(0.2)                     # 호출 지연 흉내
@@ -218,6 +218,8 @@ class SessionController:
     # 어르신의 말씀이 아니라 질문 방향이다 — 대화 기록에 섞지 않는다.
     theme: str | None = None
     topic: str = ""
+    # 회차의 화자. 링크로 연 회차만 안다 (link.py) — 자녀가 바로 연 회차는 None.
+    elder_id: str | None = None
     question_fn: QuestionFn = fixed_questions
     stt_fn: SttFn = stt.azure_transcribe
     tts_fn: TtsFn = tts.synthesize
@@ -933,8 +935,7 @@ def user_live(user_id: str) -> int:
     """
     한 사용자가 지금 들고 있는 회차 수.
 
-    **이 값으로 막는 것은 보안이 아니다.** user_id 는 X-User-Id 를 그대로 믿는
-    값이라 바꿔 넣으면 통과한다 (limits.py 참조). 로그인이 붙으면 실효를 가진다.
+    user_id 는 로그인한 자녀다 (auth.current_user). 상한의 뜻은 limits.py 에 있다.
     """
     return sum(1 for c in live_sessions() if c.user_id == user_id)
 

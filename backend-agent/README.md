@@ -25,7 +25,7 @@ app/
     timers.py             T1 / T2 + 격발 오차 계측
     controller.py         FSM + 타이머 + 저장을 묶는 곳
     shared.py             공유 상태 — 모델은 읽기만, 쓰는 것은 여기 (사실 병합 · 요약)
-    prompt.py             인터뷰 프롬프트 로더 (첨부프롬프트_md/인터뷰_v3.md)
+    prompt.py             인터뷰 프롬프트 로더 (첨부프롬프트_md/인터뷰_v4.md)
     question.py           다음 질문 생성 (Gemini). 실패해도 회차를 끊지 않는다
     audio.py              브라우저 PCM 조각 → 전사기에 넘길 한 덩어리 (WAV)
     stt.py                전사 (Azure). 실패해도 회차를 끊지 않는다
@@ -33,9 +33,9 @@ app/
     photo.py              사진 검증 · 변환 (HEIC→JPEG · EXIF · 1024px)
     photostore.py         사진 바이트 저장 심 — pg / local (나중에 blob)
     photo_analyze.py      사진 분석 (Gemini VLM) → 단서 JSON
-    postcard.py           엽서 — 카드 작성 (엽서_v2.md) · 출처 검사 · Pillow 굽기. 닫혀도 자동으로 굽지 않는다
+    postcard.py           엽서 — 카드 작성 (엽서_v3.md) · 출처 검사 · Pillow 굽기. 닫혀도 자동으로 굽지 않는다
     memoir.py             자서전 초안 — 회차 합치기 (전역 턴) · 한 번 쓰기 · 구조 검사 (실험)
-    roledoc.py            엽서_v2.md · 자서전_v2.md 에서 실행할 절(§2 · §5 · 역할 · §7-4 · §8-2)만 잇는다
+    roledoc.py            엽서_v3.md · 자서전_v4.md 에서 실행할 절(§2 · §5 · 역할 · §7-4 · §8-2)만 잇는다
     store.py              저장 (asyncpg). DB 가 없어도 회차는 돈다
     migrate.py            마이그레이션 적용 · 체크섬 · advisory lock
     conf.py               환경변수 읽기 (틀린 값을 조용히 0 으로 만들지 않는다)
@@ -44,6 +44,7 @@ app/
 tests/                    test_flow (전이 · 타이머 · 지연 · 빈 전사 루프) · limits · photo
                           · photo_analyze · postcard · question. _nodb 는 실제 DB 에 안 붙게 한다
 tools/replay.py           녹음 파일을 실제 회차처럼 흘려보낸다 (마이크 없이)
+tools/dev_login.py        시험 도구용 로그인 쿠키를 DB 에 직접 만든다 (구글 없이)
 tools/bench_audio.py      같은 녹음으로 전사·질문 경로(Azure+Gemini / Gemini 단독)를 잰다
 tools/try_photo.py        사진 한 장을 실제 Gemini 로 분석해 본다 (DB·서버 없이)
 tools/seed_sessions.py    자서전 시험 회차를 DB 에 넣고 엽서를 굽는다 (합성 자료 전용)
@@ -383,7 +384,12 @@ whisper 는 세 번 모두 「마중을 나왔어」를 「마중 올라왔어�
 python tools/replay.py                      # tools/recordings/turn*.wav 로 3턴
 python tools/replay.py --base https://...   # 터널 너머의 서버로
 python tools/replay.py --no-realtime        # 기다리지 않고 몰아서
+python tools/replay.py --cookie <msid>      # 브라우저로 로그인한 쿠키로
 ```
+
+**신원은 `msid` 쿠키다.** `--cookie` 가 없으면 `tools/dev_login.py` 로 서버와 같은 DB 에
+계정 「replay」(provider `dev`)의 쿠키를 만든다 — 서버와 같은 `.env` 로 돌린다. 이 PC 의
+DB 가 아니면 `--allow-remote` 를 붙여야 쓴다. 터널 너머 서버의 DB 에 닿지 않으면 `--cookie` 를 준다.
 
 **녹음 파일은 저장소에 올리지 않는다** (`.gitignore`). 사람 목소리라 그렇고, 저마다
 자기 목소리로 받아 두는 편이 시험으로도 낫다. 16kHz 모노 wav 면 된다.
@@ -692,7 +698,8 @@ ERROR 로 남겨 나중에 셀 수 있게 한다.
 |---|---|---|
 | `GET /api/sessions/{id}` | 메모리의 SessionController | **사라진다** (404) |
 | `GET /api/sessions/{id}/record` | DB | 남는다 |
-| `GET /api/sessions?limit=&has_postcard=` | DB. 최근 순 목록 · 회차마다 `has_postcard`. `has_postcard=1` 이면 엽서 있는 회차만 | 남는다 |
+| `GET /api/sessions?limit=&has_postcard=&elder_id=` | DB. 최근 순 목록 · 회차마다 `has_postcard` · `elder_id` (None = 화자 미지정). `has_postcard=1` 이면 엽서 있는 회차만, `elder_id=` 면 그 화자 회차만 | 남는다 |
+| `PUT /api/sessions/{id}/elder` | DB. 화자 미지정 회차에 화자를 한 번 정한다. 정해진 화자는 바꾸지 않는다 (409 `elder_already_set`) | 남는다 |
 
 **일부러 합치지 않았다.** 재시작 뒤에 조각을 *보는* 것과 회차를 *이어서 하는* 것은
 전혀 다른 일이다. 이어 하려면 상태 머신과 타이머까지 되살려야 하는데, 서버가 내려간
@@ -700,9 +707,8 @@ ERROR 로 남겨 나중에 셀 수 있게 한다.
 지금은 보는 것까지만 한다.
 
 `record` 는 **소유자를 확인한다.** 남의 것이면 403 이 아니라 404 다 — 403 은
-「있긴 있다」를 알려주는 셈이라 id 를 넣어 보며 존재를 확인할 수 있다. 다만 지금은
-`X-User-Id` 를 그대로 믿으므로 헤더를 바꾸면 통과한다. 로그인이 붙을 때 이 줄이
-그대로 실효를 가진다.
+「있긴 있다」를 알려주는 셈이라 id 를 넣어 보며 존재를 확인할 수 있다. 신원은
+로그인 쿠키에서만 나온다 (아래 「로그인」).
 
 조각은 `created_at` 이 아니라 **`idx` 순으로 준다** (FR-AD-401). 0번(씨앗)과 1번이
 같은 초에 들어가면 시각 정렬은 순서가 뒤집힌다.
@@ -715,15 +721,65 @@ ERROR 로 남겨 나중에 셀 수 있게 한다.
 
 ---
 
+## 로그인 (3-C1 · P3-SV-02 · 03)
+
+계약은 `docs/3-C1_인증_링크_초안.md`, 구현은 `app/session/auth.py` 다.
+
+| 경로 | 결과 |
+|---|---|
+| `POST /api/auth/google` `{credential}` | 200 `{user, elders}` + `msid` 쿠키 · 401 `invalid_token` · `expired_token` · 503 `auth_unavailable` |
+| `GET /api/auth/me` | 200 `{user:{user_id,name,email}, elders:[{elder_id,name}]}` · 401 `login_required` · `session_expired` |
+| `POST /api/auth/logout` | 204 |
+| `POST /api/elders` `{name}` | 201 `{elder_id, name}` — 첫 로그인에 화자가 없을 때 |
+
+- **신원은 `msid` 쿠키 하나에서만 나온다.** `X-User-Id` 헤더 · `uid` 쿠키는 읽지 않는다.
+  보호 라우트는 전부 `Depends(auth.current_user)` 를 지나고, 남의 자원은 404 · 로그인 전은 401 이다.
+- **DB 가 있어야 로그인된다.** 메모리 전용으로 뜬 서버는 로그인 503 이라 회차를 열 수 없다.
+- `.env` 에 `GOOGLE_CLIENT_ID` 가 있어야 한다. 앱 세션 수명(`SESSION_MAX_HOURS` · `SESSION_IDLE_HOURS`)은
+  팀이 아직 정하지 않았다 — 기본값은 개발용 임시값이다.
+- 상태를 바꾸는 요청은 허용한 출처(`PUBLIC_ORIGIN` · `ALLOWED_ORIGINS` · 같은 출처)에서만 받는다 (403 `bad_origin`).
+- 시험: `python -m tests.test_auth` (모의 — 구글 서명 검증과 계정 표를 메모리로 바꿔 끼운다).
+  다른 시험은 `tests/_auth.py` 로 헤더를 신원으로 꽂는다. **앱에는 그 길이 없다.**
+- 시험 도구는 `python tools/dev_login.py [--alias a --alias b]` 로 쿠키를 받는다. 로그인이 남기는
+  두 줄(app_user · login_session)을 DB 에 직접 쓰는 것이라 **DB 에 쓸 수 있는 사람만** 쓴다.
+  provider 가 `dev` 라 구글 계정과 섞이지 않고, 쿠키는 12시간 뒤 죽는다.
+
+## 인터뷰 링크 (3-C1 §5 · P3-SV-04 · 05)
+
+자녀가 회차를 준비해 링크(`/i#토큰`)를 보내면, 받은 사람은 로그인 없이 **그 회차 하나만** 진행한다.
+구현은 `app/session/link.py`, 표는 `010_interview_link.sql` 이다.
+
+| 경로 | 누가 | 결과 |
+|---|---|---|
+| `POST /api/links` `{elder_id, theme, topic, seed, title, photo_id}` | 자녀 (`msid`) | 201 `{link_id, token, url, state, …}` — 토큰은 이때 한 번만 나간다 · 남의 화자 · 사진 404 |
+| `GET /api/links?elder_id=` | 자녀 | `{links:[…]}` (토큰 없음) |
+| `POST /api/links/{id}/revoke` | 자녀 | 200 — 진행 중이면 회차를 중단한다 |
+| `POST /api/links/{id}/reissue` | 자녀 | 201 새 토큰 · 이전 링크 회수 · 시작한 링크는 409 `already_started` |
+| `GET /api/i/preview` | 헤더 `X-Interview-Token` | `{state, theme, topic, photo_url}` — 아무것도 바꾸지 않는다 |
+| `POST /api/i/start` | 헤더 | snapshot + `{state, theme, topic, photo_url}` + `mlink` 쿠키 (Path=/api/i) |
+| `GET /api/i/session` · `POST …/tts-done` · `speech` · `speech/audio` · `done` · `abort` · `GET …/question/audio` | `mlink` 쿠키 | `/api/sessions/{id}/…` 와 같은 처리 |
+| `GET /api/i/photo` | 헤더 또는 `mlink` | 링크에 지정된 사진 한 장 |
+| `GET /api/i/transcript` | 헤더 | 끝난 뒤에만 `{theme, topic, turns:[{question, answer}]}` |
+
+- 오류는 `{"detail", "code"}` 다 — 404 `invalid_link` · 410 `expired` · `revoked` ·
+  409 `ended` · `interrupted` · `in_progress_elsewhere` · `not_ended` · 503 `link_unavailable`.
+- **권한을 합치지 않는다.** `/api/i/*` 는 `msid` 를 읽지 않고, 자녀 경로는 `mlink` 를 읽지 않는다.
+- 한 링크는 한 회차다. 같은 기기(`mlink`)에서 다시 시작하면 같은 회차, 다른 기기는 409.
+- 시작 전 유효 기간 `LINK_HOURS` 는 팀이 아직 정하지 않았다 (D4) — 기본 72시간은 임시값이다.
+- 시험: `python -m tests.test_link` (모의 — 링크 · 계정 표를 메모리로 바꿔 끼운다).
+
+---
+
 ## 자서전 초안 (실험)
 
-엽서가 있는 회차 3~5개를 고르면 그 회차들의 말씀을 모아 짧은 초안 하나를 쓴다.
+한 화자의 회차 3~5개를 고르면 그 회차들의 말씀을 모아 짧은 초안 하나를 쓴다. 엽서는 조건이 아니다 —
+어르신 말씀이 하나라도 있으면 된다. 5 는 단일 호출 구조의 임시 시험 상한이다 (`MEMOIR_MAX_SESSIONS`).
 **저장하지 않는다** — 응답으로만 나가고, 다시 보려면 다시 만든다. 무엇을 왜 그렇게
 하는지는 `app/session/memoir.py` 머리에 있다.
 
 ```
 POST /api/memoirs/preview
-X-User-Id: dev-user
+Cookie: msid=…   (로그인)
 
 {"session_ids": ["<회차 UUID>", "<회차 UUID>", "<회차 UUID>"]}
 ```
@@ -737,18 +793,19 @@ X-User-Id: dev-user
 |---|---|---|
 | 200 `ready` | 초안이 있다 | — |
 | 200 `insufficient_material` | 쓸 말씀이 없다. **실패가 아니다** | — |
-| 400 | 개수(3~5) · 중복 · UUID 아님 | 선택한 엽서를 확인해 주세요. 3~5장을 고를 수 있어요. |
-| 404 | 없는 회차 · 남의 회차 · 엽서 없는 회차 | 선택한 엽서를 찾을 수 없어요. 목록에서 다시 골라 주세요. |
-| 422 | 고른 회차의 원자료를 못 읽었다 | 선택한 엽서의 이야기 자료를 불러오지 못했어요. |
-| 503 | 모델이 `needs_confirmation` · `needs_context` 로 답함. 초안을 내보내지 않고 다시 묻지도 않는다 | 지금은 자서전을 만들 수 없어요. 엽서 선택 화면으로 돌아가 주세요. |
-| 502 | 모델 호출 실패 · 낸 구조가 어긋남 | 자서전을 만드는 중 문제가 생겼어요. 엽서 선택 화면으로 돌아가 주세요. |
-| 504 | 모델이 제시간에 답하지 않음 | 정해진 시간 안에 자서전을 받지 못했어요. 엽서 선택 화면으로 돌아가 주세요. |
+| 400 `bad_selection` | 개수(3~상한) · 중복 · UUID 아님 · 말씀 없는 회차 | 선택한 엽서를 확인해 주세요. 3~5장을 고를 수 있어요. |
+| 400 `mixed_speakers` · `speaker_unassigned` | 화자가 섞였다 · 화자 미지정 회차가 끼었다 (`MEMOIR_REQUIRE_SPEAKER=1` 이거나 화자 있는 회차와 섞일 때) | 같음 |
+| 404 `not_found` | 없는 회차 · 남의 회차 | 선택한 엽서를 찾을 수 없어요. 목록에서 다시 골라 주세요. |
+| 422 `source_unavailable` | 고른 회차의 원자료를 못 읽었다 | 선택한 엽서의 이야기 자료를 불러오지 못했어요. |
+| 503 `not_final` | 모델이 `needs_confirmation` · `needs_context` 로 답함. 초안을 내보내지 않고 다시 묻지도 않는다 | 지금은 자서전을 만들 수 없어요. 엽서 선택 화면으로 돌아가 주세요. |
+| 502 `invalid_model_output` | 모델 호출 실패 · 낸 구조가 어긋남 | 자서전을 만드는 중 문제가 생겼어요. 엽서 선택 화면으로 돌아가 주세요. |
+| 504 `generation_timeout` | 모델이 제시간에 답하지 않음 | 정해진 시간 안에 자서전을 받지 못했어요. 엽서 선택 화면으로 돌아가 주세요. |
 
-실패 본문은 `{"detail": "..."}` 하나다. 구조가 어긋난 응답은 **고쳐서 내보내지 않는다**
+실패 본문은 `{"detail": "...", "code": "..."}` 다. 화면은 `code` 를 HTTP 숫자보다 먼저 본다. 구조가 어긋난 응답은 **고쳐서 내보내지 않는다**
 — 빈 줄을 지우거나 출처 번호를 맞춰 주지 않고 502 다. 구조가 맞다고 내용이 맞는
 것은 아니다. 그건 따로 대조해야 한다.
 
-설정은 `.env` 의 `MEMOIR_*` 다섯 개다 (`.env.example`). 20초는 처음 잡은 값이다.
+설정은 `.env` 의 `MEMOIR_*` 일곱 개다 (`.env.example`). 20초는 처음 잡은 값이다.
 출력 상한은 처음 2000토큰이었고 3000 으로 올렸다 (아래 「재 본 것」). 둘 다 넉넉하다는
 보장이 아니다.
 
@@ -776,6 +833,13 @@ python tools/seed_sessions.py --input eval/memoir_seed_B.json --manifest eval/me
 - **이 PC 의 DB 가 아니면 쓰지 않는다.** 함께 쓰는 DB 에 넣으면 모두의 회차 목록에
   `[A]` · `[B]` 가 뜬다. 정말 넣을 때만 `--allow-remote` 를 붙인다. 서비스 DB 에는
   넣지 않는다.
+- **회차의 주인은 시험 계정이다** (`--account`, 기본 `seed`). 넣기 전에 `tools/dev_login.py` 로
+  그 계정을 만들고, 엽서도 그 계정의 쿠키로 굽는다. 화면 · curl 로 볼 때는
+  `python tools/dev_login.py --alias seed` 로 쿠키만 다시 받는다 (같은 이름 = 같은 계정).
+- **로그인 전에 만든 manifest(`app_user_id` 칸이 없는 것)는 쓰지 않는다.** 그 회차는 주인이
+  `dev-user` 라 로그인으로 볼 수 없다. 지우거나 고치지 않고, 새 manifest 경로로 다시 넣는다.
+- `--cross-check` 는 다른 시험 계정(`seed-other`)의 쿠키로 회차 · 엽서 · 자서전을 불러
+  **전부 404 인지** 본다 (3-C1 P3-SV-03). 하나라도 404 가 아니면 종료 코드 1 이다.
 
 합치기 함수가 실제로 만든 모델 입력과 대응표(`turn_map`)는 이렇게 뽑는다. 엽서를
 굽기 전에도 돈다.
@@ -806,6 +870,23 @@ Remove-Item Env:MEMOIR_FAIL_INJECT; .\run.ps1                 # 풀고 다시 �
 
 **시험이 끝나면 풀고 다시 띄운다.** 건 채로 두면 모든 자서전 요청이 실패한다.
 주입한 504 는 오류 경로를 본 것이지 모델이 실제로 20초를 넘긴 것이 아니다.
+
+엽서에도 같은 자리가 있다 (`POSTCARD_FAIL_INJECT` · `POSTCARD_INJECT_DELAY`). 문체를 바꿔 다시 만들 때
+화면이 busy · 실패를 어떻게 다루는지 모델 값 없이 보려는 것이다 (4-C1 §6).
+
+| 값 | 결과 |
+|---|---|
+| `POSTCARD_FAIL_INJECT` 비움 · `off` | 주입 없음 |
+| `POSTCARD_FAIL_INJECT=generation_failed` | 모델을 부르는 자리에서 503. 옛 엽서는 그대로 |
+| `POSTCARD_FAIL_INJECT=insufficient_material` | 같은 자리에서 409 `code: insufficient_material` |
+| `POSTCARD_INJECT_DELAY=초` | 모델을 부르기 전에 그만큼 쉰다 (최대 120). 그동안 또 누르면 409 `busy` |
+
+**늦추기만 걸면 쉰 뒤에 실제 모델을 부른다 — 값이 든다.** 모델 없이 「busy → 실패」를 보려면 둘을 같이 건다.
+
+```powershell
+$env:POSTCARD_FAIL_INJECT = "generation_failed"; $env:POSTCARD_INJECT_DELAY = "10"; .\run.ps1
+Remove-Item Env:POSTCARD_FAIL_INJECT, Env:POSTCARD_INJECT_DELAY; .\run.ps1
+```
 
 ### 재 본 것 (합성 자료 · 로컬)
 
@@ -881,13 +962,10 @@ Remove-Item Env:MEMOIR_FAIL_INJECT; .\run.ps1                 # 풀고 다시 �
 `/docs` 에 노출한다.** `main.py` 의 주석에는 개발 중에 알아야 할 것들이 적혀
 있는데, 그중 일부는 공개 문서에 뜨면 곤란하다.
 
-    GET /api/sessions/{id}   "소유자 검사가 없다. session_id 만 알면 남의 조각이 보인다"
     POST .../abort           "「정의되지 않은 전이는 409」 원칙의 유일한 예외다"
 
-**둘 다 사실이고 적어 두는 게 맞다** — 개발 중에 `/docs` 를 눌러 보는 사람이 바로
-알아야 하는 내용이다. 배포에서 자동으로 닫히니 주석을 내릴 필요는 없다. 소유자
-검사는 ⑤ 로그인이 붙을 때 실제로 막히고, 그때 저 줄이 지워진다. **이 항목이 남아
-있다는 건 아직 안 막혔다는 표시다.**
+**사실이고 적어 두는 게 맞다** — 개발 중에 `/docs` 를 눌러 보는 사람이 바로
+알아야 하는 내용이다. 배포에서 자동으로 닫히니 주석을 내릴 필요는 없다.
 
 기동 로그 첫 줄이 그날의 자세를 말한다.
 
