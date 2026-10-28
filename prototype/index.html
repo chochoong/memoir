@@ -1176,6 +1176,7 @@
           <p class="style-tag" id="mmStyleTag" hidden></p>
           <h2 class="mm-title" id="mmTitle"></h2>
           <p class="mm-draft" id="mmDraft" hidden></p>
+          <p class="prep-note" id="mmKeep" hidden>이 자서전은 저장되지 않아요. 30분이 지나거나 서버를 점검하면 사라질 수 있어요. 필요하면 지금 읽어 보시거나 옮겨 적어 두세요.</p>
           <nav class="mm-toc" id="mmToc" aria-label="목차" hidden><h3>목차</h3><ol id="mmTocList"></ol></nav>
           <div class="mm-body" id="mmBody"></div>
         </div>
@@ -1416,7 +1417,7 @@
   const CONFIG = {
     // 화면 아래와 개발용 패널에 그대로 찍힌다. 「고친 게 반영이 안 된 것 같다」는
     // 대부분 예전 파일이 열려 있는 경우라서, 눈으로 확인할 자리를 만들어 둔다.
-    version: 'v0.50 · 2026-10-28 (v0.49 + 다른 탭 · 기기에서 시작한 자서전도 이어 보기 — GET /api/memoirs/latest)',
+    version: 'v0.51 · 2026-10-28 (태헌 님 작업 흐름 — 작업 번호 localStorage · latest 안 씀 · 결과에 「저장되지 않아요」 · 다시 정리 표시)',
 
     // 이 화면을 백엔드가 직접 서빙하면(web/ 폴더) 빈 문자열 그대로 둔다.
     // 다른 포트에서 열어 시험할 때만 'http://127.0.0.1:8010' 처럼 채운다.
@@ -1942,8 +1943,7 @@
     // 작업 방식 (PR #14) — 본문은 preview 와 같다. 202 {job_id, status, stage, run}
     memoirStart: (req, style) => call(CONFIG.memoir.jobPath, { method: 'POST', body: memoirBody(req, style) }),
     memoirJob: (id) => call(`${CONFIG.memoir.jobPath}/${encodeURIComponent(id)}`),
-    // 내 가장 최근 작업 (보관 30분 안) — 작업 번호를 모르는 화면(다른 탭 · 다른 기기 · 저장이 막힌 브라우저)이 찾는다
-    memoirLatest: () => call(`${CONFIG.memoir.jobPath}/latest`),
+    // GET /memoirs/latest (내 최근 작업) 는 쓰지 않는다 (태헌 10-28) — 작업 번호는 localStorage 로 기억한다
     memoirCancel: (id) => call(`${CONFIG.memoir.jobPath}/${encodeURIComponent(id)}`, { method: 'DELETE' }),
     // req = { ids } 또는 { elderId, exclude } (mmRequest 가 만든다)
     memoirPreview: (req, signal, style) => call(CONFIG.memoir.path, {
@@ -4690,8 +4690,9 @@
         + (mmLim ? ` · 서버 엔진 ${mmLim.memoir_engine || '?'} · 상한 ${mmLim.memoir_max === null ? '없음' : mmLim.memoir_max}` : '')
         + (outside ? ` · 목록 밖 ${outside}개` : ''));
       // 만들던 작업이 있으면 이어서 본다 (화면을 나갔다 왔다 · 새로고침)
-      // 번호를 모르면 서버에 내 최근 작업을 묻는다 (다른 탭 · 기기에서 시작한 것)
-      if (mmJobId || mmJobOk !== false) void mmResume(my);
+      // 만들던 작업이 있으면 이어서 본다 (나갔다 왔다 · 새로고침 · 다른 탭)
+      mmJobId = mmJobLoad();
+      if (mmJobId) void mmResume(my);
     } catch (e) {
       if (my !== mmReq) return;
       mmShow('loadfail');
@@ -4933,6 +4934,8 @@
       : out.chapters && out.ver && out.ver !== 'pass' ? '자서전 초안이에요. 아직 검증과 사람의 확인을 거치지 않았어요.'
       : '자서전 초안이에요. 아직 사람의 확인을 거치지 않았어요.';
     d.classList.toggle('warn', !!miss);
+    // 서버가 만든 글은 저장하지 않는다 (7-C1 §4 · 작업은 30분 보관) — 태헌 10-28
+    $('#mmKeep').hidden = origin !== 'server';
   }
 
   function mmPaint(title, body) {
@@ -5013,9 +5016,12 @@
 
   const MM_STAGE = { analysis: '이야기를 정리하고 있어요', outline: '목차를 짜고 있어요', edit: '글을 다듬고 있어요',
                      verify: '마지막으로 확인하고 있어요', write: '글을 쓰고 있어요' };
-  /** 「만드는 중」 — 지금 단계와 지난 시간 */
+  /** 「만드는 중」 — 지금 단계와 지난 시간. 분석을 다시 부르면(서버 1회 재시도) 단계가 analysis 로 돌아온다 */
+  let mmStagePast = false;     // 이 작업에서 analysis 뒤 단계를 본 적이 있나
   function mmWaitPaint(job) {
+    if (job.stage && job.stage !== 'analysis') mmStagePast = true;
     const st = job.stage === 'chapter' && job.chapters ? `${job.chapters}장 중 ${job.chapter}장을 쓰고 있어요`
+      : job.stage === 'analysis' && mmStagePast ? '이야기를 다시 정리하고 있어요'
       : MM_STAGE[job.stage] || '자서전을 만들고 있어요';
     const sec = Number(job.elapsed) || 0;
     const t = sec >= 60 ? `${Math.floor(sec / 60)}분 ${sec % 60}초` : `${sec}초`;
@@ -5024,6 +5030,7 @@
   }
   /** 작업이 끝날 때까지 몇 초마다 묻는다. 화면을 떠나면(mmReq 가 바뀜) 묻기만 멈춘다 — 서버는 계속 만든다 */
   async function mmJobWait(job, ids, my) {
+    if (mmJobId !== job.job_id) mmStagePast = false;
     mmJobId = job.job_id;
     mmJobKeep(mmJobId);
     $('#mmWaitMsg').textContent = '몇 분 걸릴 수 있어요. 이 화면을 나가도 계속 만들고, 다시 들어오면 이어서 볼 수 있어요.';
@@ -5064,16 +5071,12 @@
   /** 화면을 다시 열었을 때 만들던 작업 이어 보기 */
   async function mmResume(my) {
     let job;
-    const known = !!mmJobId;
-    try { job = known ? await api.memoirJob(mmJobId) : await api.memoirLatest(); } catch (e) {
-      if (e.code === 'job_not_found') { if (known) mmJobDone(); }
-      else if ((e.status === 404 || e.status === 405) && !e.code) mmJobOk = false;   // 작업 주소가 없는 예전 서버
-      if (known) log('자서전', `만들던 작업을 찾지 못했습니다 · ${e.code || e.status || ''}`);
+    try { job = await api.memoirJob(mmJobId); } catch (e) {
+      log('자서전', `만들던 작업을 찾지 못했습니다 · ${e.code || e.status || ''}`);
+      // 서버를 다시 켰거나 30분이 지났다 — 알리기만 하고 다시 만들지 않는다 (태헌 10-28)
+      if (e.code === 'job_not_found') { mmJobDone(); if (my === mmReq) toast(MM_SAYS.job_not_found); }
       return;
     }
-    // 번호 없이 찾은 것은 **만드는 중일 때만** 이어 본다. 이미 끝난 것은 이 화면에서 본 것인지 알 수 없어
-    // 고르기 화면을 막지 않는다 (번호를 남겨 둔 탭은 끝난 결과도 보여 준다)
-    if (!known && !(job && job.status === 'running')) return;
     if (my !== mmReq || mmView !== 'pick') return;
     log('자서전', `만들던 작업을 이어서 봅니다 · ${job.status}`);
     my = ++mmReq;
@@ -5090,10 +5093,17 @@
     toast('자서전 만들기를 그만두었어요.');
     try { await api.memoirCancel(id); log('자서전', '작업 그만둠'); } catch (e) { log('자서전', `그만두기 실패 · ${e.code || e.status || ''}`); }
   });
-  // 작업 번호를 남겨 둔다 — 새로고침해도 30분 안이면 이어서 본다. 저장이 막힌 브라우저면 이 화면 안에서만
-  function mmJobKeep(id) { try { sessionStorage.setItem('memoirJob', id); } catch (_) {} }
-  function mmJobDone() { mmJobId = ''; try { sessionStorage.removeItem('memoirJob'); } catch (_) {} }
-  try { mmJobId = sessionStorage.getItem('memoirJob') || ''; } catch (_) {}
+  // 작업 번호를 localStorage 에 남겨 둔다 (태헌 10-28) — 새로고침 · 다른 탭에서도 30분 안이면 이어서 본다.
+  // 같은 브라우저에서 다른 계정으로 들어오면 남의 번호를 묻지 않게 계정과 함께 둔다. 저장이 막힌 브라우저면 이 화면 안에서만
+  const MM_JOB_KEY = 'memoirJob';
+  const mmWho = () => String((AUTH.user && AUTH.user.user_id) || AUTH.mode || '');
+  function mmJobKeep(id) { try { localStorage.setItem(MM_JOB_KEY, JSON.stringify({ who: mmWho(), id })); } catch (_) {} }
+  function mmJobDone() { mmJobId = ''; try { localStorage.removeItem(MM_JOB_KEY); } catch (_) {} }
+  function mmJobLoad() {
+    if (mmJobId) return mmJobId;
+    try { const v = JSON.parse(localStorage.getItem(MM_JOB_KEY) || 'null'); return v && v.id && v.who === mmWho() ? String(v.id) : ''; }
+    catch (_) { return ''; }
+  }
 
   /** 결과 · 실패를 화면에 */
   function mmRender(out, kind) {
