@@ -34,7 +34,7 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
 from app.session import controller as sc
-from app.session import auth, limits, link, memoir, photo, photostore, postcard, prompt, store, stt, tts
+from app.session import auth, limits, link, memoir, photo, photostore, postcard, prompt, store, stt, tts, words
 from app.session import style as styles
 from app.session.conf import env_flag, env_int, env_str
 from app.session.machine import State, TransitionError
@@ -243,6 +243,12 @@ class GoogleLoginReq(BaseModel):
 class ElderReq(BaseModel):
     # 「누구의 이야기를 남길까요?」에 적은 이름. 상세 프로필은 받지 않는다.
     name: str = Field(..., min_length=1, max_length=40)
+
+
+class LinkStartReq(BaseModel):
+    # 어르신이 낱말 카드에서 고른 낱말. 없으면 링크의 구체 주제로 연다 (예전 화면은 본문이 없다).
+    # 허용 목록(app/session/words.py)에 없으면 422 — 길이는 그 앞에서 한 번 더 자른다.
+    topic: str | None = Field(None, max_length=60)
 
 
 class LinkReq(BaseModel):
@@ -1054,7 +1060,7 @@ async def link_preview(request: Request):
 
 
 @app.post("/api/i/start")
-async def link_start(request: Request):
+async def link_start(request: Request, body: LinkStartReq | None = None):
     """
     「시작」. 처음이면 회차를 열고 기기 쿠키를 준다. 응답은 진행 라우트와 같은
     snapshot 에 state · theme · topic · photo_url 을 더한 것이다.
@@ -1064,6 +1070,10 @@ async def link_start(request: Request):
     회차가 둘 생기지 않는다 (link.starting · store.claim_link).
 
     상한은 /api/sessions 와 같다 (_open_checks). 회차를 여는 입구가 하나 더 생긴 것뿐이다.
+
+    **낱말 카드** — 본문 { topic } 은 어르신이 고른 낱말이다. 허용 목록(카드 + 링크의 구체
+    주제)에 있을 때만 그 낱말로 연다. 없으면 422 topic_not_allowed 이고 링크는 소모되지
+    않는다. 이미 진행 중인 회차를 돌려줄 때는 보지 않는다 — 중간에 주제가 바뀌지 않는다.
     """
     rec = await link.by_token(_token(request))
     device = request.cookies.get(link.COOKIE)
@@ -1079,17 +1089,27 @@ async def link_start(request: Request):
                 raise link.stuck("in_progress_elsewhere")
             return {**sc.get(rec["session_id"]).snapshot(), **link.view(rec, state)}
 
+        picked = None
+        if body and body.topic and body.topic.strip():
+            picked = words.allowed(body.topic, rec["topic"])
+            if picked is None:
+                raise link.topic_not_allowed()
+            if picked == rec["topic"]:
+                picked = None               # 자녀가 적은 주제 그대로 — 고른 것이 없는 것과 같다
+
         _open_checks(request, rec["user_id"])
         session_id = str(uuid.uuid4())
-        raw = await link.claim(rec, session_id)
+        raw = await link.claim(rec, session_id, picked)
         if raw is None:
             # 이 프로세스 밖에서 먼저 묶였다 (DB 의 조건부 UPDATE 가 막았다).
             raise link.stuck("in_progress_elsewhere")
         ctl = sc.put(sc.SessionController(
             user_id=rec["user_id"], title=rec["title"], session_id=session_id,
-            photo_id=rec["photo_id"], theme=rec["theme"], topic=rec["topic"],
+            photo_id=rec["photo_id"], theme=rec["theme"], topic=picked or rec["topic"],
             elder_id=rec["elder_id"], question_fn=gemini_question, closed_fn=link.on_closed))
-        await ctl.start(rec["seed"])
+        # 다른 낱말을 고르셨으면 자녀의 시작 자료(seed)는 쓰지 않는다 — 다른 주제의 자료가
+        # 0번 조각으로 들어가 질문을 그쪽으로 끌고 간다
+        await ctl.start(picked if picked else rec["seed"])
     log.info("링크 %s → 회차 %s 시작", rec["link_id"], session_id[:8])
     res = JSONResponse(jsonable_encoder({**ctl.snapshot(), **link.view(rec, "in_progress")}))
     res.set_cookie(link.COOKIE, raw, max_age=link.DEVICE_HOURS * 3600, httponly=True,

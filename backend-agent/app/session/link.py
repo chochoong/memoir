@@ -83,6 +83,11 @@ def stuck(code: str) -> LinkError:
     return _STUCK[code]
 
 
+def topic_not_allowed() -> LinkError:
+    """낱말 카드에 없는 주제로 시작하려 했다 (words.allowed). 링크는 소모되지 않는다."""
+    return LinkError(422, "topic_not_allowed", "고를 수 있는 낱말이 아니에요. 화면의 카드 중에서 골라 주세요")
+
+
 def unavailable() -> LinkError:
     return LinkError(503, "link_unavailable", "지금은 링크를 확인할 수 없어요. 잠시 뒤에 다시 해 주세요")
 
@@ -168,9 +173,14 @@ async def by_device(raw: str | None) -> dict:
     return link
 
 
+def topic_of(link: dict) -> str:
+    """회차의 주제 — 어르신이 고른 낱말이 있으면 그것, 없으면 자녀가 적은 구체 주제."""
+    return link.get("picked_topic") or link["topic"]
+
+
 def view(link: dict, state: str) -> dict:
     """미리보기 · 시작 응답에 같이 싣는 준비 내용. 화자 · 발급자는 싣지 않는다."""
-    return {"state": state, "theme": link["theme"], "topic": link["topic"],
+    return {"state": state, "theme": link["theme"], "topic": topic_of(link),
             "photo_url": PHOTO_URL if link["photo_id"] else None}
 
 
@@ -178,7 +188,8 @@ def summary(link: dict) -> dict:
     """자녀 화면의 링크 목록 한 줄. 토큰은 없다 — 표에도 해시만 있다."""
     return {
         "link_id": link["link_id"], "elder_id": link["elder_id"], "title": link["title"],
-        "theme": link["theme"], "topic": link["topic"], "state": state_of(link),
+        "theme": link["theme"], "topic": link["topic"], "picked_topic": link.get("picked_topic"),
+        "state": state_of(link),
         "session_id": link["session_id"],
         "created_at": link["created_at"].isoformat(), "expires_at": link["expires_at"].isoformat(),
     }
@@ -208,10 +219,15 @@ class starting:
             _starting.pop(self.link_id, None)
 
 
-async def claim(link: dict, session_id: str) -> str | None:
-    """시작 전 링크에 회차를 묶는다. 성공하면 기기 쿠키 원문, 이미 누가 묶었으면 None."""
+async def claim(link: dict, session_id: str, picked_topic: str | None = None) -> str | None:
+    """
+    시작 전 링크에 회차를 묶는다. 성공하면 기기 쿠키 원문, 이미 누가 묶었으면 None.
+    묶이면 link 에도 picked_topic 을 적는다 — 이어지는 응답(view)이 고른 낱말을 보이게.
+    """
     raw = secrets.token_urlsafe(32)
-    ok = await read(store.claim_link(link["link_id"], session_id, _hash(raw)))
+    ok = await read(store.claim_link(link["link_id"], session_id, _hash(raw), picked_topic))
+    if ok:
+        link["picked_topic"] = picked_topic
     return raw if ok else None
 
 

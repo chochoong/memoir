@@ -761,7 +761,7 @@ async def create_elder(user_id: str, display_name: str) -> dict:
 # 표는 010 이 만들었다. 권한을 정하는 함수라 계정 함수와 같이 실패를 삼키지 않는다.
 
 # token_hash 는 읽지 않는다. device_hash 는 「시작한 기기인가」를 대조하는 데만 쓰고 내보내지 않는다.
-_LINK_COLS = """link_id, user_id, elder_id, title, seed, theme, topic, photo_id, session_id,
+_LINK_COLS = """link_id, user_id, elder_id, title, seed, theme, topic, picked_topic, photo_id, session_id,
                 device_hash, created_at, expires_at, revoked_at, started_at, ended_at"""
 
 
@@ -859,21 +859,25 @@ async def list_links(user_id: str, elder_id: str | None, limit: int) -> list[dic
     return [_link_row(r) for r in await _auth_write("링크 목록 읽기", run)]
 
 
-async def claim_link(link_id: str, session_id: str, device_hash: str) -> bool:
+async def claim_link(link_id: str, session_id: str, device_hash: str,
+                     picked_topic: str | None = None) -> bool:
     """
     시작 전 링크에 회차를 묶는다. **한 번만 성공한다** — 두 번 눌러도, 두 기기에서
     동시에 눌러도 조건부 UPDATE 하나라 회차는 하나다.
+
+    picked_topic 은 어르신이 낱말 카드에서 고른 낱말이다 (012). 묶을 때 함께 적는다 —
+    시작에 실패한 요청의 낱말이 남지 않게.
     """
     async def run(con):
         return await con.fetchval(
             """
             UPDATE interview_link
-               SET session_id = $2, device_hash = $3, started_at = now()
+               SET session_id = $2, device_hash = $3, started_at = now(), picked_topic = $4
              WHERE link_id = $1 AND session_id IS NULL AND revoked_at IS NULL
                AND expires_at > now()
             RETURNING link_id
             """,
-            link_id, uuid.UUID(session_id), device_hash)
+            link_id, uuid.UUID(session_id), device_hash, picked_topic)
     return bool(await _auth_write("링크 시작 기록", run))
 
 
