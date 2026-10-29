@@ -304,6 +304,17 @@ def test_analysis_v5_contract(mutate, kind, why):
     assert e.value.kind == kind and why in e.value.message
 
 
+def test_heard_mark_needs_quote():
+    """소리를 들은 것(「라디오를 들었어요」)은 전언 표시가 아니다 — 운영 10-29 분석 reference 실패."""
+    def heard(text):
+        return bool(pipe._HEARD_SRC.search(text))
+    assert not heard("밤에 이불을 끼고 라디오를 들었어요.")
+    assert not heard("아버지 없을 때에만 몰래 꺼내서 들었어요.")
+    assert heard("산을 넘어 걸어서 왔다고 하더라고요.")
+    assert heard("언니가 나를 업어 키웠다고 들었어요.")
+    assert heard("엄마가 그날 울었대요.")
+
+
 def test_analysis_v5_warnings_marks_units_and_years():
     data, _ = source_c()
     T = T_of(data)
