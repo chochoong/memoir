@@ -317,7 +317,7 @@ def old_heard_marks(monkeypatch):
 
 
 def test_heard_mark_needs_quote():
-    """전언 표시는 좁게 — 운영 10-29 분석 reference 실패 (라디오를 들었어요 · 대요 · 다고 하더라고요)."""
+    """전언 표시는 좁게 — 운영 10-29 분석 reference 실패 (들었어요 · 하더라고요 · 대요 모두 표시하지 않는다)."""
     def heard(text):
         return bool(pipe._HEARD_SRC.search(text))
     assert not heard("밤에 이불을 끼고 라디오를 들었어요.")
@@ -325,8 +325,9 @@ def test_heard_mark_needs_quote():
     assert not heard("산을 넘어 걸어서 왔다고 하더라고요.")          # 10-29 충: 「~다고 하더라고요」 빼기
     assert not heard("엄마가 그날 울었대요.")                        # 10-29 충: 「~대요」 빼기
     assert not heard("방에 침대요, 그런 건 없었어요.")
-    assert heard("언니가 나를 업어 키웠다고 들었어요.")
-    assert heard("그게 인연이라고 하더라고요.")
+    assert not heard("언니가 나를 업어 키웠다고 들었어요.")          # 10-29 충: 「들었어요」 전부 빼기
+    assert not heard("그게 인연이라고 하더라고요.")                  # 10-29 충: 「하더라고요」 전부 빼기
+    assert heard("그 사람이 먼저 왔다고 하데요.")
 
 
 @pytest.mark.usefixtures("old_heard_marks")
