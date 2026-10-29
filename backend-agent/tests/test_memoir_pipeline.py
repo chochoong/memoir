@@ -304,17 +304,32 @@ def test_analysis_v5_contract(mutate, kind, why):
     assert e.value.kind == kind and why in e.value.message
 
 
+# 10-29 앞의 전언 표지 — 「~대요」 · 「~다고 하더라(고요)」 · 단독 「들었어요」를 잡던 것.
+# 아래 시험들은 seed C 의 전언 턴(10 「키웠다고 하더라고요」 · 13 「울었대요」)으로 **검사 장치**
+# (전언 표시 턴에 heard 사실이 없으면 막는다 등)를 본다. 표지 범위가 줄어도 장치는 그대로라 예전 표지로 돌린다.
+_OLD_HEARD_SRC = re.compile(r"(?<!그러)대요|다고\s?(하더라고요|하데요|하더라|들었)|라고\s?(하더라고요|들었)"
+                            r"|들었어요|그러더라고요|(?<!그)래요")
+
+
+@pytest.fixture
+def old_heard_marks(monkeypatch):
+    monkeypatch.setattr(pipe, "_HEARD_SRC", _OLD_HEARD_SRC)
+
+
 def test_heard_mark_needs_quote():
-    """소리를 들은 것(「라디오를 들었어요」)은 전언 표시가 아니다 — 운영 10-29 분석 reference 실패."""
+    """전언 표시는 좁게 — 운영 10-29 분석 reference 실패 (라디오를 들었어요 · 대요 · 다고 하더라고요)."""
     def heard(text):
         return bool(pipe._HEARD_SRC.search(text))
     assert not heard("밤에 이불을 끼고 라디오를 들었어요.")
     assert not heard("아버지 없을 때에만 몰래 꺼내서 들었어요.")
-    assert heard("산을 넘어 걸어서 왔다고 하더라고요.")
+    assert not heard("산을 넘어 걸어서 왔다고 하더라고요.")          # 10-29 충: 「~다고 하더라고요」 빼기
+    assert not heard("엄마가 그날 울었대요.")                        # 10-29 충: 「~대요」 빼기
+    assert not heard("방에 침대요, 그런 건 없었어요.")
     assert heard("언니가 나를 업어 키웠다고 들었어요.")
-    assert heard("엄마가 그날 울었대요.")
+    assert heard("그게 인연이라고 하더라고요.")
 
 
+@pytest.mark.usefixtures("old_heard_marks")
 def test_analysis_v5_warnings_marks_units_and_years():
     data, _ = source_c()
     T = T_of(data)
@@ -1250,6 +1265,7 @@ def test_structure_moves_keep_fact_ids_and_source_turns(tmp_path):
     assert trace["summary"]["moved"] == 1 and trace["summary"]["final_chapters"] == 1
 
 
+@pytest.mark.usefixtures("old_heard_marks")
 def test_unresolved_hearsay_or_certainty_never_reaches_awaiting_human():
     data, _ = source_c()
     T = sorted(T_of(data))
@@ -1315,6 +1331,7 @@ def _diag(a, data):
     return pipe.analysis_diagnostics(a, T_of(data), pipe.turn_marks(data), pipe.source_texts(data), pipe.source_asked(data))
 
 
+@pytest.mark.usefixtures("old_heard_marks")
 def test_failed_v5_analysis_reports_every_problem_and_stops_before_outline():
     """v5 집중 시험(20261026T093440Z) 분석 출력 그대로 — 문제를 한 번에 모두 모으고, 목차로 넘기지 않는다."""
     data, turn_map = source_c()
@@ -1405,6 +1422,7 @@ def test_keep_is_for_core_facts_only(share, kind):
     assert (bool(hit[0]), bool(hit[1])) == {"error": (True, False), "warning": (False, True), None: (False, False)}[kind]
 
 
+@pytest.mark.usefixtures("old_heard_marks")
 def test_turn13_heard_and_remembered_must_be_split_at_fact_level():
     data, _ = source_c()
     a = _seed_c_corrected(data)
@@ -1439,6 +1457,7 @@ def test_unit_spanning_unrelated_periods_and_loaded_theme_words_are_flagged():
     assert any("['그리움']" in w for w in warnings) and not any("함께한 세월" in w for w in warnings)
 
 
+@pytest.mark.usefixtures("old_heard_marks")
 def test_analysis_only_mode_is_one_call_and_writes_the_memory_map(tmp_path):
     data, turn_map = source_c()
     bad = json.loads(FAILED_V5.read_text(encoding="utf-8"))
@@ -1545,6 +1564,7 @@ def test_stripped_fact_with_nothing_left_is_removed():
     assert all("f40" not in u["facts"] for u in a["units"]) and f25["turns"] == [21, 25]
 
 
+@pytest.mark.usefixtures("old_heard_marks")
 def test_turn_marks_separate_heard_reported_view_and_emotions():
     data, _ = source_c()
     m = {x["turn"]: x for x in pipe.turn_marks(data)}
@@ -1625,6 +1645,7 @@ def test_reported_is_a_marker_not_a_source_and_is_not_auto_converted(tmp_path):
     assert "뜻 검사 미실행" in text and "검사 미실행 (경고 0건이 아니다)" in text
 
 
+@pytest.mark.usefixtures("old_heard_marks")
 def test_lite_v5b_meaning_losses_are_all_caught():
     """01:02Z 출력을 source 만 self 로 고친 사본(시험용) — 사실 원장에서 빠진 뜻을 모두 찾는다. 38 은 보존돼 통과."""
     data, _ = source_c()
@@ -1680,6 +1701,7 @@ def test_analysis_prompt_states_three_sources_and_meaning_preservation():
 FIXTURE_C = ROOT / "eval" / "analysis_fixture_C_v5_reviewed.json"
 
 
+@pytest.mark.usefixtures("old_heard_marks")
 def test_simplified_contract_keeps_protected_items_as_errors():
     data, _ = source_c()
     base = _seed_c_corrected(data)
@@ -1735,6 +1757,7 @@ def test_reviewed_fixture_is_valid_marked_and_reproducible():
     assert hashlib.sha256(base).hexdigest()[:16] == fx["based_on"]["sha256"]       # 바탕은 모델 원본 그대로
 
 
+@pytest.mark.usefixtures("old_heard_marks")
 @pytest.mark.parametrize("change, why", [
     (lambda fx: fx.update(input_ref="000000000000"), "input_ref"),
     (lambda fx: fx.update(analysis_source="model"), "analysis_source"),
