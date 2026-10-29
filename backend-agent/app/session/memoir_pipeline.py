@@ -76,7 +76,8 @@ DEFAULT_LIMITS = {               # 초, 출력 토큰
 }
 DEFAULT_TEMPERATURE = 0.3
 DEFAULT_TOTAL_TIMEOUT = 600.0
-MIN_CHAPTERS, MAX_CHAPTERS = 1, 5    # 독립 실험의 안전 상한. 넘으면 자르지 않고 실패
+MIN_CHAPTERS, MAX_CHAPTERS = 1, 10   # 안전 상한. 넘으면 자르지 않고 실패 (10-29 충: 5 → 10 — 회차가 많으면
+                                     # 5장 안에 넣느라 장면이 빠졌다)
 RETRIES = 0
 # 장 집필 비교(--chapter-only)의 장 단계 상한 — 생각 토큰도 출력 상한에 들어가는 모델이 계약 밖 이유로
 # 잘리지 않게 넉넉히 둔다(초, 출력 토큰). 기본 실행의 상한은 그대로다
@@ -1878,7 +1879,7 @@ def edit_claim_findings(edited: dict, trace: dict) -> list[dict]:
 def check_final(out, analysis: dict, T: set[int], focus: str | None = None) -> tuple[dict[str, str], list[str]]:
     """
     편집본의 최종 근거검사. 편집은 **구성을 바꿀 수 있다** — 장을 합치고 나누고 순서를 바꾸고,
-    문단을 옮기고, 문장을 덜어 낼 수 있다(장 1~5, 한 장 시험은 1장). 대신:
+    문단을 옮기고, 문장을 덜어 낼 수 있다(장 1~MAX_CHAPTERS, 한 장 시험은 1장). 대신:
 
         모든 문장의 facts 는 사실 원장 안 (제외 턴의 사실은 원장에 없다)
         diagnosis(먼저 본 문제)가 하나 이상
@@ -2684,6 +2685,9 @@ def outline_message(data: dict, analysis: dict, focus: str | None = None) -> str
     head = (_SOURCE_HEAD + "\nanalysis 는 앞 단계의 사실 원장(facts) · 기억 단위(units) · 끈(threads) · "
             "정정(corrections)이다. 편집 참고일 뿐 사실 근거가 아니다 — source 와 다시 대조한다. "
             "must_keep 은 근거 없이 빠지면 안 되는 사실 id 다.")
+    if not focus:
+        head += (f"\n장은 {MIN_CHAPTERS}~{MAX_CHAPTERS}장까지 쓸 수 있다 — 장 수는 자료 양에 맞춘다. "
+                 "자료가 많은데 장을 적게 잡아 장면을 빼지 않는다.")
     payload: dict = {"analysis": _analysis_for_next(analysis),
                      "must_keep": sorted(must_keep(analysis), key=lambda x: int(x[1:]))}
     if focus:
@@ -2705,6 +2709,9 @@ def chapter_message(src: dict, analysis: dict, outline_out: dict, chapter: dict)
             "문장의 facts 에는 이 facts 의 id 만 쓴다.")
     book = ledger(analysis)
     mine = plan_facts(chapter)
+    head += (f"\n**장 길이는 이 장이 맡은 사실 수에 비례한다** — 이 장은 사실 {len(mine)}개를 맡았다. "
+             "문단 계획의 facts 는 사실 하나에 한두 문장으로 장면이 보이게 쓰고, brief 는 짧게 한 구절로 "
+             "담는다. 사실이 많은 장을 다른 장 길이에 맞추어 줄이거나 몇 문장으로 요약하지 않는다.")
     payload: dict = {
         "book": {k: outline_out["book"].get(k) for k in ("title", "center", "flow", "opening_facts", "closing_facts")},
         "chapter": chapter,

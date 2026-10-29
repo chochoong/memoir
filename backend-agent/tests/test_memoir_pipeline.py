@@ -350,7 +350,7 @@ def test_t14_insufficient_material_ends_after_one_call():
 
 @pytest.mark.parametrize("chapters, kind", [
     ([], "format"),
-    ([chapter_plan(f"ch-{i}", [para(["f1"])]) for i in range(1, 7)], "chapter_limit"),
+    ([chapter_plan(f"ch-{i}", [para(["f1"])]) for i in range(1, pipe.MAX_CHAPTERS + 2)], "chapter_limit"),
     ([chapter_plan("ch-1", [para(["f9"])])], "reference"),
     ([chapter_plan("ch-1", [para([])])], "reference"),
     ([chapter_plan("ch-1", [])], "format"),
@@ -804,7 +804,7 @@ def test_t17b_default_limits_v5():
             "EDIT": (150, 10000), "VERIFY": (90, 6000)}
     for st, (sec, tok) in want.items():
         assert (s[f"MEMOIR_PIPE_{st}_TIMEOUT"], s[f"MEMOIR_PIPE_{st}_MAX_OUTPUT_TOKENS"]) == (sec, tok)
-    assert s["MEMOIR_PIPE_TOTAL_TIMEOUT"] == 600 and s["retries"] == 0 and s["chapters"] == [1, 5]
+    assert s["MEMOIR_PIPE_TOTAL_TIMEOUT"] == 600 and s["retries"] == 0 and s["chapters"] == [1, 10]
 
 
 def _memoir_input_file(tmp_path, data, turn_map, **over):
@@ -950,7 +950,7 @@ def test_cli_focus_dry_run_and_rejects_long_focus(capsys):
     out = capsys.readouterr().out
     assert "예상 호출 5회" in out and "지시문 v5" in out and "모델을 부르지 않았다" in out
     assert cli.main(args + ["--focus", "가" * (cli.FOCUS_MAX_CHARS + 1)]) == 2
-    assert cli.main(args) == 0 and "예상 호출 5~9회" in capsys.readouterr().out
+    assert cli.main(args) == 0 and "예상 호출 5~14회" in capsys.readouterr().out
 
 
 # ---------------------------------------------------------------- 제외 (seed B)
@@ -1164,9 +1164,9 @@ def test_t07b_five_chapters_is_allowed_six_is_not():
     assert pipe.check_outline(o, analysis_ok(), T)[0] == "ready"
     e = edited_ok()
     e["chapters"] = [{"chapter_key": f"ch-{i}", "center": "", "title": sent("장", [], "editorial"),
-                      "paragraphs": [[sent("일이다.", ["f1"])]]} for i in range(1, 6)]
+                      "paragraphs": [[sent("일이다.", ["f1"])]]} for i in range(1, pipe.MAX_CHAPTERS + 1)]
     pipe.check_final(e, analysis_ok(), T)
-    e["chapters"].append({**e["chapters"][0], "chapter_key": "ch-6"})
+    e["chapters"].append({**e["chapters"][0], "chapter_key": f"ch-{pipe.MAX_CHAPTERS + 1}"})
     with pytest.raises(pipe.PipelineError) as err:
         pipe.check_final(e, analysis_ok(), T)
     assert err.value.kind == "chapter_limit"
