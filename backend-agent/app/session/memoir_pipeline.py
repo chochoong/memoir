@@ -56,13 +56,16 @@ ROLE_DIR = PROMPTS / "파이프라인"
 # v5 — 사실 원장과 기억 단위 · 책 설계도 · 문단 단위 서사 · 구성 편집 · 사실 + 구성 채점
 # (redesign-v5-book-quality.md). 옛 판 파일은 실행 기록으로 남긴다. 계약은 판마다 달라 옛 판은
 # 그 커밋에서만 돈다.
-PROMPT_VERSION = "v5"
+# v7 — 독립 일화 · 필수 경위 보존, 주된 구간과 재언급, 불확실성 · 감정의 범위, 삭제보다 통합, Q4 · 제목 판정
+# (naemalssami-memoir-editor 기준 · 2026-10-29 합의 명세). 출력 계약은 v5 그대로다. v6 이름은 편집 단독 실험
+# (4_편집_v6.md · edit_contract "v6")이 쓰고 있어 섞이지 않게 v7 로 건너뛴다.
+PROMPT_VERSION = "v7"
 ROLE_FILES = {
-    "analysis": "1_분석_v5.md",
-    "outline": "2_목차_v5.md",
-    "chapter": "3_장집필_v5.md",
-    "edit": "4_편집_v5.md",
-    "verify": "5_검증_v5.md",
+    "analysis": "1_분석_v7.md",
+    "outline": "2_목차_v7.md",
+    "chapter": "3_장집필_v7.md",
+    "edit": "4_편집_v7.md",
+    "verify": "5_검증_v7.md",
 }
 STAGES = tuple(ROLE_FILES)
 
@@ -1164,6 +1167,16 @@ def check_outline(out, analysis: dict, T: set[int], focus: str | None = None) ->
             if len(fs) >= 3 and len(gone_here) / len(fs) > OMIT_UNIT_RATIO:
                 c.warnings.append(f"{ch['chapter_key']} 이 고른 기억 단위 {uid} 의 사실 {len(fs)}개 중 {len(gone_here)}개를 뺐다 — "
                                   "장의 핵심 기억을 한꺼번에 생략했는지 본다")
+    # 핵심 경위(core) 미지정 — facts 에 배정된 주된 서술 일화마다 그 단위의 사실이 core 에 하나도 없으면 경고.
+    # 개수 · 비율은 강제하지 않는다(형식 오류 · code_gate 실패가 아니다). 단계 경고라 verify_plan → plan.checks 로 간다
+    for ch in chapters:
+        main_facts = {f for para in ch["paragraphs"] for f in para["facts"]}
+        core_here = {f for para in ch["paragraphs"] for f in (para.get("core") or [])}
+        for u in analysis.get("units", []):
+            fs = set(u.get("facts", []))
+            if fs & main_facts and not fs & core_here:
+                c.warnings.append(f"{ch['chapter_key']} 이 facts 로 서술하는 일화 {u['id']}({(u.get('name') or '')[:30]}) 에 "
+                                  "핵심 경위(core)가 지정되지 않았다 — 편집 단계에서 핵심 누락 보호가 없다")
     dropped_keep = sorted(must_keep(analysis) & set(omitted), key=lambda x: int(x[1:]))
     if dropped_keep:
         c.warnings.append(f"근거 없이 빠지면 안 되는 사실 {dropped_keep} 을 뺐다 — 이유를 사람이 본다")
@@ -1581,14 +1594,28 @@ def time_findings(chapters: list[dict], book: dict[str, dict]) -> list[dict]:
     return out
 
 
-def keep_findings(chapters: list[dict], keep: set[str], omitted: dict[str, str]) -> list[dict]:
-    """근거 없이 빠지면 안 되는 사실이 본문에 남았는가. 이유와 함께 뺀 것은 info 로 사람에게."""
+def keep_findings(chapters: list[dict], keep: set[str], outline_omit: dict[str, str],
+                  edit_omitted: dict[str, str] | None = None) -> list[dict]:
+    """
+    근거 없이 빠지면 안 되는 사실이 본문에 남았는가. 목차의 생략과 편집의 생략을 나눠 본다.
+
+        must_keep_excluded  review  목차가 이유와 함께 뺐다 — 책 설계의 결정. 검증 · 사람이 본다(code_gate 밖)
+        must_keep_omitted   fix     목차가 쓰기로 한 것을 편집이 뺐다 — **이유가 있어도 미해결 보호 누락**.
+                                    정당한 통합인지는 검증 · 사람 검수가 본다(자동 통과 없음)
+        must_keep_missing   fix     본문에도 생략 목록에도 없다
+
+    목차 omit 이 먼저다 — 편집이 목차의 생략을 다시 적어도(v5 편집은 그렇게 했다) 편집 생략으로 세지 않는다.
+    """
     cited = {f for _, _, _, x in _sentences(chapters) for f in (x.get("facts") or [])}
+    edit_omitted = edit_omitted or {}
     out = []
     for f in sorted(keep - cited, key=lambda x: int(x[1:]) if x[1:].isdigit() else 0):
-        if omitted.get(f, "").strip():
-            out.append(_finding("must_keep_omitted", "info", "artifact", f"사실 {f} 을 뺐다 — 이유: {omitted[f][:80]}",
-                                fact=f))
+        if outline_omit.get(f, "").strip():
+            out.append(_finding("must_keep_excluded", "review", "artifact",
+                                f"목차가 사실 {f} 을 뺐다 — 이유: {outline_omit[f][:80]}", fact=f))
+        elif edit_omitted.get(f, "").strip():
+            out.append(_finding("must_keep_omitted", "fix", "artifact",
+                                f"편집이 사실 {f} 을 뺐다 — 이유가 있어도 미해결 보호 누락: {edit_omitted[f][:80]}", fact=f))
         else:
             out.append(_finding("must_keep_missing", "fix", "artifact",
                                 f"사실 {f} 이 본문에도 생략 목록에도 없다 — 중요한 사건 · 정정 · 직접 말한 감정 · 마지막 발언",
@@ -1602,7 +1629,9 @@ def core_findings(chapters: list[dict], core: dict[str, str], omitted: dict[str,
     목차 문단 계획의 핵심 사실이 원고에 남았는가. 보조 사실은 보지 않는다(골라 쓰는 것이다).
 
         core_missing   fix   본문에도 편집의 생략 목록에도 없다 — 실수로 빠진 것. kept 로 넘기지 못한다
-        core_omitted   info  편집이 omitted 에 이유와 함께 뺐다 — 정당한 생략인지 사람이 이유를 본다
+        core_omitted   fix   편집이 omitted 에 이유와 함께 뺐다 — **이유가 있어도 미해결 보호 누락**. 이유에 적힌
+                             다른 사실 id 는 대응 내용을 찾는 데만 쓴다(그 id 가 남았다고 낮추지 않는다).
+                             정당한 통합인지는 검증(plan.protected_omissions) · 사람 검수가 본다
 
     omitted 는 **편집의 생략 목록만** 받는다(장 초안 단계에는 없다) — 목차 omit 은 핵심 사실을 담지 않는다.
     사실은 문장의 facts 로 센다 — 근거로 단 사실이 글에 실제로 드러났는지는 fact_token · 사람 대조가 본다.
@@ -1612,8 +1641,8 @@ def core_findings(chapters: list[dict], core: dict[str, str], omitted: dict[str,
     for f in sorted(set(core) - cited, key=_fid):
         what = (book.get(f) or {}).get("text", "")[:40]
         if omitted.get(f, "").strip():
-            out.append(_finding("core_omitted", "info", "artifact",
-                                f"목차 {core[f]} 의 핵심 사실 {f}({what}) 을 뺐다 — 이유: {omitted[f][:80]}",
+            out.append(_finding("core_omitted", "fix", "artifact",
+                                f"목차 {core[f]} 의 핵심 사실 {f}({what}) 을 편집이 뺐다 — 이유가 있어도 미해결: {omitted[f][:80]}",
                                 fact=f, plan=core[f]))
         else:
             out.append(_finding("core_missing", "fix", "artifact",
@@ -1668,17 +1697,162 @@ def all_findings(chapters: list[dict], outline_out: dict, data: dict, analysis: 
                  edit_omitted: dict[str, str] | None = None) -> list[dict]:
     """
     한 원고(장 초안 묶음 · 편집본)에 대한 코드 판정 전부. 핵심 사실(plan_core)은 core_findings 가 보고
-    must_keep 검사에서는 뺀다(한 사실에 두 번 경고하지 않는다). edit_omitted 는 편집의 생략 목록.
+    must_keep 검사에서는 뺀다(한 사실에 두 번 경고하지 않는다). omitted 는 **목차의 생략 목록**, edit_omitted 는
+    편집의 생략 목록 — 둘을 섞지 않는다. final 이면 일화 전체 누락(episode_findings)도 본다.
     """
     book = ledger(analysis)
     core = plan_core(outline_out)
     out = (code_findings(chapters, outline_out) + fact_findings(chapters, data)
            + voice_findings(chapters, book) + time_findings(chapters, book)
-           + keep_findings(chapters, must_keep(analysis) - set(core), omitted or {})
+           + keep_findings(chapters, must_keep(analysis) - set(core), omitted or {}, edit_omitted)
            + core_findings(chapters, core, edit_omitted or {}, book)
            + correction_findings(chapters, analysis))
     if final:
         out += verbatim_runs(chapters, data)
+        out += episode_findings(chapters, outline_out, analysis, edit_omitted or {}, omitted or {})
+    return out
+
+
+# ---------------------------------------------------------------- 일화 전체 누락 · 누락 검토 후보 (v7)
+#
+#   일화 = 분석의 기억 단위(units). main · minor 로 검토 대상을 가르지 않는다.
+#   채택 = 그 단위의 사실이 목차 문단 계획의 facts **또는 brief** 에 하나라도 있음 (brief 로만 계획된 일화도 채택이다)
+#
+#       episode_missing   fix     채택한 일화가 최종본에서 통째로 사라졌고 편집의 생략 이유가 없다
+#       episode_omitted   fix     같은 경우인데 편집이 이유를 적었다 — 이유가 있어도 미해결(사람 · 검증이 본다)
+#       episode_excluded  review  목차가 일화 전체를 뺐다 — 책 설계의 결정. 한 장 시험의 범위 밖 일화도 여기다(편집 누락이 아니다)
+
+
+def _planned(outline_out: dict, with_brief: bool = True) -> set[str]:
+    return {f for ch in outline_out.get("chapters", []) for p in ch.get("paragraphs", [])
+            for f in list(p.get("facts") or []) + (list(p.get("brief") or []) if with_brief else [])}
+
+
+def episode_findings(chapters: list[dict], outline_out: dict, analysis: dict,
+                     edit_omitted: dict[str, str], outline_omit: dict[str, str]) -> list[dict]:
+    cited = {f for _, _, _, x in _sentences(chapters) for f in (x.get("facts") or [])}
+    planned = _planned(outline_out)
+    out = []
+    for u in analysis.get("units", []):
+        fs = [f for f in u.get("facts", [])]
+        if not fs:
+            continue
+        name = (u.get("name") or "")[:40]
+        if set(fs) & cited:
+            continue                                   # 본문에 남았다 — 일부 사실의 손실은 omission_candidates 가 본다
+        if not set(fs) & planned:
+            if all(outline_omit.get(f, "").strip() for f in fs):
+                reasons = sorted({outline_omit[f][:60] for f in fs})
+                out.append(_finding("episode_excluded", "review", "artifact",
+                                    f"목차가 일화 {u['id']}({name}) 전체를 뺐다 — 이유: {' / '.join(reasons)[:120]}",
+                                    unit=u["id"], token=u["id"]))
+            continue
+        why = [edit_omitted[f] for f in fs if edit_omitted.get(f, "").strip()]
+        if why:
+            out.append(_finding("episode_omitted", "fix", "artifact",
+                                f"목차가 쓰기로 한 일화 {u['id']}({name}) 를 편집이 통째로 뺐다 — 이유가 있어도 미해결: {why[0][:80]}",
+                                unit=u["id"], token=u["id"]))
+        else:
+            out.append(_finding("episode_missing", "fix", "artifact",
+                                f"목차가 쓰기로 한 일화 {u['id']}({name}) 가 최종본에서 통째로 사라졌다 — 생략 이유도 없다",
+                                unit=u["id"], token=u["id"]))
+    return out
+
+
+PROTECTED_RULES = ("core_missing", "core_omitted", "must_keep_missing", "must_keep_omitted", "must_keep_excluded",
+                   "episode_missing", "episode_omitted", "episode_excluded")
+
+
+def _fact_sentences(chapters: list[dict]) -> dict[str, list[dict]]:
+    out: dict[str, list[dict]] = {}
+    for loc, _, _, x in _sentences(chapters):
+        for f in x.get("facts") or []:
+            out.setdefault(f, []).append({"loc": loc, "text": x.get("text", "")})
+    return out
+
+
+def _fact_source(f: str, book: dict[str, dict], elder: dict[int, str]) -> list[dict]:
+    return [{"turn": t, "elder": elder[t]} for t in (book.get(f) or {}).get("turns", []) if t in elder]
+
+
+def _marker_changes(fact: dict, draft_text: str, final_text: str) -> list[str]:
+    """
+    **사실 범위**의 표지 비교 — 후보 탐지에만 쓴다. 그 사실의 메모 · time 에 있는 수 · 연도와, 메모의 부정 ·
+    출처의 전언 · certainty 의 흐림이 초안 표현에는 있고 그 사실을 단 편집본 문장에는 없으면 적는다.
+    같은 숫자가 장 어딘가에 있어도 그 사실의 문장에 없으면 후보다(보존을 확정하지 않는다).
+    """
+    memo = f"{fact.get('text', '')} {fact.get('time', '')}"
+    out = [v for _, v in _fact_tokens(memo) if _norm(v) in _norm(draft_text) and _norm(v) not in _norm(final_text)]
+    if _NEG_FACT.search(fact.get("text", "")) and _NEG_FACT.search(draft_text) and not _NEG_FACT.search(final_text):
+        out.append("부정")
+    if fact.get("source") == "heard" and _HEARD_BODY.search(draft_text) and not _HEARD_BODY.search(final_text):
+        out.append("전언")
+    if fact.get("certainty") in ("approx", "uncertain") and _HEDGE_BODY.search(draft_text) and not _HEDGE_BODY.search(final_text):
+        out.append("흐림")
+    return out
+
+
+def omission_candidates(drafts: list[dict], final: list[dict], trace: dict, analysis: dict, data: dict,
+                        edit_omitted: dict[str, str], outline_omit: dict[str, str],
+                        protected: set[str]) -> list[dict]:
+    """
+    편집 전후의 누락 **검토 후보** — 확정 누락이 아니다. edit_trace 를 다시 쓰고 그 반환 모양은 건드리지 않는다.
+    검증(plan.omission_review)이 원문과 대조해 정상 통합 · 부수 축약과 의미 손실을 가른다. 코드 오류를 내지 않는다.
+
+        fact_dropped  초안에 있던 사실이 편집본에 없다 (편집이 이유를 적었어도 후보)
+        fact_changed  같은 id 가 남았지만 그 사실을 쓴 초안 문장이 덜어 낸 문장(dropped)에 들었거나,
+                      사실 범위의 수 · 부정 · 전언 · 흐림 표지가 편집본 문장에서 사라졌다 — 같은 id 가 남았다고 빼지 않는다
+        fact_new      초안에 없던 사실이 편집본에 들어왔다 — 초안은 사실의 기준이 아니니 원문 · 원장과 대조한다
+
+    후보에는 그 사실의 원문 근거 · 초안 표현 · 편집본 표현만 담는다(초안 전체를 다시 보내지 않는다).
+    """
+    book = ledger(analysis)
+    elder = {u["turn"]: u["elder"] for u in data["utterances"]}
+    home = {f: u["id"] for u in analysis.get("units", []) for f in u.get("facts", [])}
+    D, F = _fact_sentences(drafts), _fact_sentences(final)
+    dropped_locs = set(trace.get("dropped", []))
+    rows = []
+
+    def row(f, kind, signals):
+        fact = book.get(f) or {}
+        rows.append({"fact": f, "kind": kind, "unit": home.get(f), "protected": f in protected,
+                     "memo": fact.get("text", ""), "source": fact.get("source"), "certainty": fact.get("certainty"),
+                     "signals": signals, "evidence": _fact_source(f, book, elder),
+                     "draft": D.get(f, []), "final": F.get(f, []),
+                     "omitted_reason": edit_omitted.get(f) or outline_omit.get(f) or ""})
+    for f in sorted(set(D) - set(F), key=_fid):
+        row(f, "fact_dropped", ["편집본에 없음" + (" (생략 이유 있음)" if edit_omitted.get(f, "").strip() else " (생략 이유 없음)")])
+    for f in sorted(set(D) & set(F), key=_fid):
+        sig = []
+        merged = [d["loc"] for d in D[f] if d["loc"] in dropped_locs]
+        if merged:
+            sig.append(f"초안 문장 {merged} 이 덜어 낸 문장이다(통합일 수 있다)")
+        changes = _marker_changes(book.get(f) or {}, " ".join(d["text"] for d in D[f]), " ".join(x["text"] for x in F[f]))
+        if changes:
+            sig.append(f"사실 범위 표지가 편집본 문장에 없다: {changes}")
+        if sig:
+            row(f, "fact_changed", sig)
+    for f in sorted(set(F) - set(D), key=_fid):
+        row(f, "fact_new", ["초안에 없던 사실 — 원문 · 원장과 대조"])
+    return rows
+
+
+def protected_omissions(findings: list[dict], analysis: dict, data: dict, final: list[dict]) -> list[dict]:
+    """보호 대상 누락 판정을 검증 입력으로 — 대상 사실(또는 일화의 사실) · 지적 · 원문 근거 · 편집본의 대응 표현."""
+    book = ledger(analysis)
+    elder = {u["turn"]: u["elder"] for u in data["utterances"]}
+    units = {u["id"]: u for u in analysis.get("units", [])}
+    F = _fact_sentences(final)
+    out = []
+    for x in findings:
+        if x["rule"] not in PROTECTED_RULES:
+            continue
+        facts = [x["fact"]] if x.get("fact") else list((units.get(x.get("unit")) or {}).get("facts", []))
+        refs = sorted({r for r in re.findall(r"f\d{1,3}", x.get("detail", "")) if r in book and r not in facts}, key=_fid)
+        out.append({"rule": x["rule"], "severity": x["severity"], "detail": x["detail"], "unit": x.get("unit"),
+                    "facts": [{"fact": f, "memo": (book.get(f) or {}).get("text", ""),
+                               "evidence": _fact_source(f, book, elder)} for f in facts],
+                    "referenced": [{"fact": r, "final": F.get(r, [])} for r in refs]})
     return out
 
 
@@ -2865,7 +3039,9 @@ def verify_message(data: dict, analysis: dict, edited: dict, T: set[int], plan: 
             "펼친 원문 턴). facts 는 사실 원장이다 — source(heard = 들은 이야기) · certainty 를 문장과 견준다. "
             "plan 은 목차의 책 · 장 설계이고 구성 채점에만 쓴다(사실 근거가 아니다). plan.signals 는 장마다 "
             "발언 나열 신호, plan.edit_trace 는 코드가 잰 편집 전후 변화, plan.code_findings 는 편집본의 코드 "
-            "판정이다. review_scope.turns 는 이번 검토 범위 전체이고 complete=true 는 그 원문이 빠짐없이 "
+            "판정이다. plan.omission_review 는 코드가 찾은 누락 검토 후보(확정 누락이 아니다 — 사실마다 원문 근거 · "
+            "초안 표현 · 편집본 표현), plan.protected_omissions 는 보호 대상(핵심 사실 · must_keep · 일화 전체)의 "
+            "미해결 누락이다 — 원문과 대조해 정상 통합 · 부수 축약과 의미 손실을 가른다. review_scope.turns 는 이번 검토 범위 전체이고 complete=true 는 그 원문이 빠짐없이 "
             "source 에 있다는 뜻이다.")
     payload = {"artifact_type": "memoir_chapters", "candidate": edited, "facts": analysis.get("facts", []),
                "plan": plan}
@@ -3358,9 +3534,15 @@ async def run(data: dict, turn_map: list[dict], *, call: Call = call_model,
         rec.json("04_edit_trace.json", trace)
         resolutions, res_warnings = check_resolutions(edited, draft_checks)
         step["warnings"] += res_warnings
-        final_findings = (all_findings(edited["chapters"], outline_out, data, analysis, omitted_all, final=True,
+        final_findings = (all_findings(edited["chapters"], outline_out, data, analysis, outline_omit, final=True,
                                        edit_omitted=omitted)
                           + correction_findings([], analysis, edited["title"]) + edit_claim_findings(edited, trace))
+        protected = set(plan_core(outline_out)) | must_keep(analysis)
+        omission_review = omission_candidates(drafts, edited["chapters"], trace, analysis, data, omitted,
+                                              outline_omit, protected)
+        rec.json("04_omission_review.json", {"candidates": omission_review,
+                                             "protected_omissions": protected_omissions(final_findings, analysis, data,
+                                                                                        edited["chapters"])})
         if v6:
             final_findings += (span_checks + v6_findings(edited["chapters"], data, analysis)
                                + composition_leaks(edited) + claim_findings(edited, trace)
@@ -3389,6 +3571,8 @@ async def run(data: dict, turn_map: list[dict], *, call: Call = call_model,
         plan["code_findings"] = [{k: f[k] for k in ("rule", "severity", "location")} for f in final_findings]
         plan["signals"] = final_signals
         plan["edit_trace"] = trace["summary"]
+        plan["omission_review"] = omission_review
+        plan["protected_omissions"] = protected_omissions(final_findings, analysis, data, edited["chapters"])
         try:
             verdict_out, step = await st.ask(
                 "verify", verify_message(data, analysis, edited, T, plan, exclusion_notices(analysis)), "05_verify")
