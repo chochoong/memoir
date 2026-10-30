@@ -969,7 +969,23 @@ def test_policy():
                 check("* 이면 모두", memoir.engine("anyone") == "pipeline")
             check("limits — pipeline 이면 memoir_max 없음 (None)",
                   memoir.limits(ME) == {"memoir_engine": "pipeline", "memoir_max": None,
-                                        "memoir_max_chars": memoir.DEFAULT_MAX_INPUT_CHARS})
+                                        "memoir_max_chars": memoir.DEFAULT_MAX_INPUT_CHARS, "memoir_enabled": True})
+
+            # 시험 대상만 만든다 (MEMOIR_PIPELINE_ONLY · 충 10-30) — 목록 밖 계정은 403, 모델 · DB 를 부르지 않는다
+            with _Env(MEMOIR_PIPELINE_USERS=OTHER, MEMOIR_PIPELINE_ONLY="1"):
+                n, w, jobs = len(calls), fake.writes, len(memoir_jobs._JOBS)
+                r = c.post(url, json=three, headers=me)
+                check("목록 밖 계정의 preview → 403 memoir_closed",
+                      r.status_code == 403 and r.json()["code"] == "memoir_closed", f"{r.status_code} {r.text[:80]}")
+                r = c.post("/api/memoirs", json=three, headers=me)
+                check("목록 밖 계정의 작업 시작 → 403 memoir_closed · 작업을 열지 않는다",
+                      r.status_code == 403 and r.json()["code"] == "memoir_closed" and len(memoir_jobs._JOBS) == jobs,
+                      f"{r.status_code}")
+                check("막힌 요청은 모델을 부르지 않는다", len(calls) == n and fake.writes == w)
+                check("limits — 목록 밖이면 memoir_enabled false", memoir.limits(ME)["memoir_enabled"] is False)
+                check("목록에 든 계정은 그대로 연다", memoir.open_to(OTHER) is True)
+            with _Env(MEMOIR_PIPELINE_USERS=OTHER):
+                check("MEMOIR_PIPELINE_ONLY 가 꺼져 있으면 목록 밖도 연다 (예전 한 번 호출)", memoir.open_to(ME) is True)
 
             # B — 입력량 상한: 빼지 않고 안내
             with _Env(MEMOIR_MAX_INPUT_CHARS="20"):

@@ -937,6 +937,7 @@ _MEMOIR_SAYS = {
     502: "자서전을 만드는 중 문제가 생겼어요. 엽서 선택 화면으로 돌아가 주세요.",
     503: "지금은 자서전을 만들 수 없어요. 엽서 선택 화면으로 돌아가 주세요.",
     504: "정해진 시간 안에 자서전을 받지 못했어요. 엽서 선택 화면으로 돌아가 주세요.",
+    403: "자서전 만들기는 지금 시험 중이라 아직 열려 있지 않아요.",
 }
 # code 는 화면이 HTTP 숫자보다 먼저 보는 갈래다. 모르는 code 면 화면은 숫자로 고른다.
 # needs_confirmation · needs_context 는 화면이 나누지 않으므로 not_final 하나다.
@@ -945,7 +946,8 @@ _MEMOIR_STATUS = (
     (memoir.SourceUnavailable, 422, "source_unavailable"),
     (memoir.GenerationTimeout, 504, "generation_timeout"),
     (memoir.GenerationFailed, 502, "invalid_model_output"), (memoir.NotFinal, 503, "not_final"),
-    (memoir.Incomplete, 503, "incomplete"),     # 다섯 단계의 일부 장 실패 — 화면은 「일부 장」 안내 (태헌 10-26 A)
+    (memoir.Incomplete, 503, "incomplete"),
+    (memoir.Closed, 403, "memoir_closed"),     # 시험 대상만 만들 수 있다 (MEMOIR_PIPELINE_ONLY)     # 다섯 단계의 일부 장 실패 — 화면은 「일부 장」 안내 (태헌 10-26 A)
 )
 
 
@@ -965,6 +967,11 @@ async def memoir_preview(request: Request, who: str = Depends(auth.current_user)
     자료 부족은 200 의 insufficient_material 이고 실패가 아니다. 실패는 상태 코드와
     `{"detail": 안내, "code": 갈래}` 로만 나간다. 둘을 서로 바꿔 내보내지 않는다.
     """
+    try:
+        memoir.check_open(who)
+    except memoir.Closed as e:
+        status, code, detail = _memoir_failure(e)
+        return JSONResponse({"detail": detail, "code": code}, status_code=status)
     body = await _memoir_body(request)
     try:
         chosen = styles.pick(body.get("style"))
@@ -1010,6 +1017,11 @@ async def memoir_start(request: Request, who: str = Depends(auth.current_user)):
     202 `{job_id, status: "running", stage, ...}` 이고, 결과는 GET /api/memoirs/{job_id} 로 받는다.
     만드는 중인 작업이 있으면 새로 열지 않고 409 `{code: "busy", job_id}` 다. memoir_jobs.py 머리 참조.
     """
+    try:
+        memoir.check_open(who)
+    except memoir.Closed as e:
+        status, code, detail = _memoir_failure(e)
+        return JSONResponse({"detail": detail, "code": code}, status_code=status)
     body = await _memoir_body(request)
     try:
         chosen = styles.pick(body.get("style"))

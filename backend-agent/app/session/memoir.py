@@ -57,7 +57,7 @@ from functools import lru_cache
 from pathlib import Path
 
 from . import postcard, roledoc, store
-from .conf import env_float, env_int, env_str
+from .conf import env_flag, env_float, env_int, env_str
 from .question import _client
 
 log = logging.getLogger("memoir")
@@ -163,6 +163,12 @@ class TooMuch(BadSelection):
     code = "too_much"
 
 
+class Closed(MemoirError):
+    """이 사람에게는 자서전 만들기가 열려 있지 않다 (MEMOIR_PIPELINE_ONLY). 403 memoir_closed — 모델을 부르지 않는다."""
+
+    code = "memoir_closed"
+
+
 class Incomplete(MemoirError):
     """파이프라인의 일부 장이 실패했다 (partial). 503 incomplete — 만든 장도 내보내지 않는다."""
 
@@ -181,14 +187,28 @@ def engine(user_id: str | None = None) -> str:
     return "pipeline" if "*" in allowed or (user_id is not None and user_id in allowed) else "single"
 
 
+def open_to(user_id: str | None) -> bool:
+    """
+    이 사람이 자서전을 만들 수 있나. MEMOIR_PIPELINE_ONLY=1 이면 pipeline 대상(MEMOIR_PIPELINE_USERS)만 —
+    시험 중에는 목록 밖 사람이 예전 한 번 호출로도 유료 생성을 하지 않게 (충 10-30). 꺼져 있으면 모두.
+    """
+    return not env_flag("MEMOIR_PIPELINE_ONLY") or engine(user_id) == "pipeline"
+
+
+def check_open(user_id: str | None) -> None:
+    if not open_to(user_id):
+        raise Closed(f"자서전이 열려 있지 않은 계정 {str(user_id)[:10]}")
+
+
 def limits(user_id: str) -> dict:
     """
     화면이 고르기 전에 알아야 할 것 — 회차 목록(?elder_id=)에 함께 싣는다.
     memoir_max 는 None 이면 상한 없음 (pipeline), single 이면 MEMOIR_MAX_SESSIONS.
+    memoir_enabled 가 false 면 이 계정은 자서전을 만들 수 없다(403 memoir_closed) — 화면은 버튼을 감추거나 안내한다.
     """
     kind = engine(user_id)
     return {"memoir_engine": kind, "memoir_max": None if kind == "pipeline" else max_sessions(),
-            "memoir_max_chars": max_input_chars()}
+            "memoir_max_chars": max_input_chars(), "memoir_enabled": open_to(user_id)}
 
 
 DEFAULT_MAX_INPUT_CHARS = 150_000
