@@ -409,7 +409,7 @@ async def create_session(req: StartReq, request: Request,
     한 코드로 뭉치면 화면이 이 셋을 구분할 수 없고, 어르신은 자기가 무엇을 해야
     하는지 알 수 없게 된다.
     """
-    _open_checks(request, who)
+    closed = await _open_checks(request, who, replace=True)
     if req.elder_id and not await link.read(store.owns_elder(who, req.elder_id)):
         raise HTTPException(404, "화자를 찾을 수 없어요")
 
@@ -422,11 +422,19 @@ async def create_session(req: StartReq, request: Request,
     if not req.elder_id:
         # 필수로 바꾸기 전에 빠진 채 들어오는 화면이 남았는지 본다 (v0.42 부터 늘 보낸다)
         log.info("회차 %s 화자 없이 시작", ctl.session_id[:8])
-    return ctl.snapshot()
+    # 상한 때문에 대신 닫은 회차 — 화면이 「하던 이야기는 저장해 두었어요」로 알린다. 없으면 빈 목록
+    return {**ctl.snapshot(), "closed_session_ids": closed}
 
 
-def _open_checks(request: Request, who: str) -> None:
-    """회차를 여는 두 입구(/api/sessions · /api/i/start)가 같은 상한을 지난다."""
+async def _open_checks(request: Request, who: str, replace: bool = False) -> list[str]:
+    """
+    회차를 여는 두 입구(/api/sessions · /api/i/start)가 같은 상한을 지난다.
+
+    replace(이 기기 시작)면 계정 상한에 걸렸을 때 429 대신 **활동이 오래된 이 계정 회차를 닫고** 연다 —
+    링크 회차와 최근(limits.replace_idle 안)에 활동한 회차는 닫지 않는다(sc.replaceable). 닫을 것이
+    모자라면 지금처럼 429. 돌려주는 것은 닫은 회차 번호들이다. 링크 시작은 replace 없이 부른다 —
+    어르신 쪽에서 가족이 쓰던 회차를 닫지 않는다.
+    """
     try:
         limits.take(limits.client_ip(request))
     except limits.Rejected as e:
@@ -439,9 +447,16 @@ def _open_checks(request: Request, who: str) -> None:
         log.error("동시 회차 상한 %d 에 닿았다 — 새 회차를 열지 않는다", sc.max_live())
         raise HTTPException(503, "지금은 회차를 열 수 없습니다. 잠시 뒤에 다시 시도해 주세요")
 
-    if sc.user_live(who) >= limits.user_cap():
+    over = sc.user_live(who) - limits.user_cap() + 1
+    if over <= 0:
+        return []
+    olds = sc.replaceable(who, limits.replace_idle())[:over] if replace else []
+    if len(olds) < over:
         raise HTTPException(
             429, "이미 진행 중인 회차가 있습니다. 그 회차를 마치거나 중단해 주세요")
+    for c in olds:
+        await c.replace()
+    return [c.session_id for c in olds]
 
 
 @app.get("/api/sessions/{session_id}")
@@ -1221,7 +1236,7 @@ async def link_start(request: Request, body: LinkStartReq | None = None):
             if picked == rec["topic"]:
                 picked = None               # 자녀가 적은 주제 그대로 — 고른 것이 없는 것과 같다
 
-        _open_checks(request, rec["user_id"])
+        await _open_checks(request, rec["user_id"])
         session_id = str(uuid.uuid4())
         raw = await link.claim(rec, session_id, picked)
         if raw is None:
@@ -1230,7 +1245,7 @@ async def link_start(request: Request, body: LinkStartReq | None = None):
         ctl = sc.put(sc.SessionController(
             user_id=rec["user_id"], title=rec["title"], session_id=session_id,
             photo_id=rec["photo_id"], theme=rec["theme"], topic=picked or rec["topic"],
-            elder_id=rec["elder_id"], question_fn=gemini_question, closed_fn=link.on_closed))
+            elder_id=rec["elder_id"], question_fn=gemini_question, closed_fn=link.on_closed, via_link=True))
         # 다른 낱말을 고르셨으면 자녀의 시작 자료(seed)는 쓰지 않는다 — 다른 주제의 자료가
         # 0번 조각으로 들어가 질문을 그쪽으로 끌고 간다
         await ctl.start(picked if picked else rec["seed"])

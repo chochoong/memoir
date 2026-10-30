@@ -224,6 +224,8 @@ class SessionController:
     topic: str = ""
     # 회차의 화자. 링크로 연 회차만 안다 (link.py) — 자녀가 바로 연 회차는 None.
     elder_id: str | None = None
+    # 어르신 링크(/api/i/start)로 연 회차. 같은 계정이 새 회차를 열 때 대신 닫지 않는다 (main._open_checks)
+    via_link: bool = False
     question_fn: QuestionFn = fixed_questions
     stt_fn: SttFn = stt.azure_transcribe
     tts_fn: TtsFn = tts.synthesize
@@ -565,6 +567,15 @@ class SessionController:
         """사용자 중단."""
         self.touch()
         return await self._close("abort")
+
+    async def replace(self) -> dict:
+        """
+        같은 계정이 새 회차를 열다 상한에 걸려 이 회차를 닫는다. 중단과 같은 정리(말씀 저장 · 엽서)를 하고
+        이유만 다르게 남긴다 — 어르신이 그만둔 회차와 새로 시작하느라 닫힌 회차를 나중에 가를 수 있게.
+        """
+        log.info("회차 %s 를 닫는다 — 같은 계정이 새 회차를 열었다 (%.0f초 활동 없음)",
+                 self.session_id[:8], self.idle_seconds())
+        return await self._close("replaced")
 
     async def expire(self) -> None:
         """
@@ -979,6 +990,18 @@ def user_live(user_id: str) -> int:
     user_id 는 로그인한 자녀다 (auth.current_user). 상한의 뜻은 limits.py 에 있다.
     """
     return sum(1 for c in live_sessions() if c.user_id == user_id)
+
+
+def replaceable(user_id: str, idle: float) -> list[SessionController]:
+    """
+    새 회차를 열 때 대신 닫아도 되는 이 계정의 회차 — 활동이 오래된 것부터.
+
+    **링크 회차는 넣지 않는다** (어르신이 링크로 진행 중이면 끊기면 안 된다). **idle 초 안에 활동이 있던
+    회차도 넣지 않는다** — 서버는 기기를 모른다. 같은 계정을 쓰는 다른 기기에서 지금 진행 중일 수 있다.
+    """
+    mine = [c for c in live_sessions()
+            if c.user_id == user_id and not c.via_link and c.idle_seconds() >= idle]
+    return sorted(mine, key=lambda c: c.last_active)
 
 
 def max_live() -> int:

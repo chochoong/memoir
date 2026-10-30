@@ -34,6 +34,7 @@ log = logging.getLogger("limits")
 DEFAULT_WINDOW = 600.0        # 10분
 DEFAULT_MAX = 10              # 같은 IP 가 그 10분에 열 수 있는 회차
 DEFAULT_USER_LIVE = 3         # 한 사용자가 동시에 들고 있을 수 있는 회차
+DEFAULT_REPLACE_IDLE = 120.0  # 상한에 걸려 새로 열 때 대신 닫을 회차의 최소 무활동 시간(초)
 
 # _hits 가 이보다 커지면 한 번 훑어 창 밖의 IP 를 버린다. 아래 _prune 참조.
 PRUNE_AT = 1000
@@ -112,6 +113,11 @@ def client_ip(request: Request) -> str:
 
 def user_cap() -> int:
     return env_int("USER_LIVE_MAX", DEFAULT_USER_LIVE)
+
+
+def replace_idle() -> float:
+    """상한에 걸린 계정이 새 회차를 열 때, 이만큼 활동이 없던 회차만 대신 닫는다 (main._open_checks)."""
+    return env_float("SESSION_REPLACE_IDLE_SECONDS", DEFAULT_REPLACE_IDLE)
 
 
 def take(ip: str) -> None:

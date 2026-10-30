@@ -507,6 +507,70 @@ def test_route_limits():
     limits.reset()
 
 
+def test_replace_on_user_cap():
+    """
+    이 기기 시작이 계정 상한에 걸리면 429 대신 활동이 오래된 이 계정 회차를 닫고 연다 (승우 10-30 제안).
+    링크 회차 · 최근에 활동한 회차는 닫지 않는다. 응답의 closed_session_ids 로 화면이 알린다.
+    """
+    print("\n[11] 상한에 걸리면 오래된 회차를 닫고 연다")
+
+    from fastapi.testclient import TestClient
+
+    from app.main import app
+    from app.session.machine import State
+
+    sc._sessions.clear()
+    limits.reset()
+    body = {"title": "시험", "seed": "씨앗 한 줄", "pace": "fast"}
+
+    with _Env(GEMINI_API_KEY="", AZURE_SPEECH_KEY="", CREATE_MAX_PER_WINDOW=99, USER_LIVE_MAX=2,
+              SESSION_REPLACE_IDLE_SECONDS=120), NoDb(), AsHeader(), TestClient(app) as c:
+        c.headers["X-User-Id"] = "kim"
+        a = c.post("/api/sessions", json=body).json()
+        b = c.post("/api/sessions", json=body).json()
+        check("상한 안이면 닫은 회차 없음 (빈 목록)", a["closed_session_ids"] == [] and b["closed_session_ids"] == [],
+              f"{a.get('closed_session_ids')} {b.get('closed_session_ids')}")
+
+        r = c.post("/api/sessions", json=body)
+        check("둘 다 방금 활동했으면 닫지 않고 429 — 다른 기기에서 진행 중일 수 있다", r.status_code == 429,
+              str(r.status_code))
+
+        old = sc.get(a["session_id"])
+        old.last_active -= 1000
+        r = c.post("/api/sessions", json=body)
+        got = r.json() if r.status_code == 200 else {}
+        check("오래된 회차를 닫고 연다 · 닫은 번호를 알린다",
+              r.status_code == 200 and got.get("closed_session_ids") == [a["session_id"]],
+              f"{r.status_code} {got.get('closed_session_ids')}")
+        check("닫힌 회차는 CLOSED", old.machine.state is State.CLOSED, str(old.machine.state))
+        check("계정의 진행 중 회차는 상한 그대로", sc.user_live("kim") == 2, str(sc.user_live("kim")))
+
+        # 링크 회차는 오래돼도 닫지 않는다
+        for x in sc.live_sessions():
+            if x.user_id == "kim":
+                x.via_link = True
+                x.last_active -= 1000
+        r = c.post("/api/sessions", json=body)
+        check("남은 것이 링크 회차뿐이면 닫지 않고 429", r.status_code == 429, str(r.status_code))
+        check("링크 회차는 그대로 진행 중", all(x.machine.state is not State.CLOSED
+                                                for x in sc.live_sessions() if x.via_link) and sc.user_live("kim") == 2)
+
+        # 다른 계정의 회차는 건드리지 않는다
+        sc._sessions.clear()
+        limits.reset()
+        mine = c.post("/api/sessions", json=body).json()["session_id"]
+        other = c.post("/api/sessions", json=body, headers={"X-User-Id": "lee"}).json()["session_id"]
+        sc.get(other).last_active -= 1000
+        c.post("/api/sessions", json=body)
+        r = c.post("/api/sessions", json=body)
+        check("다른 계정의 오래된 회차는 닫지 않는다",
+              r.status_code == 429 and sc.get(other).machine.state is not State.CLOSED and sc.get(mine) is not None,
+              str(r.status_code))
+
+    sc._sessions.clear()
+    limits.reset()
+
+
 def test_all_checks_passed():
     """pytest 안전판 — test_flow.py 의 같은 함수 주석 참조."""
     assert not FAIL, "실패: " + ", ".join(FAIL)
@@ -524,6 +588,7 @@ def main() -> int:
     test_client_ip()
     test_posture()
     test_route_limits()
+    test_replace_on_user_cap()
     print(f"\n{'=' * 52}\n통과 {len(PASS)} · 실패 {len(FAIL)}")
     if FAIL:
         print("실패:", ", ".join(FAIL))
