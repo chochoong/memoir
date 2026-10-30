@@ -17,11 +17,23 @@
             낱말을 빼거나 바꾸고, 지시문까지 읽기도 한다. 화면의 글자와 귀의
             말이 다르면 안 된다
 
+**--stream** 은 generate_content_stream 으로 받는다. 소리는 40ms 남짓한 날
+PCM 조각으로 차례로 온다. 받는 대로 틀면 기다림은 '다 받을 때까지'가 아니라
+'첫 소리'가 된다. 다만 조각이 재생보다 늦게 오면 말이 중간에 끊긴다 —
+끊김이 어르신께는 말이 끝난 신호로 들려, 녹음을 여는 시점까지 어긋난다.
+그래서 두 시점을 함께 잰다.
+  · 첫조각  첫 오디오 조각이 온 시각
+  · 시작    끊김 없이 끝까지 틀 수 있는 가장 이른 재생 시작 시각.
+            max_i(조각 i 도착 − 그 앞 조각들의 재생 길이 합). 첫조각보다
+            늦으면 그 차이만큼 모아 두었다가 틀어야 한다는 뜻이다
+  스트리밍에서 예산 초과는 '시작'이 1.6초를 넘긴 비율로 센다.
+
 소리는 tools/recordings/tts/ 에 남긴다 (.gitignore). 숫자로 안 되는 것 —
 억양, 한국어 발음, 어르신께 들리는 느낌 — 은 들어 보고 고른다.
 
     python tools/bench_tts.py
     python tools/bench_tts.py --models gemini-3.8-flash-tts --voices Kore,Aoede --rounds 2
+    python tools/bench_tts.py --stream --styles none
 """
 
 from __future__ import annotations
@@ -175,12 +187,48 @@ async def gemini(text: str, model: str, voice: str, style: str) -> tuple[bytes, 
     raise RuntimeError("Gemini 응답에 오디오가 없다")
 
 
+async def gemini_stream(text: str, model: str, voice: str, style: str
+                        ) -> tuple[bytes, bytes, int, float, float]:
+    """
+    (wav, PCM, rate, 첫조각 ms, 시작 ms). 조각은 audio/l16 날 PCM 이다.
+    시각은 요청을 보낸 순간부터 잰다.
+    """
+    from google.genai import types
+    cfg = types.GenerateContentConfig(
+        response_modalities=["AUDIO"],
+        speech_config=types.SpeechConfig(
+            voice_config=types.VoiceConfig(
+                prebuilt_voice_config=types.PrebuiltVoiceConfig(voice_name=voice))))
+    t0 = time.perf_counter()
+    pcm, rate, first, start, played = bytearray(), 24000, None, 0.0, 0.0
+    async for ch in await _genai().aio.models.generate_content_stream(
+            model=model, contents=STYLES[style].format(text=text), config=cfg):
+        now = (time.perf_counter() - t0) * 1000
+        cand = ch.candidates[0] if ch.candidates else None
+        for part in (cand.content.parts or []) if cand and cand.content else []:
+            blob = getattr(part, "inline_data", None)
+            if not (blob and blob.data):
+                continue
+            m = re.search(r"rate=(\d+)", blob.mime_type or "")
+            rate = int(m.group(1)) if m else rate
+            if first is None:
+                first = now
+            # 이 조각은 재생 시작 후 played ms 에 필요하다. 그보다 늦게 왔으면
+            # 시작을 그만큼 미뤄야 끊기지 않는다.
+            start = max(start, now - played)
+            played += len(blob.data) / 2 / rate * 1000
+            pcm += blob.data
+    if first is None:
+        raise RuntimeError("Gemini 스트림에 오디오가 없다")
+    return pcm16_to_wav(bytes(pcm), rate), bytes(pcm), rate, first, start
+
+
 # ---------------------------------------------------------------- 한 갈래
 
 
 async def run(name: str, synth, questions: list[str], rounds: int, gap: float,
               check: bool) -> dict:
-    """synth(text) -> (wav 또는 mp3 바이트, mime, pcm, rate|None)."""
+    """synth(text) -> (wav 또는 mp3 바이트, mime, pcm, rate|None[, 첫조각 ms, 시작 ms])."""
     folder = OUT / re.sub(r"[^\w.-]+", "_", name)
     folder.mkdir(parents=True, exist_ok=True)
 
@@ -191,11 +239,12 @@ async def run(name: str, synth, questions: list[str], rounds: int, gap: float,
         print(f"  [{name}] 예열 실패: {type(e).__name__}: {str(e)[:160]}")
 
     lat, size, lead, tail, dur, cers, fails = [], [], [], [], [], [], 0
+    firsts, starts, by_len = [], [], []      # 첫조각·시작은 스트리밍일 때만 · (글자 수, 기다림)
     for r in range(rounds):
         for i, q in enumerate(questions):
             t0 = time.perf_counter()
             try:
-                data, mime, pcm, rate = await synth(q)
+                data, mime, pcm, rate, *timing = await synth(q)
             except Exception as e:                           # noqa: BLE001
                 fails += 1
                 print(f"  [{name}] {i:02d} 실패: {type(e).__name__}: {str(e)[:160]}")
@@ -204,6 +253,10 @@ async def run(name: str, synth, questions: list[str], rounds: int, gap: float,
             ms = (time.perf_counter() - t0) * 1000
             lat.append(ms)
             size.append(len(data))
+            if timing:
+                firsts.append(timing[0])
+                starts.append(timing[1])
+            by_len.append((len(q), timing[1] if timing else ms))
             if pcm is not None:
                 a, b, d = _silence_ms(pcm, rate)
                 lead.append(a), tail.append(b), dur.append(d)
@@ -222,10 +275,18 @@ async def run(name: str, synth, questions: list[str], rounds: int, gap: float,
         xs = sorted(xs)
         return xs[min(len(xs) - 1, int(round(p * (len(xs) - 1))))] if xs else float("nan")
 
+    # 기다림(스트리밍은 '시작', 아니면 다 받을 때까지)을 길이로 갈라 본다.
+    # 고정 비용이 크면 짧은 질문도 오래 걸린다 — 쪼개 보내기가 소용없다는 뜻이다.
+    short = [w for n, w in by_len if n <= 20]
+    long_ = [w for n, w in by_len if n > 30]
+    wait = starts or lat
     return dict(
-        name=name, n=len(lat), fails=fails,
+        name=name, n=len(lat), fails=fails, stream=bool(starts),
+        f50=pct(firsts, .5), s50=pct(starts, .5), s90=pct(starts, .9),
+        short50=pct(short, .5), long50=pct(long_, .5),
+        n_short=len(short), n_long=len(long_),
         p50=pct(lat, .5), p90=pct(lat, .9), mx=max(lat, default=float("nan")),
-        over=sum(x > BUDGET * 1000 for x in lat) / len(lat) if lat else float("nan"),
+        over=sum(x > BUDGET * 1000 for x in wait) / len(wait) if wait else float("nan"),
         kb=statistics.mean(size) / 1024 if size else float("nan"),
         lead=statistics.mean(lead) if lead else None,
         tail=statistics.mean(tail) if tail else None,
@@ -250,6 +311,19 @@ def table(rows: list[dict]) -> None:
               f"{f(r['kb'], '.0f'):>7}{f(r['sec'], '.1f'):>7}{f(r['lead'], '.0f'):>7}"
               f"{f(r['tail'], '.0f'):>7}{f(r['tail_max'], '.0f'):>8}"
               f"{f(r['cer'], '.1%'):>7}{r['bad']:>5}")
+    streamed = [r for r in rows if r["stream"]]
+    if streamed:
+        print("\n스트리밍 — 첫조각 · 시작(끊김 없이 틀 수 있는 가장 이른 때) · 초과는 '시작' 기준")
+        h2 = f"{'갈래':<44}{'첫조각50':>10}{'시작50':>9}{'시작90':>9}{'다받음50':>10}"
+        print(h2)
+        print("-" * len(h2.encode("cp949", "replace")))
+        for r in streamed:
+            print(f"{r['name']:<44}{f(r['f50'], '.0f'):>10}{f(r['s50'], '.0f'):>9}"
+                  f"{f(r['s90'], '.0f'):>9}{f(r['p50'], '.0f'):>10}")
+    print("\n길이별 기다림 p50 (스트리밍은 '시작', 아니면 다 받을 때까지)")
+    for r in rows:
+        print(f"  {r['name']:<44} ≤20자 {f(r['short50'], '.0f'):>6}ms (n={r['n_short']})"
+              f" · >30자 {f(r['long50'], '.0f'):>6}ms (n={r['n_long']})")
     print("\nAzure 의 앞·끝 무음은 mp3 라 재지 않는다 — SSML 로 끝 150ms 에 맞춰 두었다.")
     print(f"소리: {OUT}")
 
@@ -270,10 +344,16 @@ async def main_async(a) -> int:
     for model in [m for m in a.models.split(",") if m]:
         for voice in [v for v in a.voices.split(",") if v]:
             for style in [x for x in a.styles.split(",") if x]:
-                async def s_gm(text, model=model, voice=voice, style=style):
-                    data, pcm, rate = await gemini(text, model, voice, style)
-                    return data, "audio/wav", pcm, rate
-                name = f"{model}/{voice}/{style}"
+                if a.stream:
+                    async def s_gm(text, model=model, voice=voice, style=style):
+                        data, pcm, rate, first, start = await gemini_stream(
+                            text, model, voice, style)
+                        return data, "audio/wav", pcm, rate, first, start
+                else:
+                    async def s_gm(text, model=model, voice=voice, style=style):
+                        data, pcm, rate = await gemini(text, model, voice, style)
+                        return data, "audio/wav", pcm, rate
+                name = f"{model}/{voice}/{style}" + ("/stream" if a.stream else "")
                 print(name)
                 rows.append(await run(name, s_gm, questions, a.rounds, a.gap, a.check))
 
@@ -294,6 +374,8 @@ def main() -> int:
                     help="호출 사이 쉬는 초. 무료 티어 분당 한도에 걸리지 않게")
     ap.add_argument("--limit", type=int, default=0, help="질문 앞에서 몇 개만")
     ap.add_argument("--no-azure", action="store_true")
+    ap.add_argument("--stream", action="store_true",
+                    help="Gemini 를 스트리밍으로 받아 첫조각·끊김 없는 시작 시각을 잰다")
     ap.add_argument("--no-check", dest="check", action="store_false",
                     help="Azure 로 되받아 적는 충실도 검사를 끈다")
     return asyncio.run(main_async(ap.parse_args()))

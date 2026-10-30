@@ -5,8 +5,22 @@
         --manifest eval/memoir_seed_A.ids.json --api-base http://127.0.0.1:8010 --bake-postcards
 
     --bake-postcards 를 빼면 회차와 턴만 넣는다. 서버가 떠 있지 않아도 된다.
+    --cross-check    다른 시험 계정으로 보면 회차 · 엽서 · 자서전이 404 인지 본다.
 
 **합성 자료 전용이다.** 실제 어르신의 말씀을 이 도구로 넣지 않는다.
+
+--------------------------------------------------------------------------
+회차의 주인은 시험 계정이다
+
+서버는 X-User-Id 를 읽지 않는다. 신원은 로그인 쿠키(msid) 하나다. 그래서 회차를
+「dev-user」 같은 글자로 넣으면 아무도 로그인해서 볼 수 없다. 넣기 전에
+tools/dev_login.py 로 시험 계정(--account, 기본 seed)을 만들고 그 user_id 로 넣는다.
+엽서 굽기도 그 계정의 쿠키로 한다. 같은 이름이면 같은 계정이다 — 나중에 화면이나
+curl 로 볼 때는 `python tools/dev_login.py --alias seed` 로 쿠키만 다시 받는다.
+
+seed JSON 의 user_id(dev-user)는 그대로 둔다 — 자료의 모양이고, 실제 주인은
+manifest 의 app_user_id 다. 그 칸이 없는 예전 manifest 는 dev-user 가 주인이라
+로그인으로 볼 수 없다. 그 회차를 고쳐 쓰지 않는다 — 새 manifest 경로로 다시 넣는다.
 
 --------------------------------------------------------------------------
 판단은 한 칸 뒤에 넣는다
@@ -216,7 +230,7 @@ async def load(doc: dict, man: dict, dsn: dict) -> None:
             sess = by_alias[m["alias"]]
             have = await _exists(con, m["session_id"])
             if have:
-                want = (man["user_id"], sess["title"], len(sess["turns"]) + 1)
+                want = (man["app_user_id"], sess["title"], len(sess["turns"]) + 1)
                 if (have["user_id"], have["title"], have["n"]) != want:
                     raise SystemExit(f"{m['alias']} {m['session_id']} 가 DB 에 다른 내용으로 있다 — 멈춘다")
                 m["session_status"] = LOADED
@@ -226,7 +240,7 @@ async def load(doc: dict, man: dict, dsn: dict) -> None:
                 raise SystemExit(
                     f"{m['alias']} 는 manifest 에 넣었다고 적혀 있는데 이 DB 에 없다 — "
                     "다른 DB 의 manifest 다. 멈춘다")
-            await _insert(con, m["session_id"], man["user_id"], sess,
+            await _insert(con, m["session_id"], man["app_user_id"], sess,
                           created_at(seeded_at, sess["recorded_order"]))
             m["session_status"] = LOADED
             print(f"  {m['alias']:6} 넣음   {m['session_id']}  {sess['title']}")
@@ -237,9 +251,14 @@ async def load(doc: dict, man: dict, dsn: dict) -> None:
 # ---------------------------------------------------------------- 엽서
 
 
-def _http(method: str, url: str, user_id: str, timeout: float) -> tuple[int, str, bytes]:
-    req = urllib.request.Request(url, method=method, data=b"" if method == "POST" else None,
-                                 headers={"X-User-Id": user_id})
+def _http(method: str, url: str, cookie: str, timeout: float,
+          body: bytes | None = None) -> tuple[int, str, bytes]:
+    """cookie 는 msid 원문이다 (dev_login). 서버는 이것 말고 신원을 읽지 않는다."""
+    data = body if body is not None else (b"" if method == "POST" else None)
+    headers = {"Cookie": f"msid={cookie}"}
+    if body is not None:
+        headers["Content-Type"] = "application/json"
+    req = urllib.request.Request(url, method=method, data=data, headers=headers)
     try:
         with urllib.request.urlopen(req, timeout=timeout) as r:
             return r.status, r.headers.get("content-type") or "", r.read()
@@ -256,12 +275,12 @@ def _detail(body: bytes) -> str:
         return body.decode(errors="replace")[:200]
 
 
-def _has_postcard(base: str, m: dict, user_id: str) -> bool:
-    code, ctype, _ = _http("GET", f"{base}/api/sessions/{m['session_id']}/postcard", user_id, 30)
+def _has_postcard(base: str, m: dict, cookie: str) -> bool:
+    code, ctype, _ = _http("GET", f"{base}/api/sessions/{m['session_id']}/postcard", cookie, 30)
     return code == 200 and ctype.startswith("image/")
 
 
-def bake(man: dict, base: str, timeout: float) -> None:
+def bake(man: dict, base: str, timeout: float, cookie: str) -> None:
     """
     안 구워진 회차만 굽는다. 구운 뒤 이미지가 실제로 조회되어야 completed 다.
 
@@ -270,14 +289,14 @@ def bake(man: dict, base: str, timeout: float) -> None:
     for m in man["sessions"]:
         if m.get("session_status") != LOADED:
             continue
-        if _has_postcard(base, m, man["user_id"]):
+        if _has_postcard(base, m, cookie):
             m["postcard_status"] = COMPLETED
             m.pop("postcard_detail", None)
             print(f"  {m['alias']:6} 엽서 있음")
             continue
         code, _, body = _http("POST", f"{base}/api/sessions/{m['session_id']}/postcard",
-                              man["user_id"], timeout)
-        if code == 200 and _has_postcard(base, m, man["user_id"]):
+                              cookie, timeout)
+        if code == 200 and _has_postcard(base, m, cookie):
             m["postcard_status"] = COMPLETED
             m.pop("postcard_detail", None)
             print(f"  {m['alias']:6} 엽서 구움")
@@ -288,19 +307,43 @@ def bake(man: dict, base: str, timeout: float) -> None:
             print(f"  {m['alias']:6} 엽서 실패 — {m['postcard_detail']}")
 
 
-def verify(man: dict, base: str) -> None:
+def verify(man: dict, base: str, cookie: str) -> None:
     """굽지 않는 실행. 적힌 completed 가 아직 맞는지만 본다 — 모델은 부르지 않는다."""
     for m in man["sessions"]:
-        if m.get("postcard_status") == COMPLETED and not _has_postcard(base, m, man["user_id"]):
+        if m.get("postcard_status") == COMPLETED and not _has_postcard(base, m, cookie):
             m["postcard_status"] = FAILED
             m["postcard_detail"] = "completed 로 적혀 있었는데 이미지가 조회되지 않는다"
             print(f"  {m['alias']:6} 엽서 없음 — manifest 를 고쳤다")
 
 
+def cross_check(man: dict, base: str, other: str) -> list[str]:
+    """
+    다른 계정의 쿠키로 이 회차들을 본다. **전부 404 여야 한다** (3-C1 · P3-SV-03).
+
+    401 이면 쿠키가 안 먹은 것이라 검사가 아니다 — 통과로 치지 않는다.
+    자서전은 회차를 고르는 데서 404 가 나므로 모델까지 가지 않는다.
+    """
+    bad: list[str] = []
+    loaded = [m for m in man["sessions"] if m.get("session_status") == LOADED]
+    probes = [(f"회차 {m['alias']}", "GET", f"/api/sessions/{m['session_id']}", None) for m in loaded]
+    probes += [(f"엽서 {m['alias']}", "GET", f"/api/sessions/{m['session_id']}/postcard", None)
+               for m in loaded]
+    if len(loaded) >= 3:
+        ids = [m["session_id"] for m in loaded[:5]]
+        probes.append(("자서전", "POST", "/api/memoirs/preview",
+                       json.dumps({"session_ids": ids}).encode()))
+    for name, method, path, body in probes:
+        code, _, resp = _http(method, base + path, other, 60, body)
+        print(f"  {name:10} " + ("404 맞음" if code == 404 else f"HTTP {code} · {_detail(resp)}"))
+        if code != 404:
+            bad.append(f"{name} → {code}")
+    return bad
+
+
 # ---------------------------------------------------------------- manifest
 
 
-def manifest(doc: dict, path: Path) -> dict:
+def manifest(doc: dict, path: Path, account: str, app_user_id: str) -> dict:
     """
     있으면 읽고, 없으면 새 UUID 로 만든다. 세트가 다르거나 회차가 어긋나면 멈춘다.
 
@@ -313,12 +356,20 @@ def manifest(doc: dict, path: Path) -> dict:
             raise SystemExit(f"{path.name} 는 다른 세트의 manifest 다")
         if [m["alias"] for m in man["sessions"]] != [s["alias"] for s in doc["sessions"]]:
             raise SystemExit(f"{path.name} 의 회차가 입력과 다르다 — 다른 manifest 경로를 쓴다")
+        if "app_user_id" not in man:
+            raise SystemExit(f"{path.name} 는 예전 manifest 다 (주인이 {man['user_id']} 라 로그인으로 "
+                             "볼 수 없다). 그 회차는 그대로 두고, 새 manifest 경로로 다시 넣는다")
+        if man.get("account") != account or man["app_user_id"] != app_user_id:
+            raise SystemExit(f"{path.name} 는 시험 계정 {man.get('account')!r} 의 것이다 — "
+                             f"--account {man.get('account')} 로 돌리거나 다른 manifest 경로를 쓴다")
         return man
     # 가장 늦은 회차도 지금보다 앞이게 한다. 앞날의 시각을 넣지 않는다.
     seeded_at = datetime.now(timezone.utc).replace(microsecond=0) - timedelta(hours=1)
     return {
         "set_id": doc["set_id"],
         "user_id": doc["user_id"],
+        "account": account,
+        "app_user_id": app_user_id,
         "seeded_at": seeded_at.isoformat(),
         "sessions": [{"alias": s["alias"], "session_id": str(uuid.uuid4()), "title": s["title"],
                       "session_status": "pending", "postcard_status": NOT_REQUESTED}
@@ -343,6 +394,9 @@ def main() -> int:
     ap.add_argument("--bake-postcards", action="store_true", help="엽서를 굽는다 (모델을 부른다)")
     ap.add_argument("--bake-timeout", type=float, default=180.0, help="엽서 한 장을 기다리는 초")
     ap.add_argument("--allow-remote", action="store_true", help="이 PC 가 아닌 DB 에도 쓴다")
+    ap.add_argument("--account", default="seed", help="회차의 주인이 될 시험 계정 (dev_login alias)")
+    ap.add_argument("--cross-check", action="store_true",
+                    help="다른 시험 계정으로 보면 404 인지 본다 (서버가 떠 있어야 한다)")
     a = ap.parse_args()
 
     doc = json.loads(a.input.read_text(encoding="utf-8"))
@@ -360,15 +414,25 @@ def main() -> int:
         print("이 PC 의 DB 가 아니다. 맞는 DB 인지 확인하고 --allow-remote 를 붙여 다시 돌린다.")
         return 2
 
-    man = manifest(doc, a.manifest)
+    from dev_login import mint
+
+    accounts = [a.account] + ([f"{a.account}-other"] if a.cross_check else [])
+    minted = mint(accounts, allow_remote=True)          # DB 확인은 바로 위에서 했다
+    _, app_user_id, cookie = minted[0]
+    print(f"시험 계정 {a.account} ({app_user_id})")
+    man = manifest(doc, a.manifest, a.account, app_user_id)
     base = a.api_base.rstrip("/")
+    crossed: list[str] = []
     try:
         asyncio.run(load(doc, man, dsn))
         if a.bake_postcards:
             print(f"엽서 — {base}")
-            bake(man, base, a.bake_timeout)
+            bake(man, base, a.bake_timeout, cookie)
         elif any(m.get("postcard_status") == COMPLETED for m in man["sessions"]):
-            verify(man, base)
+            verify(man, base, cookie)
+        if a.cross_check:
+            print(f"다른 계정 {accounts[1]} 으로 보기 — {base}")
+            crossed = cross_check(man, base, minted[1][2])
     finally:
         _save(man, a.manifest)
 
@@ -377,7 +441,9 @@ def main() -> int:
     print(f"manifest {a.manifest} — 회차 {len(man['sessions'])}개 · 엽서 {len(done)}장"
           + (f" · 실패 {len(failed)}장" if failed else ""))
     print("session_ids:", json.dumps([m["session_id"] for m in man["sessions"]]))
-    return 1 if failed else 0
+    if crossed:
+        print("다른 계정에 보인 것:", " · ".join(crossed))
+    return 1 if failed or crossed else 0
 
 
 if __name__ == "__main__":

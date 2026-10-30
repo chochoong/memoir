@@ -24,7 +24,7 @@ FSM 도 타이머도 이 파일의 존재를 모른다.
    버렸다. 문서(§1)가 정한 이름과 코드가 쓰던 이름이 둘 다 살아 있으면 언젠가
    반드시 어긋나고, 어긋나는 쪽이 「회차가 안 끝난다」라 눈에도 잘 안 띈다.
 
-4. **프롬프트는 `첨부프롬프트_md/인터뷰_v3.md` 에서 읽는다** (prompt.py).
+4. **프롬프트는 `첨부프롬프트_md/인터뷰_v4.md` 에서 읽는다** (prompt.py).
    여기에 한 벌 더 두지 않는다. 출력 13개 키도 그 문서가 정한다.
 
 **빈 `question` 은 값이다.** 문서 §1 이 「질문하지 않는 종료 턴에는 question 을
@@ -320,7 +320,7 @@ async def gemini_question(ctl: "SessionController") -> str | None:
     status = str(data.get("topic_status") or "active").strip().lower()
     mode = str(data.get("conversation_mode") or "normal").strip().lower()
 
-    # **감각은 기록에 「없음」으로 맞춘다** (인터뷰_v3.md — 새 응답은 항상 없음).
+    # **감각은 기록에 「없음」으로 맞춘다** (인터뷰_v4.md — 새 응답은 항상 없음).
     # 모델이 감각을 적어 왔으면 오감 질문을 했다는 뜻이라 숨기지 않고 남긴다 —
     # 로그와 turn.decision 의 sense_used_raw. 상태에는 들이지 않는다: 들이면
     # last_sense_used 가 다시 차서 다음 턴 입력에 실린다.

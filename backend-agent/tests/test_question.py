@@ -375,7 +375,7 @@ def test_no_sense():
     check("기록의 sense_used 는 없음이다", d.get("sense_used") == "없음", str(d))
     check("어긴 값은 따로 남긴다", d.get("sense_used_raw") == "청각", str(d))
     check("상태의 last_sense_used 는 차지 않는다", ctl.state["last_sense_used"] == "없음",
-          "차면 다음 턴 입력에 실린다 — 인터뷰_v3.md 는 그 값을 쓰지 말라고 했다")
+          "차면 다음 턴 입력에 실린다 — 인터뷰_v4.md 는 그 값을 쓰지 말라고 했다")
 
     ctl2 = _Ctl(turn=3, fragments=frs)
     _ask(ctl2, _answer(sense_used="없음"))
@@ -439,7 +439,7 @@ def test_prompt():
     check("출력 형식이 §1 의 필드를 빠뜨리지 않는다",
           "closing_hint" in sysmsg and "end_reason" in sysmsg,
           "「반드시 아래 형식으로만」이라고 적으면서 빠뜨리면 모델이 안 적는다")
-    check("프롬프트를 첨부프롬프트_md/ 에서 읽는다", promptlib.DOC.name == "인터뷰_v3.md",
+    check("프롬프트를 첨부프롬프트_md/ 에서 읽는다", promptlib.DOC.name == "인터뷰_v4.md",
           promptlib.DOC.name)
 
 
