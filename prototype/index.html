@@ -1417,7 +1417,7 @@
   const CONFIG = {
     // 화면 아래와 개발용 패널에 그대로 찍힌다. 「고친 게 반영이 안 된 것 같다」는
     // 대부분 예전 파일이 열려 있는 경우라서, 눈으로 확인할 자리를 만들어 둔다.
-    version: 'v0.51 · 2026-10-28 (태헌 님 작업 흐름 — 작업 번호 localStorage · latest 안 씀 · 결과에 「저장되지 않아요」 · 다시 정리 표시)',
+    version: 'v0.52 · 2026-10-30 (마치기 없이 나간 이 기기 회차를 새로 시작할 때 먼저 닫기 · 「이미 진행 중」 안내 보강)',
 
     // 이 화면을 백엔드가 직접 서빙하면(web/ 폴더) 빈 문자열 그대로 둔다.
     // 다른 포트에서 열어 시험할 때만 'http://127.0.0.1:8010' 처럼 채운다.
@@ -2955,6 +2955,39 @@
   let snap = null;            // 마지막 snapshot
   let ttsFailed = false;      // 이번 질문 소리를 못 틀었다 — 「소리 없이 넘어가기」를 보인다 (SPEAKING 동안만)
   let sessionId = null;
+
+  /* 이 기기에서 연 회차를 기억해 둔다 (제보 10-30 · 최충 동의).
+     「마치기」 없이 나가면(새로고침 · 앱 종료 · 뒤로) 회차가 서버에 30분(SESSION_IDLE_SECONDS) 남아
+     USER_LIVE_MAX 에 걸리고 「이미 진행 중인 회차가 있습니다」 로 막혔다 — 화면에는 닫을 길이 없었다.
+     그래서 새로 시작할 때 남아 있던 이 기기 회차를 먼저 닫는다. 말씀은 확정 때마다 저장돼 있어 닫아도 잃지 않는다.
+     어르신 링크 회차는 기억하지 않는다 — 다른 곳에서 말씀하고 계실 수 있다. 계정과 함께 둔다 */
+  const LIVE_KEY = 'liveSession';
+  const liveWho = () => String((AUTH.user && AUTH.user.user_id) || AUTH.mode || '');
+  function liveKeep(id) { try { localStorage.setItem(LIVE_KEY, JSON.stringify({ who: liveWho(), id })); } catch (_) {} }
+  function liveForget(id) {
+    try { const v = JSON.parse(localStorage.getItem(LIVE_KEY) || 'null'); if (!v || !id || v.id === id) localStorage.removeItem(LIVE_KEY); } catch (_) {}
+  }
+  function liveLeft() {
+    try { const v = JSON.parse(localStorage.getItem(LIVE_KEY) || 'null'); return v && v.id && v.who === liveWho() ? String(v.id) : ''; }
+    catch (_) { return ''; }
+  }
+  /** 남아 있던 이 기기 회차가 아직 열려 있으면 닫는다. 닫았으면 true */
+  async function closeLeftover() {
+    const id = liveLeft();
+    if (!id) return false;
+    liveForget(id);
+    try {
+      const s = await api.get(id);
+      if (!s || s.state === 'CLOSED') return false;
+      await api.abort(id);
+      log('회차', `남아 있던 회차 ${id.slice(0, 8)} 를 닫았습니다 (마치기 없이 나갔던 것)`);
+      return true;
+    } catch (e) {
+      // 이미 정리됐거나(404) 남의 것 — 넘어간다. 못 닫았으면 서버가 429 로 알려 준다
+      log('회차', `남아 있던 회차 ${id.slice(0, 8)} 확인 · ${e.status || e.message || e} — 넘어갑니다`);
+      return false;
+    }
+  }
   let recorder = null;
   let pollTimer = null;
   let pollBusy = false;       // 앞 조회가 아직 안 끝났다 — 서버가 느릴 때 요청이 쌓이고 순서가 뒤바뀌지 않게
@@ -3098,12 +3131,17 @@
       }
     }
 
+    // 마치기 없이 나갔던 이 기기 회차가 남아 있으면 먼저 닫는다 — 「이미 진행 중인 회차」 로 막히지 않게
+    const closedLeft = LINK.on ? false : await closeLeftover();
+
     try {
       // 링크면 POST /api/i/start — 여러 번 눌러도 같은 회차가 온다 (3-C1 §5-2). 회차는 링크가 정한다
       const s = LINK.on ? await api.linkStart(LINK.topic) : await api.start(body);
       if (LINK.on && s && s.mock) { linkMockStarted(); return; }
       sessionId = s.session_id || 'link';     // 링크 진행 주소에는 session_id 가 없다 — 화면 안 표시용
       if (LINK.on) log('링크', '시작했습니다');
+      else liveKeep(sessionId);
+      if (closedLeft) toast('하던 이야기는 저장해 두었어요. 지난 이야기에서 볼 수 있어요.');
       log('회차', `${sessionId.slice(0, 8)} 열림`);
       $('#devSession').textContent = sessionId.slice(0, 8);
       startVisualLoop();
@@ -3128,7 +3166,9 @@
       if (e.status === 429) {
         // 너무 자주 열었거나(10분 10회), 이미 진행 중인 회차가 있다. 서버 문구를 그대로 쓴다.
         const wait = e.retryAfter ? ` (약 ${Math.ceil(e.retryAfter / 60)}분 뒤)` : '';
-        banner(`${e.message}${wait}`);
+        // Retry-After 가 없으면 「이미 진행 중」 쪽이다. 이 기기 것은 위에서 닫았으니 남은 것은 다른 기기 · 어르신 링크다
+        const why = e.retryAfter ? '' : ' 다른 기기나 어르신 링크로 진행 중인 이야기가 있을 수 있어요. 마치기 없이 나간 이야기는 30분이 지나면 저절로 정리돼요.';
+        banner(`${e.message}${wait}${why}`);
       } else if (e.status === 503) {
         banner('지금은 이야기를 시작할 수 없어요. 잠시 뒤에 다시 시도해 주세요.');
       } else if (e.status === 400 && e.code === 'elder_required') {
@@ -3535,6 +3575,7 @@
   async function finishSession(why) {
     if (closing) return;
     closing = true;
+    if (!LINK.on && sessionId) liveForget(sessionId);   // 제대로 닫혔다 — 다음 시작 때 닫을 것 없음
     held = false;
     clearInterval(holdTimer);
     stopPolling();
