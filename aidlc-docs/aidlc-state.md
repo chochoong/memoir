@@ -71,3 +71,4 @@
 ## 2026-10-27 기술 인계 갱신
 - 사용자 요청으로 develop 대상 Draft PR 업로드 준비. 콘텐츠 미승인, 서비스 연결(8S) 미구현 유지.
 - 원본 5823f2c와 미커밋 검토 자료를 사본에서 보존. 최종 299 passed, 외부 호출 시도 0. 상세: construction/unit8-memoir-pipeline/handoff-20261027.md
+- **지시문 v7 구현 (2026-10-29)**: 일화 · 경위 보존 지시문 + 일화 누락 · 보호 누락 · 누락 후보 판정. 원 구현 환경 309 통과. 검토 브랜치 feature/memoir-v7-episode-reflection(develop 6e89cb7 기반): 8P 240 passed · 전체 310 passed / 17 failed(develop 기존 main.py import 오류, v7 무관). 모델 호출 없음. 원고 품질 효과 미검증
