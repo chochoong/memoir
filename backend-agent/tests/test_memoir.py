@@ -898,6 +898,16 @@ def test_jobs():
         memoir_jobs._JOBS.clear()
 
 
+def test_heard_turns():
+    print("\n[전언 확인] 분석의 「전언 말투인데 heard 없음」 경고를 턴 번호로 (운영 10-30 — 막지 않고 로그로)")
+    steps = [{"stage": "analysis", "warnings": ["턴 15 에 남에게 들은 이야기 말투가 있는데 그 턴에 heard 사실이 없다 — …",
+                                                "턴 2 원문의 부정 표현이 사실 메모에 없다"]},
+             {"stage": "analysis", "warnings": ["턴 3 에 남에게 들은 이야기 말투가 있는데 그 턴에 heard 사실이 없다"]},
+             {"stage": "chapter", "warnings": ["턴 9 에 남에게 들은 이야기 말투"]}, {"stage": "outline"}]
+    check("분석 경고에서만 · 턴 번호 정렬 · 겹침 없음", memoir.heard_turns(steps) == [3, 15], str(memoir.heard_turns(steps)))
+    check("없으면 빈 목록", memoir.heard_turns([{"stage": "analysis", "warnings": []}]) == [])
+
+
 def test_policy():
     print("\n[정책] 시험 대상만 · 입력량 상한 · 분석 1회 재시도 · 사용량 · 최근 작업 (태헌 10-28)")
     import time as _time
@@ -1043,6 +1053,7 @@ def main() -> int:
     test_pipeline_engine()
     test_jobs()
     test_policy()
+    test_heard_turns()
     print(f"\n{'=' * 52}\n통과 {len(PASS)} · 실패 {len(FAIL)}")
     if FAIL:
         print("실패:", ", ".join(FAIL))

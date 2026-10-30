@@ -304,33 +304,28 @@ def test_analysis_v5_contract(mutate, kind, why):
     assert e.value.kind == kind and why in e.value.message
 
 
-# 10-29 앞의 전언 표지 — 「~대요」 · 「~다고 하더라(고요)」 · 단독 「들었어요」를 잡던 것.
-# 아래 시험들은 seed C 의 전언 턴(10 「키웠다고 하더라고요」 · 13 「울었대요」)으로 **검사 장치**
-# (전언 표시 턴에 heard 사실이 없으면 막는다 등)를 본다. 표지 범위가 줄어도 장치는 그대로라 예전 표지로 돌린다.
-_OLD_HEARD_SRC = re.compile(r"(?<!그러)대요|다고\s?(하더라고요|하데요|하더라|들었)|라고\s?(하더라고요|들었)"
-                            r"|들었어요|그러더라고요|(?<!그)래요")
-
-
-@pytest.fixture
-def old_heard_marks(monkeypatch):
-    monkeypatch.setattr(pipe, "_HEARD_SRC", _OLD_HEARD_SRC)
-
-
 def test_heard_mark_needs_quote():
-    """전언 표시는 좁게 — 운영 10-29 분석 reference 실패 (들었어요 · 하더라고요 · 대요 모두 표시하지 않는다)."""
+    """소리를 들은 것(「라디오를 들었어요」)은 전언 표시가 아니다 — 운영 10-29 분석 reference 실패."""
     def heard(text):
         return bool(pipe._HEARD_SRC.search(text))
     assert not heard("밤에 이불을 끼고 라디오를 들었어요.")
     assert not heard("아버지 없을 때에만 몰래 꺼내서 들었어요.")
-    assert not heard("산을 넘어 걸어서 왔다고 하더라고요.")          # 10-29 충: 「~다고 하더라고요」 빼기
-    assert not heard("엄마가 그날 울었대요.")                        # 10-29 충: 「~대요」 빼기
-    assert not heard("방에 침대요, 그런 건 없었어요.")
-    assert not heard("언니가 나를 업어 키웠다고 들었어요.")          # 10-29 충: 「들었어요」 전부 빼기
-    assert not heard("그게 인연이라고 하더라고요.")                  # 10-29 충: 「하더라고요」 전부 빼기
-    assert heard("그 사람이 먼저 왔다고 하데요.")
+    assert heard("산을 넘어 걸어서 왔다고 하더라고요.")
+    assert heard("언니가 나를 업어 키웠다고 들었어요.")
+    assert heard("엄마가 그날 울었대요.")
 
 
-@pytest.mark.usefixtures("old_heard_marks")
+def test_heard_mark_mismatch_is_a_warning_not_a_failure():
+    """표시는 힌트다 — 표시 턴에 heard 사실이 없어도 분석을 막지 않고 사람 확인 경고로 남긴다 (운영 10-30)."""
+    data, _ = source_c()
+    a = _seed_c_corrected(data)
+    next(f for f in a["facts"] if f["id"] == "f10").update(source="self")    # 업어 키웠다고 하더라고요 → self
+    errors, warnings = _diag(a, data)
+    assert not any("남에게 들은 이야기 말투" in x for x in errors)
+    assert any("턴 10 에 남에게 들은 이야기 말투" in x and "사람 확인" in x for x in warnings)
+    pipe.check_analysis(a, T_of(data), pipe.turn_marks(data), pipe.source_texts(data), pipe.source_asked(data))
+
+
 def test_analysis_v5_warnings_marks_units_and_years():
     data, _ = source_c()
     T = T_of(data)
@@ -1269,7 +1264,6 @@ def test_structure_moves_keep_fact_ids_and_source_turns(tmp_path):
     assert trace["summary"]["moved"] == 1 and trace["summary"]["final_chapters"] == 1
 
 
-@pytest.mark.usefixtures("old_heard_marks")
 def test_unresolved_hearsay_or_certainty_never_reaches_awaiting_human():
     data, _ = source_c()
     T = sorted(T_of(data))
@@ -1335,7 +1329,6 @@ def _diag(a, data):
     return pipe.analysis_diagnostics(a, T_of(data), pipe.turn_marks(data), pipe.source_texts(data), pipe.source_asked(data))
 
 
-@pytest.mark.usefixtures("old_heard_marks")
 def test_failed_v5_analysis_reports_every_problem_and_stops_before_outline():
     """v5 집중 시험(20261026T093440Z) 분석 출력 그대로 — 문제를 한 번에 모두 모으고, 목차로 넘기지 않는다."""
     data, turn_map = source_c()
@@ -1348,15 +1341,15 @@ def test_failed_v5_analysis_reports_every_problem_and_stops_before_outline():
     assert "사실 ['f51'] 이 어느 기억 단위에도 없다" in d
     assert "사실 f34 의 turns" in d                                    # 정정 기록이 정정 전 사실을 가리킴
     assert "다른 사실 f40 에도 시점" in d                              # 정정 전 f34 와 유효 f40 이 나뉨
-    assert "턴 13 에 남에게 들은 이야기 말투" in d
     w = " / ".join(e.value.warnings)
+    assert "턴 13 에 남에게 들은 이야기 말투" in w                     # 전언 표시 불일치는 경고 (운영 10-30)
     assert "keep 이 사실 58개 중 42개" in w                           # 단순화 뒤 — keep 과다는 경고
     assert "m2(대전 수선집 운영과 삶) 가 1983~2010년" in w           # 여러 시기를 한 단위로
     assert "['그리움']" in w and "['치열']" in w                       # 원문에 없는 감정 · 서사 말
     fake = Fake({"analysis": a})
     r = asyncio.run(pipe.run(data, turn_map, call=fake))
     assert fake.order == ["analysis"] and r["generation_state"] == "failed"
-    assert len(r["failure"]["details"]) == len(e.value.details) >= 7
+    assert len(r["failure"]["details"]) == len(e.value.details) >= 6
 
 
 def _seed_c_corrected(data):
@@ -1426,19 +1419,18 @@ def test_keep_is_for_core_facts_only(share, kind):
     assert (bool(hit[0]), bool(hit[1])) == {"error": (True, False), "warning": (False, True), None: (False, False)}[kind]
 
 
-@pytest.mark.usefixtures("old_heard_marks")
 def test_turn13_heard_and_remembered_must_be_split_at_fact_level():
     data, _ = source_c()
     a = _seed_c_corrected(data)
     f13 = next(f for f in a["facts"] if f["id"] == "f13")
     f13.update(source="self", text="시집가던 날 버스 정류장에서 많이 울었음")
-    errors, _ = _diag(a, data)
-    assert any("턴 13 에 남에게 들은 이야기 말투" in x for x in errors)
+    _, warnings = _diag(a, data)
+    assert any("턴 13 에 남에게 들은 이야기 말투" in x for x in warnings)    # 막지 않고 사람 확인 (운영 10-30)
     f13.update(source="heard", text="시집가던 날 많이 울었다고 들음")   # 들은 부분(heard) + 기억 부분(self)으로 나눔
     a["facts"].append(fact("f40", [13], "버스 정류장이 기억남"))
     a["units"].append({"id": "m99", "name": "n", "facts": ["f40"], "time": "", "weight": "minor"})
-    errors, _ = _diag(a, data)
-    assert not any("턴 13" in x for x in errors)
+    errors, warnings = _diag(a, data)
+    assert not any("턴 13 에 남에게 들은" in x for x in errors + warnings)
     f37 = next(f for f in a["facts"] if f["id"] == "f37")                  # 딸이 한 말을 전한 것 — 직접 겪은 일
     f37.update(source="self", text="딸이 이야기를 책으로 남기자고 함")
     assert not any("턴 37 에서 화자가 직접 받은 말" in x for x in _diag(a, data)[0])   # 직접 받은 말 — 전언 아님
@@ -1461,14 +1453,13 @@ def test_unit_spanning_unrelated_periods_and_loaded_theme_words_are_flagged():
     assert any("['그리움']" in w for w in warnings) and not any("함께한 세월" in w for w in warnings)
 
 
-@pytest.mark.usefixtures("old_heard_marks")
 def test_analysis_only_mode_is_one_call_and_writes_the_memory_map(tmp_path):
     data, turn_map = source_c()
     bad = json.loads(FAILED_V5.read_text(encoding="utf-8"))
     fake = Fake({"analysis": bad})
     r = asyncio.run(pipe.run_analysis_only(data, turn_map, call=fake, recorder=pipe.Recorder(tmp_path)))
     assert fake.order == ["analysis"] and r["calls"] == 1 and r["analysis_ok"] is False
-    assert len(r["diagnostics"]) >= 8 and r["memory_map"]["keep"] == 42 and r["human_review"] == "not_run"
+    assert len(r["diagnostics"]) >= 7 and r["memory_map"]["keep"] == 42 and r["human_review"] == "not_run"
     text = (tmp_path / "01_memory_map.md").read_text(encoding="utf-8")
     assert "f30 (중복)" in text and "계약 위반" in text and "keep 이 사실 58개 중 42개" in text
     good = _seed_c_corrected(data)
@@ -1568,7 +1559,6 @@ def test_stripped_fact_with_nothing_left_is_removed():
     assert all("f40" not in u["facts"] for u in a["units"]) and f25["turns"] == [21, 25]
 
 
-@pytest.mark.usefixtures("old_heard_marks")
 def test_turn_marks_separate_heard_reported_view_and_emotions():
     data, _ = source_c()
     m = {x["turn"]: x for x in pipe.turn_marks(data)}
@@ -1649,16 +1639,14 @@ def test_reported_is_a_marker_not_a_source_and_is_not_auto_converted(tmp_path):
     assert "뜻 검사 미실행" in text and "검사 미실행 (경고 0건이 아니다)" in text
 
 
-@pytest.mark.usefixtures("old_heard_marks")
 def test_lite_v5b_meaning_losses_are_all_caught():
     """01:02Z 출력을 source 만 self 로 고친 사본(시험용) — 사실 원장에서 빠진 뜻을 모두 찾는다. 38 은 보존돼 통과."""
     data, _ = source_c()
     a = json.loads(LITE_V5B.read_text(encoding="utf-8"))
     next(f for f in a["facts"] if f["id"] == "f56")["source"] = "self"
-    with pytest.raises(pipe.PipelineError) as e:
-        pipe.check_analysis(a, T_of(data), pipe.turn_marks(data), pipe.source_texts(data), pipe.source_asked(data))
-    assert any("턴 13 에 남에게 들은 이야기 말투" in x for x in e.value.details)   # 출처 오분류는 실패로 남는다
-    d = " / ".join(e.value.warnings)                                    # 메모 뉘앙스는 경고로 모두 남긴다
+    errors, warnings = _diag(a, data)
+    assert any("턴 13 에 남에게 들은 이야기 말투" in x for x in warnings)   # 출처 오분류는 사람 확인 경고 (운영 10-30)
+    d = " / ".join(warnings)                                            # 메모 뉘앙스는 경고로 모두 남긴다
     for want in ("턴 2 원문의 수 · 기간 표현 ['이십오 년']",           # 운영 기간의 대략 표현
                  "턴 8 원문의 감정 말 ['뿌듯함 · 자부심']",           # 대학 보낸 자부심
                  "턴 16 원문의 감정 말 ['좋음 · 기쁨', '힘듦']",      # 힘들었지만 좋았다
@@ -1667,9 +1655,10 @@ def test_lite_v5b_meaning_losses_are_all_caught():
                  "턴 37 원문의 망설임"):                             # 대단한 게 있나 싶은데
         assert want in d, want
     assert "턴 38" not in d                                           # 싫었던 소리 · 언니 생각 · 못 버림 모두 보존
+    pipe.check_analysis(a, T_of(data), pipe.turn_marks(data), pipe.source_texts(data), pipe.source_asked(data))   # 막지 않는다 · normalized 를 단다
     assert a["normalized"][0]["changed"] is False and a["normalized"][0]["applied"] is False
-    assert not any("정정 정규화" in w for w in e.value.warnings)       # 바꾼 것이 없으면 정규화로 적지 않는다
-    assert any("m6(자녀들의 결혼과 가족의 소식)" in w for w in e.value.warnings)   # 무관한 묶음은 경고로 유지
+    assert not any("정정 정규화" in w for w in warnings)               # 바꾼 것이 없으면 정규화로 적지 않는다
+    assert any("m6(자녀들의 결혼과 가족의 소식)" in w for w in warnings)   # 무관한 묶음은 경고로 유지
 
 
 def test_turn_marks_for_negation_doubt_numbers_and_pride():
@@ -1705,12 +1694,10 @@ def test_analysis_prompt_states_three_sources_and_meaning_preservation():
 FIXTURE_C = ROOT / "eval" / "analysis_fixture_C_v5_reviewed.json"
 
 
-@pytest.mark.usefixtures("old_heard_marks")
 def test_simplified_contract_keeps_protected_items_as_errors():
     data, _ = source_c()
     base = _seed_c_corrected(data)
     cases = {
-        "heard 오분류": lambda a: next(f for f in a["facts"] if f["id"] == "f10").update(source="self"),
         "view 오분류": lambda a: next(f for f in a["facts"] if f["id"] == "f32").update(source="self"),
         "근거 턴 불일치": lambda a: next(f for f in a["facts"] if f["id"] == "f3").update(turns=[29]),
         "없는 턴": lambda a: next(f for f in a["facts"] if f["id"] == "f3").update(turns=[99]),
@@ -1761,13 +1748,12 @@ def test_reviewed_fixture_is_valid_marked_and_reproducible():
     assert hashlib.sha256(base).hexdigest()[:16] == fx["based_on"]["sha256"]       # 바탕은 모델 원본 그대로
 
 
-@pytest.mark.usefixtures("old_heard_marks")
 @pytest.mark.parametrize("change, why", [
     (lambda fx: fx.update(input_ref="000000000000"), "input_ref"),
     (lambda fx: fx.update(analysis_source="model"), "analysis_source"),
     (lambda fx: fx.update(edits=[]), "edits"),
     (lambda fx: fx.pop("based_on"), "based_on"),
-    (lambda fx: next(f for f in fx["analysis"]["facts"] if f["id"] == "f21").update(source="self"), "계약 위반"),
+    (lambda fx: next(f for f in fx["analysis"]["facts"] if f["id"] == "f21").update(turns=[99]), "계약 위반"),
 ])
 def test_fixture_is_refused_when_unmarked_or_invalid(change, why):
     data, turn_map = source_c()

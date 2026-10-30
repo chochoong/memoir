@@ -51,6 +51,7 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+import re
 import uuid
 from functools import lru_cache
 from pathlib import Path
@@ -652,6 +653,10 @@ async def _draft_pipeline(recs: list[dict], ids: list[str], style: str, progress
     log.info("자서전 사용량 — 모델 %s · 시도 %d · 호출 %d · 입력 %d · 출력 %d · 생각 %d · 비용 %s",
              model, attempt, calls, use["input"], use["output"], use["thoughts"],
              f"약 ${use['usd']:.3f}" if use["usd"] is not None else "단가 모름")
+    heard = heard_turns(steps)
+    if heard:
+        # 단계 기록은 메모리에서 버려진다 — 사람이 볼 수 있는 곳은 이 로그뿐이다 (원문 없이 턴 번호만)
+        log.warning("자서전 전언 확인 — 전언 말투인데 분석이 직접 기억으로 둔 턴 %s · 사람 확인", heard)
     return pipeline_result(res, ids, style)
 
 
@@ -661,6 +666,15 @@ RETRY_KINDS = ("format", "call")
 # 100만 토큰당 USD — (입력, 출력 · 생각) 요청 하나 20만 토큰 이하 / 넘으면. ai.google.dev 가격표 10-28.
 # 모르는 모델은 비용을 적지 않는다 (지어내지 않는다)
 PRICES = {"gemini-3.1-pro-preview": ((2.0, 12.0), (4.0, 18.0))}
+
+
+_HEARD_WARN = re.compile(r"턴 (\d+) 에 남에게 들은 이야기 말투")
+
+
+def heard_turns(steps: list[dict]) -> list[int]:
+    """분석 경고 중 「전언 말투인데 heard 사실이 없다」의 턴 번호 (memoir_pipeline.check_analysis — 막지 않는 경고)."""
+    return sorted({int(m.group(1)) for x in steps if x.get("stage") == "analysis"
+                   for w in x.get("warnings") or [] for m in [_HEARD_WARN.match(w)] if m})
 
 
 def usage(model: str, steps: list[dict]) -> dict:
