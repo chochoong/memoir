@@ -79,7 +79,8 @@ DEFAULT_LIMITS = {               # 초, 출력 토큰
 }
 DEFAULT_TEMPERATURE = 0.3
 DEFAULT_TOTAL_TIMEOUT = 600.0
-MIN_CHAPTERS, MAX_CHAPTERS = 1, 5    # 독립 실험의 안전 상한. 넘으면 자르지 않고 실패
+MIN_CHAPTERS, MAX_CHAPTERS = 1, 10   # 안전 상한. 넘으면 자르지 않고 실패 (10-29 충: 5 → 10 — 회차가 많으면
+                                     # 5장 안에 넣느라 장면이 빠졌다)
 RETRIES = 0
 # 장 집필 비교(--chapter-only)의 장 단계 상한 — 생각 토큰도 출력 상한에 들어가는 모델이 계약 밖 이유로
 # 잘리지 않게 넉넉히 둔다(초, 출력 토큰). 기본 실행의 상한은 그대로다
@@ -137,10 +138,14 @@ _ANSWER = re.compile(r"^\s*(아니요|아뇨|네[,.\s]|예[,.\s]|응[,.\s]|가�
 _QUOTE = re.compile(r"'[^']*'|\"[^\"]*\"|“[^”]*”|‘[^’]*’")
 
 # 원문(사용자 발언)의 전언 · 불확실 표지 — 코드가 먼저 찾아 분석에 표시로 준다 (모델 판단을 돕는 표시일 뿐)
-# 전언 — 남에게 들은 지난 일("울었대요", "업어 키웠다고 하더라고요"). 화자가 직접 받은 말("편지로 고맙다고
-# 했어요")은 전언이 아니라 직접 들은 말(reported)이다 — 그 말의 내용은 사실 메모에 남아야 한다
-_HEARD_SRC = re.compile(r"(?<!그러)대요|다고\s?(하더라고요|하데요|하더라|들었)|라고\s?(하더라고요|들었)"
-                        r"|들었어요|그러더라고요|(?<!그)래요")
+# 전언 — 남에게 들은 지난 일("왔다고 하데요"). 화자가 직접 받은 말("편지로 고맙다고
+# 했어요")은 전언이 아니라 직접 들은 말(reported)이다 — 그 말의 내용은 사실 메모에 남아야 한다.
+# 「들었어요」 하나만으로는 표시하지 않는다 — 「라디오를 들었어요」는 소리를 들은 것이다. 전언인 「…다고 · 라고
+# 들었어요」는 앞 갈래가 잡는다 (운영 10-29: 단독 들었어요가 분석을 reference 실패로 막았다).
+# 「~대요」 · 「~다고 하더라(고요)」도 표시하지 않는다 (10-29 충) — 「침대요」 같은 말에 걸리고, 전언을 모델이
+# 사실로 나누지 못하면 그 회차가 든 자서전이 분석에서 늘 멈췄다. 이런 전언은 표시 없이 분석이 원문을 보고 정한다.
+# 「…다고 · 라고 들었어요」 · 「…라고 하더라고요」도 뺀다 (10-29 충 — 「들었어요」 · 「하더라고요」 전부)
+_HEARD_SRC = re.compile(r"다고\s?하데요|그러더라고요|(?<!그)래요")
 _REPORTED_SRC = re.compile(r"[다라자냐]고\s?(했어요|하셨어요|그러셨어요|말했어요)|그러대요|그러더라고요")
 # 화자의 평가 · 생각 — "닮았다고 제가 그래요", "…라고 생각해요". 객관적 사실로 확정하지 않는다
 _VIEW_SRC = re.compile(r"[다라]고\s?(제가|내가)\s?(그래요|그러죠|해요)|[다라]고\s?(생각해요|봐요|여겨요)")
@@ -315,7 +320,7 @@ def turn_marks(data: dict) -> list[dict]:
     """
     원문 턴의 표지 — 사용자 발언에서 코드가 찾는다.
 
-        heard      남에게 들은 지난 일 ("~대요", "~다고 하더라고요")
+        heard      남에게 들은 지난 일 ("~다고 하데요", "~래요")
         reported   화자가 직접 받은 말 ("~다고 했어요", "그러대요") — 전언이 아니다, 말의 내용을 남긴다
         view       화자의 평가 · 생각 ("~다고 제가 그래요") — 객관적 사실로 확정하지 않는다
         uncertain  흐린 말투 ("~쯤", "~였나", "~일 거예요")
@@ -2050,7 +2055,7 @@ def edit_claim_findings(edited: dict, trace: dict) -> list[dict]:
 def check_final(out, analysis: dict, T: set[int], focus: str | None = None) -> tuple[dict[str, str], list[str]]:
     """
     편집본의 최종 근거검사. 편집은 **구성을 바꿀 수 있다** — 장을 합치고 나누고 순서를 바꾸고,
-    문단을 옮기고, 문장을 덜어 낼 수 있다(장 1~5, 한 장 시험은 1장). 대신:
+    문단을 옮기고, 문장을 덜어 낼 수 있다(장 1~MAX_CHAPTERS, 한 장 시험은 1장). 대신:
 
         모든 문장의 facts 는 사실 원장 안 (제외 턴의 사실은 원장에 없다)
         diagnosis(먼저 본 문제)가 하나 이상
@@ -2835,7 +2840,7 @@ _EXCLUSION_HEAD = (
 
 def analysis_message(data: dict) -> str:
     head = (_SOURCE_HEAD + "\nturn_marks 는 코드가 발언 말끝에서 찾은 표시다 — heard 는 들은 이야기의 "
-            "말투(~대요 · ~다고 하더라고요), uncertain 은 흐린 말투(~쯤 · ~였나 · ~일 거예요)가 있다는 "
+            "말투(~다고 하데요 · ~래요), uncertain 은 흐린 말투(~쯤 · ~였나 · ~일 거예요)가 있다는 "
             "뜻이다. 한 턴에 들은 이야기와 직접 기억이 섞일 수 있으니 사실마다 다시 정한다.")
     return _user(head, {"turn_marks": turn_marks(data), "source": data})
 
@@ -2856,6 +2861,9 @@ def outline_message(data: dict, analysis: dict, focus: str | None = None) -> str
     head = (_SOURCE_HEAD + "\nanalysis 는 앞 단계의 사실 원장(facts) · 기억 단위(units) · 끈(threads) · "
             "정정(corrections)이다. 편집 참고일 뿐 사실 근거가 아니다 — source 와 다시 대조한다. "
             "must_keep 은 근거 없이 빠지면 안 되는 사실 id 다.")
+    if not focus:
+        head += (f"\n장은 {MIN_CHAPTERS}~{MAX_CHAPTERS}장까지 쓸 수 있다 — 장 수는 자료 양에 맞춘다. "
+                 "자료가 많은데 장을 적게 잡아 장면을 빼지 않는다.")
     payload: dict = {"analysis": _analysis_for_next(analysis),
                      "must_keep": sorted(must_keep(analysis), key=lambda x: int(x[1:]))}
     if focus:
@@ -2877,6 +2885,9 @@ def chapter_message(src: dict, analysis: dict, outline_out: dict, chapter: dict)
             "문장의 facts 에는 이 facts 의 id 만 쓴다.")
     book = ledger(analysis)
     mine = plan_facts(chapter)
+    head += (f"\n**장 길이는 이 장이 맡은 사실 수에 비례한다** — 이 장은 사실 {len(mine)}개를 맡았다. "
+             "문단 계획의 facts 는 사실 하나에 한두 문장으로 장면이 보이게 쓰고, brief 는 짧게 한 구절로 "
+             "담는다. 사실이 많은 장을 다른 장 길이에 맞추어 줄이거나 몇 문장으로 요약하지 않는다.")
     payload: dict = {
         "book": {k: outline_out["book"].get(k) for k in ("title", "center", "flow", "opening_facts", "closing_facts")},
         "chapter": chapter,
