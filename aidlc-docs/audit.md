@@ -404,3 +404,21 @@
 
 ## 2026-10-27 Unit 8P 기술 인계
 사용자가 팀 저장소 업로드·허용 대상 확인 후 Draft PR·최충님 전달문 작성을 요청했다. 원본 C:\work\memoir-team은 변경하지 않고 작업 사본 사용. develop 기반과 기능 PR 선례 확인, 기존 서버·다른 팀원 코드 무변경. 미커밋 v2 결과/편집 자료 보존. Windows 복사본의 시험 원자료 LF를 복원하고 해당 파일만 .gitattributes로 고정. 최종 299 passed, 외부 호출 시도 0, 알려진 비밀키 패턴 0. 콘텐츠 미승인 및 partial 제외·선택 밖 정정·화자 통제 의존 사항은 handoff-20261027.md에 기록. 병합·배포·추가 모델 호출 없음.
+
+---
+
+## Construction 단위 8P - 지시문 v7 구현 (독립 일화 · 필수 경위 보존)
+**Timestamp**: 2026-10-29T00:00:00Z
+**User Input**: "내말싸미 자서전 — 실제 구현 지시 … 지금까지 합의한 명세에 따라 … 기존 5단계 자서전 파이프라인을 실제로 수정 … 유료 Gemini 호출은 금지 … 정적 검사·로컬 테스트·저장된 기록 대조로만 …"
+**AI Response**: "기준 feature/memoir-pipeline 5823f2c. 지시문 v7(1~5, v5 복사 후 합의 문구만 변경, 출력 키 동일) · PROMPT_VERSION v7 · ROLE_FILES v7(v6 이름은 편집 단독 실험이 사용). 코드: keep/core 생략 등급(목차 review · 편집 fix), episode_findings(episode_missing/omitted fix · excluded review, facts+brief 기준), omission_candidates(fact_dropped/changed/new, edit_trace 모양 유지), protected_omissions, check_outline core 미지정 경고 → plan.checks, run 기록 04_omission_review.json · plan.omission_review/protected_omissions, verify head. 테스트 309 통과(+18), 외부 호출 시도 0, dry-run 2종. prompt-v7-episode-preservation.md. 원고 생성 · 모델 호출 · 커밋 없음."
+**Context**: CONSTRUCTION - 단위 8P v7 구현 완료 — 원고 품질 효과 미검증
+
+---
+
+## Construction 단위 8P - v7 보완: 당시의 경험과 지금의 회고
+**Timestamp**: 2026-10-29T08:50:00Z
+**User Input**: "내말싸미 v7 추가 수정 — 당시의 경험과 현재의 회고 … 기존 v7 프롬프트를 직접 보완 … 출력 형식, source·certainty의 의미, 누락 판정 코드 … 변경하지 않습니다 … 유료 Gemini 호출을 금지 …"
+**AI Response**: "v7 지시문 5개에 문구만 추가(분석: 당시 · 지금 해석 분리 · 영향은 말한 경우만 / 목차: 비중 · role 연결 · 회고 반복 금지 · core 선택 가능 / 장 집필: 그때의 나 · 지금의 나, 회고 없으면 사건 · 감정으로 맺음, 영향 · 깨달음은 근거 있을 때만 / 편집: 회고 삭제 금지 · 성장 · 화해 덧붙이기 금지 / 검증: 기존 분류로 확인, 회고 없음 감점 금지). 코드 · 출력 키 변경 없음. 로딩 테스트에 문구 확인 추가, 전체 309 통과, 외부 호출 0."
+**Context**: CONSTRUCTION - 단위 8P v7 보완 — 회고 깊이 · 문학적 품질 미검증
+
+---
