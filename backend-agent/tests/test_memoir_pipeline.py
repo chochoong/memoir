@@ -220,7 +220,7 @@ def test_t01_normal_run_calls_each_role_separately():
     assert r["model_quality"]["meets_bar"] is True
     assert r["overall"] == "awaiting_human"                        # 사람 없이 approved 는 없다
     assert [c["chapter_key"] for c in r["chapters"]] == ["ch-1", "ch-2"]
-    assert r["prompt_version"] == "v5"
+    assert r["prompt_version"] == "v7"
 
 
 def test_t02_each_call_has_its_own_role_prompt_and_common_rules():
@@ -612,9 +612,12 @@ def test_must_keep_missing_unless_omitted_with_reason():
     ch = [_chapter([("있었던 일이다.", ["f1", "f2"])])]
     f = pipe.keep_findings(ch, pipe.must_keep(a), {})
     assert {(x["rule"], x["fact"]) for x in f} == {("must_keep_missing", "f3"), ("must_keep_missing", "f4")}
-    f = pipe.keep_findings(ch, pipe.must_keep(a), {"f3": "", "f4": "다른 장과 같은 뜻"})
+    f = pipe.keep_findings(ch, pipe.must_keep(a), {"f3": "", "f4": "다른 장과 같은 뜻"})          # 목차의 생략
     assert {(x["rule"], x["severity"], x["fact"]) for x in f} == {("must_keep_missing", "fix", "f3"),
-                                                                  ("must_keep_omitted", "info", "f4")}
+                                                                  ("must_keep_excluded", "review", "f4")}
+    f = pipe.keep_findings(ch, pipe.must_keep(a), {}, {"f4": "다른 장과 같은 뜻"})                 # 편집의 생략
+    assert {(x["rule"], x["severity"], x["fact"]) for x in f} == {("must_keep_missing", "fix", "f3"),
+                                                                  ("must_keep_omitted", "fix", "f4")}
 
 
 def test_fact_token_regression_cases():
@@ -874,11 +877,11 @@ def test_t19_run_folder_has_stage_files_without_secrets_or_text(monkeypatch, tmp
     assert "Q7 사실 충실" in summary and r["run_ref"] == "test"
 
 
-def test_t20_prompts_load_v5_and_earlier_versions_kept():
-    assert pipe.PROMPT_VERSION == "v5" and all(f.endswith("_v5.md") for f in pipe.ROLE_FILES.values())
+def test_t20_prompts_load_v7_and_earlier_versions_kept():
+    assert pipe.PROMPT_VERSION == "v7" and all(f.endswith("_v7.md") for f in pipe.ROLE_FILES.values())
     for f in pipe.ROLE_FILES.values():
-        for old in ("_v1", "_v2", "_v3", "_v4"):                       # 실행 기록의 옛 판을 지우지 않는다
-            assert (pipe.ROLE_DIR / f.replace("_v5", old)).exists()
+        for old in ("_v1", "_v2", "_v3", "_v4", "_v5"):                # 실행 기록의 옛 판을 지우지 않는다
+            assert (pipe.ROLE_DIR / f.replace("_v7", old)).exists()
     common = pipe.common_rules()
     assert common.startswith("당신은") and "## 5." not in common
     src = (ROOT / "app" / "session" / "memoir_pipeline.py").read_text(encoding="utf-8")
@@ -889,7 +892,7 @@ def test_t20_prompts_load_v5_and_earlier_versions_kept():
 def test_prompts_v5_carry_the_book_contract_without_seed_c_text():
     a, o, c, e, v = (pipe.role_text(s) for s in pipe.STAGES)
     assert "사실 원장" in a and "기억 단위" in a and "사실마다 문장을 하나씩 쓰라는 뜻이 아닙니다" in a
-    assert "모든 발언을 본문에 넣지 않습니다" in o and "reorder" in o and "experience" in o
+    assert "모든 발언을 본문에 넣지 않아도 됩니다" in o and "reorder" in o and "experience" in o
     assert "한 턴을 한 문장으로 차례로 옮기지 마세요" in c and "정해져 있지 않습니다" in c
     assert "들은 이야기로 씁니다" in c and "흐린 채로" in c and "인생 교훈" in c
     assert "제안일 뿐이고 바꿀 수 있습니다" in e and "diagnosis" in e and "장 합치기 · 나누기" in e
@@ -937,7 +940,7 @@ def test_cli_focus_dry_run_and_rejects_long_focus(capsys):
     args = ["--seed", str(SEED_C_PATH), "--aliases", "c1,c2,c3,c4,c5", "--dry-run"]
     assert cli.main(args + ["--focus", "큰 소재"]) == 0
     out = capsys.readouterr().out
-    assert "예상 호출 5회" in out and "지시문 v5" in out and "모델을 부르지 않았다" in out
+    assert "예상 호출 5회" in out and "지시문 v7" in out and "모델을 부르지 않았다" in out
     assert cli.main(args + ["--focus", "가" * (cli.FOCUS_MAX_CHARS + 1)]) == 2
     assert cli.main(args) == 0 and "예상 호출 5~9회" in capsys.readouterr().out
 
@@ -1592,7 +1595,7 @@ def test_analysis_prompt_separates_fact_unit_thread_and_paragraph_plan():
     assert "사실 수는 턴 수와 같아도, 많아도, 적어도 됩니다" in a
     assert '"view"' in a and "직접 받은 말" in a and "다른 사람의 다른 일을 한 묶음으로 만들지 마세요" in a
     assert "화자가 말한 감정은 메모에서 빼지 마세요" in a
-    assert "화자의 생각으로 씁니다" in pipe.role_text("chapter") and "opinion_as_fact" in pipe.role_text("edit")
+    assert "화자의 생각임이 드러나게" in pipe.role_text("chapter") and "opinion_as_fact" in pipe.role_text("edit")
 
 
 # ---------------------------------------------------------------- source 계약 · 사실 보존 · 로그 (01:02Z flash-lite 회귀)
@@ -1910,7 +1913,17 @@ def test_reviewed_outline_covers_the_required_memories_and_is_reproducible():
     spec = importlib.util.spec_from_file_location("bo", ROOT / "eval" / "build_outline_fixture_C_v5.py")
     mod = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(mod)
-    assert mod.build() == o
+    assert _without_core_warnings(mod.build()) == _without_core_warnings(o)
+
+
+CORE_WARN = "핵심 경위(core)가 지정되지 않았다"
+
+
+def _without_core_warnings(o):
+    """v7 의 core 미지정 경고는 시험용 목차를 만든 뒤에 생겼다 — 저장된 목차 스냅샷의 check 기록은 그대로 둔다."""
+    o = json.loads(json.dumps(o))
+    o["check"]["warnings"] = [w for w in o["check"]["warnings"] if CORE_WARN not in w]
+    return o
 
 
 @pytest.mark.parametrize("change, why", [
@@ -1991,12 +2004,12 @@ def test_core_still_missing_after_edit_means_needs_revision():
     assert pipe.code_gate(final, kept, final)["state"] == "attention"                 # kept 로 넘기지 못한다
 
 
-def test_core_omitted_with_reason_by_edit_is_info_not_outline_omit():
+def test_core_omitted_with_reason_by_edit_stays_fix_not_outline_omit():
     data, a, outline, omit, w = _r2()
     eo = {"f44": "병문안 대목은 화자가 다음 장에서 다루기를 원했다(사람 확인)"}
-    final = pipe.all_findings(w["edited"]["chapters"], outline, data, a, {**omit, **eo}, final=True, edit_omitted=eo)
+    final = pipe.all_findings(w["edited"]["chapters"], outline, data, a, omit, final=True, edit_omitted=eo)
     by = {f["fact"]: f for f in final if f["rule"].startswith("core_")}
-    assert by["f44"]["rule"] == "core_omitted" and by["f44"]["severity"] == "info"
+    assert by["f44"]["rule"] == "core_omitted" and by["f44"]["severity"] == "fix"        # v7 — 이유가 있어도 미해결
     assert by["f17"]["rule"] == "core_missing"
     # 편집의 생략 목록이 아닌 곳의 이유로는 정당한 생략이 되지 않는다
     final = pipe.all_findings(w["edited"]["chapters"], outline, data, a, {**omit, "f44": "목차 이유"}, final=True)
@@ -2045,7 +2058,8 @@ def test_r2_outline_only_adds_core_marks():
     spec.loader.exec_module(mod)
     r1 = json.loads(OUTLINE_C.read_text(encoding="utf-8"))
     r2 = json.loads(OUTLINE_C2.read_text(encoding="utf-8"))
-    assert mod.build() == r1 and mod.build(core=True) == r2
+    assert _without_core_warnings(mod.build()) == _without_core_warnings(r1)
+    assert _without_core_warnings(mod.build(core=True)) == _without_core_warnings(r2)
     strip = [{k: v for k, v in p.items() if k != "core"} for p in r2["outline"]["chapters"][0]["paragraphs"]]
     assert strip == r1["outline"]["chapters"][0]["paragraphs"]
     assert r2["analysis_fixture"] == r1["analysis_fixture"] and r2["memories"] == r1["memories"]
@@ -2572,8 +2586,12 @@ def test_v6_is_only_for_edit_only_and_v5_edit_is_unchanged(tmp_path):
     r, fake = _edit_only(tmp_path / "c", _pro_edit())                    # 기본 v5 — 지시문 · 자료 그대로
     assert fake.specs[0].system == pipe.prompt("edit") and r["edit_contract"] == "v5"
     assert "drafts" in fake.payload("edit") and "text" in fake.payload("edit")["drafts"][0]["paragraphs"][0][0]
-    assert not [f for f in r["code_findings"] if f["severity"] == "review"]   # v5 실행에는 v6 검사를 더하지 않는다
-    assert pipe.ROLE_FILES["edit"] == "4_편집_v5.md" and pipe.PROMPT_VERSION == "v5"
+    V6_RULES = {"negation_lost", "causal_unsupported", "causal_suspect", "spoken_carryover", "meta_suspect",
+                "repeat_phrase", "time_reversal_undeclared", "time_reversal_declared", "link_content", "claim_weak",
+                "span_missing", "span_misplaced", "span_crosses_sentence", "uncovered_text", "composition_missing",
+                "composition_mismatch"}
+    assert not [f for f in r["code_findings"] if f["rule"] in V6_RULES]      # 문장 객체 계약 실행에는 v6 검사를 더하지 않는다
+    assert pipe.ROLE_FILES["edit"] == "4_편집_v7.md" and pipe.PROMPT_VERSION == "v7"
 
 
 def test_v1_to_v5_prompts_untouched_and_v6_prompt_exists():
@@ -2614,3 +2632,227 @@ def test_blind_edit_comparison_uses_v6_prose_and_edit_criteria(tmp_path):
     assert "편집 계약 v6" in scope["v6"] and "검토 지적 9개" in scope["v6"] and "편집 계약 v5" in scope[None]
     facts = (tmp_path / "out" / "검수자용" / f"사실대조표_{lab6}.md").read_text(encoding="utf-8")
     assert "「엄마가 밭일을 나가면" in facts and "뜻이 맞는 것이 아니다" in facts
+
+
+# ---------------------------------------------------------------- v7 — 독립 일화 · 필수 경위 보존 (2026-10-29 합의 명세)
+#
+# 모델을 부르지 않는다. 저장된 Pro 초안 · v5 편집 · v6 편집 기록과, 대화에 첨부된 원문 20개 시험(5 · 10 · 20개 입력
+# 결과)의 사례를 짧은 합성 원장으로 옮긴 것만 쓴다 — 그 결과들의 실행 기록은 없어 단계별 원인은 시험하지 않는다.
+
+
+def test_v7_prompts_are_what_the_run_actually_sends_and_v5_files_stay():
+    fake = Fake(script())
+    go(fake)
+    by = {s.stage: s.system for s in fake.specs}
+    want = {"analysis": "흐린 대상이 나이라는 이유만으로 값을 바꾸지 마세요",
+            "outline": "주된 구간은 한 곳이며, 필요하면 이어지는 여러 문단으로 전개합니다",
+            "chapter": "\"나는 생각한다\", \"것 같다\"는 필수 문형이 아닙니다",
+            "edit": "예시 문구를 문장 끝에 덧붙이지 마세요",
+            "verify": "theme_contradiction"}
+    for stage, text in want.items():
+        assert by[stage] == pipe.prompt(stage) and text in by[stage], stage
+    reflect = {"analysis": "당시의 감정 · 판단과 지금 돌아보며 하는 해석도 같은 방식으로 나눕니다",      # 당시의 경험과 지금의 회고
+               "outline": "의미 있는 회고를 일화마다 끝에 되풀이해 두지 말고",
+               "chapter": "그때의 나와 지금 돌아보는 나",
+               "edit": "원문에 없는 성장 · 화해 · 용서 · 감사를 결말로 더하지 마세요",
+               "verify": "회고가 없다는 이유로 감점하지 마세요"}
+    for stage, text in reflect.items():
+        assert text in by[stage], stage
+    v5 = (pipe.ROLE_DIR / "2_목차_v5.md").read_text(encoding="utf-8")
+    assert "**모든 발언을 본문에 넣지 않습니다.**" in v5 and "주된 구간" not in v5          # 옛 판은 그대로
+    for stage in pipe.STAGES:                                                      # 출력 계약(키)은 v5 그대로
+        old = (pipe.ROLE_DIR / pipe.ROLE_FILES[stage].replace("_v7", "_v5")).read_text(encoding="utf-8")
+        new = pipe.role_text(stage)
+        tail = lambda s: re.findall(r'"(\w+)":', s.split("[출력")[-1])
+        assert set(tail(new)) - set(tail(old)) <= {"core"}, stage                  # core 는 기존 선택 키
+
+
+def test_edit_trace_shape_is_unchanged_and_merge_is_only_a_candidate():
+    data, _ = source()
+    a = analysis_ok()
+    drafts = _expanded([_chapter([("첫 월급을 받았다.", ["f1"]), ("목도리를 사 드렸다.", ["f2"])])], a)
+    final = _expanded([_chapter([("첫 월급으로 목도리를 사 드렸다.", ["f1", "f2"])])], a)
+    trace = pipe.edit_trace(drafts, final)
+    s = trace["summary"]
+    assert isinstance(s["dropped"], int) and s["dropped"] == 1 and len(trace["dropped"]) == 1
+    assert all(isinstance(x, str) for x in trace["dropped"]) and trace["dropped_facts"] == []
+    gone = trace["dropped"][0]
+    gone_fact = trace["draft_facts_at"][gone][0]
+    cands = pipe.omission_candidates(drafts, final, trace, a, data, {}, {}, set())
+    assert [(c["fact"], c["kind"]) for c in cands] == [(gone_fact, "fact_changed")]     # 같은 id 가 남아도 후보
+    assert "덜어 낸 문장" in cands[0]["signals"][0] and cands[0]["draft"][0]["loc"] == gone
+    assert cands[0]["final"][0]["text"] == "첫 월급으로 목도리를 사 드렸다." and cands[0]["evidence"][0]["turn"] == int(gone_fact[1:])
+    outline = outline_ok()
+    found = pipe.all_findings(final, {**outline, "chapters": outline["chapters"][:1]}, data, a, {}, final=True)
+    assert not [f for f in found if f["severity"] in ("block", "fix")]                  # 통합만으로 오류를 내지 않는다
+
+
+def _one_chapter_outline(paras, units=("m1", "m2"), omit=()):
+    o = outline_ok()
+    o["chapters"] = [chapter_plan("ch-1", paras, "일과 가족", list(units))]
+    o["omit"] = list(omit)
+    o["book"]["closing_facts"] = [paras[-1]["facts"][0]]
+    return o
+
+
+def test_referenced_id_does_not_resolve_a_protected_omission():
+    data, _ = source()
+    a = analysis_ok()
+    a["facts"][1]["keep"] = True                                                   # f2 는 must_keep
+    o = _one_chapter_outline([{**para(["f1", "f2"]), "core": ["f1"]}, para(["f3", "f4"])])
+    final = _expanded([_chapter([("첫 월급을 받던 해였다.", ["f3"]), ("딸이 입학했다.", ["f4"])])], a)
+    eo = {"f1": "중복 — f3 에 남음", "f2": "중복 — f3 문장에 합침"}
+    found = pipe.all_findings(final, o, data, a, {}, final=True, edit_omitted=eo)
+    by = {(f["rule"], f.get("fact")): f["severity"] for f in found}
+    assert by[("core_omitted", "f1")] == "fix" and by[("must_keep_omitted", "f2")] == "fix"
+    assert pipe.code_gate(found, {}, [])["state"] == "attention"
+    prot = pipe.protected_omissions(found, a, data, final)
+    row = next(x for x in prot if x["rule"] == "core_omitted")
+    assert row["facts"][0]["fact"] == "f1" and row["facts"][0]["evidence"][0]["turn"] == 1
+    assert row["referenced"] == [{"fact": "f3", "final": [{"loc": "ch-1/p0/s0", "text": "첫 월급을 받던 해였다."}]}]
+
+
+# 원문 20개 시험의 사례 — 텔레비전 · 펜팔(어머니와 먼 독립 일화)과 고무신 두 일화를 짧은 원장으로 옮긴 것
+def _twenty_case():
+    a = analysis_ok()
+    a["facts"] = [fact("f1", [1], "어머니가 캐 온 꼬막 자루를 나름", "여섯 살쯤", certainty="approx"),
+                  fact("f2", [2], "이장님 댁에 동네 첫 텔레비전", "열 살 때"),
+                  fact("f3", [3], "순천 여고생과 펜팔 · 순천역에서 한 번 만남", "열여덟 살"),
+                  fact("f4", [4], "종태가 고무신을 빼앗겨 맨발로 울며 옴", "중학교 2학년"),
+                  fact("f5", [5], "동생 학교를 뒤져 고무신을 찾아냄"),
+                  fact("f6", [6], "못을 달궈 고무신 안쪽에 종태 이름을 새김")]
+    a["units"] = [{"id": "m1", "name": "꼬막 자루", "facts": ["f1"], "time": "", "weight": "main"},
+                  {"id": "m2", "name": "동네 첫 텔레비전", "facts": ["f2"], "time": "", "weight": "minor"},
+                  {"id": "m3", "name": "펜팔", "facts": ["f3"], "time": "", "weight": "minor"},
+                  {"id": "m4", "name": "빼앗긴 고무신", "facts": ["f4", "f5", "f6"], "time": "", "weight": "main"}]
+    return a
+
+
+def test_twenty_case_tv_and_penpal_dropped_whole_are_fixed_even_when_minor_or_brief_only():
+    data, _ = source()
+    a = _twenty_case()
+    o = _one_chapter_outline([{**para(["f1"]), "core": ["f1"]}, {**para(["f4", "f5", "f6"], brief=["f3"]), "core": ["f6"]},
+                              {**para(["f2"]), "core": ["f2"]}], units=("m1", "m2", "m3", "m4"))
+    final = _expanded([_chapter([("여섯 살쯤 어머니가 캐 온 꼬막 자루를 날랐다.", ["f1"]),
+                                 ("종태가 고무신을 빼앗겼다.", ["f4"]), ("나는 동생 학교를 뒤져 찾아냈다.", ["f5"]),
+                                 ("못을 달궈 이름을 새겨 주었다.", ["f6"])])], a)
+    found = pipe.episode_findings(final, o, a, {"f2": "어머니 이야기와 멀다"}, {})
+    assert {(f["rule"], f["unit"], f["severity"]) for f in found} == {
+        ("episode_omitted", "m2", "fix"),                                          # minor 이고 이유가 있어도
+        ("episode_missing", "m3", "fix")}                                          # brief 로만 계획한 펜팔도 채택이다
+
+
+def test_twenty_case_gomusin_background_loss_is_a_candidate_not_an_episode_error():
+    data, _ = source()
+    a = _twenty_case()
+    o = _one_chapter_outline([{**para(["f4", "f5", "f6"]), "core": ["f6"]}], units=("m4",),
+                             omit=[{"facts": ["f1", "f2", "f3"], "reason": "다른 장 몫"}])
+    drafts = _expanded([_chapter([("종태가 고무신을 빼앗겨 맨발로 울며 왔다.", ["f4"]),
+                                  ("다음 날 동생 학교를 뒤져 고무신을 찾아냈다.", ["f5"]),
+                                  ("그날 저녁 못을 달궈 고무신 안쪽에 이름을 새겨 주었다.", ["f6"])])], a)
+    final = _expanded([_chapter([("중학교 2학년 때 못을 달궈 고무신 안쪽에 종태 이름을 새겨 주었다.", ["f6"])])], a)
+    trace = pipe.edit_trace(drafts, final)
+    found = pipe.all_findings(final, o, data, a, {f: "다른 장 몫" for f in ("f1", "f2", "f3")}, final=True)
+    assert not [f for f in found if f["rule"].startswith("episode_m") or f["rule"] == "episode_omitted"]
+    cands = pipe.omission_candidates(drafts, final, trace, a, data, {}, {}, {"f6"})
+    assert [(c["fact"], c["kind"]) for c in cands] == [("f4", "fact_dropped"), ("f5", "fact_dropped")]
+    assert cands[0]["draft"][0]["text"].startswith("종태가 고무신을 빼앗겨")              # 검증이 원문과 대조할 재료
+
+
+def test_outline_exclusion_edit_omission_and_focus_scope_are_kept_apart():
+    data, _ = source()
+    a = analysis_ok()
+    a["facts"][3]["keep"] = True                                                   # f4 must_keep, 목차가 뺐다
+    o = _one_chapter_outline([{**para(["f1", "f2"]), "core": ["f1"]}], units=("m1",),
+                             omit=[{"facts": ["f3", "f4"], "reason": "한 장 시험 범위 밖 — 딸의 장 몫"}])
+    outline_omit = {"f3": "한 장 시험 범위 밖", "f4": "한 장 시험 범위 밖"}
+    final = _expanded([_chapter([("첫 월급으로 목도리를 사 드렸다.", ["f1", "f2"])])], a)
+    found = pipe.all_findings(final, o, data, a, outline_omit, final=True, edit_omitted=dict(outline_omit))
+    rules = {(f["rule"], f.get("fact") or f.get("unit"), f["severity"]) for f in found
+             if f["rule"].startswith(("episode_", "must_keep_"))}
+    assert rules == {("episode_excluded", "m2", "review"), ("must_keep_excluded", "f4", "review")}
+    assert pipe.code_gate(found, {}, [])["state"] == "pass"                        # 범위 밖은 편집 누락이 아니다
+    gone = pipe.all_findings(_expanded([_chapter([("딴 얘기다.", ["f3"])])], a), _one_chapter_outline(
+        [{**para(["f1", "f2"]), "core": ["f1"]}, {**para(["f3", "f4"]), "core": ["f3"]}]), data, a, {}, final=True,
+        edit_omitted={"f1": "줄임", "f2": "줄임"})
+    assert ("episode_omitted", "m1") in {(f["rule"], f.get("unit")) for f in gone}
+
+
+def test_core_unset_warning_reaches_verify_through_plan_checks():
+    fake = Fake(script())
+    r = go(fake)
+    checks = fake.payload("verify")["plan"]["checks"]
+    core_warn = [c for c in checks if CORE_WARN in c]
+    assert len(core_warn) == 2 and all(c.startswith("outline: ch-") for c in core_warn)  # 장마다 일화 하나씩
+    assert r["code_gate"] == "pass" and r["overall"] == "awaiting_human"           # 형식 오류 · 게이트 실패가 아니다
+    with_core = outline_ok()
+    for ch in with_core["chapters"]:
+        ch["paragraphs"][0]["core"] = ch["paragraphs"][0]["facts"][:1]
+    status, w = pipe.check_outline(with_core, analysis_ok(), set(range(1, 7)))
+    assert status == "ready" and not [x for x in w if CORE_WARN in x]
+    brief_only = outline_ok()
+    brief_only["chapters"][1]["paragraphs"] = [{**para(["f3"], brief=["f4"]), "core": ["f3"]}]
+    brief_only["chapters"][0]["paragraphs"][0]["core"] = ["f1"]
+    _, w = pipe.check_outline(brief_only, analysis_ok(), set(range(1, 7)))
+    assert not [x for x in w if CORE_WARN in x]                                    # 기준은 facts 의 주된 서술
+
+
+def test_verify_receives_omission_review_and_protected_omissions():
+    edit = edited_ok()
+    edit["chapters"][1]["paragraphs"] = [[sent("뒤의 일이다.", ["f3"])]]          # f4 를 말없이 뺐다
+    fake = Fake(script(edit=edit))
+    r = go(fake)
+    plan = fake.payload("verify")["plan"]
+    assert [(c["fact"], c["kind"]) for c in plan["omission_review"]] == [("f4", "fact_dropped")]
+    assert plan["omission_review"][0]["evidence"][0]["turn"] == 6
+    assert "omission_review" in fake.specs[-1].user.split("\n\n", 1)[0]           # 검증 입력 설명
+    assert r["code_gate"] == "pass"                                                # 보조 사실 생략은 후보일 뿐
+    keep = analysis_ok()
+    keep["facts"][3]["keep"] = True
+    fake = Fake(script(analysis=keep, edit=edit))
+    r = go(fake)
+    prot = fake.payload("verify")["plan"]["protected_omissions"]
+    assert [(x["rule"], x["facts"][0]["fact"]) for x in prot] == [("must_keep_missing", "f4")]
+    assert r["overall"] == "needs_revision"                                        # 미해결 보호 누락은 상태에 남는다
+
+
+def test_title_composition_warning_fits_the_verify_contract(tmp_path):
+    v = verify_ok(issues=[{"location": "title", "category": "composition", "severity": "warning",
+                           "code": "theme_contradiction", "resolution": "auto_fix",
+                           "explanation": "제목의 교복 이야기가 본문에 없다", "source_turns": [1], "fix_instruction": ""}])
+    locs = pipe.locations(edited_ok())
+    assert isinstance(pipe.check_verify(json.loads(json.dumps(v)), set(range(1, 7)), locs), list)   # 형식 거부 없음
+    r = go(Fake(script(verify=v)))
+    assert r["model_verdict"] == "pass" and r["verification"]["issues"][0]["code"] == "theme_contradiction"
+
+
+def _saved_edit(path, sentences=False):
+    return json.loads((ROOT / "tests" / "data" / path / ("04_edited_sentences.json" if sentences else "04_edited.json"))
+                      .read_text(encoding="utf-8"))["chapters"]
+
+
+def test_saved_pro_edits_give_the_expected_candidates_and_no_episode_loss():
+    """02:49Z v5 · 04:32Z v6 Pro 편집을 Pro 초안과 견준다 — 실제로 있었던 손실이 후보로 나오는지."""
+    data, _, _, a = _fixture_analysis()
+    o = json.loads(OUTLINE_C2.read_text(encoding="utf-8"))["outline"]
+    omit = {f: x["reason"] for x in o["omit"] for f in x["facts"]}
+    book = pipe.ledger(a)
+    d = [json.loads((PRO_DRAFT / "03_ch-1.json").read_text(encoding="utf-8"))]
+    pipe.expand_turns(d, book)
+    protected = set(pipe.plan_core(o)) | pipe.must_keep(a)
+    for name, sentences, want in [("v5_edit_pro_20261027T024949Z", False, {("f16", "fact_changed")}),
+                                  ("v6_edit_pro_20261027T043228Z", True,
+                                   {(f, "fact_dropped") for f in ("f16", "f26", "f33", "f62", "f65")})]:
+        fin = _saved_edit(name, sentences)
+        pipe.expand_turns(fin, book)
+        trace = pipe.edit_trace(d, fin)
+        cands = pipe.omission_candidates(d, fin, trace, a, data, {}, omit, protected)
+        got = {(c["fact"], c["kind"]) for c in cands}
+        assert want <= got, name
+        if name.startswith("v5"):
+            f16 = next(c for c in cands if c["fact"] == "f16")
+            assert any("부정" in s for s in f16["signals"])                         # 턴 10 「저는 기억은 안 나요」
+        ep = pipe.episode_findings(fin, o, a, {}, omit)
+        assert all(f["rule"] == "episode_excluded" and f["severity"] == "review" for f in ep)   # 채택한 일화는 다 남았다
+        # 목차 r2 가 통째로 뺀 일화 — 편집이 되살린 m5(부산 · 바다)는 빠지고 나머지는 검토 대상으로
+        assert {f["unit"] for f in ep} == {"m6", "m8", "m9", "m11"}
