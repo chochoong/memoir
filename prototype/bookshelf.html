@@ -1,0 +1,589 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <title>기억을 담은 책장</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Gowun+Batang:wght@400;700&display=swap" rel="stylesheet" />
+  <style>
+    :root {
+      --bg: #f3ece0;
+      --ink: #3d2e22;
+      --muted: #85735f;
+      --gold: #c49a4c;
+      --line: #b8a184;
+      --paper: #fbf6ea;
+      --serif: "Gowun Batang", "Nanum Myeongjo", serif;
+    }
+    * { box-sizing: border-box; }
+    html, body { margin: 0; }
+    body {
+      min-height: 100dvh;
+      background:
+        radial-gradient(ellipse 90% 60% at 50% 0%, #fbf7ef 0%, rgba(251,247,239,0) 70%),
+        radial-gradient(ellipse 120% 80% at 50% 120%, #e6dac5 0%, rgba(230,218,197,0) 60%),
+        var(--bg);
+      color: var(--ink);
+      font-family: var(--serif);
+      -webkit-font-smoothing: antialiased;
+      -webkit-tap-highlight-color: transparent;
+    }
+    body.locked { overflow: hidden; }
+    button { font: inherit; color: inherit; }
+
+    /* ── 01 책장 ─────────────────────────────── */
+    .shelf {
+      max-width: 460px; margin: 0 auto; padding: 48px 16px 40px;
+      transition: opacity .5s ease, visibility .5s;
+    }
+    .shelf.away { opacity: 0; visibility: hidden; }
+    .shelf header { text-align: center; margin-bottom: 40px; }
+    .shelf h1 { font-size: clamp(1.9rem, 8vw, 2.3rem); font-weight: 700; letter-spacing: -.03em; margin: 0 0 10px; }
+    .shelf .sub { margin: 0; color: var(--muted); font-size: 1rem; letter-spacing: .02em; }
+    .shelf .rule { display: block; width: 72px; height: 1px; background: var(--gold); margin: 22px auto 0; }
+
+    .shelves { transition: opacity .5s ease, filter .5s ease; }
+    .shelf.dim .shelves { opacity: .4; filter: blur(1.5px) saturate(.7); }
+    .row { margin-bottom: 44px; }
+    .books {
+      display: grid; grid-template-columns: 1fr 1fr; gap: 0 18px;
+      align-items: end; padding: 0 18px;
+    }
+    .slot { position: relative; display: flex; justify-content: center; }
+    .slot::after { /* 꺼낼 때 선반에 비치는 빛 */
+      content: ""; position: absolute; left: 0; right: 0; bottom: -7px; height: 10px;
+      background: radial-gradient(ellipse 50% 50% at 50% 50%, rgba(255,198,92,.95), rgba(255,198,92,0));
+      opacity: 0; transition: opacity .3s;
+    }
+    .slot:hover::after, .slot:has(.book:focus-visible)::after { opacity: 1; }
+    .book {
+      width: 90%; aspect-ratio: var(--ar, .72);
+      padding: 0; border: 0; background: none; cursor: pointer;
+      transition: transform .3s cubic-bezier(.2,.7,.2,1);
+      filter: drop-shadow(0 6px 6px rgba(60,38,20,.28));
+    }
+    .book:hover, .book:focus-visible { transform: translateY(-6px); }
+    .book:focus-visible { outline: 2px solid var(--gold); outline-offset: 4px; }
+    .plank {
+      position: relative; height: 16px; margin: 0 4px; border-radius: 2px 2px 3px 3px;
+      background:
+        repeating-linear-gradient(90deg, rgba(255,255,255,0) 0 37px, rgba(60,30,10,.12) 37px 39px, rgba(255,255,255,0) 39px 71px),
+        linear-gradient(#a2724c, #7d5437 40%, #5f3e28);
+      box-shadow: 0 14px 16px -8px rgba(60,35,15,.5), inset 0 1px 0 rgba(255,235,200,.35);
+    }
+
+    /* 표지 — 책장, 꺼낸 책 모두 이것 하나로 그린다 */
+    .cover {
+      container-type: inline-size;
+      position: relative; display: flex; flex-direction: column; align-items: center; justify-content: center;
+      width: 100%; height: 100%; border-radius: 2px 5px 5px 2px; color: var(--t);
+      background:
+        linear-gradient(90deg, rgba(0,0,0,.30) 0, rgba(0,0,0,.10) 6%, rgba(255,255,255,.14) 8.5%, rgba(0,0,0,0) 13%, rgba(255,255,255,.06) 55%, rgba(0,0,0,.14) 100%),
+        repeating-linear-gradient(0deg, rgba(255,255,255,.05) 0 1px, rgba(0,0,0,0) 1px 3px),
+        repeating-linear-gradient(90deg, rgba(0,0,0,.05) 0 1px, rgba(0,0,0,0) 1px 3px),
+        var(--c);
+      box-shadow: inset 0 0 0 1px rgba(0,0,0,.12), inset 0 1px 0 rgba(255,255,255,.2);
+    }
+    .cover .t {
+      font-family: var(--serif); font-weight: 700; font-size: 15cqw; line-height: 1.35;
+      white-space: pre-line; text-align: center; padding-left: 8cqw; word-break: keep-all;
+      text-shadow: 0 1px 0 rgba(0,0,0,.18);
+    }
+    .cover .bar { width: 30cqw; height: 1px; margin: 9cqw 0 0 8cqw; background: var(--bar, currentColor); opacity: .85; }
+
+    .rec {
+      display: flex; align-items: center; justify-content: center; gap: 12px;
+      margin: 8px 18px 0; padding: 18px; border: 1px solid var(--gold); border-radius: 10px;
+      color: var(--ink); text-decoration: none; font-size: 1.15rem; font-weight: 700;
+      background: rgba(255,252,244,.5); transition: background .2s;
+    }
+    .rec:hover { background: rgba(255,252,244,.95); }
+    .rec svg { width: 22px; height: 22px; }
+
+    /* ── 02 꺼내는 책 ─────────────────────────── */
+    .fly {
+      position: fixed; z-index: 50; transform-origin: 0 50%; transform-style: preserve-3d;
+      pointer-events: none;
+    }
+    .fly > * { position: absolute; }
+    .fly-back {
+      inset: 0; border-radius: 2px 5px 5px 2px; background: var(--c);
+      box-shadow: 0 28px 50px rgba(50,30,15,.35), inset 0 0 0 1px rgba(0,0,0,.15);
+    }
+    .fly-pages {
+      top: 2.5%; bottom: 2.5%; left: 0; right: 3%; transform: translateZ(calc(var(--th) - 1px));
+      background: linear-gradient(90deg, #ddd0b4 0, #f7f1e3 7%, var(--paper) 100%);
+      border-radius: 0 3px 3px 0;
+    }
+    .fly-edge {
+      top: 2.5%; bottom: 2.5%; left: 97%; width: var(--th);
+      transform-origin: 0 50%; transform: rotateY(-90deg);
+      background: repeating-linear-gradient(90deg, #f3ead6 0 2px, #d9cbb0 2px 3px);
+    }
+    .fly-cover { inset: 0; transform-origin: 0 50%; transform-style: preserve-3d; transform: translateZ(var(--th)); }
+    .fly-cover .face { position: absolute; inset: 0; backface-visibility: hidden; -webkit-backface-visibility: hidden; }
+    .fly-cover .face.back {
+      transform: rotateY(180deg); border-radius: 5px 2px 2px 5px; background: var(--c);
+    }
+    .fly-cover .face.back::before { /* 면지 */
+      content: ""; position: absolute; top: 2.5%; bottom: 2.5%; left: 3%; right: 0;
+      background: linear-gradient(90deg, var(--paper) 0, #f7f1e3 92%, #ddd0b4 100%);
+      border-radius: 3px 0 0 3px;
+    }
+
+    /* ── 03 펼친 책 ───────────────────────────── */
+    .reader {
+      position: fixed; inset: 0; z-index: 40; overflow-y: auto;
+      display: flex; flex-direction: column; align-items: center;
+      padding: max(14px, env(safe-area-inset-top)) 16px max(18px, env(safe-area-inset-bottom));
+      background: inherit;
+      background:
+        radial-gradient(ellipse 90% 60% at 50% 0%, #fbf7ef 0%, rgba(251,247,239,0) 70%),
+        var(--bg);
+    }
+    .reader[hidden] { display: none; }
+    .reader.pre { background: transparent; }
+    .reader .fade { transition: opacity .45s ease; }
+    .reader.pre .fade, .reader.pre .open-book { opacity: 0; }
+
+    .topbar { width: 100%; max-width: 680px; display: flex; justify-content: space-between; align-items: center; }
+    .back {
+      display: flex; align-items: center; gap: 8px; padding: 10px 6px; border: 0; background: none;
+      font-size: 1.1rem; cursor: pointer;
+    }
+    .back svg { width: 20px; height: 20px; }
+    .fs {
+      width: 44px; height: 44px; border: 1px solid var(--ink); border-radius: 8px; background: none;
+      font-size: 1.15rem; cursor: pointer;
+    }
+    .stage { flex: 1; display: grid; place-items: center; width: 100%; padding: 24px 0; }
+
+    .open-book {
+      position: relative; perspective: 2400px; transform-style: preserve-3d;
+      width: var(--bw); height: var(--bh);
+    }
+    .open-book::before { /* 겉표지 판 */
+      content: ""; position: absolute; inset: -9px -11px -16px; border-radius: 6px;
+      background:
+        repeating-linear-gradient(0deg, rgba(255,255,255,.05) 0 1px, rgba(0,0,0,0) 1px 3px),
+        repeating-linear-gradient(90deg, rgba(0,0,0,.05) 0 1px, rgba(0,0,0,0) 1px 3px),
+        var(--c);
+      box-shadow: 0 26px 40px -12px rgba(50,30,15,.45), inset 0 0 0 1px rgba(0,0,0,.18);
+    }
+    .open-book::after { /* 아래로 겹친 종이 결 */
+      content: ""; position: absolute; left: 1px; right: 1px; bottom: -6px; height: 6px;
+      background: repeating-linear-gradient(180deg, #efe5cf 0 1px, #d3c4a6 1px 2px);
+      border-radius: 0 0 3px 3px;
+    }
+    .page {
+      position: absolute; top: 0; bottom: 0; width: 50%; overflow: hidden;
+      font-size: calc(var(--fs) * var(--k, 1));
+    }
+    .page.left {
+      left: 0; border-radius: 4px 0 0 4px;
+      background: linear-gradient(90deg, #f3ead7 0%, var(--paper) 18%, var(--paper) 80%, #e7dabe 100%);
+    }
+    .page.right {
+      left: 50%; border-radius: 0 4px 4px 0;
+      background: linear-gradient(90deg, #e2d4b6 0%, #f5eedd 9%, var(--paper) 25%, var(--paper) 85%, #f1e8d4 100%);
+    }
+    .pc {
+      position: absolute; inset: 0 0 34px; padding: 2.4em 12% 0;
+      overflow-y: auto; scrollbar-width: none;
+      word-break: keep-all; overflow-wrap: anywhere;
+    }
+    .pc::-webkit-scrollbar { display: none; }
+    .pc p { margin: 0 0 1.1em; line-height: 1.85; white-space: pre-line; }
+    .no {
+      position: absolute; bottom: 14px; left: 0; right: 0; text-align: center;
+      font-size: .78rem; color: var(--muted); letter-spacing: .1em;
+    }
+    .pc.title-pg { display: flex; flex-direction: column; padding-top: 3.2em; padding-bottom: .4em; }
+    .kicker { font-size: .85em; color: var(--muted); margin-bottom: .9em !important; }
+    .pc h2 { font-size: 1.9em; line-height: 1.3; margin: 0; letter-spacing: -.03em; font-weight: 700; }
+    .pc .rule { display: block; width: 2.6em; height: 1px; background: var(--gold); margin: 1.2em 0 1.6em; }
+    .pc .meta { margin-top: auto !important; font-size: .8em; color: var(--muted); line-height: 1.6; }
+    .pc.end { display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; }
+    .pc.end .orn { color: var(--gold); letter-spacing: .3em; margin-bottom: 1.2em; }
+    .pc.end .meta { margin-top: 0 !important; }
+
+    .ribbon {
+      position: absolute; top: -12px; right: 1.2%; width: 12px; height: 15%; z-index: 6;
+      background: linear-gradient(90deg, rgba(0,0,0,.18), rgba(255,255,255,.08) 50%, rgba(0,0,0,.15)), var(--c);
+      clip-path: polygon(0 0, 100% 0, 100% 100%, 50% 86%, 0 100%);
+      filter: brightness(.85);
+    }
+
+    .leaf { position: absolute; top: 0; bottom: 0; width: 50%; z-index: 5; transform-style: preserve-3d; }
+    .leaf.fwd { left: 50%; transform-origin: 0 50%; }
+    .leaf.bwd { left: 0; transform-origin: 100% 50%; }
+    .leaf .page { left: 0; width: 100%; backface-visibility: hidden; -webkit-backface-visibility: hidden; }
+    .leaf .page.back { transform: rotateY(180deg); }
+    .shade { position: absolute; inset: 0; pointer-events: none; opacity: 0; }
+    .leaf .page.right .shade { background: linear-gradient(90deg, rgba(60,40,20,.35), rgba(60,40,20,.05)); }
+    .leaf .page.left .shade { background: linear-gradient(270deg, rgba(60,40,20,.35), rgba(60,40,20,.05)); }
+
+    .pager { display: flex; align-items: center; gap: 34px; padding-top: 4px; }
+    .pager button {
+      width: 50px; height: 50px; display: grid; place-items: center;
+      border: 1px solid var(--ink); border-radius: 8px; background: none; cursor: pointer;
+    }
+    .pager button:disabled { opacity: .3; cursor: default; }
+    .pager svg { width: 20px; height: 20px; }
+    .count { font-size: 1.15rem; min-width: 56px; text-align: center; letter-spacing: .08em; }
+
+    @media (prefers-reduced-motion: reduce) {
+      .book, .shelf, .shelves { transition: none; }
+    }
+  </style>
+</head>
+<body>
+
+  <!-- 01 기억이 모인 책장 -->
+  <main class="shelf" id="shelf">
+    <header>
+      <h1>기억을 담은 책장</h1>
+      <p class="sub">목소리로 남긴 나의 이야기</p>
+      <span class="rule"></span>
+    </header>
+    <div class="shelves" id="shelves"></div>
+    <a class="rec" href="index.html">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" aria-hidden="true">
+        <rect x="9" y="3" width="6" height="11" rx="3" /><path d="M5.5 11a6.5 6.5 0 0 0 13 0M12 17.5V21M8.5 21h7" />
+      </svg>
+      새 기억 녹음
+    </a>
+  </main>
+
+  <!-- 03 이야기 펼쳐 보기 -->
+  <section class="reader" id="reader" hidden aria-label="책 읽기">
+    <div class="topbar fade">
+      <button class="back" id="backBtn" type="button">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 5l-7 7 7 7" /></svg>
+        책장으로
+      </button>
+      <button class="fs" id="fsBtn" type="button" aria-label="글자 크기 바꾸기">가</button>
+    </div>
+    <div class="stage">
+      <div class="open-book" id="openBook">
+        <div class="page left" id="pageL"></div>
+        <div class="page right" id="pageR"></div>
+        <span class="ribbon" aria-hidden="true"></span>
+      </div>
+    </div>
+    <nav class="pager fade" aria-label="쪽 넘기기">
+      <button id="prevBtn" type="button" aria-label="앞 쪽">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M15 5l-7 7 7 7" /></svg>
+      </button>
+      <span class="count" id="count">1 / 1</span>
+      <button id="nextBtn" type="button" aria-label="다음 쪽">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M9 5l7 7-7 7" /></svg>
+      </button>
+    </nav>
+  </section>
+
+  <script>
+    // 책 한 권 = 녹음 한 회차를 정리한 이야기.
+    // 나중에는 백엔드의 회고록 결과로 이 배열을 채운다.
+    const MEMORIES = [
+      {
+        id: "summer", title: "그해 여름", cover: "그해 여름", c: "#5f6e48", t: "#e6c98a", ar: .72,
+        lead: "오래도록 남아 있는\n그날의 기억.", meta: "1987년 여름 · 녹음 14분",
+        pages: [
+          "그해 여름, 우리는 바다로 갔다. 창문으로 들어오던 바람과 함께 웃음소리가 차 안을 가득 채웠다.\n\n오랜 시간이 흘렀지만, 그날의 따뜻한 마음은 아직도 선명하다.",
+          "아이들은 뒷자리에서 번갈아 노래를 불렀다. 남편은 운전대를 잡고 박자를 맞추느라 고개를 끄덕였다. 길은 멀었지만 아무도 지루해하지 않았다.",
+          "모래사장에 닿자마자 막내가 신발도 벗지 않고 바다로 뛰어들었다. 나는 소리를 지르면서도 웃음이 났다. 그 신발은 끝내 마르지 않았다.",
+          "저녁에는 민박집 마당에서 옥수수를 쪄 먹었다. 주인 할머니가 내어 준 평상에 누워 별을 셌다. 그렇게 많은 별은 그 뒤로 본 적이 없다.",
+          "돌아오는 길, 아이들은 모두 잠들어 있었다. 남편이 조용히 말했다. \"내년에도 또 오자.\" 우리는 그 약속을 다섯 번 지켰다.",
+          "지금도 여름이 오면 그 바다 냄새가 먼저 생각난다. 아무것도 아닌 하루를 함께 보냈고, 그 하루가 평생 남았다."
+        ]
+      },
+      {
+        id: "table", title: "어머니의 밥상", cover: "어머니의\n밥상", c: "#e4d9c3", t: "#5b4330", bar: "#b48c46", ar: .76,
+        lead: "아랫목에 묻어 둔\n밥 한 그릇.", meta: "1962년 겨울 · 녹음 9분",
+        pages: [
+          "학교에서 돌아오면 아랫목 이불 밑에 밥그릇이 묻혀 있었다. 뚜껑을 열면 김이 올라왔다. 어머니는 늘 밭에 계셨지만, 밥은 언제나 따뜻했다.",
+          "반찬은 김치와 콩자반이 전부였다. 그래도 어머니가 끓인 된장국 하나면 형제 넷이 밥 한 톨 남기지 않았다.",
+          "어머니는 우리가 다 먹을 때까지 숟가락을 들지 않으셨다. 그때는 몰랐다. 남은 누룽지가 어머니의 저녁이었다는 것을."
+        ]
+      },
+      {
+        id: "work", title: "첫 출근", cover: "첫 출근", c: "#6b5242", t: "#e6c98a", ar: .74,
+        lead: "새 구두가 발뒤꿈치를\n물던 아침.", meta: "1971년 봄 · 녹음 11분",
+        pages: [
+          "첫 출근 날, 아버지가 사 주신 구두를 신었다. 버스에서 내려 회사까지 걷는 동안 발뒤꿈치가 까졌지만 아프다는 생각도 들지 않았다.",
+          "과장님은 내 이름을 두 번이나 틀리게 불렀다. 점심에는 선배가 짜장면을 사 주었다. 그 맛이 지금도 기억난다.",
+          "퇴근길에 첫 월급을 받으면 무엇을 할지 생각했다. 어머니께 내복을 사 드리자. 한 달 뒤, 나는 정말 그렇게 했다.",
+          "그 회사에서 서른두 해를 일했다. 구두는 몇 켤레를 갈아 신었는지 모르지만, 첫 구두는 아직 신발장 맨 위에 있다."
+        ]
+      },
+      {
+        id: "spring", title: "봄날의 산책", cover: "봄날의\n산책", c: "#a95f47", t: "#f2d9a6", ar: .73,
+        lead: "벚꽃 아래를\n천천히 걸었다.", meta: "2019년 4월 · 녹음 7분",
+        pages: [
+          "손녀가 휠체어를 밀어 주겠다고 했지만, 그날은 내 발로 걷고 싶었다. 천변을 따라 벚꽃이 길게 피어 있었다.",
+          "손녀는 걸음을 맞추느라 몇 번이고 멈춰 섰다. 꽃잎이 머리에 내려앉으면 웃으며 떼어 주었다.",
+          "벤치에 앉아 귤을 나눠 먹었다. 손녀가 물었다. \"할머니는 언제가 제일 좋았어요?\" 나는 지금이라고 대답했다.",
+          "그 말은 거짓이 아니었다. 봄볕이 등을 데우고, 옆에는 내 이야기를 들어 주는 사람이 있었다.",
+          "집에 돌아와 신발을 벗으니 꽃잎 하나가 따라 들어와 있었다. 손녀는 그것을 책갈피로 만들어 주었다."
+        ]
+      }
+    ];
+
+    const $ = (id) => document.getElementById(id);
+    const shelf = $("shelf"), shelves = $("shelves"), reader = $("reader"), openBookEl = $("openBook");
+    const pageL = $("pageL"), pageR = $("pageR");
+    const reduceMotion = matchMedia("(prefers-reduced-motion: reduce)").matches;
+    const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+    const anim = (el, kf, opt) => el.animate(kf, { fill: "forwards", ...opt }).finished;
+
+    let current = null;   // 펼친 책
+    let spreads = [];     // [[왼쪽 쪽, 오른쪽 쪽], ...]
+    let at = 0;           // 지금 펼친 면
+    let busy = false;     // 애니메이션 중에는 다른 입력을 받지 않는다
+
+    // ── 01 책장 그리기 ──
+    function coverHTML(m) {
+      return `<span class="cover" style="--c:${m.c};--t:${m.t};${m.bar ? `--bar:${m.bar}` : ""}">
+        <span class="t">${m.cover}</span><span class="bar"></span></span>`;
+    }
+    function renderShelf() {
+      let html = "";
+      for (let i = 0; i < MEMORIES.length; i += 2) {
+        html += `<div class="row"><div class="books">`;
+        for (const m of MEMORIES.slice(i, i + 2)) {
+          html += `<div class="slot"><button class="book" type="button" data-id="${m.id}"
+            style="--ar:${m.ar}" aria-label="${m.title} 펼치기">${coverHTML(m)}</button></div>`;
+        }
+        html += `</div><div class="plank"></div></div>`;
+      }
+      shelves.innerHTML = html;
+    }
+    shelves.addEventListener("click", (e) => {
+      const btn = e.target.closest(".book");
+      if (btn) openBook(MEMORIES.find((m) => m.id === btn.dataset.id), btn);
+    });
+
+    // ── 03 쪽 만들기 ──
+    function buildSpreads(m) {
+      const pages = [
+        `<div class="pc title-pg"><p class="kicker">나의 이야기</p><h2>${m.title}</h2>
+          <span class="rule"></span><p>${m.lead}</p><p class="meta">${m.meta}</p></div>`,
+        ...m.pages.map((txt, i) => `<div class="pc"><p>${txt}</p></div><span class="no">${i + 1}</span>`)
+      ];
+      if (pages.length % 2) {
+        pages.push(`<div class="pc end"><span class="orn">· 끝 ·</span><p class="meta">${m.meta}</p></div>`);
+      }
+      const out = [];
+      for (let i = 0; i < pages.length; i += 2) out.push([pages[i], pages[i + 1]]);
+      return out;
+    }
+    function showSpread() {
+      [pageL.innerHTML, pageR.innerHTML] = spreads[at];
+      $("count").textContent = `${at + 1} / ${spreads.length}`;
+      $("prevBtn").disabled = at === 0;
+      $("nextBtn").disabled = at === spreads.length - 1;
+    }
+    function sizeBook() {
+      const vw = innerWidth, vh = innerHeight;
+      const bw = Math.min(vw - 40, 680);
+      const bh = Math.min(bw * (bw < 520 ? 1.05 : .72), vh - 200);
+      openBookEl.style.setProperty("--bw", bw + "px");
+      openBookEl.style.setProperty("--bh", Math.max(bh, 260) + "px");
+      openBookEl.style.setProperty("--fs", Math.min(17, Math.max(13.5, bw / 30)) + "px");
+    }
+    addEventListener("resize", sizeBook);
+
+    // 글자 크기: 보통 → 크게 → 아주 크게
+    const SIZES = [1, 1.15, 1.3];
+    let sizeAt = 0;
+    try { sizeAt = +localStorage.getItem("shelf-fs") || 0; } catch {}
+    function applySize() {
+      openBookEl.style.setProperty("--k", SIZES[sizeAt % SIZES.length]);
+    }
+    $("fsBtn").addEventListener("click", () => {
+      sizeAt = (sizeAt + 1) % SIZES.length;
+      applySize();
+      try { localStorage.setItem("shelf-fs", sizeAt); } catch {}
+    });
+    applySize();
+
+    // ── 02 꺼내는 책 (책장 ↔ 펼친 책 사이를 잇는 3D 책) ──
+    // 기준점은 책등(왼쪽 가운데). 책등을 옮기고 키우면 책장 칸, 화면 가운데, 펼친 책 자리에 정확히 맞는다.
+    function makeFly(m, w, h) {
+      const fly = document.createElement("div");
+      fly.className = "fly";
+      fly.style.cssText = `--c:${m.c};--t:${m.t};--th:${Math.round(w * .07)}px;width:${w}px;height:${h}px;`
+        + `left:${(innerWidth - w) / 2}px;top:${centerY() - h / 2}px`;
+      fly.innerHTML = `<div class="fly-back"></div><div class="fly-edge"></div><div class="fly-pages"></div>
+        <div class="fly-cover"><div class="face front">${coverHTML(m)}</div><div class="face back"></div></div>`;
+      document.body.appendChild(fly);
+      return fly;
+    }
+    const centerY = () => innerHeight * .46;
+    const T = (x, y, sx, sy, extra = "") => `perspective(1600px) translate(${x}px, ${y}px) scale(${sx}, ${sy}) ${extra}`;
+
+    function geometry(m, btn) {
+      const r = btn.getBoundingClientRect();
+      const w = Math.min(250, innerWidth * .6), h = w * r.height / r.width;
+      const left = (innerWidth - w) / 2, cy = centerY();
+      const ob = openBookEl.getBoundingClientRect();
+      return {
+        w, h,
+        shelf: T(r.left - left, r.top + r.height / 2 - cy, r.width / w, r.width / w),
+        lifted: T(0, 0, 1, 1, "rotateY(-12deg) rotateZ(-2deg)"),
+        open: (() => { const s = Math.min(1, (innerWidth - 32) / (2 * w)); return T(w / 2, 0, s, s); })(),
+        spread: T(ob.left + ob.width / 2 - left, ob.top + ob.height / 2 - cy, ob.width / 2 / w, ob.height / h)
+      };
+    }
+
+    async function openBook(m, btn) {
+      if (busy) return;
+      busy = true;
+      current = m;
+      spreads = buildSpreads(m);
+      at = 0;
+      reader.style.setProperty("--c", m.c);
+      showSpread();
+      sizeBook();
+      reader.hidden = false;
+      reader.classList.add("pre");
+      document.body.classList.add("locked");
+
+      if (!reduceMotion) {
+        const g = geometry(m, btn);
+        const fly = makeFly(m, g.w, g.h);
+        const cover = fly.querySelector(".fly-cover");
+        const th = `translateZ(${Math.round(g.w * .07)}px)`;
+        btn.style.visibility = "hidden";
+        shelf.classList.add("dim");
+
+        // 1) 선반에서 앞으로 빼내어 가운데로
+        await anim(fly, [
+          { transform: g.shelf },
+          { transform: T(0, -16, 1.04, 1.04, "rotateY(-16deg) rotateZ(-3deg)"), offset: .72 },
+          { transform: g.lifted }
+        ], { duration: 820, easing: "cubic-bezier(.25,.8,.25,1)" });
+        await wait(160);
+
+        // 2) 표지를 넘겨 펼친다
+        shelf.classList.add("away");
+        await Promise.all([
+          anim(fly, [{ transform: g.lifted }, { transform: g.open }], { duration: 900, easing: "cubic-bezier(.45,.05,.25,1)" }),
+          anim(cover, [{ transform: `${th} rotateY(0deg)` }, { transform: `${th} rotateY(-180deg)` }],
+            { duration: 900, easing: "cubic-bezier(.45,.05,.25,1)" })
+        ]);
+
+        // 3) 읽기 화면의 책 자리에 맞추고 바꿔 끼운다
+        await anim(fly, [{ transform: g.open }, { transform: g.spread }], { duration: 480, easing: "cubic-bezier(.3,.7,.2,1)" });
+        reader.classList.remove("pre");
+        await anim(fly, [{ opacity: 1 }, { opacity: 0 }], { duration: 220 });
+        fly.remove();
+        btn.style.visibility = "";
+        shelf.classList.remove("dim");
+      } else {
+        shelf.classList.add("away");
+        reader.classList.remove("pre");
+      }
+      $("backBtn").focus({ preventScroll: true });
+      busy = false;
+    }
+
+    async function closeBook() {
+      if (busy || !current) return;
+      busy = true;
+      const m = current;
+      const btn = shelves.querySelector(`[data-id="${m.id}"]`);
+
+      if (!reduceMotion) {
+        const g = geometry(m, btn);
+        const fly = makeFly(m, g.w, g.h);
+        const cover = fly.querySelector(".fly-cover");
+        const th = `translateZ(${Math.round(g.w * .07)}px)`;
+        cover.style.transform = `${th} rotateY(-180deg)`;
+        fly.style.transform = g.spread;
+        btn.style.visibility = "hidden";
+        reader.classList.add("pre");
+        shelf.classList.add("dim");
+        shelf.classList.remove("away");
+
+        await anim(fly, [{ transform: g.spread }, { transform: g.open }], { duration: 420, easing: "cubic-bezier(.3,.7,.2,1)" });
+        await Promise.all([
+          anim(fly, [{ transform: g.open }, { transform: g.lifted }], { duration: 760, easing: "cubic-bezier(.45,.05,.25,1)" }),
+          anim(cover, [{ transform: `${th} rotateY(-180deg)` }, { transform: `${th} rotateY(0deg)` }],
+            { duration: 760, easing: "cubic-bezier(.45,.05,.25,1)" })
+        ]);
+        reader.hidden = true;
+        document.body.classList.remove("locked");
+        shelf.classList.remove("dim");
+        await anim(fly, [{ transform: g.lifted }, { transform: g.shelf }], { duration: 680, easing: "cubic-bezier(.5,0,.2,1)" });
+        btn.style.visibility = "";
+        fly.remove();
+      } else {
+        reader.hidden = true;
+        document.body.classList.remove("locked");
+        shelf.classList.remove("away");
+      }
+      reader.classList.remove("pre");
+      current = null;
+      btn.focus({ preventScroll: true });
+      busy = false;
+    }
+    $("backBtn").addEventListener("click", closeBook);
+
+    // ── 쪽 넘기기 ──
+    async function turn(dir) {
+      const next = at + dir;
+      if (busy || next < 0 || next >= spreads.length) return;
+      busy = true;
+      const [L, R] = spreads[at], [nL, nR] = spreads[next];
+      if (!reduceMotion) {
+        const leaf = document.createElement("div");
+        leaf.className = "leaf " + (dir > 0 ? "fwd" : "bwd");
+        leaf.innerHTML = dir > 0
+          ? `<div class="page right">${R}<span class="shade"></span></div><div class="page left back">${nL}<span class="shade"></span></div>`
+          : `<div class="page left">${L}<span class="shade"></span></div><div class="page right back">${nR}<span class="shade"></span></div>`;
+        openBookEl.appendChild(leaf);
+        if (dir > 0) pageR.innerHTML = nR; else pageL.innerHTML = nL;
+        const [front, back] = leaf.querySelectorAll(".shade");
+        const opt = { duration: 650, easing: "cubic-bezier(.45,.05,.3,1)" };
+        await Promise.all([
+          anim(leaf, [{ transform: "rotateY(0deg)" }, { transform: `rotateY(${dir > 0 ? -180 : 180}deg)` }], opt),
+          anim(front, [{ opacity: 0 }, { opacity: 1 }], opt),
+          anim(back, [{ opacity: 1 }, { opacity: 0 }], opt)
+        ]);
+        at = next;
+        showSpread();
+        leaf.remove();
+      } else {
+        at = next;
+        showSpread();
+      }
+      busy = false;
+    }
+    $("prevBtn").addEventListener("click", () => turn(-1));
+    $("nextBtn").addEventListener("click", () => turn(1));
+
+    addEventListener("keydown", (e) => {
+      if (reader.hidden) return;
+      if (e.key === "ArrowRight") turn(1);
+      else if (e.key === "ArrowLeft") turn(-1);
+      else if (e.key === "Escape") closeBook();
+    });
+
+    // 손가락으로 밀어 넘기기
+    let downX = null;
+    openBookEl.addEventListener("pointerdown", (e) => { downX = e.clientX; });
+    openBookEl.addEventListener("pointerup", (e) => {
+      if (downX === null) return;
+      const dx = e.clientX - downX;
+      downX = null;
+      if (Math.abs(dx) > 40) turn(dx < 0 ? 1 : -1);
+    });
+
+    renderShelf();
+  </script>
+</body>
+</html>
