@@ -69,6 +69,17 @@ ROLE_FILES = {
 }
 STAGES = tuple(ROLE_FILES)
 
+# 실험 — 통합 개선안(exp/memoir-integrated, 2026-10-30). v7 은 기준선으로 그대로 두고 같은 다섯 단계 계약 위에서
+# 지시문 묶음 · 장 길이 안내 · 편집 범위(책 전체 → 장마다)만 바꾼다. 서비스 경로(memoir 모듈)는 variant 를 넘기지 않아
+# 늘 v7 이다. 바꾼 까닭과 단계별 차이는 aidlc-docs/construction/unit8-memoir-pipeline/exp-integrated/ 에 적는다.
+INTEGRATED_DIR = PROMPTS / "파이프라인_통합"
+VARIANTS = {
+    "v7": {"dir": ROLE_DIR, "files": ROLE_FILES, "edit_scope": "book"},
+    "integrated": {"dir": INTEGRATED_DIR, "edit_scope": "chapter",
+                   "files": {"analysis": "1_분석.md", "outline": "2_목차.md", "chapter": "3_장집필.md",
+                             "edit": "4_장편집.md", "verify": "5_검증.md"}},
+}
+
 # 실측용 값이다. v4 C 실측에서 분석 출력이 4,887/5,000 토큰으로 상한에 붙어 늘렸다.
 DEFAULT_LIMITS = {               # 초, 출력 토큰
     "analysis": (90.0, 8000),
@@ -89,6 +100,7 @@ EDIT_ONLY_LIMITS = (300.0, 32768)       # 편집 단독 시험의 편집 단계 
 
 # 상태 값
 GENERATED, PARTIAL, FAILED = "generated", "partial", "failed"
+STOPPED = "stopped"                # 실험 — stop_after 로 지정한 단계까지만 돌렸다. 완성본이 아니다
 DRAFT_ONLY = "draft_only"          # 장 집필 비교 — 편집 · 검증을 부르지 않았다. 완성본이 아니다
 EDIT_ONLY = "edit_only"            # 편집 단독 시험 — 남긴 초안을 편집만 했다. 검증을 부르지 않았다
 INSUFFICIENT, NEEDS_CONTEXT = "insufficient_material", "needs_context"
@@ -217,13 +229,17 @@ def settings() -> dict:
     """지금 적용되는 값. 실행 기록에 그대로 남긴다 — 비밀값은 없다."""
     s: dict[str, Any] = {
         "MEMOIR_PIPE_TEXT_MODEL": env_str("MEMOIR_PIPE_TEXT_MODEL", memoir.DEFAULT_TEXT_MODEL),
-        "MEMOIR_PIPE_TEMPERATURE": env_float("MEMOIR_PIPE_TEMPERATURE", DEFAULT_TEMPERATURE),
+        "MEMOIR_PIPE_TEMPERATURE": (None if env_str("MEMOIR_PIPE_TEMPERATURE", "").lower() == "omit"
+                                    else env_float("MEMOIR_PIPE_TEMPERATURE", DEFAULT_TEMPERATURE)),
         "MEMOIR_PIPE_TOTAL_TIMEOUT": env_float("MEMOIR_PIPE_TOTAL_TIMEOUT", DEFAULT_TOTAL_TIMEOUT),
     }
     for stage, (sec, tokens) in DEFAULT_LIMITS.items():
         up = stage.upper()
         s[f"MEMOIR_PIPE_{up}_TIMEOUT"] = env_float(f"MEMOIR_PIPE_{up}_TIMEOUT", sec)
         s[f"MEMOIR_PIPE_{up}_MAX_OUTPUT_TOKENS"] = env_int(f"MEMOIR_PIPE_{up}_MAX_OUTPUT_TOKENS", tokens)
+    # 실험 — 「omit」 이면 temperature 를 요청에 싣지 않는다(Gemini 4 는 샘플링 값을 무시하고 경고를 낸다).
+    # thinking_level 은 비우면 싣지 않는다(모델 기본값). 둘 다 비워 두면 지금 동작 그대로다
+    s["MEMOIR_PIPE_THINKING_LEVEL"] = env_str("MEMOIR_PIPE_THINKING_LEVEL", "").lower()
     s["chapters"] = [MIN_CHAPTERS, MAX_CHAPTERS]
     s["retries"] = RETRIES
     s["prompt_version"] = PROMPT_VERSION
@@ -246,8 +262,9 @@ def common_rules() -> str:
     return body
 
 
-def role_text(stage: str, file: str | None = None) -> str:
-    path = ROLE_DIR / (file or ROLE_FILES[stage])
+def role_text(stage: str, file: str | None = None, variant: str = "v7") -> str:
+    v = VARIANTS[variant]
+    path = v["dir"] / (file or v["files"][stage])
     try:
         text = _FENCE.sub("", path.read_text(encoding="utf-8")).strip()
     except OSError as e:
@@ -257,9 +274,19 @@ def role_text(stage: str, file: str | None = None) -> str:
     return text
 
 
-def prompt(stage: str, file: str | None = None) -> str:
+def prompt(stage: str, file: str | None = None, variant: str = "v7") -> str:
     """시스템 지시 = 공통 지침 + 이 역할의 지시문 하나. 원문은 여기에 넣지 않는다. file 은 같은 역할의 다른 판."""
-    return common_rules() + "\n\n" + role_text(stage, file)
+    return common_rules() + "\n\n" + role_text(stage, file, variant)
+
+
+def variant_hashes(variant: str) -> dict[str, str]:
+    """이 실행이 실제로 보낸 시스템 지시(공통 지침 + 역할 지시문)의 sha256 앞 16자 · 역할 파일 이름."""
+    out: dict[str, str] = {}
+    for s in STAGES:
+        out[s] = "sha256:" + hashlib.sha256(prompt(s, variant=variant).encode("utf-8")).hexdigest()[:16]
+        out[s + "_file"] = VARIANTS[variant]["files"][s]
+    out["common"] = "sha256:" + hashlib.sha256(common_rules().encode("utf-8")).hexdigest()[:16]
+    return out
 
 
 def edit_prompt(contract: str = "v5") -> str:
@@ -2751,6 +2778,8 @@ def overall_state(generation_state: str, gate: dict | None, verification: dict, 
         awaiting_human   코드 pass · 사실 대조 pass · 구성 채점 기준 충족 — 사람 검수 대기
         approved         human_review=passed
     """
+    if generation_state == STOPPED:
+        return "stopped"                          # 실험 — 지정한 단계까지만. 판정하지 않는다
     if generation_state == DRAFT_ONLY:
         return "draft_only"                       # 장 집필 비교 — 편집 · 검증 전이라 판정하지 않는다
     if generation_state == EDIT_ONLY:                 # 검증 전 — 코드 판정만 본다
@@ -2778,8 +2807,9 @@ class CallSpec:
     system: str
     user: str
     model: str
-    temperature: float
+    temperature: float | None
     max_output_tokens: int
+    thinking_level: str = ""     # 실험 — 비우면 싣지 않는다
 
 
 @dataclass
@@ -2802,12 +2832,17 @@ async def call_model(spec: CallSpec) -> Reply:
 
     from google.genai import types
 
+    extra: dict = {}
+    if spec.temperature is not None:
+        extra["temperature"] = spec.temperature
+    if spec.thinking_level:
+        extra["thinking_config"] = types.ThinkingConfig(thinking_level=spec.thinking_level.upper())
     cfg = types.GenerateContentConfig(
         system_instruction=spec.system,
         response_mime_type="application/json",
-        temperature=spec.temperature,
         max_output_tokens=spec.max_output_tokens,
         automatic_function_calling=types.AutomaticFunctionCallingConfig(disable=True),
+        **extra,
     )
     res = await client.aio.models.generate_content(model=spec.model, contents=spec.user, config=cfg)
     finish = None
@@ -2860,7 +2895,7 @@ def _analysis_for_next(analysis: dict) -> dict:
     return out
 
 
-def outline_message(data: dict, analysis: dict, focus: str | None = None) -> str:
+def outline_message(data: dict, analysis: dict, focus: str | None = None, watch: list[dict] | None = None) -> str:
     head = (_SOURCE_HEAD + "\nanalysis 는 앞 단계의 사실 원장(facts) · 기억 단위(units) · 끈(threads) · "
             "정정(corrections)이다. 편집 참고일 뿐 사실 근거가 아니다 — source 와 다시 대조한다. "
             "must_keep 은 근거 없이 빠지면 안 되는 사실 id 다.")
@@ -2869,6 +2904,11 @@ def outline_message(data: dict, analysis: dict, focus: str | None = None) -> str
                  "자료가 많은데 장을 적게 잡아 장면을 빼지 않는다.")
     payload: dict = {"analysis": _analysis_for_next(analysis),
                      "must_keep": sorted(must_keep(analysis), key=lambda x: int(x[1:]))}
+    if watch:
+        head += ("\npreserve_watch 는 사람이 원문에서 고른 **보존 점검 대상**이다 — 이야기마다 꼭 남아야 할 경위 · "
+                 "감정 · 직접 인용(quote 는 원문 그대로). 그 이야기의 문단 계획에서 이것을 담는 사실을 brief 로 돌리거나 "
+                 "omit 하지 말고 facts · core 에 둔다. 점검 대상이 아닌 이야기도 같은 기준으로 다룬다.")
+        payload["preserve_watch"] = watch
     if focus:
         head += ("\nfocus 는 이번 원고의 범위다 — 이 소재로 **장 하나만** 설계한다. 이 장에 쓰지 않는 "
                  "사실은 omit 에 이유와 함께 적는다.")
@@ -2879,7 +2919,8 @@ def outline_message(data: dict, analysis: dict, focus: str | None = None) -> str
     return _user(head, payload)
 
 
-def chapter_message(src: dict, analysis: dict, outline_out: dict, chapter: dict) -> str:
+def chapter_message(src: dict, analysis: dict, outline_out: dict, chapter: dict, variant: str = "v7",
+                    watch: list[dict] | None = None) -> str:
     head = (_SOURCE_HEAD + "\n이 source 는 이번 장 문단 계획의 사실이 가리키는 원문만 남긴 것이다. "
             "다른 장의 원문은 일부러 뺐다. utterances 는 문단 계획 순서로 놓았다(번호와 글은 그대로). "
             "book 은 책 전체 설계, chapter 는 이번에 쓸 장의 설계도(중심 · 핵심 경험 · 문단 계획 · 재배치 "
@@ -2888,9 +2929,17 @@ def chapter_message(src: dict, analysis: dict, outline_out: dict, chapter: dict)
             "문장의 facts 에는 이 facts 의 id 만 쓴다.")
     book = ledger(analysis)
     mine = plan_facts(chapter)
-    head += (f"\n**장 길이는 이 장이 맡은 사실 수에 비례한다** — 이 장은 사실 {len(mine)}개를 맡았다. "
-             "문단 계획의 facts 는 사실 하나에 한두 문장으로 장면이 보이게 쓰고, brief 는 짧게 한 구절로 "
-             "담는다. 사실이 많은 장을 다른 장 길이에 맞추어 줄이거나 몇 문장으로 요약하지 않는다.")
+    if variant == "integrated":
+        # 통합안 — 길이를 사실 수가 아니라 원문의 양과 경험의 밀도에 맞춘다(사실 하나 = 한두 문장 안내가 메모 하나 =
+        # 한 문장 구성을 부추길 수 있어 뺀다). 숫자는 모델이 원문 분량을 가늠하게 주는 참고값이지 목표가 아니다
+        chars = sum(len(re.sub(r"\s", "", u["elder"])) for u in src["utterances"])
+        head += (f"\n이 장이 받은 원문은 이야기 {len(src['utterances'])}개 · 공백 빼고 약 {chars}자다. 장 길이는 "
+                 "원문의 양과 경험의 밀도에 맞춘다 — 원문이 장면 · 감정 · 회고를 넉넉히 말한 일화를 몇 문장으로 "
+                 "압축하지 않는다. 사실 하나를 문장 하나로 옮기는 구성이 아니라 장면과 경험의 흐름으로 쓴다.")
+    else:
+        head += (f"\n**장 길이는 이 장이 맡은 사실 수에 비례한다** — 이 장은 사실 {len(mine)}개를 맡았다. "
+                 "문단 계획의 facts 는 사실 하나에 한두 문장으로 장면이 보이게 쓰고, brief 는 짧게 한 구절로 "
+                 "담는다. 사실이 많은 장을 다른 장 길이에 맞추어 줄이거나 몇 문장으로 요약하지 않는다.")
     payload: dict = {
         "book": {k: outline_out["book"].get(k) for k in ("title", "center", "flow", "opening_facts", "closing_facts")},
         "chapter": chapter,
@@ -2906,6 +2955,11 @@ def chapter_message(src: dict, analysis: dict, outline_out: dict, chapter: dict)
     if notices:
         head += _EXCLUSION_HEAD
         payload["exclusions"] = notices
+    mine_watch = watch_for(watch, [u["turn"] for u in src.get("utterances", [])]) if watch else []
+    if mine_watch:
+        head += ("\npreserve_watch 는 이 장 이야기 가운데 사람이 고른 보존 점검 대상이다 — quote 의 경위 · 감정 · "
+                 "직접 인용이 장면 안에 살아 있게 쓴다(낱말을 그대로 옮길 필요는 없지만 뜻과 세기를 줄이지 않는다).")
+        payload["preserve_watch"] = mine_watch
     payload["source"] = src
     return _user(head, payload)
 
@@ -3033,6 +3087,355 @@ def missing_core(checks: list[dict], analysis: dict, outline_out: dict) -> list[
     return out
 
 
+# ---------------------------------------------------------------- 실험 — 통합 개선안의 장 단위 편집
+
+
+def edit_chapter_message(data: dict, analysis: dict, outline_out: dict, draft: dict, checks: list[dict],
+                         signal: dict | None, chapter_plan_: dict, watch: list[dict] | None = None) -> str:
+    """
+    통합안의 편집 — 장 하나씩. 책 전체를 한 응답으로 다시 쓰게 하면 출력 부담 때문에 장이 짧아지는 일이 있어,
+    장 구성은 목차 그대로 두고 장 안만 다듬는다. 원문은 이 장 문단 계획이 가리키는 것만 준다(장 집필과 같다).
+    """
+    src, _ = chapter_source(data, analysis, chapter_plan_)
+    book = ledger(analysis)
+    mine = plan_facts(chapter_plan_)
+    head = (_SOURCE_HEAD + "\n이 source 는 이번 장 문단 계획의 사실이 가리키는 원문만이다. draft 는 이 장의 초안이다"
+            "(문장의 turns 는 코드가 facts 에서 펼친 것). 초안은 사실 근거가 아니다 — source · facts 와 다시 대조한다. "
+            "chapter_plan 은 목차의 이 장 설계도, other_chapters 는 다른 장의 이름과 중심이다(다른 장의 내용을 이 장에 "
+            "쓰지 않는다). checks 는 코드가 이 장 초안에서 찾은 고칠 곳, signal 은 이 장의 발언 나열 신호다. "
+            "문장의 facts 에는 facts 의 id 만 쓴다. 장 키는 바꾸지 않는다.")
+    payload = {
+        "chapter_plan": chapter_plan_,
+        "other_chapters": [{"chapter_key": c["chapter_key"], "title": c["title"]["text"], "center": c["center"]}
+                           for c in outline_out["chapters"] if c["chapter_key"] != chapter_plan_["chapter_key"]],
+        "draft": draft,
+        "facts": [book[f] for f in mine if f in book],
+        "must_keep": sorted(must_keep(analysis) & set(mine), key=_fid),
+        "checks": checks,
+        "signal": signal or {},
+    }
+    notices = exclusion_notices(analysis, set(fact_turns(mine, book)))
+    if notices:
+        head += _EXCLUSION_HEAD
+        payload["exclusions"] = notices
+    mine_watch = watch_for(watch, [u["turn"] for u in src["utterances"]])
+    if mine_watch:
+        head += ("\npreserve_watch 는 사람이 고른 보존 점검 대상이다 — 다듬으면서 이 경위 · 감정 · 직접 인용을 덜어 내지 "
+                 "않는다. draft_watch 는 코드가 초안에서 그 낱말을 찾은 결과(어림)다.")
+        payload["preserve_watch"] = mine_watch
+        payload["draft_watch"] = watch_check([draft], mine_watch)
+    payload["source"] = src
+    return _user(head, payload)
+
+
+def check_chapter_edit(out, key: str, allowed: set[str]) -> dict:
+    """장 하나 편집 응답의 모양 — 장 키를 바꾸지 않았고, 문장 근거는 이 장이 쓸 수 있는 사실 안."""
+    c = _Check("edit", key)
+    out = c.obj(out, ("diagnosis", "chapter", "omitted", "checks_resolution", "notes"))
+    ch = out["chapter"]
+    if not isinstance(ch, dict) or ch.get("chapter_key") != key:
+        raise c.fail("reference", f"편집한 장 키 {ch.get('chapter_key') if isinstance(ch, dict) else None!r} — {key} 여야 한다")
+    if "title" not in ch or "paragraphs" not in ch:
+        raise c.fail("format", f"{key} 에 title · paragraphs 가 없다")
+    c.sentence(ch["title"], allowed, f"{key}/title")
+    c.paragraphs(ch["paragraphs"], allowed, key)
+    c.items(out["diagnosis"], "diagnosis")
+    c.items(out["omitted"], "omitted")
+    c.items(out["checks_resolution"], "checks_resolution")
+    return out
+
+
+def merge_chapter_edits(outs: list[dict], outline_out: dict) -> dict:
+    """장마다 받은 편집을 편집 계약(check_final) 모양 하나로. 책 제목은 목차의 것을 쓴다(장 단위 편집은 제목을 다루지 않는다)."""
+    return {
+        "diagnosis": [d for o in outs for d in o["diagnosis"]],
+        "title": outline_out["book"]["title"],
+        "chapters": [{"center": o["chapter"].get("center", ""), **o["chapter"]} for o in outs],
+        "omitted": [x for o in outs for x in o["omitted"]],
+        "checks_resolution": [x for o in outs for x in o["checks_resolution"]],
+        "notes": [x for o in outs for x in (o.get("notes") or [])],
+    }
+
+
+# 감정 · 감각 · 회고 말 — 사실 메모 · 원문에서 「감정 쪽」 사실을 어림으로 가른다. 코드의 어림이지 판정이 아니다.
+# 두 판(v7 · 통합안)에 똑같이 쓴다 — v7 분석에는 사실 종류 칸이 없어서다.
+_AFFECT = re.compile(
+    r"속상|반갑|반가|기쁘|기뻤|좋았|좋더|좋아|슬프|슬펐|서럽|서러|서운|뭉클|울컥|눈물|울었|울면서|떨리|떨렸|설레|설렜|그립|그리워"
+    r"|미안|고맙|감사|부끄|창피|무섭|무서|두렵|겁이|외롭|쓸쓸|허전|아쉽|아쉬|후회|뿌듯|자랑스|행복|즐거|신나|신기|답답|막막"
+    r"|억울|화가|화나|분하|섭섭|걱정|불안|안타깝|가슴이|마음이|생각나|생각이 나|기억나|잊히지|잊지 못|지금도|지금은|돌아보면"
+    r"|향기|냄새|소리|따뜻|차갑|추웠|더웠|배고프|배가 고")
+AFFECT_KINDS = ("emotion_then", "thought_then", "reflection_now", "effect", "sense")
+
+
+def fact_kind(f: dict) -> str:
+    """사실 종류 — 통합안 분석이 kind 를 적었으면 그것, 아니면 메모 말로 어림한 affect / event."""
+    k = f.get("kind")
+    if isinstance(k, str) and k:
+        return "affect" if k in AFFECT_KINDS else "event"
+    return "affect" if _AFFECT.search(f.get("text", "")) else "event"
+
+
+def _turn_chars(chapters: list[dict]) -> dict[int, int]:
+    """원문 턴마다 그 턴을 근거로 단 문장의 글자 수(공백 빼고). 한 문장이 여러 턴을 달면 턴마다 셈한다 — 어림."""
+    out: dict[int, int] = {}
+    for _, _, _, x in _sentences(chapters):
+        n = len(re.sub(r"\s", "", x.get("text", "")))
+        for t in set(x.get("turns") or []):
+            out[t] = out.get(t, 0) + n
+    return out
+
+
+def _turn_text(chapters: list[dict]) -> dict[int, str]:
+    out: dict[int, str] = {}
+    for _, _, _, x in _sentences(chapters):
+        for t in set(x.get("turns") or []):
+            out[t] = out.get(t, "") + " " + x.get("text", "")
+    return out
+
+
+def watch_for(watch: list[dict] | None, turns) -> list[dict]:
+    """보존 점검 대상 가운데 이 턴들의 것만."""
+    keep = set(turns)
+    return [w for w in watch or [] if w["turn"] in keep]
+
+
+def watch_check(chapters: list[dict], watch: list[dict] | None) -> list[dict]:
+    """
+    보존 점검 대상(사람이 원문에서 고른 꼭 남을 표현)이 그 이야기를 근거로 단 문장에 남았는가. 항목마다 keys
+    (원문 낱말) 가운데 하나라도 그 턴 근거 문장에 있으면 found. **낱말 어림이다** — 뜻이 남았는지는 사람이 본다.
+    """
+    by_turn: dict[int, list[tuple[str, str]]] = {}
+    for loc, _, _, x in _sentences(chapters):
+        for t_ in set(x.get("turns") or []):
+            by_turn.setdefault(t_, []).append((loc, x.get("text", "")))
+    out = []
+    for w in watch or []:
+        rows = by_turn.get(w["turn"], [])
+        for item in w["items"]:
+            hit = [loc for loc, text in rows if any(k in text for k in item["keys"])]
+            out.append({"turn": w["turn"], "what": item["what"], "quote": item["quote"], "keys": item["keys"],
+                        "found": bool(hit), "where": hit[:3]})
+    return out
+
+
+def loss_trace(analysis: dict, outline_out: dict, drafts: list[dict], final: list[dict], data: dict) -> dict:
+    """
+    원문 → 분석 → 목차 → 장 초안 → 편집본에서 사실 · 이야기가 **처음 사라진 단계**를 코드로 잰다(두 판 같은 함수).
+
+        facts   사실마다 kind(affect · event) · 목차 배정(facts · brief · core · omit · none) · 초안 · 편집본 인용 ·
+                first_lost(outline · draft · edit · None)
+        turns   원문 턴(이야기)마다 원문 글자 · 초안 · 편집본에서 그 턴을 근거로 단 문장 글자 · 원문의 감정 말 중
+                편집본(그 턴 근거 문장)에 남은 것
+
+    **ID 기준이다** — 사실 id 가 문장에 달렸다고 그 내용이 문장에 있다는 뜻이 아니다. 감정 말 대조는 낱말 어림이다.
+    분석이 원문을 놓친 것은 이 표로 보이지 않는다(턴의 사실 수 · 감정 말 수로만 어림) — 사람 대조가 본다.
+    """
+    book = ledger(analysis)
+    plan: dict[str, str] = {}
+    for ch in outline_out.get("chapters", []):
+        for p in ch.get("paragraphs", []):
+            for f in p.get("brief") or []:
+                plan[f] = "brief"
+            for f in p.get("facts") or []:
+                plan[f] = "facts"
+            for f in p.get("core") or []:
+                plan[f] = "core"
+    for x in outline_out.get("omit", []):
+        for f in x.get("facts") or []:
+            plan.setdefault(f, "omit")
+    in_draft = {f for _, _, _, x in _sentences(drafts) for f in (x.get("facts") or [])}
+    in_final = {f for _, _, _, x in _sentences(final) for f in (x.get("facts") or [])}
+    rows = []
+    for f in analysis.get("facts", []):
+        fid = f["id"]
+        where = plan.get(fid, "none")
+        lost = ("outline" if where in ("omit", "none") else "draft" if fid not in in_draft
+                else "edit" if fid not in in_final else None)
+        rows.append({"fact": fid, "turns": f["turns"], "kind": fact_kind(f), "model_kind": f.get("kind"),
+                     "plan": where, "draft": fid in in_draft, "final": fid in in_final, "first_lost": lost})
+    src = {u["turn"]: u["elder"] for u in data["utterances"]}
+    dc, fc, ft = _turn_chars(drafts), _turn_chars(final), _turn_text(final)
+    facts_of: dict[int, list[str]] = {}
+    for f in analysis.get("facts", []):
+        for t in f["turns"]:
+            facts_of.setdefault(t, []).append(f["id"])
+    turns = []
+    for t, text in sorted(src.items()):
+        words = sorted({m.group(0) for m in _AFFECT.finditer(text)})
+        kept = [w for w in words if w in ft.get(t, "")]
+        turns.append({"turn": t, "source_chars": len(re.sub(r"\s", "", text)), "facts": len(facts_of.get(t, [])),
+                      "draft_chars": dc.get(t, 0), "final_chars": fc.get(t, 0),
+                      "affect_words": words, "affect_words_kept": kept})
+    def count(rs):
+        out = {s: sum(1 for r in rs if r["first_lost"] == s) for s in ("outline", "draft", "edit")}
+        return out | {"kept": sum(1 for r in rs if r["first_lost"] is None), "total": len(rs)}
+    affect = [r for r in rows if r["kind"] == "affect"]
+    chapter_chars = []
+    dmap = {d["chapter_key"]: d for d in drafts}
+    for ch in final:
+        d = dmap.get(ch["chapter_key"])
+        n_final = sum(len(re.sub(r"\s", "", x.get("text", ""))) for _, _, _, x in _sentences([ch]))
+        n_draft = sum(len(re.sub(r"\s", "", x.get("text", ""))) for _, _, _, x in _sentences([d])) if d else None
+        chapter_chars.append({"chapter_key": ch["chapter_key"], "draft_chars": n_draft, "final_chars": n_final,
+                              "ratio": round(n_final / n_draft, 2) if n_draft else None})
+    words_total = sum(len(x["affect_words"]) for x in turns)
+    summary = {"facts": count(rows), "affect_facts": count(affect),
+               "affect_words": {"source": words_total, "kept_in_final": sum(len(x["affect_words_kept"]) for x in turns)},
+               "chapters": chapter_chars,
+               "source_chars": sum(x["source_chars"] for x in turns),
+               "draft_chars": sum(len(re.sub(r"\s", "", x.get("text", ""))) for _, _, _, x in _sentences(drafts)),
+               "final_chars": sum(len(re.sub(r"\s", "", x.get("text", ""))) for _, _, _, x in _sentences(final)),
+               "method": "사실 id 인용 기준 · 감정 말은 낱말 어림(_AFFECT) — 내용 보존의 증거가 아니다"}
+    return {"summary": summary, "facts": rows, "turns": turns}
+
+
+def adaptation_notes(chapters: list[dict]) -> list[dict]:
+    """
+    통합안 — 문장의 adapted(이 문장에 보탠 문학적 표현 구절)를 모은다. 각색 표시 칸이다: 보탠 분위기 · 가벼운 감정을
+    사실과 가른다. 구절이 문장에 실제로 없거나 따옴표 안(실제 발언처럼)에 있으면 표시한다. 판정은 검증 · 사람 몫이다.
+    """
+    out = []
+    for loc, _, _, x in _sentences(chapters):
+        for a in x.get("adapted") or []:
+            if not isinstance(a, str) or not a.strip():
+                continue
+            quoted = any(a in q for q in _QUOTE.findall(x.get("text", "")))
+            out.append({"location": loc, "phrase": a, "in_text": a in x.get("text", ""),
+                        "in_quote": quoted})
+    return out
+
+
+# ---------------------------------------------------------------- 실험 — 분할 분석
+
+
+ANALYSIS_KEYS = ("status", "facts", "units", "threads", "people", "corrections", "themes", "direction",
+                 "exclusions", "not_in_facts", "unclear", "missing_context")
+_STRENGTH_RANK = {"clear": 0, "partial": 1, "weak": 2}
+PART_EXCERPT = 80          # 앞 부분 원문을 연결 후보의 출처로 보일 때의 글자 수 — 원문 첫머리 그대로(요약이 아니다)
+
+
+def part_source(data: dict, turns: list[int]) -> dict:
+    """원자료에서 이 부분의 턴만 — 번호 · 글은 그대로."""
+    keep = set(turns)
+    utts = [u for u in data["utterances"] if u["turn"] in keep]
+    sids = {u["session_id"] for u in utts}
+    return {"shared_state": {"confirmed_facts": data["shared_state"].get("confirmed_facts", []),
+                             "facts_found": [x for x in data["shared_state"].get("facts_found", []) if x.get("turn") in keep]},
+            "sessions": [s for s in data["sessions"] if s["session_id"] in sids],
+            "utterances": utts}
+
+
+def _next_ids(acc: dict) -> dict:
+    def nxt(items, pre):
+        return f"{pre}{max([int(x['id'][1:]) for x in items] or [0]) + 1}"
+    return {"next_fact_id": nxt(acc["facts"], "f"), "next_unit_id": nxt(acc["units"], "m"),
+            "next_thread_id": nxt(acc["threads"], "t")}
+
+
+def analysis_part_message(data: dict, turns: list[int], index: int, total: int, acc: dict) -> str:
+    """분할 분석 한 부분의 자료. 앞 부분의 기억 단위 · 끈은 이름 · 시기 · 근거 턴만 준다(원문은 이 부분 것만)."""
+    src = part_source(data, turns)
+    book = {f["id"]: f for f in acc["facts"]}
+    text = {u["turn"]: u["elder"] for u in data["utterances"]}
+    head = (_SOURCE_HEAD + f"\n이번 자료는 전체 원문을 {total}부분으로 나눈 가운데 {index}번째 부분이다(part). "
+            "source 에는 이 부분의 이야기만 있고, 전역 원문 번호는 그대로다. part 의 next_*_id 부터 번호를 이어 "
+            "매긴다. earlier_units · earlier_threads · earlier_people 은 앞 부분에서 나온 **연결 후보**다 — ai_label 은 "
+            "앞 단계 AI 가 붙인 이름이지 원문이 아니다. 근거는 source_turns 와 source_excerpt(앞 원문 첫머리 그대로)다. "
+            "이 부분의 원문이 앞의 사람 · 물건 · 장소 · 경험을 직접 다시 말할 때만 끈으로 잇고, 연결을 이유로 사실을 "
+            "만들지 않는다. 앞 부분의 사실을 다시 만들지 않는다. turn_marks 는 코드가 말끝에서 찾은 참고 표시다.")
+
+    def turns_of(u):
+        return sorted({t for f in u["facts"] for t in book.get(f, {}).get("turns", [])})
+    units = {u["id"]: u for u in acc["units"]}
+    payload = {
+        "part": {"index": index, "of": total, "turns": sorted(turns), **_next_ids(acc)},
+        "earlier_units": [{"id": u["id"], "ai_label": u["name"], "source_turns": turns_of(u),
+                           "source_excerpt": {str(t): text.get(t, "")[:PART_EXCERPT] for t in turns_of(u)}}
+                          for u in acc["units"]],
+        "earlier_threads": [{"id": th["id"], "ai_label": th.get("name"), "kind": th.get("kind"), "units": th.get("units"),
+                             "source_turns": sorted({t for uid in th.get("units") or [] if uid in units
+                                                     for t in turns_of(units[uid])})}
+                            for th in acc["threads"]],
+        "earlier_people": [{"name": x.get("name"), "relation": x.get("relation")} for x in acc.get("people") or []],
+        "turn_marks": turn_marks(src),
+        "source": src,
+    }
+    return _user(head, payload)
+
+
+def check_analysis_part(out, turns: list[int], acc: dict, key: str) -> dict:
+    """한 부분의 모양 — 번호가 앞 부분과 겹치지 않고, 사실의 턴이 이 부분 안이고, 끈이 아는 단위만 가리킨다.
+    뜻 검사(정정 · 출처 · 경고)는 합친 뒤 check_analysis 가 전체로 한다."""
+    c = _Check("analysis", key)
+    out = c.obj(out, ANALYSIS_KEYS)
+    mine = set(turns)
+    seen_f = {f["id"] for f in acc["facts"]}
+    seen_m = {u["id"] for u in acc["units"]}
+    new_f: set[str] = set()
+    for i, f in enumerate(c.items(out["facts"], "facts")):
+        fid = f.get("id") if isinstance(f, dict) else None
+        if not isinstance(fid, str) or not _FACT_ID.match(fid) or fid in seen_f or fid in new_f:
+            raise c.fail("reference", f"facts[{i}].id={fid!r} — 형식이 다르거나 앞 부분 · 이 부분에서 이미 쓴 번호")
+        c.turns(f.get("turns"), mine, f"{fid}", nonempty=True, outside="이 부분에 없는 턴")
+        new_f.add(fid)
+    new_m: set[str] = set()
+    for i, u in enumerate(c.items(out["units"], "units")):
+        uid = u.get("id") if isinstance(u, dict) else None
+        if not isinstance(uid, str) or not _UNIT_ID.match(uid) or uid in seen_m or uid in new_m:
+            raise c.fail("reference", f"units[{i}].id={uid!r} — 형식이 다르거나 이미 쓴 번호")
+        c.ids(u.get("facts"), new_f, f"{uid}.facts", nonempty=True)
+        new_m.add(uid)
+    for i, th in enumerate(c.items(out["threads"], "threads")):
+        tid = th.get("id") if isinstance(th, dict) else None
+        if not isinstance(tid, str) or not _THREAD_ID.match(tid):
+            raise c.fail("format", f"threads[{i}].id={tid!r}")
+        c.ids(th.get("units"), seen_m | new_m, f"{tid}.units", what="기억 단위")
+    return out
+
+
+def merge_analysis_parts(parts: list[dict]) -> dict:
+    """
+    부분 분석을 하나로. 번호는 모델이 이어 매긴 그대로(부분 검사가 겹침을 막았다). 끈은 같은 id 면 단위 ·
+    link_turns 를 합친다. 주제는 부분마다 낸 후보를 모아 강도(clear → partial → weak) · 근거 턴 수로 셋까지 —
+    코드의 선택이며 run 기록에 부분별 후보가 남는다.
+    """
+    status = [p["status"] for p in parts]
+    out: dict = {"status": ("needs_context" if "needs_context" in status
+                            else "insufficient_material" if all(s == "insufficient_material" for s in status) else "ready")}
+    for k in ("facts", "units", "corrections", "exclusions", "not_in_facts", "unclear", "missing_context"):
+        out[k] = [x for p in parts for x in p.get(k) or []]
+    threads: dict[str, dict] = {}
+    for p in parts:
+        for th in p.get("threads") or []:
+            if th["id"] in threads:
+                old = threads[th["id"]]
+                old["units"] = old["units"] + [u for u in th.get("units") or [] if u not in old["units"]]
+                old["link_turns"] = sorted(set(old.get("link_turns") or []) | set(th.get("link_turns") or []))
+            else:
+                threads[th["id"]] = json.loads(json.dumps(th))
+    out["threads"] = list(threads.values())
+    people, seen = [], set()
+    for p in parts:
+        for x in p.get("people") or []:
+            k = (x.get("name"), x.get("relation"))
+            if k not in seen:
+                seen.add(k)
+                people.append(x)
+    out["people"] = people
+    themes, names = [], set()
+    for p in parts:
+        for th in p.get("themes") or []:
+            if th.get("theme") and th["theme"] not in names:
+                names.add(th["theme"])
+                themes.append(th)
+    themes.sort(key=lambda th: (_STRENGTH_RANK.get(th.get("strength"), 3), -len(th.get("supporting") or [])))
+    out["themes"] = themes[:3]
+    clear = [th for th in out["themes"] if th.get("strength") == "clear"]
+    out["direction"] = ({"theme": clear[0]["theme"], "reason": "분할 분석 — 부분별 주제 후보 가운데 가장 분명한 것", "neutral": False}
+                        if clear else {"theme": "", "reason": "", "neutral": True})
+    return out
+
+
 def verify_plan(analysis: dict, outline_out: dict, steps: list[dict] | None = None) -> dict:
     """구성 채점에 쓸 계획 — 책 · 장의 중심과 핵심 경험, 앞 단계 코드 경고. 사실 근거가 아니다."""
     checks = [f"{s['stage']}{'/' + s['chapter_key'] if s.get('chapter_key') else ''}: {w}"
@@ -3100,6 +3503,7 @@ class _Run:
     steps: list[dict] = field(default_factory=list)
     calls: int = 0
     max_calls: int = 2       # 목차가 나오면 장 수 + 4 로 늘린다
+    variant: str = "v7"
 
     async def ask(self, stage: str, user: str, file_stem: str,
                   chapter_key: str | None = None, system: str | None = None) -> tuple[Any, dict]:
@@ -3118,8 +3522,9 @@ class _Run:
         if self.calls >= self.max_calls:
             raise PipelineError(stage, "budget", f"호출 수 상한 {self.max_calls}", chapter_key)
 
-        spec = CallSpec(stage, chapter_key, system or prompt(stage), user,
-                        self.cfg["MEMOIR_PIPE_TEXT_MODEL"], self.cfg["MEMOIR_PIPE_TEMPERATURE"], tokens)
+        spec = CallSpec(stage, chapter_key, system or prompt(stage, variant=self.variant), user,
+                        self.cfg["MEMOIR_PIPE_TEXT_MODEL"], self.cfg["MEMOIR_PIPE_TEMPERATURE"], tokens,
+                        self.cfg.get("MEMOIR_PIPE_THINKING_LEVEL", ""))
         wait = min(limit, left)
         self.calls += 1
         t0 = time.monotonic()
@@ -3155,7 +3560,7 @@ def _result(state: str, *, failure: PipelineError | None = None, edited: dict | 
             verification: dict | None = None, complete: bool = False, calls: int = 0,
             metrics: dict | None = None, gate: dict | None = None, quality: dict | None = None,
             trace: dict | None = None, focus: str | None = None) -> dict:
-    edited = edited if state in (GENERATED, DRAFT_ONLY, EDIT_ONLY) else None
+    edited = edited if state in (GENERATED, DRAFT_ONLY, EDIT_ONLY, STOPPED) else None
     verification = verification or {"state": "not_run", "verdict": None, "issues": [],
                                     "reviewed_locations": [], "missing_context": []}
     human = "not_run"                            # 코드는 늘 not_run 으로 쓴다 — 사람이 R1 에 적는다
@@ -3369,7 +3774,9 @@ async def run(data: dict, turn_map: list[dict], *, call: Call = call_model,
               analysis_fixture: dict | None = None, outline_fixture: dict | None = None,
               chapter_only: bool = False, model: str | None = None,
               draft_fixture: dict | None = None, review_notes: dict | None = None,
-              edit_contract: str = "v5") -> dict:
+              edit_contract: str = "v5", variant: str = "v7", reuse: dict | None = None,
+              stop_after: str | None = None, analysis_parts: list[list[int]] | None = None,
+              preserve_watch: list[dict] | None = None) -> dict:
     """
     다섯 단계를 차례로. 돌려주는 것은 result (result.json 과 같은 것).
 
@@ -3392,6 +3799,13 @@ async def run(data: dict, turn_map: list[dict], *, call: Call = call_model,
 
     edit_contract "v6" 은 편집만 문단 산문 + 근거 표현(claims) 계약으로 부른다(edit_message_v6 · check_final_v6 ·
     v6_findings · claim_findings). 편집 단독 시험에서만 받는다 — 장 집필 · 검증 계약은 v5 그대로다.
+
+    실험(exp/memoir-integrated) — variant 는 지시문 묶음(VARIANTS). "integrated" 는 장 길이 안내를 원문 양 기준으로
+    바꾸고 편집을 장마다 부른다(호출 장 수 × 2 + 3). reuse 는 앞 실행이 남긴 모델 출력({"analysis", "outline",
+    "drafts", "from"})을 그대로 받아 그 단계를 부르지 않는다 — 사람이 고친 스냅샷(fixture)이 아니라 결과에
+    analysis_source="reused_run" 으로 남는다. analysis_parts(턴 묶음 목록)를 주면 분석을 부분마다 차례로 부르고
+    (앞 부분의 기억 단위 · 끈을 다음 부분에 넘긴다) 합쳐서 전체를 다시 검사한다 — 통합안에서만. stop_after("analysis" · "outline" · "chapter" · "edit")는 그 단계까지만
+    부르고 STOPPED 로 끝낸다. 손실 추적(04_loss_trace.json)은 두 판 모두 남기고, 판정(code_gate)에는 넣지 않는다.
     """
     rec = recorder or Recorder()
     cfg = settings()
@@ -3406,6 +3820,8 @@ async def run(data: dict, turn_map: list[dict], *, call: Call = call_model,
     cfg["edit_only"] = edit_only
     cfg["edit_contract"] = edit_contract
     v6 = edit_contract == "v6"
+    reuse = reuse or {}
+    by_chapter = VARIANTS.get(variant, {}).get("edit_scope") == "chapter"
     draft_source: dict | None = None
     meta = dict(meta or {})
     started_at = datetime.now(timezone.utc).isoformat(timespec="seconds")
@@ -3433,12 +3849,55 @@ async def run(data: dict, turn_map: list[dict], *, call: Call = call_model,
             raise PipelineError("input", "input", f"편집 계약 {edit_contract!r} — {list(EDIT_CONTRACTS)} 중 하나")
         if v6 and not edit_only:
             raise PipelineError("input", "input", "편집 계약 v6 은 편집 단독 시험에서만 쓴다")
+        if variant not in VARIANTS:
+            raise PipelineError("input", "input", f"variant {variant!r} — {list(VARIANTS)} 중 하나")
+        if variant != "v7" and (v6 or analysis_fixture is not None or draft_fixture is not None or chapter_only):
+            raise PipelineError("input", "input", "통합안은 스냅샷 · 장 집필 비교 · 편집 단독 시험과 함께 쓰지 않는다 — reuse 를 쓴다")
+        if stop_after not in (None, "analysis", "outline", "chapter", "edit"):
+            raise PipelineError("input", "input", f"stop_after {stop_after!r}")
+        if (reuse.get("outline") is not None and reuse.get("analysis") is None) or (
+                reuse.get("drafts") is not None and reuse.get("outline") is None) or (
+                reuse.get("edits") and (reuse.get("drafts") is None or not by_chapter)):
+            raise PipelineError("input", "input", "reuse 는 앞 단계부터 차례로 — 목차는 분석과, 초안은 목차와 함께")
+        if reuse and analysis_fixture is not None:
+            raise PipelineError("input", "input", "reuse 와 스냅샷(fixture)은 함께 쓰지 않는다")
+        if analysis_parts is not None:
+            flat = [x for p in analysis_parts for x in p]
+            if variant == "v7" or reuse.get("analysis") is not None or analysis_fixture is not None:
+                raise PipelineError("input", "input", "분할 분석은 통합안에서, 분석을 부를 때만 쓴다")
+            if sorted(flat) != sorted(T) or len(flat) != len(set(flat)) or not all(analysis_parts):
+                raise PipelineError("input", "input", "analysis_parts 는 모든 턴을 정확히 한 번씩 나눠 담아야 한다")
+            st.max_calls = len(analysis_parts) + 1          # 부분 분석 + 목차. 목차 뒤에 다시 센다
+        st.variant = variant
 
         # ① 분석 — 사실 원장 · 기억 단위 (또는 검증된 시험용 스냅샷)
         if analysis_fixture is not None:
             analysis = load_analysis_fixture(analysis_fixture, data, T)
             rec.json("01_analysis_fixture.json", analysis_fixture)
             status = "ready"
+        elif reuse.get("analysis") is not None:
+            analysis = json.loads(json.dumps(reuse["analysis"]))
+            status, warns = check_analysis(analysis, T, turn_marks(data), source_texts(data), source_asked(data))
+            rec.json("01_analysis_reused.json", {"from": reuse.get("from"), "warnings": warns, "analysis": analysis})
+        elif analysis_parts is not None:
+            acc = {"facts": [], "units": [], "threads": []}
+            outs = []
+            for k, turns in enumerate(analysis_parts, start=1):
+                key = f"part-{k}"
+                try:
+                    o, step = await st.ask("analysis", analysis_part_message(data, turns, k, len(analysis_parts), acc),
+                                           f"01_analysis_part{k}", key)
+                    o = check_analysis_part(o, turns, acc, key)
+                    step["ok"] = True
+                except PipelineError as e:
+                    st.steps[-1]["error"] = e.as_dict()
+                    raise
+                outs.append(o)
+                acc = merge_analysis_parts(outs)
+            analysis = acc
+            rec.json("01_analysis.json", analysis)
+            status, step["warnings"] = check_analysis(analysis, T, turn_marks(data), source_texts(data),
+                                                      source_asked(data))
         else:
             analysis, step = await st.ask("analysis", analysis_message(data), "01_analysis")
             status, step["warnings"] = check_analysis(analysis, T, turn_marks(data), source_texts(data),
@@ -3450,9 +3909,13 @@ async def run(data: dict, turn_map: list[dict], *, call: Call = call_model,
         if status == NEEDS_CONTEXT:
             raise PipelineError("analysis", "context", "; ".join(analysis["missing_context"])[:300])
         book = ledger(analysis)
-        if analysis_fixture is None:
+        if analysis_fixture is None and reuse.get("analysis") is None:
             step["metrics"] = {"facts": len(analysis["facts"]), "units": len(analysis["units"]),
                                "must_keep": len(must_keep(analysis))}
+        if stop_after == "analysis":
+            result = _result(STOPPED, calls=st.calls, focus=focus,
+                             metrics={"facts": len(analysis["facts"]), "units": len(analysis["units"])})
+            return result
 
         # ② 목차 — 책 설계도 (또는 사람이 검토한 시험용 목차)
         if outline_fixture is not None:
@@ -3464,8 +3927,14 @@ async def run(data: dict, turn_map: list[dict], *, call: Call = call_model,
             focus = fixture_focus
             rec.json("02_outline_fixture.json", outline_fixture)
             status = "ready"
+        elif reuse.get("outline") is not None:
+            outline_out = json.loads(json.dumps(reuse["outline"]))
+            status, warns = check_outline(outline_out, analysis, T, focus)
+            rec.json("02_outline_reused.json", {"from": reuse.get("from"), "warnings": warns, "outline": outline_out})
         else:
-            outline_out, step = await st.ask("outline", outline_message(data, analysis, focus), "02_outline")
+            outline_out, step = await st.ask("outline", outline_message(data, analysis, focus,
+                                                                         preserve_watch if variant != "v7" else None),
+                                             "02_outline")
             status, step["warnings"] = check_outline(outline_out, analysis, T, focus)
             step["ok"] = True
         if status == NEEDS_CONTEXT:
@@ -3473,7 +3942,17 @@ async def run(data: dict, turn_map: list[dict], *, call: Call = call_model,
         chapters_plan = outline_out["chapters"]
         st.max_calls = (1 if edit_only else len(chapters_plan) + (0 if chapter_only else 2 if outline_fixture is not None
                                                                   else 3 if analysis_fixture is not None else 4))
+        if variant != "v7" or reuse:
+            # 실험 — 남은 호출만 센다: 장(재사용이면 0) + 편집(장 단위면 장 수) + 검증 1
+            n = len(chapters_plan)
+            done = len(reuse.get("edits") or {}) if by_chapter else 0
+            st.max_calls = st.calls + (0 if reuse.get("drafts") is not None else n) + ((n - done) if by_chapter else 1) + 1
         memos = outline_memos(outline_out)
+        if stop_after == "outline":
+            result = _result(STOPPED, calls=st.calls, focus=focus,
+                             metrics={"facts": len(analysis["facts"]), "outline_chapters": len(chapters_plan),
+                                      "outline_omitted_facts": sum(len(x["facts"]) for x in outline_out.get("omit", []))})
+            return result
 
         # ③ 장별 집필 — 순서대로, 첫 실패에서 멈춘다 (편집 단독 시험은 남긴 초안을 받는다)
         drafts: list[dict] = []
@@ -3485,11 +3964,19 @@ async def run(data: dict, turn_map: list[dict], *, call: Call = call_model,
             if review_notes is not None:
                 notes = check_review_notes(review_notes, drafts, draft_source["run_ref"], T)
                 rec.json("03_review_notes.json", review_notes)
-        for ch in [] if edit_only else chapters_plan:
+        if reuse.get("drafts") is not None:
+            drafts = json.loads(json.dumps(reuse["drafts"]))
+            if [d.get("chapter_key") for d in drafts] != [c["chapter_key"] for c in chapters_plan]:
+                raise PipelineError("input", "input", "재사용 초안의 장 키가 목차와 다르다")
+            warns = [w for d, c in zip(drafts, chapters_plan) for w in check_chapter(d, c, set(plan_facts(c)), memos)]
+            expand_turns(drafts, book)
+            rec.json("03_drafts_reused.json", {"from": reuse.get("from"), "warnings": warns, "drafts": drafts})
+        for ch in [] if edit_only or reuse.get("drafts") is not None else chapters_plan:
             key = ch["chapter_key"]
             src, given = chapter_source(data, analysis, ch)
             try:
-                draft, step = await st.ask("chapter", chapter_message(src, analysis, outline_out, ch),
+                draft, step = await st.ask("chapter", chapter_message(src, analysis, outline_out, ch, variant,
+                                                                      preserve_watch if variant != "v7" else None),
                                            f"03_{key}", key)
                 step["warnings"] = check_chapter(draft, ch, set(plan_facts(ch)), memos)
                 expand_turns([draft], book)
@@ -3509,8 +3996,16 @@ async def run(data: dict, turn_map: list[dict], *, call: Call = call_model,
         if v6:
             draft_checks += v6_findings(drafts, data, analysis)
         draft_signals = listing_signals(drafts, data)
+        if preserve_watch:
+            rec.json("03_watch.json", watch_check(drafts, preserve_watch))
         rec.json("03_checks.json", {"checks": draft_checks, "signals": draft_signals,
                                     "plan_coverage": plan_coverage(drafts, outline_out)})
+        if stop_after == "chapter":
+            result = _result(STOPPED, edited={"title": outline_out["book"]["title"], "chapters": drafts},
+                             calls=st.calls, focus=focus,
+                             metrics={**text_metrics(drafts, data), "signals": draft_signals,
+                                      "plan_coverage": {"draft": plan_coverage(drafts, outline_out)}})
+            return result
         if chapter_only:
             gate = code_gate(draft_checks, {}, [])
             metrics = {"facts": len(analysis["facts"]), "units": len(analysis["units"]),
@@ -3528,6 +4023,39 @@ async def run(data: dict, turn_map: list[dict], *, call: Call = call_model,
             raw, step = await st.ask("edit", edit_message_v6(data, analysis, outline_out, drafts, draft_checks,
                                                              draft_signals, focus, notes), "04_edited",
                                      system=edit_prompt("v6"))
+        elif by_chapter:
+            outs = []
+            keys = [c["chapter_key"] for c in chapters_plan]
+            at = lambda c: str(c.get("location", "")).split("/")[0]      # noqa: E731
+            for i, (d, ch, sig) in enumerate(zip(drafts, chapters_plan, draft_signals)):
+                key = ch["chapter_key"]
+                # 장 위치가 아닌 경고(artifact · title)는 첫 장 편집이 함께 받는다 — 처리 결과가 빠지지 않게
+                mine = [c for c in draft_checks if at(c) == key or (i == 0 and at(c) not in keys)]
+                done = (reuse.get("edits") or {}).get(key)
+                if done is not None:
+                    # 앞 실행에서 이미 받은 이 장의 편집 — 다시 부르지 않는다. 같은 모양 검사를 거치고 출처를 남긴다
+                    o = check_chapter_edit(json.loads(json.dumps(done)), key, set(book))
+                    step = {"stage": "edit", "chapter_key": key, "ok": True, "reused": reuse.get("from"), "ms": 0,
+                            "timeout": 0, "max_output_tokens": 0, "in_chars": 0, "out_chars": 0, "finish": None,
+                            "usage": None, "file": f"04_edit_{key}_reused.json", "raw_file": None, "warnings": [],
+                            "error": None}
+                    st.steps.append(step)
+                    rec.json(f"04_edit_{key}_reused.json", {"from": reuse.get("from"), "edit": o})
+                    outs.append(o)
+                    continue
+                try:
+                    o, step = await st.ask("edit", edit_chapter_message(data, analysis, outline_out, d, mine, sig, ch,
+                                                                        preserve_watch),
+                                           f"04_edit_{key}", key)
+                    o = check_chapter_edit(o, key, set(book))
+                    step["warnings"] = []
+                    step["ok"] = True
+                except PipelineError as e:
+                    st.steps[-1]["error"] = e.as_dict()
+                    raise
+                outs.append(o)
+            edited = merge_chapter_edits(outs, outline_out)
+            rec.json("04_edited.json", edited)
         else:
             edited, step = await st.ask("edit", edit_message(data, analysis, outline_out, drafts, draft_checks,
                                                              draft_signals, focus, notes), "04_edited")
@@ -3565,6 +4093,14 @@ async def run(data: dict, turn_map: list[dict], *, call: Call = call_model,
         gate["draft_checks"] = len(draft_checks)
         gate["resolutions"] = {s: sum(1 for r in resolutions.values() if r["status"] == s) for s in CHECK_STATUSES}
         rec.json("04_code_gate.json", gate)
+        loss = loss_trace(analysis, outline_out, drafts, edited["chapters"], data)
+        rec.json("04_loss_trace.json", loss)
+        adapted = adaptation_notes(edited["chapters"])
+        if adapted:
+            rec.json("04_adaptations.json", adapted)
+        watched = watch_check(edited["chapters"], preserve_watch) if preserve_watch else []
+        if preserve_watch:
+            rec.json("04_watch.json", watched)
         final_signals = listing_signals(edited["chapters"], data)
         metrics = {"facts": len(analysis["facts"]), "units": len(analysis["units"]),
                    "outline_chapters": len(chapters_plan), "outline_omitted_facts": len(outline_omit),
@@ -3573,7 +4109,16 @@ async def run(data: dict, turn_map: list[dict], *, call: Call = call_model,
                    "signals": final_signals, "draft_signals": draft_signals,
                    "plan_coverage": {"draft": plan_coverage(drafts, outline_out),
                                      "final": plan_coverage(edited["chapters"], outline_out)}}
+        metrics["loss"] = loss["summary"]
+        if preserve_watch:
+            metrics["watch"] = {"items": len(watched), "found": sum(1 for w in watched if w["found"])}
+        metrics["adaptations"] = {"count": len(adapted), "in_quote": sum(1 for a in adapted if a["in_quote"]),
+                                  "not_in_text": sum(1 for a in adapted if not a["in_text"])}
         step["metrics"] = {"edit_trace": trace["summary"]}
+        if stop_after == "edit":
+            result = _result(STOPPED, edited=edited, calls=st.calls, metrics=metrics, gate=gate, trace=trace,
+                             focus=focus)
+            return result
         if edit_only:
             result = _result(EDIT_ONLY, edited=edited, calls=st.calls, metrics=metrics, gate=gate, trace=trace,
                              focus=focus)
@@ -3587,6 +4132,14 @@ async def run(data: dict, turn_map: list[dict], *, call: Call = call_model,
         plan["edit_trace"] = trace["summary"]
         plan["omission_review"] = omission_review
         plan["protected_omissions"] = protected_omissions(final_findings, analysis, data, edited["chapters"])
+        if variant == "integrated":
+            plan["loss_trace"] = {"summary": loss["summary"],
+                                  "lost_facts": [r for r in loss["facts"] if r["first_lost"]],
+                                  "turns": [{k: x[k] for k in ("turn", "source_chars", "final_chars", "affect_words",
+                                                               "affect_words_kept")} for x in loss["turns"]]}
+            plan["adaptations"] = adapted
+            if preserve_watch:
+                plan["preserve_watch"] = watched
         try:
             verdict_out, step = await st.ask(
                 "verify", verify_message(data, analysis, edited, T, plan, exclusion_notices(analysis)), "05_verify")
@@ -3623,12 +4176,24 @@ async def run(data: dict, turn_map: list[dict], *, call: Call = call_model,
         if draft_source is not None:
             result["draft_source"] = draft_source
         result["edit_contract"] = edit_contract
+        result["variant"] = variant
+        if reuse:
+            for k, stage in (("analysis", "analysis_source"), ("outline", "outline_source")):
+                if reuse.get(k) is not None:
+                    result[stage] = reuse.get(stage) or "reused_run"      # 보정 분석이면 "reviewed_correction"
+            if reuse.get("drafts") is not None:
+                result["draft_source"] = {"reused_run": reuse.get("from")}
+            if reuse.get("edits"):
+                result["edit_source"] = {"reused_run": reuse.get("from"), "chapters": sorted(reuse["edits"])}
         rec.json("result.json", result)               # 출처 표시를 넣은 뒤에 쓴다
         run_doc = {**meta, "focus": focus, "analysis_source": result["analysis_source"],
                    "outline_source": result["outline_source"], "draft_source": draft_source,
                    "started_at": started_at,
                    "finished_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
-                   "settings": cfg, "prompts": _safe_hashes(),
+                   "settings": cfg, "prompts": _safe_hashes(), "variant": variant,
+                   "variant_prompts": _safe_variant_hashes(variant), "reused_from": reuse.get("from"),
+                   "stop_after": stop_after, "analysis_parts": analysis_parts, "preserve_watch": preserve_watch,
+                   "analysis_source": result.get("analysis_source"),
                    "steps": st.steps if st else [],
                    "generation_state": result["generation_state"],
                    "pipeline_complete": result["pipeline_complete"],
@@ -3636,6 +4201,13 @@ async def run(data: dict, turn_map: list[dict], *, call: Call = call_model,
                    "failure": result["failure"], "calls": result["calls"]}
         rec.json("run.json", run_doc)
         rec.text("r1_summary.md", r1_summary(run_doc, result))
+
+
+def _safe_variant_hashes(variant: str) -> dict:
+    try:
+        return variant_hashes(variant)
+    except (PipelineError, KeyError) as e:
+        return {"error": str(e)}
 
 
 def _safe_hashes() -> dict:
