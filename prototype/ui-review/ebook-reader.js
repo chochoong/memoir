@@ -12,7 +12,7 @@
   let active=false, paged=false, spread=false, key='', sections=[], pages=[], pageIndex=0;
   let reading={location:{section:0,offset:0},atStart:true,bookmarks:[]};
   let previousScreen=location.hash.slice(1)||'home', returnScreen='library';
-  let saveTimer, layoutFrame, scrollFrame, turnAnimation, turnOverlay, swipeStart, lastSwipe=0;
+  let saveTimer, layoutFrame, scrollFrame, turnAnimation, turnOverlay, swipeStart, dragAnimation, lastSwipe=0;
   let restoring=false, activation=0;
   const measure=document.createElement('article');
   measure.className='ebook-content ebook-measure';
@@ -112,7 +112,23 @@
     return `<section class="ebook-section" data-section-index="${block.section}">${block.start===0&&heading.show?`<span class="ebook-chapter-label">${String(heading.number).padStart(2,'0')}</span><h2>${escapeText(heading.title)}</h2>`:''}<p>${escapeText(block.text)}</p></section>`;
   }
   function coverHTML(){return `<div class="ebook-cover-page"><span class="ebook-eyebrow">나의 작은 자서전</span><h1 class="ebook-title" id="ebook-title" tabindex="-1">${escapeText(state.title)}</h1><span class="ebook-cover-rule" aria-hidden="true"></span><p class="ebook-byline">내말싸미에서 엮은 나의 이야기</p><p class="ebook-cover-caption">말로 남긴 기억이, 한 권의 책으로.</p></div>`;}
-  function cancelTurn(){if(turnAnimation)turnAnimation.cancel();turnAnimation=null;if(turnOverlay)turnOverlay.remove();turnOverlay=null;}
+  function resetSwipe(spring=false){
+    const swipe=swipeStart,viewport=query('#ebook-viewport'),stage=query('#ebook-stage');swipeStart=null;
+    if(dragAnimation)dragAnimation.cancel();dragAnimation=null;
+    if(!swipe)return;
+    if(swipe.locked)lastSwipe=Date.now();
+    if(stage.hasPointerCapture?.(swipe.id))stage.releasePointerCapture(swipe.id);
+    if(!swipe.styles)return;
+    const from=viewport.style.transform;
+    Object.assign(viewport.style,swipe.styles);
+    if(spring&&swipe.x&&!preferences.reduceMotion&&!reducedMotion.matches){
+      const base=swipe.styles.transform&&swipe.styles.transform!=='none'?`${swipe.styles.transform} `:'';
+      const animation=viewport.animate([{transform:from},{offset:.8,transform:`${base}translateX(${-swipe.x*.035}px) scale(1)`},{transform:swipe.styles.transform||'none'}],{duration:280,easing:'cubic-bezier(.22,.8,.3,1)'});
+      dragAnimation=animation;
+      animation.finished.then(()=>{if(dragAnimation===animation)dragAnimation=null;}).catch(()=>{});
+    }
+  }
+  function cancelTurn(){resetSwipe();if(turnAnimation)turnAnimation.cancel();turnAnimation=null;if(turnOverlay)turnOverlay.remove();turnOverlay=null;}
   function animateTurn(oldHTML,direction){
     if(preferences.reduceMotion||reducedMotion.matches)return;
     const content=query('#ebook-content');
@@ -181,7 +197,7 @@
     query('#ebook-show-tools').hidden=visible;
   }
   function closeSheets(){sheets.forEach(sheet=>{if(sheet.open)sheet.close();});}
-  function openSheet(id){showChrome(true);closeSheets();if(id==='ebook-toc')renderContents();if(id==='ebook-bookmarks')renderBookmarks();query(`#${id}`).showModal();if(id==='ebook-settings')query('.ebook-settings-body').scrollTop=0;}
+  function openSheet(id){cancelTurn();showChrome(true);closeSheets();if(id==='ebook-toc')renderContents();if(id==='ebook-bookmarks')renderBookmarks();query(`#${id}`).showModal();if(id==='ebook-settings')query('.ebook-settings-body').scrollTop=0;}
   function renderContents(){const current=model.contentsIndex(state.document?.sections,currentLocation().section);query('#ebook-toc-list').innerHTML=sections.map((paragraph,index)=>({index,heading:headingFor(index)})).filter(({heading})=>heading.show).map(({index,heading})=>`<button class="ebook-list-item" data-reader-section="${index}" ${index===current?'aria-current="location"':''}><span><small>${String(heading.number).padStart(2,'0')}</small><strong>${escapeText(heading.title)}</strong></span>${icons('chevron')}</button>`).join('');}
   function renderBookmarks(){
     const list=query('#ebook-bookmark-list');
@@ -233,11 +249,54 @@
   query('#ebook-toc-list').addEventListener('click',event=>{const button=event.target.closest('[data-reader-section]');if(!button)return;closeSheets();scrollToLocation({section:Number(button.dataset.readerSection),offset:0});saveProgress();});
   query('#ebook-bookmark-list').addEventListener('click',event=>{const remove=event.target.closest('[data-reader-delete-bookmark]');if(remove){reading.bookmarks.splice(Number(remove.dataset.readerDeleteBookmark),1);saveProgress();updateBookmarkButton();renderBookmarks();return;}const button=event.target.closest('[data-reader-bookmark]');if(button){const bookmark=reading.bookmarks[Number(button.dataset.readerBookmark)];closeSheets();scrollToLocation(bookmark);saveProgress();}});
   query('#ebook-page-previous').addEventListener('click',()=>turnPage(-1));query('#ebook-page-next').addEventListener('click',()=>turnPage(1));
-  query('#ebook-stage').addEventListener('pointerdown',event=>{if(event.isPrimary)swipeStart={x:event.clientX,y:event.clientY};});
-  query('#ebook-stage').addEventListener('pointerup',event=>{if(!swipeStart||!paged)return;const dx=event.clientX-swipeStart.x,dy=event.clientY-swipeStart.y;swipeStart=null;if(Math.abs(dx)>55&&Math.abs(dx)>Math.abs(dy)*1.5&&!window.getSelection()?.toString()){lastSwipe=Date.now();turnPage(dx<0?1:-1);}});
-  query('#ebook-stage').addEventListener('pointercancel',()=>{swipeStart=null;});
+  const swipeIgnored='button,a,input,textarea,select,label,[contenteditable]:not([contenteditable="false"]),[role="button"]';
+  query('#ebook-stage').addEventListener('pointerdown',event=>{
+    if(!event.isPrimary){resetSwipe();return;}
+    if(!active||!paged||event.button!==0||event.target.closest(swipeIgnored)||sheets.some(sheet=>sheet.open)||window.getSelection()?.toString())return;
+    // A mouse drag over text keeps native selection; touch and pen still swipe.
+    if(event.pointerType==='mouse'&&event.target.closest('p,h1,h2,h3,h4,h5,h6,span'))return;
+    if(event.pointerType==='mouse'&&event.cancelable)event.preventDefault();
+    cancelTurn();
+    swipeStart={id:event.pointerId,startX:event.clientX,startY:event.clientY,lastX:event.clientX,lastTime:event.timeStamp,velocity:0,locked:false,x:0};
+  });
+  query('#ebook-stage').addEventListener('pointermove',event=>{
+    const swipe=swipeStart;if(!swipe||event.pointerId!==swipe.id)return;
+    if(!active||!paged||(event.pointerType==='mouse'&&event.buttons!==1)||window.getSelection()?.toString()){resetSwipe(true);return;}
+    const dx=event.clientX-swipe.startX,dy=event.clientY-swipe.startY,elapsed=event.timeStamp-swipe.lastTime;
+    if(elapsed>0)swipe.velocity=(event.clientX-swipe.lastX)/elapsed;
+    swipe.lastX=event.clientX;swipe.lastTime=event.timeStamp;
+    if(!swipe.locked){
+      if(Math.abs(dy)>10&&Math.abs(dy)>Math.abs(dx)){resetSwipe();return;}
+      if(Math.abs(dx)<10||Math.abs(dx)<Math.abs(dy)*1.5)return;
+      swipe.locked=true;query('#ebook-stage').setPointerCapture?.(swipe.id);
+    }
+    if(event.cancelable)event.preventDefault();
+    if(preferences.reduceMotion||reducedMotion.matches)return;
+    const viewport=query('#ebook-viewport'),view=pager.viewState(pageIndex,pages.length,spread?2:1);
+    if(!swipe.styles){swipe.styles={transform:viewport.style.transform,transition:viewport.style.transition,willChange:viewport.style.willChange};viewport.style.transition='none';viewport.style.willChange='transform';}
+    const boundary=dx<0?view.next===null:view.previous===null,width=viewport.clientWidth||1,limit=Math.min(width*.28,160),distance=Math.abs(dx);
+    swipe.x=boundary?36*dx/(distance+100):Math.sign(dx)*(distance<=limit?distance:limit+(distance-limit)*.12);
+    const base=swipe.styles.transform&&swipe.styles.transform!=='none'?`${swipe.styles.transform} `:'';
+    viewport.style.transform=`${base}translateX(${swipe.x}px) scale(${1-Math.min(Math.abs(swipe.x)/width,.3)*.02})`;
+  },{passive:false});
+  query('#ebook-stage').addEventListener('pointerup',event=>{
+    const swipe=swipeStart;if(!swipe||event.pointerId!==swipe.id)return;
+    const dx=event.clientX-swipe.startX,dy=event.clientY-swipe.startY,elapsed=event.timeStamp-swipe.lastTime;
+    const velocity=elapsed>100?0:event.clientX!==swipe.lastX&&elapsed>0?(event.clientX-swipe.lastX)/elapsed:swipe.velocity;
+    const horizontal=(swipe.locked||Math.abs(dx)>10)&&Math.abs(dx)>Math.abs(dy)*1.5;
+    const selected=window.getSelection()?.toString(),direction=dx<0?1:-1,view=pager.viewState(pageIndex,pages.length,spread?2:1);
+    const commit=active&&paged&&!selected&&horizontal&&(Math.abs(dx)>55||(Math.abs(dx)>18&&Math.abs(velocity)>.45&&Math.sign(velocity)===Math.sign(dx)))&&(direction>0?view.next:view.previous)!==null;
+    if(horizontal||swipe.locked)lastSwipe=Date.now();
+    resetSwipe(!commit);
+    if(commit)turnPage(direction);
+  });
+  query('#ebook-stage').addEventListener('pointercancel',()=>resetSwipe(true));
+  query('#ebook-stage').addEventListener('lostpointercapture',event=>{if(swipeStart?.id===event.pointerId)resetSwipe(true);});
+  window.addEventListener('pointerup',event=>{if(swipeStart?.id===event.pointerId)resetSwipe(true);});
+  window.addEventListener('pointercancel',event=>{if(swipeStart?.id===event.pointerId)resetSwipe(true);});
+  reducedMotion.addEventListener?.('change',()=>{if(reducedMotion.matches)cancelTurn();});
   query('#ebook-viewport').addEventListener('click',event=>{
-    if(Date.now()-lastSwipe<400||event.target.closest('button,a')||window.getSelection()?.toString())return;
+    if(Date.now()-lastSwipe<400||event.target.closest(swipeIgnored)||window.getSelection()?.toString())return;
     if(paged){
       const rect=query('#ebook-viewport').getBoundingClientRect(),edge=Math.min(rect.width*.12,100),x=event.clientX-rect.left;
       if(x<=edge){turnPage(-1);return;}
