@@ -1,0 +1,104 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light">
+  <title>표지 후보 비교 · 나의 이야기</title>
+  <style>
+    * { box-sizing: border-box; }
+    body { margin: 0; color: #292720; background: #f5f2ec; font-family: "Malgun Gothic", "Apple SD Gothic Neo", sans-serif; line-height: 1.65; }
+    main { width: min(1180px, 100% - 48px); margin: 0 auto; padding: 48px 0 56px; }
+    .eyebrow { color: #74684f; font-size: 13px; font-weight: 700; letter-spacing: .08em; }
+    h1 { margin: 10px 0 12px; font-size: clamp(26px, 4vw, 38px); letter-spacing: -.05em; line-height: 1.3; }
+    .intro { max-width: 760px; margin: 0; color: #625e54; font-size: 16px; }
+    .notice { display: inline-block; margin: 20px 0 24px; padding: 8px 13px; border: 1px solid #d9d0bf; border-radius: 6px; color: #665b46; background: #fbf8f1; font-size: 14px; }
+    figure { margin: 0; }
+    .board { overflow: hidden; border: 1px solid #e4ddd1; border-radius: 14px; background: #f9f2e8; }
+    .board img { width: 100%; height: auto; display: block; }
+    figcaption { margin: 12px 2px 0; color: #70695d; font-size: 13px; }
+    .candidates { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; margin: 28px 0 36px; }
+    .candidate { padding: 22px 22px 25px; border: 1px solid #dfd8cc; border-radius: 12px; background: #fcfaf6; }
+    .candidate-heading { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; }
+    .label { display: grid; place-items: center; width: 28px; height: 28px; border-radius: 50%; color: #fffaf0; font: 700 13px Georgia, serif; }
+    .burgundy { background: #5f1d2c; } .navy { background: #1c293b; } .green { background: #1a3128; }
+    h2 { margin: 0; font-size: 19px; letter-spacing: -.03em; }
+    .candidate p { margin: 0; color: #6b6459; font-size: 14px; }
+    .mini-crop { width: 148px; aspect-ratio: 445 / 690; margin: 22px auto 18px; background-image: url("cover-candidates-burgundy-navy-green.png"); background-size: 345.16854% auto; background-repeat: no-repeat; }
+    .mini-a { background-position: 5.04125% 50.8982%; }
+    .mini-b { background-position: 49.4959% 50.8982%; }
+    .mini-c { background-position: 93.9505% 50.8982%; }
+    .scale-note { text-align: center; font-size: 12px !important; color: #8a8071 !important; }
+    .principles { border-top: 1px solid #dcd3c5; padding-top: 22px; }
+    .principles h2 { margin-bottom: 12px; }
+    ul { padding-left: 21px; margin: 0; color: #625d53; font-size: 14px; }
+    li + li { margin-top: 7px; }
+    footer { margin-top: 28px; color: #7c7365; font-size: 12px; }
+    a { color: #635236; text-underline-offset: 3px; }
+    a:focus-visible { outline: 3px solid #9a7e4e; outline-offset: 5px; border-radius: 2px; }
+    @media (max-width: 680px) {
+      main { width: min(100% - 32px, 480px); padding-top: 30px; }
+      .intro { font-size: 15px; }
+      .notice { font-size: 13px; }
+      .board { border-radius: 10px; }
+      .candidates { grid-template-columns: 1fr; gap: 14px; margin-top: 22px; }
+      .candidate { padding: 20px; }
+      .mini-crop { margin-top: 18px; }
+    }
+    @media print {
+      body { background: white; }
+      main { width: 100%; padding: 0; }
+      .candidates { break-inside: avoid; }
+    }
+  </style>
+</head>
+<body>
+  <main>
+    <header>
+      <div class="eyebrow">독립 비교 시안 · 3색 순환 적용 선택</div>
+      <h1>나의 이야기를 담는 표지</h1>
+      <p class="intro">짙은 단색과 은은한 무광 표면, 작은 금박·아이보리 제목을 비교합니다. 세 후보는 같은 제목과 같은 얇은 양장 형태를 사용했습니다.</p>
+      <p class="notice">A · B · C의 3색을 표지에 순환 적용합니다. 서비스 전체 테마를 뜻하지 않습니다.</p>
+    </header>
+
+    <figure>
+      <div class="board">
+        <img src="cover-candidates-burgundy-navy-green.png" width="1536" height="1024" alt="같은 크기와 구도로 놓인 얇은 양장본 세 권. 왼쪽은 버건디와 금빛 제목, 가운데는 네이비와 아이보리 제목, 오른쪽은 딥그린과 금빛 제목이다. 모두 나의 이야기라는 제목과 작은 기록이라는 부제, 작은 별 모양 하나가 있다.">
+      </div>
+      <figcaption>왼쪽부터 A 버건디 · B 네이비 · C 딥그린. <a href="cover-candidates-burgundy-navy-green.png" target="_blank" rel="noopener">원본 이미지 크게 보기</a></figcaption>
+    </figure>
+
+    <section class="candidates" aria-label="표지별 작은 크기 비교">
+      <article class="candidate">
+        <div class="candidate-heading"><span class="label burgundy">A</span><h2>버건디</h2></div>
+        <p>짙은 붉은 바탕과 절제된 금빛 제목.</p>
+        <div class="mini-crop mini-a" role="img" aria-label="작은 크기로 본 버건디 표지, 나의 이야기"></div>
+        <p class="scale-note">약 148px 폭에서 보는 제목과 양장 형태</p>
+      </article>
+      <article class="candidate">
+        <div class="candidate-heading"><span class="label navy">B</span><h2>네이비</h2></div>
+        <p>짙은 푸른 바탕과 부드러운 아이보리 제목.</p>
+        <div class="mini-crop mini-b" role="img" aria-label="작은 크기로 본 네이비 표지, 나의 이야기"></div>
+        <p class="scale-note">약 148px 폭에서 보는 제목과 양장 형태</p>
+      </article>
+      <article class="candidate">
+        <div class="candidate-heading"><span class="label green">C</span><h2>딥그린</h2></div>
+        <p>깊은 초록 바탕과 차분한 금빛 제목.</p>
+        <div class="mini-crop mini-c" role="img" aria-label="작은 크기로 본 딥그린 표지, 나의 이야기"></div>
+        <p class="scale-note">약 148px 폭에서 보는 제목과 양장 형태</p>
+      </article>
+    </section>
+
+    <section class="principles" aria-labelledby="principles-title">
+      <h2 id="principles-title">세 후보에 공통으로 담은 것</h2>
+      <ul>
+        <li>규칙적인 격자와 세로줄 대신, 빛을 부드럽게 머금는 은은하고 불규칙한 표면결.</li>
+        <li>먼저 읽히는 큰 한글 제목, 넓은 여백, 작은 상징 하나.</li>
+        <li>책등 옆 홈과 단단한 표지 가장자리, 좁은 페이지 단면으로 표현한 얇은 양장.</li>
+        <li>사용자 참고 도서의 로고·문양·고유 레터링을 복제하지 않은 새 표지.</li>
+      </ul>
+    </section>
+    <footer>2026-11-09 · AI 생성 표지 방향 비교용 이미지. 제목·부제는 예시입니다. 사용자가 세 색상을 표지에 순환 적용하는 방향을 선택했습니다. 이 비교 페이지는 실제 데이터에 연결되지 않은 정적 시안입니다.</footer>
+  </main>
+</body>
+</html>

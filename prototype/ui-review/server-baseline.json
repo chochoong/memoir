@@ -1,0 +1,44 @@
+{
+  "captured": "2026-11-09",
+  "branch": "develop (local)",
+  "commit": "7400e51c9b915d4de671b670e02857ab9e6d8cd5",
+  "normalization": "UTF-8, CRLF normalized to LF",
+  "sources": [
+    {
+      "path": "backend-agent/app/main.py",
+      "sha256": "fbffbe65b153ec125baea2f328ff6d9e9b7f870735c1aef210b0bdbb732b9281"
+    },
+    {
+      "path": "backend-agent/app/session/style.py",
+      "sha256": "26544a72e7eb8841a4fa75a40ee7a03d93df284b65183dbb83b09ff16328736d"
+    },
+    {
+      "path": "backend-agent/app/session/memoir.py",
+      "sha256": "c63f3b51c5d992d56d5e7544ad8d71c7d6284709f33bc5270a462d958b1f5043"
+    },
+    {
+      "path": "backend-agent/app/session/memoir_jobs.py",
+      "sha256": "6a565338ae5216b514c223f13b677e020f048cdb48c6c7672380592b24938a81"
+    },
+    {
+      "path": "backend-agent/app/session/store.py",
+      "sha256": "edaec7945c8c07bf6f80626414422e7c9bb3981fa7558dff756dc48d880f6b9f"
+    },
+    {
+      "path": "backend-agent/app/session/auth.py",
+      "sha256": "dcfaf4b48b883587389d51479f81e1173215bea5abda5ed2550cb4825afd8e2c"
+    },
+    {
+      "path": "backend-agent/app/session/link.py",
+      "sha256": "e7a4cc58b4d8fa62b81a3c6a1a0178a03382464aac70c27b65a5e0c5e108a4fa"
+    },
+    {
+      "path": "backend-agent/app/session/controller.py",
+      "sha256": "e391884079f4e2fd2604f0f205729f419a62e95282fcf208847c73c0f02fcb4e"
+    },
+    {
+      "path": "backend-agent/app/session/machine.py",
+      "sha256": "d4843985d353be14eebc04c84d33435dd58b4b46f1c8ae024939c8182e19f2ed"
+    }
+  ]
+}

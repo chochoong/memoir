@@ -1,0 +1,58 @@
+/* Review-only login/account dialog; all styles stay within this dialog. */
+.memoir-login-dialog { width:min(820px,calc(100% - 40px)); max-height:calc(100dvh - 40px); margin:auto; padding:0; overflow:auto; border:1px solid var(--line); border-radius:18px; background:var(--paper); color:var(--ink); box-shadow:0 20px 90px #34252a40; }
+.memoir-login-dialog::backdrop { background:#34272b88; }
+.memoir-login-dialog .mlg-topbar { display:flex; align-items:center; justify-content:space-between; gap:16px; padding:13px 16px 13px 24px; border-bottom:1px solid var(--line); }
+.memoir-login-dialog .mlg-preview-label { display:inline-block; padding:4px 9px; border:1px solid #e2d1c7; border-radius:4px; font-size:12px; line-height:1.6; color:#886955; background:#faf4ed; }
+.memoir-login-dialog .mlg-close { display:flex; align-items:center; justify-content:center; width:48px; height:48px; flex-shrink:0; padding:0; border:0; border-radius:50%; color:#806a5f; background:none; }
+.memoir-login-dialog .mlg-close:hover { background:#f3e9e2; }
+.memoir-login-dialog .mlg-close .icon { width:22px; height:22px; }
+.memoir-login-dialog .mlg-layout { display:grid; grid-template-columns:.8fr 1.2fr; }
+.memoir-login-dialog .mlg-visual { display:flex; flex-direction:column; align-items:center; justify-content:center; min-width:0; padding:35px 22px 38px; background:radial-gradient(at 50% 35%,#fff7e9,transparent 75%),#f3e9dc; border-right:1px solid #e8dacb; text-align:center; }
+.memoir-login-dialog .mlg-brand { align-self:flex-start; font-size:25px; font-weight:800; letter-spacing:-.08em; color:#693a3b; margin:0 0 10px 6px; }
+.memoir-login-dialog .mlg-visual img { display:block; width:135%; max-width:340px; margin:4px -20px 0; }
+.memoir-login-dialog .mlg-visual p { margin-top:0; color:#886d59; font-family:var(--serif); font-size:21px; line-height:1.85; letter-spacing:-.04em; }
+.memoir-login-dialog .mlg-visual-rule { width:38px; height:1px; background:#b9987c; margin-top:24px; }
+.memoir-login-dialog .mlg-main { min-width:0; padding:32px 30px 25px; }
+.memoir-login-dialog h2 { margin:0 0 13px; font-size:28px; line-height:1.55; letter-spacing:-.06em; }
+.memoir-login-dialog #login-preview-description { font-size:17px; line-height:1.85; color:var(--muted); }
+.memoir-login-dialog .mlg-content { margin-top:25px; }
+.memoir-login-dialog .mlg-welcome-note { font-size:15px; color:#8a705f; line-height:1.9; padding:17px 18px; margin-bottom:23px; border-radius:9px; background:#f7efe6; }
+.memoir-login-dialog .mlg-primary { width:100%; min-height:64px; font-size:18px; padding:14px 16px; }
+.memoir-login-dialog .mlg-secondary { display:block; width:100%; min-height:60px; padding:12px 5px; margin-top:6px; border:0; background:none; font-size:15px; line-height:1.6; color:#84685b; }
+.memoir-login-dialog .mlg-secondary:hover { color:var(--burgundy); text-decoration:underline; text-underline-offset:5px; }
+.memoir-login-dialog .mlg-fixture-note { margin:16px 0 20px; font-size:13px; line-height:1.9; color:#8e7c71; }
+.memoir-login-dialog .mlg-speaker-choices { display:grid; gap:10px; }
+.memoir-login-dialog .mlg-speaker-choice { display:flex; align-items:center; gap:13px; min-height:79px; width:100%; padding:13px 16px; border:1px solid var(--line); border-radius:10px; background:#fffaf4; text-align:left; }
+.memoir-login-dialog .mlg-speaker-choice[aria-pressed="true"] { border-color:#a16c76; background:#f5e8e4; box-shadow:inset 0 0 0 1px #a16c7633; }
+.memoir-login-dialog .mlg-speaker-initial { display:flex; align-items:center; justify-content:center; width:41px; height:44px; flex-shrink:0; border:1px solid #e3cdc0; border-radius:8px; background:#f2e5d7; color:#94694f; font-family:var(--serif); font-size:20px; }
+.memoir-login-dialog .mlg-speaker-choice strong { display:block; font-size:18px; font-weight:600; }
+.memoir-login-dialog .mlg-speaker-choice small { display:block; font-size:12px; color:#917b6e; margin-top:1px; }
+.memoir-login-dialog .mlg-choice-check { display:flex; align-items:center; justify-content:center; width:22px; height:22px; flex-shrink:0; margin-left:auto; border:1px solid #cdb3a8; border-radius:50%; font-size:14px; line-height:1; color:#fff; }
+.memoir-login-dialog [aria-pressed="true"] .mlg-choice-check { background:var(--burgundy); border-color:var(--burgundy); }
+.memoir-login-dialog .mlg-account { display:flex; align-items:center; gap:15px; padding:20px 0 24px; border-bottom:1px solid var(--line); }
+.memoir-login-dialog .mlg-account-avatar { display:flex; align-items:center; justify-content:center; width:57px; height:57px; flex-shrink:0; border-radius:50%; background:#f0dfd5; border:4px solid #fffaf3; box-shadow:0 0 0 1px #e3cdbf; color:var(--burgundy); font-family:var(--serif); font-size:23px; }
+.memoir-login-dialog .mlg-account strong { display:block; font-size:21px; font-weight:600; }
+.memoir-login-dialog .mlg-account small { display:block; font-size:12px; color:#8c7566; margin-top:4px; }
+.memoir-login-dialog .mlg-speaker-summary { display:flex; justify-content:space-between; align-items:center; gap:16px; padding:21px 0 7px; }
+.memoir-login-dialog .mlg-speaker-summary span { color:#917968; font-size:15px; }
+.memoir-login-dialog .mlg-speaker-summary strong { font-size:20px; font-weight:600; color:var(--burgundy); }
+@media(max-width:760px) {
+  .memoir-login-dialog { width:min(480px,calc(100% - 24px)); max-height:calc(100dvh - 24px); border-radius:15px; }
+  .memoir-login-dialog .mlg-topbar { padding:10px 10px 10px 20px; }
+  .memoir-login-dialog .mlg-layout { grid-template-columns:1fr; }
+  .memoir-login-dialog .mlg-visual { display:none; }
+  .memoir-login-dialog .mlg-main { padding:27px 23px 22px; }
+  .memoir-login-dialog h2 { font-size:27px; }
+  .memoir-login-dialog #login-preview-description { font-size:16px; }
+  .memoir-login-dialog .mlg-content { margin-top:22px; }
+  .memoir-login-dialog .mlg-speaker-choice { min-height:76px; }
+  .memoir-login-dialog .mlg-fixture-note { font-size:13px; }
+}
+@media(max-width:360px) {
+  .memoir-login-dialog .mlg-main { padding:25px 19px 20px; }
+  .memoir-login-dialog h2 { font-size:25px; }
+  .memoir-login-dialog .mlg-welcome-note { padding:15px; font-size:14px; }
+  .memoir-login-dialog .mlg-primary { font-size:17px; }
+  .memoir-login-dialog .mlg-speaker-choice { padding:12px; gap:10px; }
+  .memoir-login-dialog .mlg-account small { font-size:11px; }
+}
