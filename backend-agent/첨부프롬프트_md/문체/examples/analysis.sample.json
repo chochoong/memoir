@@ -1,0 +1,67 @@
+{
+  "book_title": "(가상) 철물점 골목",
+  "stories": [
+    {
+      "turn": 1,
+      "title_hint": "자전거 짐받이",
+      "people": ["주인아저씨"],
+      "time": ["열아홉", "비 오는 날"],
+      "places": ["읍내 철물점", "길"],
+      "events": ["읍내 철물점에서 배달 일을 했다", "못 상자가 터져 못이 길에 쏟아졌다", "주인아저씨가 같이 주워 줬다", "그날 품삯을 다 받았다"],
+      "objects": ["자전거 짐받이", "못 상자"],
+      "emotions_then": ["품삯을 못 받을까 걱정"],
+      "reflections_now": [],
+      "quotes": [],
+      "heard": [],
+      "must_keep": ["자전거 짐받이", "못 상자", "비 오는 날", "주인아저씨가 같이 주움"],
+      "emotion_notes": [
+        {"who": "화자", "kind": "걱정", "target": "품삯", "intensity": "보통", "when": "당시", "explicit": true, "evidence": "품삯을 못 받는 줄 알았는데"}
+      ],
+      "facts": [
+        {"id": "f1-1", "text": "열아홉에 읍내 철물점에서 배달 일을 했다", "source": "self", "certainty": "stated"},
+        {"id": "f1-2", "text": "비 오는 날 못 상자가 터져 못이 길에 쏟아졌다", "source": "self", "certainty": "stated"},
+        {"id": "f1-3", "text": "주인아저씨가 같이 주워 줬다", "source": "self", "certainty": "stated"},
+        {"id": "f1-4", "text": "그날 품삯을 다 받았다", "source": "self", "certainty": "stated"}
+      ]
+    },
+    {
+      "turn": 2,
+      "title_hint": "첫 월급",
+      "people": ["어머니", "누나"],
+      "time": ["그해 겨울"],
+      "places": ["집"],
+      "events": ["첫 월급을 받았다", "어머니께 내의를 한 벌 사다 드렸다"],
+      "objects": ["내의 한 벌"],
+      "emotions_then": [],
+      "reflections_now": [],
+      "quotes": [],
+      "heard": ["어머니가 내의를 한참 입지 않으셨다는 것"],
+      "must_keep": ["첫 월급", "내의 한 벌", "누나에게 들음"],
+      "emotion_notes": [],
+      "facts": [
+        {"id": "f2-1", "text": "그해 겨울에 첫 월급을 받았다", "source": "self", "certainty": "approx"},
+        {"id": "f2-2", "text": "어머니께 내의를 한 벌 사다 드렸다", "source": "self", "certainty": "stated"},
+        {"id": "f2-3", "text": "어머니는 아깝다고 한참 입지 않으셨다", "source": "heard", "certainty": "stated"}
+      ]
+    }
+  ],
+  "chapters": [
+    {
+      "id": "c1",
+      "title_basis": {
+        "core_change": "남의 가게에서 일을 배우던 소년이 처음 번 돈으로 어머니께 무언가를 드린다.",
+        "candidates": [
+          {"title": "못 상자와 내의 한 벌", "type": "장면 중심형", "basis": "이야기 1의 못 상자 · 이야기 2의 내의"},
+          {"title": "처음 번 돈", "type": "삶의 변화형", "basis": "이야기 1의 품삯 · 이야기 2의 첫 월급"}
+        ]
+      },
+      "stories": [1, 2],
+      "fact_ids": ["f1-1", "f1-2", "f1-3", "f1-4", "f2-1", "f2-2", "f2-3"],
+      "center_scene": "비 오는 길에 쏟아진 못을 주인아저씨와 같이 줍는 장면",
+      "emotion": "품삯을 못 받을까 하던 걱정",
+      "direction": "쏟아진 못에서 열고 첫 월급의 내의로 닫는다",
+      "fiction_notes": "품삯의 액수를 만들지 않는다. 어머니의 말은 전해 들은 범위를 넘지 않는다.",
+      "avoid_overlap": "없음(한 장짜리 예시)"
+    }
+  ]
+}

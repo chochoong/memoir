@@ -1,0 +1,912 @@
+{
+  "status": "ready",
+  "facts": [
+    {
+      "id": "f1",
+      "turns": [
+        1
+      ],
+      "text": "대전에서 수선집을 오래 함",
+      "time": "",
+      "source": "self",
+      "certainty": "stated",
+      "keep": false
+    },
+    {
+      "id": "f2",
+      "turns": [
+        2
+      ],
+      "text": "2010년에 수선집을 그만둠",
+      "time": "2010년",
+      "source": "self",
+      "certainty": "stated",
+      "keep": true
+    },
+    {
+      "id": "f3",
+      "turns": [
+        2
+      ],
+      "text": "무릎이 아파서 더는 못 앉아 있겠어서 그만둠",
+      "time": "",
+      "source": "self",
+      "certainty": "stated",
+      "keep": true
+    },
+    {
+      "id": "f4",
+      "turns": [
+        3
+      ],
+      "text": "아침 아홉 시에 문 열면 저녁 여덟 시까지 거의 재봉틀 앞에 있었음",
+      "time": "",
+      "source": "self",
+      "certainty": "stated",
+      "keep": false
+    },
+    {
+      "id": "f5",
+      "turns": [
+        4
+      ],
+      "text": "검은색 발틀 재봉틀을 씀",
+      "time": "",
+      "source": "self",
+      "certainty": "stated",
+      "keep": false
+    },
+    {
+      "id": "f6",
+      "turns": [
+        4
+      ],
+      "text": "검은색 발틀 재봉틀은 큰언니가 보내 준 것임",
+      "time": "",
+      "source": "self",
+      "certainty": "stated",
+      "keep": true
+    },
+    {
+      "id": "f7",
+      "turns": [
+        5
+      ],
+      "text": "남편은 시내버스 운전을 함",
+      "time": "",
+      "source": "self",
+      "certainty": "stated",
+      "keep": false
+    },
+    {
+      "id": "f8",
+      "turns": [
+        5
+      ],
+      "text": "가게는 거의 혼자 함",
+      "time": "",
+      "source": "self",
+      "certainty": "stated",
+      "keep": false
+    },
+    {
+      "id": "f9",
+      "turns": [
+        6
+      ],
+      "text": "양복점 하던 김 사장님이 단골이었음",
+      "time": "",
+      "source": "self",
+      "certainty": "stated",
+      "keep": false
+    },
+    {
+      "id": "f10",
+      "turns": [
+        6
+      ],
+      "text": "김 사장님 덕에 처음 몇 년을 버팀",
+      "time": "",
+      "source": "self",
+      "certainty": "stated",
+      "keep": false
+    },
+    {
+      "id": "f11",
+      "turns": [
+        7
+      ],
+      "text": "아들, 딸 운동회를 거의 못 감",
+      "time": "",
+      "source": "self",
+      "certainty": "stated",
+      "keep": false
+    },
+    {
+      "id": "f12",
+      "turns": [
+        7
+      ],
+      "text": "운동회를 못 간 것이 지금도 좀 미안함",
+      "time": "",
+      "source": "self",
+      "certainty": "stated",
+      "keep": true
+    },
+    {
+      "id": "f13",
+      "turns": [
+        8
+      ],
+      "text": "제 손으로 돈 벌어서 애들 둘을 대학 보냄",
+      "time": "",
+      "source": "self",
+      "certainty": "stated",
+      "keep": true
+    },
+    {
+      "id": "f14",
+      "turns": [
+        9
+      ],
+      "text": "충청도 시골 출신이며 오 남매 중 넷째임",
+      "time": "",
+      "source": "self",
+      "certainty": "stated",
+      "keep": false
+    },
+    {
+      "id": "f15",
+      "turns": [
+        10
+      ],
+      "text": "큰언니와 열 살 차이임",
+      "time": "",
+      "source": "self",
+      "certainty": "stated",
+      "keep": false
+    },
+    {
+      "id": "f16",
+      "turns": [
+        10
+      ],
+      "text": "엄마가 밭일 나가면 큰언니가 업어 키웠다고 들음",
+      "time": "",
+      "source": "heard",
+      "certainty": "stated",
+      "keep": false
+    },
+    {
+      "id": "f17",
+      "turns": [
+        11
+      ],
+      "text": "열 살쯤 큰언니에게 양말 꿰매는 걸 배움",
+      "time": "열 살쯤",
+      "source": "self",
+      "certainty": "approx",
+      "keep": false
+    },
+    {
+      "id": "f18",
+      "turns": [
+        12
+      ],
+      "text": "큰언니는 말이 별로 없고 손이 빨랐음",
+      "time": "",
+      "source": "self",
+      "certainty": "stated",
+      "keep": false
+    },
+    {
+      "id": "f19",
+      "turns": [
+        12
+      ],
+      "text": "동네 사람들 옷도 언니가 다 고쳐 줌",
+      "time": "",
+      "source": "self",
+      "certainty": "stated",
+      "keep": false
+    },
+    {
+      "id": "f20",
+      "turns": [
+        13
+      ],
+      "text": "열다섯 살 즈음 큰언니가 부산으로 시집감",
+      "time": "열다섯 즈음",
+      "source": "self",
+      "certainty": "approx",
+      "keep": false
+    },
+    {
+      "id": "f21",
+      "turns": [
+        13
+      ],
+      "text": "언니가 시집가는 날 버스 정류장에서 많이 울었음",
+      "time": "",
+      "source": "self",
+      "certainty": "stated",
+      "keep": true
+    },
+    {
+      "id": "f22",
+      "turns": [
+        14
+      ],
+      "text": "열일곱 살에 서울 동대문 근처 봉제 공장으로 올라감",
+      "time": "열일곱 살",
+      "source": "self",
+      "certainty": "stated",
+      "keep": true
+    },
+    {
+      "id": "f23",
+      "turns": [
+        15
+      ],
+      "text": "기숙사에서 여섯 명이 한 방을 썼고 미싱 소리가 시끄러웠음",
+      "time": "",
+      "source": "self",
+      "certainty": "stated",
+      "keep": false
+    },
+    {
+      "id": "f24",
+      "turns": [
+        16
+      ],
+      "text": "공장 첫 월급을 집에 부쳤음",
+      "time": "",
+      "source": "self",
+      "certainty": "stated",
+      "keep": false
+    },
+    {
+      "id": "f25",
+      "turns": [
+        16
+      ],
+      "text": "엄마가 편지로 고맙다고 함",
+      "time": "",
+      "source": "self",
+      "certainty": "stated",
+      "keep": false
+    },
+    {
+      "id": "f26",
+      "turns": [
+        17
+      ],
+      "text": "재단하는 언니들 옆에서 어깨너머로 배움",
+      "time": "",
+      "source": "self",
+      "certainty": "stated",
+      "keep": false
+    },
+    {
+      "id": "f27",
+      "turns": [
+        18
+      ],
+      "text": "서울에서 약 6년 살았음",
+      "time": "약 6년",
+      "source": "self",
+      "certainty": "approx",
+      "keep": false
+    },
+    {
+      "id": "f28",
+      "turns": [
+        18
+      ],
+      "text": "남편을 만나 결혼한 뒤 남편 고향인 대전으로 내려옴",
+      "time": "",
+      "source": "self",
+      "certainty": "stated",
+      "keep": false
+    },
+    {
+      "id": "f29",
+      "turns": [
+        19
+      ],
+      "text": "중앙시장 안에 좌판을 먼저 폈음",
+      "time": "",
+      "source": "self",
+      "certainty": "stated",
+      "keep": false
+    },
+    {
+      "id": "f30",
+      "turns": [
+        19
+      ],
+      "text": "딸이 네 살 때인 1983년쯤 좌판을 폈음",
+      "time": "1983년쯤",
+      "source": "self",
+      "certainty": "approx",
+      "keep": false
+    },
+    {
+      "id": "f31",
+      "turns": [
+        20
+      ],
+      "text": "좌판은 일 년도 못 함",
+      "time": "",
+      "source": "self",
+      "certainty": "stated",
+      "keep": false
+    },
+    {
+      "id": "f32",
+      "turns": [
+        20
+      ],
+      "text": "비가 오면 장사를 못 하고 자릿세는 나가서 그때 남편이랑 많이 다툼",
+      "time": "",
+      "source": "self",
+      "certainty": "stated",
+      "keep": false
+    },
+    {
+      "id": "f33",
+      "turns": [
+        21
+      ],
+      "text": "은행동 골목에 두 평짜리 가게를 얻음",
+      "time": "",
+      "source": "self",
+      "certainty": "stated",
+      "keep": false
+    },
+    {
+      "id": "f34",
+      "turns": [
+        21,
+        25
+      ],
+      "text": "수선집을 1985년 봄에 개업함",
+      "time": "1985년 봄",
+      "source": "self",
+      "certainty": "stated",
+      "keep": true
+    },
+    {
+      "id": "f35",
+      "turns": [
+        22
+      ],
+      "text": "간판 할 돈이 없어 달력 뒤에 매직으로 '수선'이라고 써 붙임",
+      "time": "",
+      "source": "self",
+      "certainty": "stated",
+      "keep": false
+    },
+    {
+      "id": "f36",
+      "turns": [
+        23
+      ],
+      "text": "첫날은 손님이 한 명도 안 옴",
+      "time": "",
+      "source": "self",
+      "certainty": "stated",
+      "keep": false
+    },
+    {
+      "id": "f37",
+      "turns": [
+        23
+      ],
+      "text": "사흘째에 할머니 한 분이 바지 단 줄여 달라고 온 것이 첫 손님임",
+      "time": "",
+      "source": "self",
+      "certainty": "stated",
+      "keep": false
+    },
+    {
+      "id": "f38",
+      "turns": [
+        23
+      ],
+      "text": "첫 손님에게 천 원쯤 받음",
+      "time": "",
+      "source": "self",
+      "certainty": "approx",
+      "keep": false
+    },
+    {
+      "id": "f39",
+      "turns": [
+        24
+      ],
+      "text": "첫 천 원을 한참 안 쓰고 지갑에 넣어 고 다님",
+      "time": "",
+      "source": "self",
+      "certainty": "stated",
+      "keep": false
+    },
+    {
+      "id": "f40",
+      "turns": [
+        26
+      ],
+      "text": "가게 열고 한 달쯤 뒤에 큰언니가 쓰던 재봉틀이 부산에서 화물로 옴",
+      "time": "가게 열고 한 달쯤 뒤",
+      "source": "self",
+      "certainty": "approx",
+      "keep": false
+    },
+    {
+      "id": "f41",
+      "turns": [
+        26,
+        27
+      ],
+      "text": "편지가 동봉되어 있었고 '기름 자주 쳐라'라고 적혀 있었음",
+      "time": "",
+      "source": "self",
+      "certainty": "stated",
+      "keep": false
+    },
+    {
+      "id": "f42",
+      "turns": [
+        28
+      ],
+      "text": "아들 돌 지나고 1977년쯤 부산에 처음 감",
+      "time": "1977년쯤",
+      "source": "self",
+      "certainty": "approx",
+      "keep": false
+    },
+    {
+      "id": "f43",
+      "turns": [
+        28
+      ],
+      "text": "큰언니가 시집간 집에 처음 가 보고 그때 바다를 처음 봄",
+      "time": "",
+      "source": "self",
+      "certainty": "stated",
+      "keep": true
+    },
+    {
+      "id": "f44",
+      "turns": [
+        29
+      ],
+      "text": "2003년에 언니가 아프다고 해서 부산 병원으로 병문안을 감",
+      "time": "2003년",
+      "source": "self",
+      "certainty": "stated",
+      "keep": false
+    },
+    {
+      "id": "f45",
+      "turns": [
+        30
+      ],
+      "text": "딸이 2008년에 결혼함",
+      "time": "2008년",
+      "source": "self",
+      "certainty": "stated",
+      "keep": false
+    },
+    {
+      "id": "f46",
+      "turns": [
+        30
+      ],
+      "text": "빌린 드레스가 커서 가게에서 직접 허리를 줄여줌",
+      "time": "",
+      "source": "self",
+      "certainty": "stated",
+      "keep": false
+    },
+    {
+      "id": "f47",
+      "turns": [
+        31
+      ],
+      "text": "내 손으로 고친 옷을 입고 들어가는 것을 보니 좋았음",
+      "time": "",
+      "source": "self",
+      "certainty": "stated",
+      "keep": false
+    },
+    {
+      "id": "f48",
+      "turns": [
+        31
+      ],
+      "text": "처음부터 하나 지어 주고 싶었는데 눈이 침침해 엄두가 안 나서 아쉬움",
+      "time": "",
+      "source": "self",
+      "certainty": "stated",
+      "keep": true
+    },
+    {
+      "id": "f49",
+      "turns": [
+        32
+      ],
+      "text": "아들은 서울에서 회사원으로 일함",
+      "time": "",
+      "source": "self",
+      "certainty": "stated",
+      "keep": false
+    },
+    {
+      "id": "f50",
+      "turns": [
+        32
+      ],
+      "text": "아들이 말이 없어서 큰언니를 닮았다고 생각함",
+      "time": "",
+      "source": "view",
+      "certainty": "stated",
+      "keep": false
+    },
+    {
+      "id": "f51",
+      "turns": [
+        33
+      ],
+      "text": "남편은 2015년에 돌아가심",
+      "time": "2015년",
+      "source": "self",
+      "certainty": "stated",
+      "keep": true
+    },
+    {
+      "id": "f52",
+      "turns": [
+        34
+      ],
+      "text": "큰언니는 병원 다녀온 그다음 해 봄인 2004년에 돌아가심",
+      "time": "2004년 봄",
+      "source": "self",
+      "certainty": "stated",
+      "keep": true
+    },
+    {
+      "id": "f53",
+      "turns": [
+        34
+      ],
+      "text": "큰언니 장례식에는 남동생과 같이 감",
+      "time": "",
+      "source": "self",
+      "certainty": "stated",
+      "keep": false
+    },
+    {
+      "id": "f54",
+      "turns": [
+        35
+      ],
+      "text": "2010년에 가게 문을 닫으면서 발틀 재봉틀은 집으로 가져옴",
+      "time": "2010년",
+      "source": "self",
+      "certainty": "stated",
+      "keep": false
+    },
+    {
+      "id": "f55",
+      "turns": [
+        36
+      ],
+      "text": "가끔 손주 바지 단을 줄여주지만 발이 예전 같지 않아 오래는 못 돌림",
+      "time": "",
+      "source": "self",
+      "certainty": "stated",
+      "keep": false
+    },
+    {
+      "id": "f56",
+      "turns": [
+        37
+      ],
+      "text": "딸이 엄마 얘기를 책으로 남기자고 함",
+      "time": "",
+      "source": "reported",
+      "certainty": "stated",
+      "keep": false
+    },
+    {
+      "id": "f57",
+      "turns": [
+        38
+      ],
+      "text": "언니가 준 재봉틀을 아직 못 버렸음",
+      "time": "",
+      "source": "self",
+      "certainty": "stated",
+      "keep": true
+    },
+    {
+      "id": "f58",
+      "turns": [
+        38
+      ],
+      "text": "재봉틀 드르륵 소리가 나면 언니 생각이 남",
+      "time": "",
+      "source": "self",
+      "certainty": "stated",
+      "keep": true
+    },
+    {
+      "id": "f59",
+      "turns": [
+        38
+      ],
+      "text": "공장 다닐 때는 그 소리가 그렇게 싫었음",
+      "time": "",
+      "source": "self",
+      "certainty": "stated",
+      "keep": false
+    },
+    {
+      "id": "f60",
+      "turns": [
+        39
+      ],
+      "text": "자녀에게 그 재봉틀을 줄지는 아직 모름",
+      "time": "",
+      "source": "self",
+      "certainty": "uncertain",
+      "keep": false
+    }
+  ],
+  "units": [
+    {
+      "id": "m1",
+      "name": "충청도 어린 시절과 큰언니와의 이별",
+      "facts": [
+        "f14",
+        "f15",
+        "f16",
+        "f17",
+        "f18",
+        "f19",
+        "f20",
+        "f21"
+      ],
+      "time": "어린 시절",
+      "weight": "main"
+    },
+    {
+      "id": "m2",
+      "name": "서울 봉제 공장 생활",
+      "facts": [
+        "f22",
+        "f23",
+        "f24",
+        "f25",
+        "f26",
+        "f27",
+        "f28"
+      ],
+      "time": "열일곱 살 이후 서울 생활",
+      "weight": "minor"
+    },
+    {
+      "id": "m3",
+      "name": "대전 시장 좌판과 은행동 수선집 개업",
+      "facts": [
+        "f29",
+        "f30",
+        "f31",
+        "f32",
+        "f33",
+        "f34",
+        "f35",
+        "f36",
+        "f37",
+        "f38",
+        "f39",
+        "f40",
+        "f41"
+      ],
+      "time": "1983년~1985년",
+      "weight": "main"
+    },
+    {
+      "id": "m4",
+      "name": "수선집 운영과 고생하던 일상",
+      "facts": [
+        "f1",
+        "f2",
+        "f3",
+        "f4",
+        "f5",
+        "f6",
+        "f7",
+        "f8",
+        "f9",
+        "f10",
+        "f11",
+        "f12",
+        "f13"
+      ],
+      "time": "대전 수선집 운영 기간",
+      "weight": "main"
+    },
+    {
+      "id": "m5",
+      "name": "부산 큰언니 집 방문과 인연",
+      "facts": [
+        "f42",
+        "f43",
+        "f44",
+        "f52",
+        "f53"
+      ],
+      "time": "1977년 및 2003~2004년",
+      "weight": "minor"
+    },
+    {
+      "id": "m6",
+      "name": "자녀들의 결혼과 가족의 소식",
+      "facts": [
+        "f45",
+        "f46",
+        "f47",
+        "f48",
+        "f49",
+        "f50",
+        "f51"
+      ],
+      "time": "2008년 및 이후",
+      "weight": "main"
+    },
+    {
+      "id": "m7",
+      "name": "가게 정리와 집에 남은 재봉틀 소리",
+      "facts": [
+        "f54",
+        "f55",
+        "f56",
+        "f57",
+        "f58",
+        "f59",
+        "f60"
+      ],
+      "time": "2010년 이후 현재",
+      "weight": "main"
+    }
+  ],
+  "threads": [
+    {
+      "id": "t1",
+      "name": "큰언니",
+      "kind": "person",
+      "units": [
+        "m1",
+        "m3",
+        "m5",
+        "m7"
+      ],
+      "link_turns": [
+        26,
+        38
+      ]
+    },
+    {
+      "id": "t2",
+      "name": "재봉틀",
+      "kind": "object",
+      "units": [
+        "m3",
+        "m4",
+        "m7"
+      ],
+      "link_turns": [
+        4,
+        26,
+        38
+      ]
+    },
+    {
+      "id": "t3",
+      "name": "부산",
+      "kind": "place",
+      "units": [
+        "m1",
+        "m5"
+      ],
+      "link_turns": [
+        13,
+        28
+      ]
+    }
+  ],
+  "people": [
+    {
+      "name": "큰언니",
+      "relation": "큰언니"
+    },
+    {
+      "name": "남편",
+      "relation": "남편"
+    },
+    {
+      "name": "김 사장",
+      "relation": "양복점 사장님"
+    },
+    {
+      "name": "딸",
+      "relation": "딸"
+    },
+    {
+      "name": "아들",
+      "relation": "아들"
+    },
+    {
+      "name": "엄마",
+      "relation": "어머니"
+    },
+    {
+      "name": "남동생",
+      "relation": "남동생"
+    }
+  ],
+  "corrections": [
+    {
+      "fact": "f34",
+      "turns": [
+        21,
+        25
+      ],
+      "before": "1986년",
+      "after": "1985년 봄",
+      "note": "가게 개업 연도를 1986년에서 1985년 봄으로 바로잡음"
+    }
+  ],
+  "themes": [
+    {
+      "theme": "언니에게서 이어진 바느질과 재봉틀의 기억",
+      "supporting": [
+        4,
+        11,
+        26,
+        38
+      ],
+      "counter": [],
+      "strength": "clear"
+    },
+    {
+      "theme": "고생 속에서 꾸려간 수선집과 자식 키운 세월",
+      "supporting": [
+        3,
+        7,
+        8,
+        30
+      ],
+      "counter": [],
+      "strength": "clear"
+    }
+  ],
+  "direction": {
+    "theme": "언니에게서 이어진 바느질과 재봉틀의 기억",
+    "reason": "큰언니와의 어린 시절 인연과 언니가 보내 준 재봉틀이 삶 전체를 관통하며 큰 울림을 주므로",
+    "neutral": false
+  },
+  "exclusions": [],
+  "not_in_facts": [
+    {
+      "turns": [
+        33
+      ],
+      "reason": "남편 별세 이야기 중 '그 얘긴… 오늘은 그만할게요'라며 이야기를 중단한 부분"
+    }
+  ],
+  "unclear": [],
+  "missing_context": []
+}

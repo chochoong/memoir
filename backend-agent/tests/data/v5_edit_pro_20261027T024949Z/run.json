@@ -1,0 +1,105 @@
+{
+  "seed": "memoir_seed_C.json",
+  "set_id": "C",
+  "aliases": [
+    "c1",
+    "c2",
+    "c3",
+    "c4",
+    "c5"
+  ],
+  "run_ref": "20261027T024949Z-C5-b9f8-focus-fixture-outline-edit-31propreview",
+  "input_ref": "b9f8e2daea65",
+  "focus": "큰언니와 재봉틀",
+  "analysis_source": "reviewed_fixture",
+  "outline_source": "reviewed_fixture",
+  "draft_source": {
+    "run_ref": "20261027T023603Z-C5-b9f8-focus-fixture-outline-chapter-31propreview",
+    "model": "gemini-3.1-pro-preview",
+    "temperature": 1.0,
+    "sha256": [
+      "2cabbb3a7850def6"
+    ]
+  },
+  "started_at": "2026-10-27T02:49:49+00:00",
+  "finished_at": "2026-10-27T02:51:25+00:00",
+  "settings": {
+    "MEMOIR_PIPE_TEXT_MODEL": "gemini-3.1-pro-preview",
+    "MEMOIR_PIPE_TEMPERATURE": 1.0,
+    "MEMOIR_PIPE_TOTAL_TIMEOUT": 600.0,
+    "MEMOIR_PIPE_ANALYSIS_TIMEOUT": 90.0,
+    "MEMOIR_PIPE_ANALYSIS_MAX_OUTPUT_TOKENS": 8000,
+    "MEMOIR_PIPE_OUTLINE_TIMEOUT": 60.0,
+    "MEMOIR_PIPE_OUTLINE_MAX_OUTPUT_TOKENS": 6000,
+    "MEMOIR_PIPE_CHAPTER_TIMEOUT": 90.0,
+    "MEMOIR_PIPE_CHAPTER_MAX_OUTPUT_TOKENS": 6000,
+    "MEMOIR_PIPE_EDIT_TIMEOUT": 300.0,
+    "MEMOIR_PIPE_EDIT_MAX_OUTPUT_TOKENS": 32768,
+    "MEMOIR_PIPE_VERIFY_TIMEOUT": 90.0,
+    "MEMOIR_PIPE_VERIFY_MAX_OUTPUT_TOKENS": 6000,
+    "chapters": [
+      1,
+      5
+    ],
+    "retries": 0,
+    "prompt_version": "v5",
+    "chapter_only": false,
+    "edit_only": true
+  },
+  "prompts": {
+    "analysis": "sha256:dd1641c04e55c991",
+    "outline": "sha256:b5fdcc6d0ffca346",
+    "chapter": "sha256:c6390485ec663d14",
+    "edit": "sha256:272f31840c955d68",
+    "verify": "sha256:e4570c03f792051c"
+  },
+  "steps": [
+    {
+      "stage": "edit",
+      "chapter_key": null,
+      "ok": true,
+      "ms": 95808,
+      "timeout": 300.0,
+      "max_output_tokens": 32768,
+      "in_chars": 36901,
+      "out_chars": 8374,
+      "finish": "FinishReason.STOP",
+      "usage": {
+        "prompt": 20358,
+        "output": 3225,
+        "thoughts": 13341,
+        "total": 36924
+      },
+      "file": "04_edited.json",
+      "raw_file": "04_edited.raw.txt",
+      "warnings": [],
+      "error": null,
+      "metrics": {
+        "edit_trace": {
+          "draft_chapters": 1,
+          "final_chapters": 1,
+          "draft_sentences": 24,
+          "final_sentences": 27,
+          "kept": 12,
+          "revised": 12,
+          "rewritten": 1,
+          "new": 2,
+          "dropped": 0,
+          "moved": 2,
+          "chapter_merges": [],
+          "chapter_splits": [],
+          "paragraph_merges": 2,
+          "paragraph_splits": 1,
+          "unchanged_ratio": 0.44,
+          "structure_changed": true
+        }
+      }
+    }
+  ],
+  "generation_state": "edit_only",
+  "pipeline_complete": false,
+  "code_gate": "pass",
+  "overall": "edit_only",
+  "failure": null,
+  "calls": 1
+}

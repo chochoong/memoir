@@ -11,9 +11,8 @@
     IP 당 생성 횟수     창(기본 10분) 안에 열 수 있는 회차 수      ← 실제 천장
     사용자당 동시 회차   닫히지 않은 채로 들고 있을 수 있는 회차 수  ← 예의
 
-**두 번째는 보안이 아니다.** user_id 는 X-User-Id 헤더를 그대로 믿는 값이라 바꿔
-넣으면 통과한다. 탭을 여러 개 띄워 둔 경우를 막는 정도이고, 로그인이 붙으면 그때
-비로소 실효를 가진다. 그래서 진짜 상한은 첫 번째다.
+두 번째는 로그인한 자녀 한 명이 회차를 쌓아 두는 것을 막는다. 회차를 여는 입구는
+첫 번째가 지킨다 — 로그인 전 요청은 회차를 열지 못하지만, 상한은 그대로 둔다.
 
 상태는 프로세스 메모리다. 인스턴스를 늘리면 상한도 인스턴스 수만큼 늘어난다 —
 그때는 Redis 로 옮겨야 한다. 지금은 한 프로세스라 이것으로 맞는다.
@@ -35,6 +34,7 @@ log = logging.getLogger("limits")
 DEFAULT_WINDOW = 600.0        # 10분
 DEFAULT_MAX = 10              # 같은 IP 가 그 10분에 열 수 있는 회차
 DEFAULT_USER_LIVE = 3         # 한 사용자가 동시에 들고 있을 수 있는 회차
+DEFAULT_REPLACE_IDLE = 120.0  # 상한에 걸려 새로 열 때 대신 닫을 회차의 최소 무활동 시간(초)
 
 # _hits 가 이보다 커지면 한 번 훑어 창 밖의 IP 를 버린다. 아래 _prune 참조.
 PRUNE_AT = 1000
@@ -113,6 +113,11 @@ def client_ip(request: Request) -> str:
 
 def user_cap() -> int:
     return env_int("USER_LIVE_MAX", DEFAULT_USER_LIVE)
+
+
+def replace_idle() -> float:
+    """상한에 걸린 계정이 새 회차를 열 때, 이만큼 활동이 없던 회차만 대신 닫는다 (main._open_checks)."""
+    return env_float("SESSION_REPLACE_IDLE_SECONDS", DEFAULT_REPLACE_IDLE)
 
 
 def take(ip: str) -> None:

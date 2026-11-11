@@ -7,3 +7,6 @@ google-genai
 httpx
 Pillow
 pillow-heif
+google-auth
+requests
+anthropic>=2.4.0

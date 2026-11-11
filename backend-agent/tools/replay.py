@@ -4,6 +4,11 @@
     python tools/replay.py                      tools/recordings/turn*.wav 로 3턴
     python tools/replay.py --base https://...   터널 너머의 서버로
     python tools/replay.py --no-realtime        기다리지 않고 몰아서 (빠른 확인용)
+    python tools/replay.py --cookie <msid>      브라우저로 로그인한 쿠키를 쓴다
+
+**신원은 msid 쿠키다** (서버는 X-User-Id 를 읽지 않는다). --cookie 를 주지 않으면
+tools/dev_login.py 로 이 서버의 DB 에 계정 「replay」의 쿠키를 만든다 — 그래서
+서버와 같은 .env 로 돌린다. 터널 너머 서버의 DB 가 이 PC 에 없으면 --cookie 를 준다.
 
 **녹음 파일은 저장소에 올리지 않는다** (.gitignore). 사람 목소리라 그렇고,
 저마다 자기 목소리로 받아 두는 편이 시험으로도 낫다. 16kHz 모노 wav 면 된다.
@@ -41,13 +46,14 @@ SEED = "1968년 여름, 순애랑 서울 가는 완행열차를 탔다."
 CHUNK_SEC = 1.0          # MediaRecorder 의 timeslice 와 같은 자리
 SILENCE_RATIO = 0.08     # 최대 음량 대비 이 아래면 무음으로 본다
 CTX = ssl.create_default_context()
+COOKIE = ""              # main 이 채운다. 「msid=…」
 
 
 def _call(base: str, path: str, data: bytes | None = None,
           ctype: str = "application/json") -> dict:
     req = urllib.request.Request(
         base + path, data=data,
-        headers={"Content-Type": ctype, "X-User-Id": "replay"},
+        headers={"Content-Type": ctype, "Cookie": COOKIE},
         method="POST" if data is not None else "GET")
     with urllib.request.urlopen(req, timeout=40, context=CTX) as r:
         return json.loads(r.read().decode())
@@ -117,12 +123,22 @@ def main() -> int:
                     help="머리 없는 PCM 대신 wav 로 올린다 (통과 경로 확인용)")
     ap.add_argument("--no-realtime", action="store_true",
                     help="청크 사이를 기다리지 않는다. T1 리셋은 시험되지 않는다")
+    ap.add_argument("--cookie", help="msid 값. 없으면 dev_login 으로 만든다")
+    ap.add_argument("--allow-remote", action="store_true",
+                    help="dev_login 이 이 PC 가 아닌 DB 에도 쓴다")
     a = ap.parse_args()
 
     files = sorted(Path(a.dir).glob(a.glob))
     if not files:
         print(f"{a.dir}/{a.glob} 에 녹음이 없다. 16kHz 모노 wav 를 넣어 두면 된다.")
         return 1
+
+    global COOKIE
+    if a.cookie:
+        COOKIE = a.cookie if a.cookie.startswith("msid=") else f"msid={a.cookie}"
+    else:
+        from dev_login import mint
+        COOKIE = f"msid={mint(['replay'], a.allow_remote)[0][2]}"
 
     snap = _call(a.base, "/api/sessions", json.dumps({
         "title": "녹음 재생", "seed": SEED,
@@ -155,6 +171,12 @@ def main() -> int:
                 time.sleep(a.chunk)
 
         snap, waited = _wait(a.base, sid)
+        if snap["state"] == "LISTENING":
+            # 전사가 비면 턴을 소모하지 않고 다시 듣는다 (FR-AD-312). 마지막 조각은
+            # 아직 이전 것이라 찍으면 엉뚱한 말이 이 턴의 전사로 보인다.
+            print(f"[턴 {i}] {path.name}  {waited:.1f}초 뒤에도 LISTENING — 전사가 비었다."
+                  " 서버 로그의 stt 줄을 본다\n")
+            break
         frag = snap["fragments"][-1]
         print(f"[턴 {i}] {path.name}  소리 {sent}청크({sec:.1f}초) · 무음 {dropped}청크 버림")
         print(f"  말씀이 끝나고 {waited:.1f}초 뒤 {snap['state']}")

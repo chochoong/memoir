@@ -21,6 +21,9 @@ export interface Snapshot {
   next_question: string | null
   audio_bytes: number          // 지금 모여 있는 발화 오디오. 청크가 닿는지 눈으로 보려고 둔다
   question_audio: boolean      // 낭독할 소리가 준비됐나. false 면 글자만 띄운다
+  // 참이면 낭독을 조각으로 받아 오는 대로 튼다 (questionStream). 서버의 TTS_STREAM.
+  // 없으면 예전 서버다 — 거짓으로 읽는다.
+  question_audio_stream?: boolean
   closing_hint: string | null  // 마칠 때 띄울 한 줄. 진행 중에는 null
   timer_drift: { n?: number; max_ms?: number; avg_ms?: number }
 }
@@ -167,6 +170,17 @@ export const api = {
     if (!res.ok) throw new ApiError(res.status, '소리를 받지 못했습니다')
     const blob = await res.blob()
     return blob.size ? blob : null
+  },
+
+  // 낭독을 조각으로. **본문을 읽지 않고 응답째 돌려준다** — 다 받고 나서 틀면
+  // 흘려 받는 뜻이 없다. 204 면 null (소리 없음, 오류 아님). 본문은 날 PCM
+  // 16비트 모노이고 rate 는 Content-Type 에 실려 온다.
+  questionStream: async (id: string): Promise<Response | null> => {
+    const res = await fetch(`${BASE}/api/sessions/${id}/question/stream`,
+                            { headers: { 'X-User-Id': 'dev-user' } })
+    if (res.status === 204) return null
+    if (!res.ok || !res.body) throw new ApiError(res.status, '소리를 받지 못했습니다')
+    return res
   },
 
   done: (id: string) => call<Snapshot>(`/sessions/${id}/done`, { method: 'POST' }),

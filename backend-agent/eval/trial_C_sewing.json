@@ -1,0 +1,42 @@
+{
+  "trial": "Seed C — 큰언니와 재봉틀 한 장 (v4 장 집필 1회)",
+  "note": "계획만 담는다 — 턴 배치 · 사건 묶음 · 끈 · 장 역할. 예상 정답 글은 넣지 않는다 (trial_plan 이 거부).",
+  "seed": "memoir_seed_C.json",
+  "aliases": ["c1", "c2", "c3", "c4", "c5"],
+  "direction": {"theme": "재봉틀과 큰언니", "reason": "", "neutral": false},
+  "theme_use": "큰언니에게 배운 바느질과 언니가 보낸 발틀이 지금까지 이어지는 흐름으로 장을 엮는다",
+  "chapter": {
+    "chapter_key": "ch-1",
+    "title": {"text": "언니의 발틀", "kind": "editorial", "turns": []},
+    "role": "큰언니에게서 시작된 바느질과 언니가 보낸 발틀 재봉틀이 지금까지 이어진 이야기를 한 흐름으로 엮는다",
+    "purpose": "언니에게 바느질을 배운 일, 서울 봉제 공장, 발틀이 온 일과 가게 시절, 언니의 병과 죽음, 가게 정리, 지금의 발틀",
+    "grouping_reason": "큰언니와 재봉틀이라는 같은 끈이 여러 회차에 걸쳐 나온다",
+    "threads": ["t-machine", "t-sister"],
+    "events": ["e-learn", "e-factory", "e-arrival", "e-shop-days", "e-sister-death", "e-close", "e-now"],
+    "focus_turns": [2, 3, 4, 11, 12, 14, 15, 26, 27, 29, 34, 35, 36, 38, 39],
+    "context_turns": [],
+    "weight": "main",
+    "transition_in": "",
+    "transition_out": ""
+  },
+  "events": [
+    {"event_key": "e-learn", "turns": [11, 12]},
+    {"event_key": "e-factory", "turns": [14, 15]},
+    {"event_key": "e-arrival", "turns": [4, 26, 27]},
+    {"event_key": "e-shop-days", "turns": [3]},
+    {"event_key": "e-sister-death", "turns": [29, 34]},
+    {"event_key": "e-close", "turns": [2, 35]},
+    {"event_key": "e-now", "turns": [36, 38, 39]}
+  ],
+  "threads": [
+    {"thread_key": "t-machine", "name": "발틀 재봉틀 · 미싱 소리", "kind": "object",
+     "events": ["e-factory", "e-arrival", "e-shop-days", "e-close", "e-now"],
+     "turns": [3, 4, 15, 26, 27, 35, 36, 38, 39]},
+    {"thread_key": "t-sister", "name": "큰언니", "kind": "person",
+     "events": ["e-learn", "e-arrival", "e-sister-death", "e-now"],
+     "turns": [4, 11, 12, 26, 27, 29, 34, 38]}
+  ],
+  "people": [
+    {"name": "큰언니", "relation": "큰언니", "turns": [4, 11, 12, 26, 27, 29, 34, 38]}
+  ]
+}

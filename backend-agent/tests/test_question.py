@@ -45,9 +45,11 @@ class _Machine:
 class _Ctl:
     """gemini_question 이 실제로 만지는 것만 갖춘 최소한의 회차."""
 
-    def __init__(self, turn=1, fragments=None):
+    def __init__(self, turn=1, fragments=None, theme=None, topic=""):
         self.machine = _Machine(turn)
         self.fragments = fragments if fragments is not None else []
+        self.theme = theme
+        self.topic = topic
         self.state = shared.initial()
         self.last_decision = None
         self.closing_hint = None
@@ -134,7 +136,7 @@ def test_trim():
 def test_window():
     """
     창이 없으면 턴 20 의 입력이 턴 1 의 스무 배가 되고 그게 그대로 지연이 된다.
-    씨앗은 회차의 주제라 창 밖으로 밀려나도 남는다.
+    씨앗은 대화가 아니라 시작 자료로 간다 — test_start_material 참조.
     """
     print("\n[2] 대화는 최근 몇 턴만 싣는다")
 
@@ -149,7 +151,8 @@ def test_window():
     finally:
         os.environ.pop("PROMPT_WINDOW", None)
 
-    check("씨앗은 남는다", "씨앗 한 줄" in t)
+    check("씨앗은 대화 기록에 실리지 않는다", "씨앗 한 줄" not in t,
+          "가족이 적은 글이 「어르신:」 으로 실리면 어르신의 말씀 행세를 한다")
     check("창 안의 턴은 실린다", "대답10" in t and "대답8" in t)
     check("창 밖의 턴은 빠진다", "대답7" not in t, t[:60])
     check("자른 것을 말없이 넘기지 않는다", "7턴은 줄였습니다" in t,
@@ -231,6 +234,52 @@ def test_for_interview():
           str(len(out2["confirmed_facts"])))
     check("기록은 다 남긴다", len(ctl.state["confirmed_facts"]) == shared.FACTS_SENT + 5)
 
+    ctl3 = _Ctl(turn=1, fragments=frs[:1], topic="가족과 함께 이사한 기억")
+    check("가족이 고른 주제가 씨앗보다 앞선다",
+          shared.for_interview(ctl3)["current_topic"] == "가족과 함께 이사한 기억",
+          shared.for_interview(ctl3)["current_topic"])
+
+
+def test_start_material():
+    """
+    테마·주제·가족 설명은 질문 방향이지 어르신의 말씀이 아니다 (SV-02).
+    대화 기록과 따로 매 턴 실려야 창이 잘려도 주제가 남는다.
+    """
+    print("\n[4-1] 시작 자료는 대화와 따로 간다")
+
+    frs = [{"idx": 0, "question": None, "answer": "아버지가 사진관을 하셨어요"}]
+    for i in range(1, 11):
+        frs.append({"idx": i, "question": f"질문{i}", "answer": f"대답{i}"})
+    ctl = _Ctl(turn=10, fragments=frs, theme="hobby", topic="처음 사진을 찍던 때")
+
+    m = Q._start_material(ctl)
+    check("테마를 우리말로 싣는다", "테마: 취미" in m, m)
+    check("주제를 싣는다", "주제: 처음 사진을 찍던 때" in m, m)
+    check("가족 설명은 가족 설명으로 싣는다", "가족이 적은 설명: 아버지가 사진관을 하셨어요" in m, m)
+    check("사용자의 말이 아니라고 밝힌다", "사용자의 말이 아닙니다" in m, m)
+
+    check("받지 않은 테마는 적지 않는다",
+          "테마" not in Q._start_material(_Ctl(fragments=frs[:1], topic="이사")),
+          "「모름」을 적으면 모델이 그 자리를 추측으로 채운다")
+    check("주제와 같은 씨앗은 두 번 적지 않는다",
+          Q._start_material(_Ctl(fragments=[{"idx": 0, "question": None, "answer": "이사"}],
+                                 topic="이사")).count("이사") == 1)
+    check("아무것도 없으면 블록도 없다",
+          Q._start_material(_Ctl(fragments=[{"idx": 0, "question": None, "answer": ""}])) == "")
+
+    os.environ["PROMPT_WINDOW"] = "3"
+    try:
+        _, fake = _ask(ctl, _answer())
+    finally:
+        os.environ.pop("PROMPT_WINDOW", None)
+    sent = fake.seen["contents"]
+    check("창이 잘려도 주제는 모델에게 간다", "주제: 처음 사진을 찍던 때" in sent
+          and "7턴은 줄였습니다" in sent, sent[-200:])
+    check("시작 자료는 대화보다 앞에 놓인다",
+          sent.index("[시작 자료") < sent.index("[지금까지의 대화]"))
+    check("가족 설명이 「어르신:」 으로 실리지 않는다",
+          "어르신: 아버지가 사진관을 하셨어요" not in sent)
+
 
 # --------------------------------------------------------------- 회차를 닫는 문
 
@@ -270,6 +319,17 @@ def test_close():
     check("sensitive 는 하한을 넘어선다", out3 is None,
           "하한은 모델의 성급함을 막는 장치지 어르신의 뜻을 막는 장치가 아니다")
 
+    # 「그만할래요」도 하한보다 위다 (SV-03 — 예전에는 막히고 청각 고정 질문이 나갔다)
+    ctl3b = _Ctl(turn=1, fragments=frs[:2])
+    out3b, _ = _ask(ctl3b, _answer(topic_status="closed", question="", question_type="없음",
+                                   sense_used="없음", end_reason="user_request",
+                                   closing_hint="오늘은 여기까지 할게요."))
+    check("user_request 는 하한을 넘어선다", out3b is None
+          and (ctl3b.last_decision or {}).get("end_reason") == "user_request"
+          and "overruled" not in (ctl3b.last_decision or {}),
+          str(ctl3b.last_decision))
+    check("상태에도 closed 가 남는다 — user_request", ctl3b.state["topic_status"] == "closed")
+
     # 정상 턴
     ctl4 = _Ctl(turn=3, fragments=frs[:4])
     out4, _ = _ask(ctl4, _answer(empathy="그러셨군요.", question="그때 어떤 소리가 들렸나요?"))
@@ -281,6 +341,45 @@ def test_close():
     out5, _ = _ask(ctl5, _answer(question="", empathy=""))
     check("질문 없는 진행 턴은 고정 질문으로 받친다", isinstance(out5, str) and out5,
           repr(out5))
+
+
+def test_no_sense():
+    """
+    오감 질문은 하지 않는다 (SV-03). 모델 밖에서 나가는 말(고정 질문)에도,
+    모델이 감각을 적어 왔을 때의 기록에도 같은 원칙이 선다.
+    """
+    print("\n[5-1] 오감 질문 제외")
+
+    from app.session import controller as C
+
+    asked = []
+    for turn in range(1, 5):
+        ctl = _Ctl(turn=turn)
+        asked.append(asyncio.run(C.fixed_questions(ctl)))
+    got = [q for q in asked if q]
+    check("고정 질문에 감각 질문이 없다", not any(C._SENSORY.search(q) for q in got), str(got))
+    check("고정 질문이 끝나면 None 이다 — 키 없는 회차가 끝날 자리", asked[-1] is None)
+    check("첫 고정 질문은 첫 답을 이어 받는다 — 어르신 말씀 뒤에 나간다",
+          asked[0] == "그 이야기를 조금 더 들려주시겠어요?", repr(asked[0]))
+
+    # 실패한 턴의 대체 질문도 감각을 묻지 않는다
+    frs = [{"idx": 0, "question": None, "answer": "씨앗"},
+           {"idx": 1, "question": "질문1", "answer": "대답1"}]
+    out, _ = _ask(_Ctl(turn=1, fragments=frs), "망가진 응답")
+    check("대체 질문도 감각을 묻지 않는다", not C._SENSORY.search(out), repr(out))
+
+    # 모델이 감각을 적어 오면 기록은 「없음」으로 맞추고 원래 값은 숨기지 않는다
+    ctl = _Ctl(turn=3, fragments=frs)
+    out2, _ = _ask(ctl, _answer(sense_used="청각"))
+    d = ctl.last_decision or {}
+    check("기록의 sense_used 는 없음이다", d.get("sense_used") == "없음", str(d))
+    check("어긴 값은 따로 남긴다", d.get("sense_used_raw") == "청각", str(d))
+    check("상태의 last_sense_used 는 차지 않는다", ctl.state["last_sense_used"] == "없음",
+          "차면 다음 턴 입력에 실린다 — 인터뷰_v4.md 는 그 값을 쓰지 말라고 했다")
+
+    ctl2 = _Ctl(turn=3, fragments=frs)
+    _ask(ctl2, _answer(sense_used="없음"))
+    check("지킨 턴에는 원래 값 칸이 없다", "sense_used_raw" not in (ctl2.last_decision or {}))
 
 
 def test_broken_answer():
@@ -340,7 +439,7 @@ def test_prompt():
     check("출력 형식이 §1 의 필드를 빠뜨리지 않는다",
           "closing_hint" in sysmsg and "end_reason" in sysmsg,
           "「반드시 아래 형식으로만」이라고 적으면서 빠뜨리면 모델이 안 적는다")
-    check("프롬프트를 첨부프롬프트_md/ 에서 읽는다", promptlib.DOC.name == "인터뷰.md",
+    check("프롬프트를 첨부프롬프트_md/ 에서 읽는다", promptlib.DOC.name == "인터뷰_v4.md",
           promptlib.DOC.name)
 
 
@@ -488,7 +587,9 @@ def main() -> int:
     test_window()
     test_merge()
     test_for_interview()
+    test_start_material()
     test_close()
+    test_no_sense()
     test_broken_answer()
     test_prompt()
     test_end_reason()

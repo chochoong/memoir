@@ -1,0 +1,218 @@
+{
+  "summary": {
+    "draft_chapters": 1,
+    "final_chapters": 1,
+    "draft_sentences": 24,
+    "final_sentences": 27,
+    "kept": 12,
+    "revised": 12,
+    "rewritten": 1,
+    "new": 2,
+    "dropped": 0,
+    "moved": 2,
+    "chapter_merges": [],
+    "chapter_splits": [],
+    "paragraph_merges": 2,
+    "paragraph_splits": 1,
+    "unchanged_ratio": 0.44,
+    "structure_changed": true
+  },
+  "sentences": [
+    {
+      "at": "ch-1/p0/s0",
+      "from": "ch-1/p0/s0",
+      "kind": "revised",
+      "ratio": 0.8,
+      "moved": false
+    },
+    {
+      "at": "ch-1/p0/s1",
+      "from": "ch-1/p0/s1",
+      "kind": "revised",
+      "ratio": 0.75,
+      "moved": false
+    },
+    {
+      "at": "ch-1/p0/s2",
+      "from": "ch-1/p6/s3",
+      "kind": "revised",
+      "ratio": 0.86,
+      "moved": true
+    },
+    {
+      "at": "ch-1/p0/s3",
+      "from": null,
+      "kind": "new",
+      "ratio": 0.0,
+      "moved": false
+    },
+    {
+      "at": "ch-1/p1/s0",
+      "from": "ch-1/p1/s0",
+      "kind": "revised",
+      "ratio": 0.79,
+      "moved": false
+    },
+    {
+      "at": "ch-1/p1/s1",
+      "from": "ch-1/p1/s1",
+      "kind": "revised",
+      "ratio": 0.76,
+      "moved": false
+    },
+    {
+      "at": "ch-1/p1/s2",
+      "from": "ch-1/p1/s2",
+      "kind": "rewritten",
+      "ratio": 0.43,
+      "moved": false
+    },
+    {
+      "at": "ch-1/p1/s3",
+      "from": "ch-1/p1/s2",
+      "kind": "revised",
+      "ratio": 0.55,
+      "moved": false
+    },
+    {
+      "at": "ch-1/p1/s4",
+      "from": "ch-1/p1/s3",
+      "kind": "kept",
+      "ratio": 1.0,
+      "moved": false
+    },
+    {
+      "at": "ch-1/p1/s5",
+      "from": "ch-1/p1/s4",
+      "kind": "kept",
+      "ratio": 0.92,
+      "moved": false
+    },
+    {
+      "at": "ch-1/p2/s0",
+      "from": "ch-1/p2/s0",
+      "kind": "kept",
+      "ratio": 0.91,
+      "moved": false
+    },
+    {
+      "at": "ch-1/p2/s1",
+      "from": "ch-1/p2/s1",
+      "kind": "kept",
+      "ratio": 0.94,
+      "moved": false
+    },
+    {
+      "at": "ch-1/p2/s2",
+      "from": "ch-1/p2/s2",
+      "kind": "kept",
+      "ratio": 1.0,
+      "moved": false
+    },
+    {
+      "at": "ch-1/p3/s0",
+      "from": "ch-1/p3/s0",
+      "kind": "kept",
+      "ratio": 1.0,
+      "moved": false
+    },
+    {
+      "at": "ch-1/p3/s1",
+      "from": "ch-1/p3/s1",
+      "kind": "kept",
+      "ratio": 0.91,
+      "moved": false
+    },
+    {
+      "at": "ch-1/p3/s2",
+      "from": "ch-1/p3/s2",
+      "kind": "revised",
+      "ratio": 0.72,
+      "moved": false
+    },
+    {
+      "at": "ch-1/p3/s3",
+      "from": "ch-1/p3/s3",
+      "kind": "kept",
+      "ratio": 0.97,
+      "moved": false
+    },
+    {
+      "at": "ch-1/p3/s4",
+      "from": "ch-1/p4/s1",
+      "kind": "revised",
+      "ratio": 0.85,
+      "moved": true
+    },
+    {
+      "at": "ch-1/p3/s5",
+      "from": "ch-1/p4/s0",
+      "kind": "kept",
+      "ratio": 0.9,
+      "moved": false
+    },
+    {
+      "at": "ch-1/p4/s0",
+      "from": null,
+      "kind": "new",
+      "ratio": 0.0,
+      "moved": false
+    },
+    {
+      "at": "ch-1/p4/s1",
+      "from": "ch-1/p5/s0",
+      "kind": "kept",
+      "ratio": 0.92,
+      "moved": false
+    },
+    {
+      "at": "ch-1/p4/s2",
+      "from": "ch-1/p5/s1",
+      "kind": "kept",
+      "ratio": 1.0,
+      "moved": false
+    },
+    {
+      "at": "ch-1/p4/s3",
+      "from": "ch-1/p5/s2",
+      "kind": "revised",
+      "ratio": 0.85,
+      "moved": false
+    },
+    {
+      "at": "ch-1/p5/s0",
+      "from": "ch-1/p6/s0",
+      "kind": "revised",
+      "ratio": 0.89,
+      "moved": false
+    },
+    {
+      "at": "ch-1/p5/s1",
+      "from": "ch-1/p6/s1",
+      "kind": "revised",
+      "ratio": 0.89,
+      "moved": false
+    },
+    {
+      "at": "ch-1/p5/s2",
+      "from": "ch-1/p6/s2",
+      "kind": "revised",
+      "ratio": 0.83,
+      "moved": false
+    },
+    {
+      "at": "ch-1/p5/s3",
+      "from": "ch-1/p6/s4",
+      "kind": "kept",
+      "ratio": 0.97,
+      "moved": false
+    }
+  ],
+  "dropped": [],
+  "dropped_facts": [],
+  "unexplained_dropped_facts": [],
+  "new_facts": [
+    "f42",
+    "f43"
+  ]
+}

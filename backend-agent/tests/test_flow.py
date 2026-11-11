@@ -246,6 +246,19 @@ def test_pcm_wrap():
 
 def test_tts():
     """
+    낭독 설정(TTS_PROVIDER · TTS_STREAM)을 비우고 본다 — 이 시험은 tts_fn 하나로 읽는 기본 길이다.
+    pytest 로 한꺼번에 돌면 다른 시험이 app.main 을 불러 .env 의 TTS_STREAM=1 이 켜져 있다.
+    """
+    import os
+    saved = {k: os.environ.pop(k, None) for k in ("TTS_PROVIDER", "TTS_STREAM")}
+    try:
+        _tts_in_silence()
+    finally:
+        os.environ.update({k: v for k, v in saved.items() if v is not None})
+
+
+def _tts_in_silence():
+    """
     낭독 합성이 T2 안에 숨는가, 그리고 실패해도 회차가 사는가.
 
     **순서가 전부인 자리다.** 질문이 준비된 뒤에 합성을 시작하면 그 시간이
