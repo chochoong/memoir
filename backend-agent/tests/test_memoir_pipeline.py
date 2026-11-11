@@ -461,6 +461,43 @@ def test_t08_chapter_timeout_stops_everything_after_it(monkeypatch, tmp_path):
     assert (tmp_path / "03_ch-1.json").exists() and not (tmp_path / "04_edited.json").exists()
 
 
+class _Overlap(Fake):
+    """장 호출이 얼마나 겹쳤는지 센다 — 장마다 잠깐 기다린다."""
+
+    def __init__(self, replies):
+        super().__init__(replies)
+        self.now = self.peak = 0
+
+    async def __call__(self, spec):
+        if spec.stage != "chapter":
+            return await super().__call__(spec)
+        self.now += 1
+        self.peak = max(self.peak, self.now)
+        await asyncio.sleep(0.05)
+        self.now -= 1
+        return await super().__call__(spec)
+
+
+@pytest.mark.parametrize("limit, peak", [(None, 2), ("1", 1)])
+def test_t08b_chapters_run_together_up_to_parallel_limit(monkeypatch, limit, peak):
+    if limit is None:
+        monkeypatch.delenv("MEMOIR_PIPE_PARALLEL", raising=False)
+    else:
+        monkeypatch.setenv("MEMOIR_PIPE_PARALLEL", limit)
+    fake = _Overlap(script())
+    r = go(fake)
+    assert fake.peak == peak
+    assert [c["chapter_key"] for c in r["chapters"]] == ["ch-1", "ch-2"]      # 끝난 순서가 아니라 목차 순서
+
+
+def test_t08c_chapter_failure_cancels_the_rest(monkeypatch, tmp_path):
+    monkeypatch.setenv("MEMOIR_PIPE_CHAPTER_TIMEOUT", "0.05")
+    fake = Fake(script(ch_1=SLEEP, ch_2=RuntimeError("boom")))
+    r = go(fake, recorder=pipe.Recorder(tmp_path))
+    assert (r["generation_state"], r["failure"]["chapter_key"], r["failure"]["kind"]) == ("partial", "ch-2", "call")
+    assert not (tmp_path / "03_ch-1.json").exists()                            # 멈춘 장은 남기지 않는다
+
+
 def test_t09_truncated_or_broken_chapter_is_partial():
     cut = pipe.Reply(json.dumps(draft("ch-1", ["f1"]), ensure_ascii=False), "FinishReason.MAX_TOKENS")
     r = go(Fake(script(ch_1=cut)))
@@ -2877,3 +2914,31 @@ def test_saved_pro_edits_give_the_expected_candidates_and_no_episode_loss():
         assert all(f["rule"] == "episode_excluded" and f["severity"] == "review" for f in ep)   # 채택한 일화는 다 남았다
         # 목차 r2 가 통째로 뺀 일화 — 편집이 되살린 m5(부산 · 바다)는 빠지고 나머지는 검토 대상으로
         assert {f["unit"] for f in ep} == {"m6", "m8", "m9", "m11"}
+
+
+def test_service_pipeline_passes_variant_from_env_and_refuses_unknown(monkeypatch):
+    seen = []
+
+    class Stop(Exception):
+        pass
+
+    async def fake_run(data, turn_map, **kw):
+        seen.append(kw.get("variant"))
+        raise Stop
+
+    monkeypatch.setattr(pipe, "run", fake_run)
+    monkeypatch.setattr(memoir, "inject", lambda: None)
+    recs = cli.records_from_seed(SEED_A, ["s-a", "s-b", "s-c"])
+    ids = ["s-a", "s-b", "s-c"]                                               # 로그에만 쓴다
+    for env, want in ((None, "v7"), ("integrated", "integrated")):
+        if env is None:
+            monkeypatch.delenv("MEMOIR_PIPE_VARIANT", raising=False)
+        else:
+            monkeypatch.setenv("MEMOIR_PIPE_VARIANT", env)
+        with pytest.raises(Stop):
+            asyncio.run(memoir._draft_pipeline(recs, ids, "plain", None))
+        assert seen[-1] == want
+    monkeypatch.setenv("MEMOIR_PIPE_VARIANT", "v99")
+    with pytest.raises(memoir.GenerationFailed, match="v99"):
+        asyncio.run(memoir._draft_pipeline(recs, ids, "plain", None))
+    assert pipe.role_text("chapter", variant="integrated") != pipe.role_text("chapter")   # 통합 지시문 파일이 실제로 있다

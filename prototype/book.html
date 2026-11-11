@@ -924,6 +924,9 @@
     .rb-top { width: 100%; max-width: 900px; display: flex; justify-content: space-between; align-items: center; }
     .rb-back { display: flex; align-items: center; gap: 8px; padding: 10px 6px; border: 0; background: none; font-family: var(--serif); font-size: 1.1rem; color: inherit; }
     .rb-back svg { width: 20px; height: 20px; }
+    .rb-tools { display: flex; align-items: center; gap: 8px; }
+    .rb-share { height: 44px; padding: 0 14px; border: 1px solid var(--ink); border-radius: 8px; background: none; font-family: var(--serif); font-size: 1rem; color: inherit; }
+    .rb-share[disabled] { opacity: .5; }
     .rb-fs { width: 44px; height: 44px; border: 1px solid var(--ink); border-radius: 8px; background: none; font-family: var(--serif); font-size: 1.15rem; color: inherit; }
     .rb-stage { flex: 1; display: grid; place-items: center; width: 100%; padding: 22px 0; }
     .rb-book { position: relative; perspective: 2400px; transform-style: preserve-3d; width: var(--bw); height: var(--bh); touch-action: pan-y; }
@@ -996,6 +999,33 @@
     .rb-count { font-family: var(--serif); font-size: 1.15rem; min-width: 64px; text-align: center; letter-spacing: .08em; }
     .rb-measure { position: absolute !important; visibility: hidden; pointer-events: none; left: -9999px; top: 0; }
     body.rb-lock { overflow: hidden; }
+    @media (max-width: 420px) { .rb-tools { gap: 6px; } .rb-share { padding: 0 10px; font-size: .92rem; } }
+
+    /* PDF로 저장 — 브라우저 인쇄 창의 「PDF로 저장」 을 쓴다. #printBook 은 인쇄할 때만 보인다 */
+    #printBook { display: none; }
+    @media print {
+      @page { size: A5; margin: 18mm 15mm 20mm; @bottom-center { content: counter(page); font-size: 9pt; color: #888; } }
+      @page :first { @bottom-center { content: none; } }
+      html, body.printing { background: #fff !important; overflow: visible !important; height: auto !important; }
+      body.printing > *:not(#printBook) { display: none !important; }
+      body.printing #printBook { display: block; color: #222; font-family: var(--serif); font-size: 11pt; line-height: 1.9; }
+      #printBook .pb-cover { min-height: 150mm; display: flex; flex-direction: column; justify-content: center; text-align: center; break-after: page; }
+      #printBook .pb-kicker { margin: 0; color: #777; letter-spacing: .12em; font-size: 10pt; }
+      #printBook h1 { margin: 10pt 0 6pt; font-size: 24pt; line-height: 1.4; word-break: keep-all; }
+      #printBook .pb-sub { margin: 0; color: #555; font-size: 13pt; }
+      #printBook .pb-rule { display: block; width: 36pt; height: 1.5pt; background: #8a5a3c; margin: 18pt auto; }
+      #printBook .pb-note { margin: 0 0 4pt; color: #777; font-size: 9.5pt; }
+      #printBook .pb-toc { break-after: page; }
+      #printBook .pb-toc h2 { font-size: 15pt; margin: 0 0 14pt; }
+      #printBook .pb-toc ol { list-style: none; margin: 0; padding: 0; }
+      #printBook .pb-toc li { display: flex; gap: 10pt; padding: 5pt 0; border-bottom: .5pt solid #ddd; }
+      #printBook .pb-toc li small { color: #888; min-width: 28pt; }
+      #printBook .pb-ch { break-before: page; }
+      #printBook .pb-ch > small { display: block; color: #888; font-size: 9.5pt; margin-top: 18mm; }
+      #printBook .pb-ch h2 { font-size: 16pt; line-height: 1.5; margin: 2pt 0 16pt; word-break: keep-all; break-after: avoid; }
+      #printBook .pb-ch p { margin: 0 0 .9em; text-align: justify; word-break: keep-all; overflow-wrap: anywhere; orphans: 2; widows: 2; }
+      #printBook .pb-end { break-before: page; text-align: center; padding-top: 60mm; color: #777; font-size: 10pt; white-space: pre-line; }
+    }
 
     /* ── 시작: 쓰고 있는 책 ── */
     [data-screen="desk"] { padding-bottom: calc(168px + env(safe-area-inset-bottom)); align-items: center; }
@@ -1698,7 +1728,7 @@
           </div>
           <button class="btn btn-primary" id="holdBtn">일시정지</button>
           <button class="btn-ghost" id="abortBtn">녹음 정지 · 엽서 만들기</button>
-          <button class="btn-ghost" id="doneBtn" hidden>다 말했어요</button>
+          <button class="btn-ghost" id="doneBtn" hidden>이야기를 다 말했어요</button>
           <button class="btn-ghost" id="skipBtn" hidden>소리 없이 넘어가기</button>
         </div>
       </section>
@@ -1805,6 +1835,7 @@
         <div class="dock">
           <button class="btn btn-primary" id="saveBtn">엽서 저장</button>
           <button class="btn-ghost" id="exitBtn">마치기</button>
+          <button class="btn-ghost" id="cardDel" type="button" hidden>이 엽서 지우기</button>
         </div>
       </section>
 
@@ -2167,7 +2198,11 @@
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 5l-7 7 7 7" /></svg>
         책장으로
       </button>
-      <button class="rb-fs" id="rbFs" type="button" aria-label="글자 크기 바꾸기">가</button>
+      <div class="rb-tools">
+        <button class="rb-share" id="rbShare" type="button">링크로 공유</button>
+        <button class="rb-share" id="rbPdf" type="button">PDF로 저장</button>
+        <button class="rb-fs" id="rbFs" type="button" aria-label="글자 크기 바꾸기">가</button>
+      </div>
     </div>
     <div class="rb-stage">
       <div class="rb-book" id="rbBook">
@@ -2317,6 +2352,8 @@
       // 아래 max · requestShape 는 그 칸이 없는 서버(예전 · 개발 모드)에서만 쓴다 — 서버 MEMOIR_MAX_SESSIONS 와 같게.
       // 6개 이상이면 「모두 고르기 · 모두 빼기」 가 나온다.
       max: 5,
+      // 첫 화면 책 한 권에 담는 장 수. 0 이면 상한 없음 (책이 「다 차지」 않는다 · 다음 권을 따로 꺼내지 않는다)
+      bookMax: 0,
       // 요청 모양. 'ids' = {session_ids, style} (지금) ·
       // 'exclude' = {elder_id, exclude_session_ids, style} — 최종 정책 「같은 화자 전체 선택 후 제외」 (7-C1 §4 · 태헌 10-26).
       // 'exclude' 면 고르기 화면이 **처음부터 전부 골라진 채** 열리고, 넣지 않을 것만 눌러 뺀다
@@ -2414,7 +2451,7 @@
         begin:   '이 기기에서 시작',       // 1차 흐름의 시작 버튼
         reading: '읽어 드리는 중…',
         skip:    '소리 없이 넘어가기',
-        done:    '다 말했어요',
+        done:    '이야기를 다 말했어요',
         save:    '엽서 저장',
         exit:    '마치기',
       },
@@ -2425,7 +2462,7 @@
       // 「다 말했어요」(다음 질문으로 즉시 넘어가기). 기본은 숨김 —
       // 말을 마치고 3초 기다리면 저절로 넘어가므로 어르신께는 버튼이 하나 더
       // 있는 셈이 된다. 개발용 패널에는 항상 있다.
-      showDoneButton: false,
+      showDoneButton: true,
       // 녹음 화면(대화 · 정리 중)만 앱 모양으로 두고, 준비 · 내용 확인 · 지난 이야기 · 자서전 ·
       // 엽서는 넓은 웹 화면으로 그린다 (PC 처럼 폭이 760px 이상일 때). false 면 전부 앱 모양.
       webLayout: true,
@@ -2703,6 +2740,8 @@
       Object.assign({ method: CONFIG.card.method }, style ? { body: JSON.stringify({ style }) } : {})),
     // DB 에 저장된 회차. 서버가 저절로 구운 엽서를 여기서 되찾는다.
     record: (id, signal) => call(`/sessions/${id}/record`, signal ? { signal } : undefined),
+    // 엽서 지우기 — 회차를 통째로 숨긴다 (서버 015). 책에 든 것은 화면이 먼저 막는다 (storyDelete)
+    hideSession: (id) => call(`/sessions/${encodeURIComponent(id)}`, { method: 'DELETE' }),
     // 서버가 구운 엽서 그림. <img> 로는 헤더를 못 보내므로 fetch 로 받는다.
     postcardImage: async (url) => {
       const res = await fetch(`${CONFIG.apiBase}${url}`, {
@@ -4952,6 +4991,7 @@
   let arStale = false;             // 그 뒤 엽서를 만들었다 — 받아 둔 제목이 낡았다. 다음에 목록을 보일 때 다시 읽는다
   let arSort = 'new';
   let arViewing = false;           // 보관함에서 연 엽서를 보고 있는가
+  let arViewId = '';               // 그 엽서의 회차 — 「이 엽서 지우기」
   let arPhoto = '';                // 그 회차의 사진 주소 — 저장할 때도 이것을 쓴다
   let arCardUrl = '';              // 그 회차에 서버가 구워 둔 엽서 그림 주소
   let ended = false;               // 「마치기」로 끝 화면에 왔다 — 보관함에서 돌아갈 곳이 거기다
@@ -5118,6 +5158,8 @@
   function arShowCard(rec, id) {
     arPaint(rec.postcard, rec.photo_id ? api.photoUrl(rec.photo_id) : '', rec.created_at);
     arViewing = true;
+    arViewId = id || '';
+    $('#cardDel').hidden = !arViewId || listMock();
     cardStyleDraw();                 // 보관함에서 연 엽서에는 문체 줄을 두지 않는다
     show('complete');
     // 지난 엽서를 보는 중에는 「마치기」가 끝내는 말이 아니다. 목록으로 돌아간다.
@@ -5194,11 +5236,19 @@
     if (!arViewing) return;
     e.stopImmediatePropagation();
     arViewing = false;
+    arViewId = ''; $('#cardDel').hidden = true;
     arPhoto = arCardUrl = '';
     $('#exitBtn').textContent = '마치기';
     $('#cardHead').innerHTML = '한 편의 엽서가<br />되었습니다.';
     if (arStale) void openArchive(); else show('archive');
   }, true);
+
+  $('#cardDel').addEventListener('click', async () => {
+    if (!arViewing || !arViewId) return;
+    if (!(await storyDelete(arViewId))) return;
+    if (!arRows.length) arShow('empty'); else arDraw();
+    $('#exitBtn').click();               // 목록으로 (위의 보관함 손잡이가 받는다)
+  });
 
   $$('[data-screen="archive"] .tabs .tab').forEach(b => b.addEventListener('click', async () => {
     $$('[data-screen="archive"] .tabs .tab').forEach(x => x.setAttribute('aria-pressed', 'false'));
@@ -7910,6 +7960,7 @@
     }
     rb.classList.remove('pre');
     $$('#shShelves .sh-slot.fresh').forEach(x => x.classList.remove('fresh'));
+    printOff();
     rbCur = null;
     if (btn) btn.focus({ preventScroll: true });
     shBusy = false;
@@ -7982,12 +8033,116 @@
       booksSave(d);
       rb.hidden = true; rb.classList.remove('pre');
       document.body.classList.remove('rb-lock');
+      printOff();
       rbCur = null;
       renderShelf();
       deskStale = true;
       show('shelf');
       toast('책장에서 뺐어요');
     }
+  });
+
+  /* ── 링크로 공유 (서버 014) ──
+       펼친 책을 보이는 모양 그대로(bookView) 서버에 보낸다 → 로그인 없이 읽는 주소 https://<주소>/b#<토큰>.
+       토큰은 응답에 한 번만 온다. 같은 책을 다시 누르면 새 링크다 — 이 기기에서는 마지막 링크를 기억해 다시 보여 준다.
+       끄기는 아직 화면이 없다 (POST /api/shares/{share_id}/revoke). */
+  const SHARE_KEY = 'memoir.shares';
+  function shareMemo(id, v) {
+    try {
+      const all = JSON.parse(localStorage.getItem(SHARE_KEY) || '{}') || {};
+      const k = `${mmWho()}:${id}`;
+      if (v === undefined) return all[k] || null;
+      all[k] = v; localStorage.setItem(SHARE_KEY, JSON.stringify(all));
+    } catch (_) {}
+    return null;
+  }
+  async function shareHand(url, title) {
+    if (navigator.share) {
+      try { await navigator.share({ title: `${title} — 나의 자서전`, url }); return; }
+      catch (e) { if (e && e.name === 'AbortError') return; }
+    }
+    try { await navigator.clipboard.writeText(url); toast('공유 링크를 복사했어요. 카카오톡 등에 붙여 넣어 보내 주세요.', 4200); }
+    catch (_) { window.prompt('이 주소를 복사해 보내 주세요', url); }
+  }
+  $('#rbShare').addEventListener('click', async () => {
+    if (shBusy || !rbCur) return;
+    if (rbCur.origin === 'mock') { toast('예시 책은 공유할 수 없어요'); return; }
+    if (AUTH.mode !== 'session') { toast('로그인한 화면에서만 공유할 수 있어요'); return; }
+    const btn = $('#rbShare');
+    const book = bookById(booksData(), rbCur.id);
+    const sig = JSON.stringify(rbCur.chapters.map(c => [c.title, c.paras]));
+    const old = shareMemo(rbCur.id);
+    if (old && old.sig === sig && old.url) { await shareHand(old.url, rbCur.title); return; }
+    btn.disabled = true; btn.textContent = '링크 만드는 중…';
+    try {
+      const out = await call('/shares', { method: 'POST', body: JSON.stringify({
+        book_id: rbCur.id,
+        book: { title: rbCur.title, subtitle: rbCur.subtitle || '', draft: rbCur.draft || '', made: rbCur.made || '',
+                chapters: rbCur.chapters.map(c => ({ title: c.title, paras: c.paras, draft: !!c.draft })) },
+      }) });
+      shareMemo(rbCur.id, { url: out.url, share_id: out.share_id, sig, at: new Date().toISOString() });
+      log('책장', `공유 링크 · ${book ? book.title : rbCur.title} · ${out.share_id}`);
+      await shareHand(out.url, rbCur.title);
+    } catch (e) {
+      log('책장', `공유 실패 · ${e.status || ''} ${e.code || e.message || e}`);
+      toast(e.code === 'too_many_shares' ? '켜 둔 공유가 너무 많아요.'
+        : e.status === 404 ? '아직 서버에 공유 기능이 없어요. 서버를 다시 켠 뒤에 해 주세요.'
+        : '공유 링크를 만들지 못했어요. 잠시 뒤에 다시 해 주세요.');
+    } finally {
+      btn.disabled = false; btn.textContent = '링크로 공유';
+    }
+  });
+
+  /* ── PDF로 저장 ──
+       서버에서 PDF 를 만들지 않는다 — 브라우저 인쇄 창의 「PDF로 저장」 을 쓴다 (한글 글꼴이 화면과 같다).
+       펼친 책(bookView)을 #printBook 에 한 줄로 부어 놓고 인쇄한다. 쪽 나누기는 인쇄 CSS 가 한다.
+       파일 이름은 문서 제목을 따르므로 인쇄하는 동안 제목을 책 이름으로 바꿔 두고, 책을 닫을 때 되돌린다
+       (휴대폰은 afterprint 가 인쇄 전에 오기도 해서 거기서 되돌리지 않는다). */
+  const PDF_TITLE0 = document.title;
+  function printOff() {
+    document.body.classList.remove('printing');
+    document.title = PDF_TITLE0;
+    const pb = document.getElementById('printBook'); if (pb) pb.remove();
+  }
+  function printBook(b) {
+    printOff();
+    const pb = el('div'); pb.id = 'printBook';
+    const cv = el('section', 'pb-cover');
+    cv.append(el('p', 'pb-kicker', '나의 자서전'), el('h1', '', b.title));
+    if (b.subtitle) cv.append(el('p', 'pb-sub', b.subtitle));
+    cv.append(el('span', 'pb-rule'));
+    if (b.draft) cv.append(el('p', 'pb-note', b.draft));
+    if (longDate(b.made)) cv.append(el('p', 'pb-note', `${longDate(b.made)}에 엮었어요`));
+    if (b.origin === 'mock') cv.append(el('p', 'pb-note', '예시(합성) 글 — 실제 생성이 아닙니다'));
+    pb.append(cv);
+    if (b.chapters.length > 1) {
+      const toc = el('section', 'pb-toc'), ol = el('ol');
+      toc.append(el('h2', '', '차례'));
+      b.chapters.forEach(c => { const li = el('li'); li.append(el('small', '', `${c.no}장`), el('span', '', c.title + (c.draft ? ' · 초고' : ''))); ol.append(li); });
+      toc.append(ol); pb.append(toc);
+    }
+    b.chapters.forEach(c => {
+      const sec = el('section', 'pb-ch');
+      sec.append(el('small', '', c.draft ? `${c.no}장 · 초고` : `${c.no}장`), el('h2', '', c.title));
+      c.paras.forEach(ss => sec.append(el('p', '', (Array.isArray(ss) ? ss : [ss]).join(' '))));
+      pb.append(sec);
+    });
+    pb.append(el('section', 'pb-end', `${b.title}\n${longDate(b.made)}\n\n내말쌈 · 목소리로 남긴 이야기`));
+    document.body.append(pb);
+    document.body.classList.add('printing');
+    document.title = String(b.title || '나의 자서전').replace(/[\\/:*?"<>|]+/g, ' ').trim() || '나의 자서전';
+  }
+  $('#rbPdf').addEventListener('click', () => {
+    if (shBusy || !rbCur) return;
+    if (/KAKAOTALK|NAVER\(|Instagram|FBAN|FBAV|Line\//i.test(navigator.userAgent)) {
+      toast('이 앱 안에서는 PDF를 만들 수 없어요. 오른쪽 위 메뉴에서 「다른 브라우저로 열기」 를 눌러 크롬이나 사파리에서 해 주세요.', 6000);
+      return;
+    }
+    if (!rbCur.chapters.length) { toast('아직 쓰인 장이 없어요'); return; }
+    printBook(rbCur);
+    log('책장', `PDF로 저장 · ${rbCur.title}`);
+    toast('인쇄 창에서 「PDF로 저장」 을 골라 주세요', 5000);
+    setTimeout(() => window.print(), 300);
   });
 
   $('#rbFs').addEventListener('click', () => {
@@ -8065,7 +8220,7 @@
   let deskForm = false, deskFormTheme = '', deskFormTitle = '';
   const ORD = ['첫', '두', '세', '네', '다섯', '여섯', '일곱', '여덟', '아홉', '열'];
   const ordinal = i => `${ORD[i] || `${i + 1}`} 번째`;
-  const deskMaxN = () => { const m = mmMax(); return Number.isFinite(m) && m > 0 ? m : CONFIG.memoir.max; };
+  const deskMaxN = () => (CONFIG.memoir.bookMax > 0 ? CONFIG.memoir.bookMax : Infinity);
 
   // 오늘의 이야깃거리 — 낱말 카드 묶음(CONFIG.interview.wordDefaults)에서 날마다 하나. 「다른 이야깃거리」 로 바꾼다
   const TOPICS = CONFIG.interview.wordDefaults.flatMap(g => g.words);
@@ -8186,7 +8341,7 @@
     const head = el('div', 'dk-ob-head');
     const txt = el('div', 'dk-ob-txt');
     txt.append(el('span', 'dk-ob-t', b.title),
-      el('span', 'dk-ob-s', [b.theme, n ? `${n}장` : '아직 빈 책', `${max}장까지`].filter(Boolean).join(' · ')));
+      el('span', 'dk-ob-s', [b.theme, n ? `${n}장` : '아직 빈 책', Number.isFinite(max) ? `${max}장까지` : ''].filter(Boolean).join(' · ')));
     head.append(el('span', 'dk-mini'), txt);
     box.append(head);
 
@@ -8275,6 +8430,7 @@
         btn(`「${b.title}」 책으로 옮기기`, () => deskMove(sid, b.id), 'ghost-line', b.sessionIds.length >= deskMaxN()));
       btn('책에서 빼기', () => deskMove(sid, ''));
     }
+    if (tray) btn('이 이야기 지우기', () => void storyDelete(sid), 'ghost-line');
     btn('닫기', () => { deskMenu = null; deskPaint(); }, 'ghost');
     box.append(row);
     return box;
@@ -8298,6 +8454,42 @@
     renderShelf();
     deskPaint();
     if (b) toast(`「${b.title}」 ${b.sessionIds.length}장으로 넣었어요`);
+  }
+
+  /* ── 엽서(이야기) 지우기 ──
+       서버는 회차를 통째로 숨긴다 (015 · DELETE /api/sessions/{id}) — 목록 · 자서전 고르기에서 빠지고,
+       DB 에는 남아 실수였으면 되살릴 수 있다. 책장의 책은 이 기기에만 있어 서버가 모른다 —
+       **책에 든 이야기는 여기서 막는다** (책에서 먼저 빼야 지울 수 있다). */
+  async function storyDelete(sid) {
+    if (!sid) return false;
+    const d = booksData();
+    const inBook = d.books.filter(b => b.sessionIds.includes(sid) || (b.text && (b.text.ids || []).includes(sid)));
+    if (inBook.length) {
+      toast(`「${inBook[0].title}」 책에 들어 있는 이야기라 지울 수 없어요. 책에서 먼저 빼 주세요.`, 5000);
+      return false;
+    }
+    const row = deskById.get(sid) || arRows.find(r => r.session_id === sid);
+    const title = row ? arTitle(row).text : '이 이야기';
+    if (!window.confirm(`「${title}」 이야기를 지울까요?\n엽서와 나눈 이야기가 목록과 자서전 고르기에서 모두 빠져요.`)) return false;
+    try {
+      await api.hideSession(sid);
+      log('보관함', `이야기 지움 · ${sid.slice(0, 8)}`);
+    } catch (e) {
+      if (e.status === 409) { toast('아직 이야기 중인 기록이라 지울 수 없어요'); return false; }
+      if (e.status !== 404) {
+        log('보관함', `지우기 실패 · ${e.status || ''} ${e.message || e}`);
+        toast(e.status === 405 ? '아직 서버에 지우기 기능이 없어요. 서버를 다시 켠 뒤에 해 주세요.' : '지우지 못했어요. 잠시 뒤에 다시 해 주세요.');
+        return false;
+      }
+    }
+    // 404 는 이미 없는 것이다 — 화면에서도 뺀다
+    if (deskRows) { deskRows = deskRows.filter(r => r.session_id !== sid); deskById.delete(sid); }
+    arRows = arRows.filter(r => r.session_id !== sid);
+    deskStale = true;
+    if (deskMenu && deskMenu.sid === sid) deskMenu = null;
+    deskPaintIfOpen();
+    toast('지웠어요');
+    return true;
   }
 
   /** 다른 책 꺼내기 — 책장의 책들 중에서 고른다 */

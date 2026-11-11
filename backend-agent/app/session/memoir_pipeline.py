@@ -90,6 +90,7 @@ DEFAULT_LIMITS = {               # 초, 출력 토큰
 }
 DEFAULT_TEMPERATURE = 0.3
 DEFAULT_TOTAL_TIMEOUT = 600.0
+DEFAULT_PARALLEL = 4
 MIN_CHAPTERS, MAX_CHAPTERS = 1, 10   # 안전 상한. 넘으면 자르지 않고 실패 (10-29 충: 5 → 10 — 회차가 많으면
                                      # 5장 안에 넣느라 장면이 빠졌다)
 RETRIES = 0
@@ -240,6 +241,11 @@ def settings() -> dict:
     # 실험 — 「omit」 이면 temperature 를 요청에 싣지 않는다(Gemini 4 는 샘플링 값을 무시하고 경고를 낸다).
     # thinking_level 은 비우면 싣지 않는다(모델 기본값). 둘 다 비워 두면 지금 동작 그대로다
     s["MEMOIR_PIPE_THINKING_LEVEL"] = env_str("MEMOIR_PIPE_THINKING_LEVEL", "").lower()
+    # 서비스가 쓰는 지시문 묶음(VARIANTS). 비우면 v7 — integrated 는 통합 개선안(첨부프롬프트_md/파이프라인_통합)
+    s["MEMOIR_PIPE_VARIANT"] = env_str("MEMOIR_PIPE_VARIANT", "v7").lower()
+    # 장 집필 · 장 편집을 몇 장까지 동시에 부르나. 장끼리는 서로의 결과를 읽지 않는다 — 목차만 읽는다.
+    # 1 이면 예전처럼 한 장씩. 크게 잡으면 모델 쪽 분당 한도(429)에 걸릴 수 있다
+    s["MEMOIR_PIPE_PARALLEL"] = max(1, env_int("MEMOIR_PIPE_PARALLEL", DEFAULT_PARALLEL))
     s["chapters"] = [MIN_CHAPTERS, MAX_CHAPTERS]
     s["retries"] = RETRIES
     s["prompt_version"] = PROMPT_VERSION
@@ -3492,6 +3498,32 @@ class Recorder:
         return self.text(name, json.dumps(obj, ensure_ascii=False, indent=2) + "\n")
 
 
+async def _together(items: list, fn: Callable[[Any], Awaitable[Any]], limit: int) -> list:
+    """
+    items 마다 fn 을 동시에(limit 개까지) 부르고 결과를 items 순서로 돌려준다. 하나가 실패하면 아직 도는
+    나머지를 멈추고 그 오류를 올린다 — 실패한 실행에 더 쓰지 않는다 (예전 순서 실행의 「첫 실패에서 멈춘다」).
+    """
+    sem = asyncio.Semaphore(max(1, limit))
+
+    async def one(x):
+        async with sem:
+            return await fn(x)
+
+    tasks = [asyncio.ensure_future(one(x)) for x in items]
+    try:
+        return list(await asyncio.gather(*tasks))
+    finally:
+        for t in tasks:
+            if not t.done():
+                t.cancel()
+        await asyncio.gather(*tasks, return_exceptions=True)
+
+
+def _own_step(st: "_Run", stage: str, chapter_key: str) -> dict:
+    """그 장 그 단계의 기록. 동시에 돌면 st.steps[-1] 이 다른 장의 것일 수 있다."""
+    return next(s for s in reversed(st.steps) if s["stage"] == stage and s["chapter_key"] == chapter_key)
+
+
 @dataclass
 class _Run:
     data: dict
@@ -3971,7 +4003,7 @@ async def run(data: dict, turn_map: list[dict], *, call: Call = call_model,
             warns = [w for d, c in zip(drafts, chapters_plan) for w in check_chapter(d, c, set(plan_facts(c)), memos)]
             expand_turns(drafts, book)
             rec.json("03_drafts_reused.json", {"from": reuse.get("from"), "warnings": warns, "drafts": drafts})
-        for ch in [] if edit_only or reuse.get("drafts") is not None else chapters_plan:
+        async def write_chapter(ch):
             key = ch["chapter_key"]
             src, given = chapter_source(data, analysis, ch)
             try:
@@ -3985,10 +4017,17 @@ async def run(data: dict, turn_map: list[dict], *, call: Call = call_model,
                                    "plan_coverage": plan_coverage([draft], {"chapters": [ch]})}
                 step["ok"] = True
             except PipelineError as e:
-                st.steps[-1]["error"] = e.as_dict()
-                result = _result(PARTIAL, failure=e, calls=st.calls, focus=focus)
-                return result
-            drafts.append(draft)
+                _own_step(st, "chapter", key)["error"] = e.as_dict()
+                raise
+            return draft
+
+        # 장끼리는 목차만 읽고 서로의 초안은 읽지 않는다 — 동시에 부른다 (MEMOIR_PIPE_PARALLEL)
+        try:
+            drafts += await _together([] if edit_only or reuse.get("drafts") is not None else chapters_plan,
+                                      write_chapter, cfg.get("MEMOIR_PIPE_PARALLEL", DEFAULT_PARALLEL))
+        except PipelineError as e:
+            result = _result(PARTIAL, failure=e, calls=st.calls, focus=focus)
+            return result
 
         # 코드 판정 ① — 장 초안에서. 편집이 고칠 곳 · 나열 신호로 넘긴다
         outline_omit = {f: x["reason"] for x in outline_out.get("omit", []) for f in x["facts"]}
@@ -4024,10 +4063,11 @@ async def run(data: dict, turn_map: list[dict], *, call: Call = call_model,
                                                              draft_signals, focus, notes), "04_edited",
                                      system=edit_prompt("v6"))
         elif by_chapter:
-            outs = []
             keys = [c["chapter_key"] for c in chapters_plan]
             at = lambda c: str(c.get("location", "")).split("/")[0]      # noqa: E731
-            for i, (d, ch, sig) in enumerate(zip(drafts, chapters_plan, draft_signals)):
+
+            async def edit_one(arg):
+                i, d, ch, sig = arg
                 key = ch["chapter_key"]
                 # 장 위치가 아닌 경고(artifact · title)는 첫 장 편집이 함께 받는다 — 처리 결과가 빠지지 않게
                 mine = [c for c in draft_checks if at(c) == key or (i == 0 and at(c) not in keys)]
@@ -4041,8 +4081,7 @@ async def run(data: dict, turn_map: list[dict], *, call: Call = call_model,
                             "error": None}
                     st.steps.append(step)
                     rec.json(f"04_edit_{key}_reused.json", {"from": reuse.get("from"), "edit": o})
-                    outs.append(o)
-                    continue
+                    return o, step
                 try:
                     o, step = await st.ask("edit", edit_chapter_message(data, analysis, outline_out, d, mine, sig, ch,
                                                                         preserve_watch),
@@ -4051,9 +4090,16 @@ async def run(data: dict, turn_map: list[dict], *, call: Call = call_model,
                     step["warnings"] = []
                     step["ok"] = True
                 except PipelineError as e:
-                    st.steps[-1]["error"] = e.as_dict()
+                    _own_step(st, "edit", key)["error"] = e.as_dict()
                     raise
-                outs.append(o)
+                return o, step
+
+            # 장 편집도 그 장의 초안 · 경고만 읽는다 — 동시에 부른다. 뒤의 공통 기록은 마지막 장 편집에 붙는다
+            pairs = await _together([(i, d, ch, sig) for i, (d, ch, sig)
+                                     in enumerate(zip(drafts, chapters_plan, draft_signals))],
+                                    edit_one, cfg.get("MEMOIR_PIPE_PARALLEL", DEFAULT_PARALLEL))
+            outs = [o for o, _ in pairs]
+            step = pairs[-1][1]
             edited = merge_chapter_edits(outs, outline_out)
             rec.json("04_edited.json", edited)
         else:

@@ -12,7 +12,7 @@
     검사      check             7개 키 · 본문 줄마다 출처 하나    → GenerationFailed (502)
                                 확인 필요 · 자료 누락              → NotFinal (503)
 
-**요청은 두 모양이다.** `{session_ids}` 는 고른 것 (3 ~ MEMOIR_MAX_SESSIONS).
+**요청은 두 모양이다.** `{session_ids}` 는 고른 것 (3개 이상 · MEMOIR_MAX_SESSIONS 를 두면 그만큼까지).
 `{elder_id, exclude_session_ids}` 는 최종 정책 「같은 화자 전체 선택 후 제외」(7-C1 §4 ·
 태헌 10-26) — 서버가 그 화자의 전부(store.memoir_sessions)를 정하고 뺄 것만 받는다.
 **빼기 요청에는 개수 상한이 없다** (최충 · 태헌 10-28). 어느 쪽이든 응답의
@@ -65,14 +65,23 @@ log = logging.getLogger("memoir")
 PROMPT = Path(__file__).resolve().parents[2] / "첨부프롬프트_md" / "자서전_v4.md"
 
 MIN_SESSIONS = 3
-# 상한은 **단일 호출 구조의 임시 시험 제한**이다 (태헌 10-26). 최종 정책은 같은 화자의
-# 쓸 수 있는 기록을 전부 고르고 빼는 것이라 상수로 박지 않는다 — 다섯 단계 구조가
-# 품질 시험을 지나면 올리거나 없앤다.
-DEFAULT_MAX_SESSIONS = 5
+# 회차 수 상한은 기본으로 없다 (0). 예전에는 한 번 호출(single)의 시험 제한으로 5개였다 (태헌 10-26).
+# 너무 많이 넣는 것은 글자 수 상한(MEMOIR_MAX_INPUT_CHARS → 400 too_much)이 막는다.
+# 다시 걸려면 MEMOIR_MAX_SESSIONS 에 1 이상을 둔다.
+DEFAULT_MAX_SESSIONS = 0
 
 
 def max_sessions() -> int:
+    """MEMOIR_MAX_SESSIONS 그대로. 0 이하는 상한 없음 — 판단은 cap() 으로 한다."""
     return env_int("MEMOIR_MAX_SESSIONS", DEFAULT_MAX_SESSIONS)
+
+
+def cap(user_id: str | None = None) -> int | None:
+    """고를 수 있는 회차 수 상한. None 이면 없음 — pipeline 계정은 늘 없음."""
+    if user_id is not None and engine(user_id) == "pipeline":
+        return None
+    n = max_sessions()
+    return n if n > 0 else None
 
 
 def require_speaker() -> bool:
@@ -203,11 +212,11 @@ def check_open(user_id: str | None) -> None:
 def limits(user_id: str) -> dict:
     """
     화면이 고르기 전에 알아야 할 것 — 회차 목록(?elder_id=)에 함께 싣는다.
-    memoir_max 는 None 이면 상한 없음 (pipeline), single 이면 MEMOIR_MAX_SESSIONS.
+    memoir_max 는 None 이면 상한 없음 (pipeline · MEMOIR_MAX_SESSIONS 를 두지 않은 single).
     memoir_enabled 가 false 면 이 계정은 자서전을 만들 수 없다(403 memoir_closed) — 화면은 버튼을 감추거나 안내한다.
     """
     kind = engine(user_id)
-    return {"memoir_engine": kind, "memoir_max": None if kind == "pipeline" else max_sessions(),
+    return {"memoir_engine": kind, "memoir_max": cap(user_id),
             "memoir_max_chars": max_input_chars(), "memoir_enabled": open_to(user_id)}
 
 
@@ -246,9 +255,10 @@ def check_selection(session_ids) -> list[str]:
     """
     if not isinstance(session_ids, list):
         raise BadSelection("session_ids 가 목록이 아니다")
-    top = max_sessions()
-    if not MIN_SESSIONS <= len(session_ids) <= top:
-        raise BadSelection(f"회차 {len(session_ids)}개 — {MIN_SESSIONS}~{top}개여야 한다")
+    top = cap()
+    if len(session_ids) < MIN_SESSIONS or (top and len(session_ids) > top):
+        span = f"{MIN_SESSIONS}~{top}개" if top else f"{MIN_SESSIONS}개 이상"
+        raise BadSelection(f"회차 {len(session_ids)}개 — {span}여야 한다")
     return _uuids(session_ids)
 
 
@@ -591,10 +601,11 @@ async def select(body: dict, user_id: str) -> list[str]:
     if "exclude_session_ids" in body:
         elder, gone = check_exclusion(body.get("elder_id"), body["exclude_session_ids"])
         ids = await pick_all(elder, gone, user_id)
-        # 상한 없음은 pipeline 만이다 — 한 번 호출(single)은 MEMOIR_MAX_SESSIONS 를 넘겨 받지 않는다.
+        # MEMOIR_MAX_SESSIONS 를 둔 경우만 한 번 호출(single)을 그 개수로 막는다 (pipeline 은 늘 없음).
         # 화면은 목록의 memoir_max 로 미리 안다 (limits)
-        if engine(user_id) == "single" and len(ids) > max_sessions():
-            raise BadSelection(f"남은 회차 {len(ids)}개 — 이 계정은 {max_sessions()}개까지 (single)")
+        top = cap(user_id)
+        if top and len(ids) > top:
+            raise BadSelection(f"남은 회차 {len(ids)}개 — 이 계정은 {top}개까지 (single)")
         return ids
     return check_selection(body.get("session_ids"))
 
@@ -641,17 +652,20 @@ async def _draft_pipeline(recs: list[dict], ids: list[str], style: str, progress
         raise GenerationFailed("MEMOIR_FAIL_INJECT=generation_failed")
     if hook == INJECT_TIMEOUT:
         raise GenerationTimeout("MEMOIR_FAIL_INJECT=generation_timeout")
-    model = mp.settings()["MEMOIR_PIPE_TEXT_MODEL"]
+    cfg = mp.settings()
+    model, variant = cfg["MEMOIR_PIPE_TEXT_MODEL"], cfg["MEMOIR_PIPE_VARIANT"]
+    if variant not in mp.VARIANTS:
+        raise GenerationFailed(f"MEMOIR_PIPE_VARIANT={variant} 는 없는 지시문 묶음이다 {sorted(mp.VARIANTS)}")
     t0 = time.monotonic()
-    log.info("자서전 다섯 단계 요청 — 회차 %d개 %s · 말씀 %d턴 · 모델 %s", len(ids),
-             ",".join(s[:8] for s in ids), len(turn_map), model)
+    log.info("자서전 다섯 단계 요청 — 회차 %d개 %s · 말씀 %d턴 · 모델 %s · 지시문 %s", len(ids),
+             ",".join(s[:8] for s in ids), len(turn_map), model, variant)
     steps: list[dict] = []
     calls = 0
     for attempt in (1, 2):
         rec = _progress_recorder(progress)            # folder 없음 — 메모리에만
         if attempt > 1 and progress is not None:
             progress("analysis", 0, 0)
-        res = await mp.run(data, turn_map, recorder=rec)
+        res = await mp.run(data, turn_map, recorder=rec, variant=variant)
         try:
             steps += json.loads(rec.files.get("run.json", "{}")).get("steps", [])
         except ValueError:
