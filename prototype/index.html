@@ -806,6 +806,138 @@
     }
     @media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation-duration: .01ms !important; animation-iteration-count: 1 !important; } }
   </style>
+
+  <style id="readerV1">
+    /* ── 자서전 펼쳐 읽기 (v0.53) — 책상 위에 펼친 책 ──
+       PC: 두 쪽 펼침 · 책 양옆 화살표 · 종이책 넘김 / 휴대폰(760px 이하): 한 쪽 · 책 가장자리를 누르거나 밀어서 넘김 · 넘김 연출 없음
+       책 가운데를 누르면 위 · 아래 메뉴를 숨긴다. */
+    .rd-open { display: inline-flex; align-items: center; justify-content: center; gap: 10px; width: 100%; margin: 4px 0 18px; }
+    .rd-open svg { width: 22px; height: 22px; }
+    .rd {
+      --rd-paper: #fbf6ea; --rd-ink: #2f2a22; --rd-muted: #7a6c58; --rd-gold: #b58a45; --rd-cover: #5f6e48;
+      --rd-serif: "Gowun Batang", "Batang", "바탕", serif;
+      --rd-grain: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.85' numOctaves='3' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 .45 0 0 0 0 .35 0 0 0 0 .2 2 0 0 0 -.85'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='.35'/%3E%3C/svg%3E");
+      position: fixed; inset: 0; z-index: 900; overflow: hidden; color: var(--rd-ink);
+      background: repeating-linear-gradient(92deg, #7a55320d 0 2px, transparent 2px 9px, #ffffff0a 9px 10px, transparent 10px 23px),
+                  radial-gradient(ellipse 70% 62% at 50% 44%, #f3e3c4 0%, #d9bf96 46%, #b8936a 78%, #9c7650 100%);
+    }
+    .rd[hidden] { display: none; }
+    body.rd-lock { overflow: hidden; }
+    .rd-top, .rd-bottom { position: absolute; left: 0; right: 0; z-index: 5; background: rgba(251,246,234,.86); -webkit-backdrop-filter: blur(10px); backdrop-filter: blur(10px); transition: opacity .2s, transform .2s; }
+    .rd-top { top: 0; height: calc(56px + env(safe-area-inset-top)); padding: env(safe-area-inset-top) 10px 0; display: grid; grid-template-columns: 120px 1fr 120px; align-items: center; border-bottom: 1px solid rgba(120,90,50,.15); }
+    .rd-back { white-space: nowrap; display: inline-flex; align-items: center; gap: 4px; min-height: 44px; padding: 0 8px; border: 0; background: none; color: inherit; font-family: var(--rd-serif); font-size: 1rem; }
+    .rd-back svg { width: 20px; height: 20px; }
+    .rd-title { text-align: center; font-family: var(--rd-serif); font-size: 1rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .rd-bottom { bottom: 0; padding: 6px 12px calc(8px + env(safe-area-inset-bottom)); border-top: 1px solid rgba(120,90,50,.15); display: grid; justify-items: center; gap: 2px; }
+    .rd-pager { display: flex; align-items: center; gap: 22px; }
+    .rd-pager button { width: 44px; height: 44px; display: grid; place-items: center; border: 1px solid #cdb995; border-radius: 50%; background: var(--rd-paper); color: inherit; }
+    .rd-pager button:disabled { opacity: .3; }
+    .rd-pager svg { width: 20px; height: 20px; }
+    .rd-count { min-width: 84px; text-align: center; font-size: .9rem; color: var(--rd-muted); font-variant-numeric: tabular-nums; }
+    .rd-menu { display: flex; gap: 4px; }
+    .rd-menu button { display: grid; justify-items: center; gap: 2px; min-width: 84px; min-height: 52px; padding: 4px 8px; border: 0; border-radius: 12px; background: none; color: inherit; font-family: var(--rd-serif); font-size: .85rem; }
+    .rd-menu button:hover { background: rgba(181,138,69,.14); }
+    .rd-menu svg { width: 22px; height: 22px; }
+    .rd-menu button[hidden] { display: none; }
+    .rd-menu .rd-del { color: #a2463a; }
+    .rd.chrome-off .rd-top { opacity: 0; transform: translateY(-10px); pointer-events: none; }
+    .rd.chrome-off .rd-bottom { opacity: 0; transform: translateY(10px); pointer-events: none; }
+    .rd-showmenu { position: absolute; z-index: 6; right: 14px; bottom: calc(14px + env(safe-area-inset-bottom)); display: flex; align-items: center; gap: 8px; min-height: 46px; padding: 0 16px; border: 1px solid #cdb995; border-radius: 999px; background: rgba(251,246,234,.95); color: inherit; font-family: var(--rd-serif); box-shadow: 0 8px 20px -8px rgba(30,18,8,.45); }
+    .rd-showmenu svg { width: 18px; height: 18px; }
+    .rd-showmenu[hidden] { display: none; }
+    /* 책 */
+    .rd-stage { position: absolute; inset: 0; display: grid; place-items: center; touch-action: pan-y; }
+    .rd-book { position: relative; width: var(--bw); height: var(--bh); transform-style: preserve-3d; touch-action: pan-y; }
+    .rd-book::before { content: ""; position: absolute; inset: -10px -12px -16px; border-radius: 6px; z-index: -1;
+      background: repeating-linear-gradient(0deg, rgba(255,255,255,.05) 0 1px, transparent 1px 3px), repeating-linear-gradient(90deg, rgba(0,0,0,.05) 0 1px, transparent 1px 3px), var(--rd-cover);
+      box-shadow: 0 36px 56px -18px rgba(30,18,8,.6), 0 8px 18px rgba(30,18,8,.25), inset 0 0 0 1px rgba(0,0,0,.2); }
+    .rd-book::after { content: ""; position: absolute; left: 2px; right: 2px; bottom: -7px; height: 7px; border-radius: 0 0 3px 3px; background: repeating-linear-gradient(180deg, #efe5cf 0 1px, #cdbd9c 1px 2px); }
+    .rd.single .rd-book::before { inset: -10px -12px -16px -16px; }
+    .rd-page { position: absolute; top: 0; bottom: 0; width: 50%; overflow: hidden; touch-action: pan-y; font-family: var(--rd-serif); font-size: var(--fs); line-height: 1.95; color: var(--rd-ink); word-break: keep-all; overflow-wrap: anywhere; }
+    .rd-page.left { left: 0; border-radius: 4px 0 0 4px; background: var(--rd-grain), linear-gradient(90deg, #f3ead7 0%, var(--rd-paper) 14%, var(--rd-paper) 74%, #e9dcbf 92%, #d8c7a4 100%); }
+    .rd-page.right { left: 50%; border-radius: 0 4px 4px 0; background: var(--rd-grain), linear-gradient(90deg, #d8c7a4 0%, #e9dcbf 8%, var(--rd-paper) 24%, var(--rd-paper) 86%, #f1e8d4 100%); }
+    .rd.single .rd-page.left:not(.face) { display: none; }
+    .rd.single .rd-page.right { left: 0; width: 100%; border-radius: 2px 5px 5px 2px; background: var(--rd-grain), linear-gradient(90deg, #d8c7a4 0%, #efe4cc 4%, var(--rd-paper) 12%, var(--rd-paper) 90%, #f1e8d4 100%); }
+    .rd-pc { position: absolute; inset: 0; padding: var(--pad); overflow: hidden; }
+    /* 쪽 · 글 상자는 저마다 넘침을 자르는 상자(스크롤 상자)라 바깥의 pan-y 가 닿지 않는다 — 안쪽에도 같은 값을 줘야 가로 밀기를 브라우저가 가져가지 않는다 */
+    .rd-book, .rd-book * { touch-action: pan-y; }
+    .rd-pc p { margin: 0 0 .8em; text-indent: 1em; }
+    .rd-pc p.cont { text-indent: 0; }
+    .rd-ch { margin: .4em 0 1.3em; }
+    .rd-ch small { display: block; margin-bottom: .4em; font-size: .78em; letter-spacing: .15em; color: var(--rd-gold); }
+    .rd-ch h3 { margin: 0; font-size: 1.32em; line-height: 1.45; letter-spacing: -.02em; }
+    .rd-ch::after { content: ""; display: block; width: 1.8em; height: 1px; margin-top: .9em; background: var(--rd-gold); }
+    .rd-cover { display: flex; flex-direction: column; justify-content: center; }
+    .rd-cover .k { font-size: .82em; color: var(--rd-muted); letter-spacing: .1em; margin-bottom: .8em; }
+    .rd-cover h2 { margin: 0; font-size: 1.8em; line-height: 1.35; letter-spacing: -.03em; }
+    .rd-cover .rule { display: block; width: 2.6em; height: 1px; margin: 1.2em 0; background: var(--rd-gold); }
+    .rd-cover .note { font-size: .74em; line-height: 1.7; color: #8a5a2a; text-indent: 0; }
+    .rd-toc h3 { margin: .2em 0 1em; font-size: 1.15em; letter-spacing: .3em; }
+    .rd-toc ol { list-style: none; margin: 0; padding: 0; }
+    .rd-toc li { border-bottom: 1px dotted #d5c6aa; }
+    .rd-toc button { display: flex; gap: .8em; width: 100%; padding: .55em 0; border: 0; background: none; color: inherit; font: inherit; font-size: .92em; text-align: left; }
+    .rd-toc button small { flex: none; min-width: 2.4em; color: var(--rd-gold); }
+    .rd-toc button span { flex: 1; }
+    .rd-toc button i { font-style: normal; color: var(--rd-muted); }
+    .rd-toc button:disabled { color: var(--rd-muted); font-style: italic; }
+    .rd-end { display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; color: var(--rd-muted); }
+    .rd-end span { color: var(--rd-gold); letter-spacing: .3em; margin-bottom: 1em; }
+    .rd-run { position: absolute; top: 12px; left: 0; right: 0; padding: 0 44px; text-align: center; font-size: .66rem; letter-spacing: .14em; color: var(--rd-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; pointer-events: none; }
+    .rd-no { position: absolute; bottom: 12px; font-size: .74rem; color: var(--rd-muted); font-variant-numeric: tabular-nums; pointer-events: none; }
+    .rd-page.left .rd-no { left: 22px; }
+    .rd-page.right .rd-no { right: 22px; }
+    .rd-measure { position: absolute !important; left: -9999px; top: 0; visibility: hidden; pointer-events: none; }
+    /* 넘기는 장 (PC) */
+    .rd-leaf { position: absolute; top: 0; bottom: 0; width: 50%; z-index: 3; transform-style: preserve-3d; pointer-events: none; }
+    .rd-leaf.fwd { left: 50%; transform-origin: 0 50%; }
+    .rd-leaf.bwd { left: 0; transform-origin: 100% 50%; }
+    .rd.single .rd-leaf { left: 0; width: 100%; transform-origin: 0 50%; }
+    .rd-leaf .rd-page { left: 0 !important; width: 100% !important; display: block !important; backface-visibility: hidden; -webkit-backface-visibility: hidden; box-shadow: 8px 2px 24px rgba(30,18,8,.2); }
+    .rd-leaf .rd-page.back { transform: rotateY(180deg); }
+    .rd-shade { position: absolute; inset: 0; pointer-events: none; opacity: 0; background: linear-gradient(90deg, rgba(42,24,12,.34), rgba(42,24,12,.06) 25%, rgba(255,255,255,.18) 62%, transparent 80%); }
+    .rd-leaf .rd-page.left .rd-shade { background: linear-gradient(270deg, rgba(42,24,12,.34), rgba(42,24,12,.06) 25%, rgba(255,255,255,.18) 62%, transparent 80%); }
+    .rd-cast { position: absolute; top: 0; bottom: 0; z-index: 2; pointer-events: none; opacity: 0; }
+    .rd-cast.r { left: 50%; right: 0; background: linear-gradient(90deg, rgba(30,18,8,.3), rgba(30,18,8,.07) 35%, transparent 70%); }
+    .rd-cast.l { left: 0; right: 50%; background: linear-gradient(270deg, rgba(30,18,8,.3), rgba(30,18,8,.07) 35%, transparent 70%); }
+    .rd.single .rd-cast { left: 0; right: 0; }
+    /* PC 양옆 화살표 */
+    .rd-side { position: absolute; z-index: 4; top: var(--sy, 50%); transform: translateY(-50%); display: none; justify-items: center; gap: 8px; width: 84px; padding: 0; border: 0; background: none; color: inherit; font-family: var(--rd-serif); font-size: .9rem; }
+    .rd.side-on .rd-side { display: grid; }
+    .rd-side.prev { left: var(--sl); }
+    .rd-side.next { right: var(--sr); }
+    .rd-side svg { box-sizing: content-box; width: 28px; height: 28px; padding: 18px; border-radius: 50%; background: rgba(251,246,234,.95); border: 1px solid #cdb995; box-shadow: 0 8px 20px -6px rgba(30,18,8,.45); stroke-width: 2.2; transition: transform .15s; }
+    .rd-side span { white-space: nowrap; padding: 2px 8px; border-radius: 999px; background: rgba(251,246,234,.8); }
+    .rd-side.next:not(:disabled):hover svg { transform: translateX(3px) scale(1.06); }
+    .rd-side.prev:not(:disabled):hover svg { transform: translateX(-3px) scale(1.06); }
+    .rd-side:disabled { opacity: .3; cursor: default; }
+    .rd.side-on .rd-pager button { visibility: hidden; }
+    /* 휴대폰 */
+    @media (max-width: 760px) {
+      .rd-top { grid-template-columns: auto 1fr 12px; gap: 6px; }
+      .rd-pager button { display: none; }
+      .rd-menu { width: 100%; justify-content: space-around; }
+      .rd-menu button { flex: 1; min-width: 0; }
+    }
+    /* PDF 저장 — 인쇄할 때만 보이는 책 */
+    #rdPrint { display: none; }
+    @page { size: A5; margin: 18mm 16mm 20mm; }
+    @media print {
+      body.rd-printing > *:not(#rdPrint) { display: none !important; }
+      body.rd-printing { background: #fff !important; }
+      body.rd-printing #rdPrint { display: block; color: #2b241c; font-family: "Gowun Batang", "Batang", serif; }
+      #rdPrint section { break-after: page; }
+      #rdPrint section:last-child { break-after: auto; }
+      .rdp-cover { min-height: 165mm; display: flex; flex-direction: column; justify-content: center; text-align: center; }
+      .rdp-cover small { font-size: 10pt; letter-spacing: .25em; color: #8a6d4c; }
+      .rdp-cover h1 { font-size: 22pt; line-height: 1.5; margin: 14pt 0; }
+      .rdp-cover p { font-size: 9.5pt; color: #8a5a2a; }
+      .rdp-toc h2 { font-size: 15pt; letter-spacing: .25em; }
+      .rdp-toc ol { padding: 0; } .rdp-toc li { list-style: none; padding: 5pt 0; border-bottom: .5pt solid #e2d6c0; font-size: 11pt; }
+      .rdp-ch small { display: block; margin-top: 8mm; font-size: 9.5pt; letter-spacing: .2em; color: #a0805a; }
+      .rdp-ch h2 { font-size: 15pt; margin: 4pt 0 12pt; }
+      .rdp-ch p { font-size: 11pt; line-height: 2; margin: 0 0 8pt; text-indent: 1em; orphans: 2; widows: 2; word-break: keep-all; }
+    }
+  </style>
 </head>
 <body>
   <div class="app" id="app">
@@ -1175,6 +1307,7 @@
           <span class="mm-origin" id="mmOrigin" hidden></span>
           <p class="style-tag" id="mmStyleTag" hidden></p>
           <h2 class="mm-title" id="mmTitle"></h2>
+          <button type="button" class="btn btn-primary rd-open" id="rdOpen"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 6.5C10 5 7 4.5 3 5v13c4-.5 7 0 9 1.5 2-1.5 5-2 9-1.5V5c-4-.5-7 0-9 1.5Zm0 0V19.5" /></svg>책으로 펼쳐 읽기</button>
           <p class="mm-draft" id="mmDraft" hidden></p>
           <p class="prep-note" id="mmKeep" hidden>이 자서전은 저장되지 않아요. 30분이 지나거나 서버를 점검하면 사라질 수 있어요. 필요하면 지금 읽어 보시거나 옮겨 적어 두세요.</p>
           <nav class="mm-toc" id="mmToc" aria-label="목차" hidden><h3>목차</h3><ol id="mmTocList"></ol></nav>
@@ -1407,6 +1540,39 @@
     <pre id="devLog"></pre>
   </div>
 
+  <!-- ── 자서전 펼쳐 읽기 (v0.53) — 받은 자서전(장 · 문단)을 책 모양으로 펼친다. 글은 고치지 않고 쪽으로 나누기만 한다 ── -->
+  <section class="rd" id="rd" hidden role="dialog" aria-modal="true" aria-label="자서전 펼쳐 읽기">
+    <header class="rd-top">
+      <button type="button" class="rd-back" id="rdBack"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 5l-7 7 7 7" /></svg><span>자서전으로</span></button>
+      <span class="rd-title" id="rdTitle"></span>
+      <span class="rd-top-gap" aria-hidden="true"></span>
+    </header>
+    <div class="rd-stage" id="rdStage">
+      <div class="rd-book" id="rdBook">
+        <article class="rd-page left" id="rdL"></article>
+        <article class="rd-page right" id="rdR"></article>
+      </div>
+    </div>
+    <button type="button" class="rd-side prev" id="rdSidePrev" tabindex="-1" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 5l-7 7 7 7" /></svg><span>이전 쪽</span></button>
+    <button type="button" class="rd-side next" id="rdSideNext" tabindex="-1" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 5l7 7-7 7" /></svg><span>다음 쪽</span></button>
+    <footer class="rd-bottom" id="rdBottom">
+      <div class="rd-pager">
+        <button type="button" id="rdPrev" aria-label="이전 쪽"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 5l-7 7 7 7" /></svg></button>
+        <span class="rd-count" id="rdCount" aria-live="polite"></span>
+        <button type="button" id="rdNext" aria-label="다음 쪽"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 5l7 7-7 7" /></svg></button>
+      </div>
+      <nav class="rd-menu" aria-label="독서 메뉴">
+        <button type="button" data-rd="toc"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 6h11M9 12h11M9 18h11M4.5 6h.01M4.5 12h.01M4.5 18h.01" /></svg><span>목차</span></button>
+        <button type="button" data-rd="fs"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 19 9 6l5 13M5.8 14.5h6.4M15 19l3-8 3 8M15.9 16.6h4.2" /></svg><span>글자 크기</span></button>
+        <button type="button" data-rd="pdf"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v12m-5-5 5 5 5-5M4 16v5h16v-5" /></svg><span>PDF 저장</span></button>
+        <button type="button" data-rd="share" hidden><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 15V3m-5 5 5-5 5 5M5 12v8h14v-8" /></svg><span>공유</span></button>
+        <button type="button" data-rd="del" class="rd-del" hidden><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18" /></svg><span>책 지우기</span></button>
+      </nav>
+    </footer>
+    <button type="button" class="rd-showmenu" id="rdShowMenu" hidden><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16" /></svg>독서 메뉴 보기</button>
+  </section>
+  <div id="rdPrint" aria-hidden="true"></div>
+
 <script>
 (function () {
   'use strict';
@@ -1417,7 +1583,7 @@
   const CONFIG = {
     // 화면 아래와 개발용 패널에 그대로 찍힌다. 「고친 게 반영이 안 된 것 같다」는
     // 대부분 예전 파일이 열려 있는 경우라서, 눈으로 확인할 자리를 만들어 둔다.
-    version: 'v0.52 · 2026-10-30 (마치기 없이 나간 이 기기 회차를 새로 시작할 때 먼저 닫기 · 「이미 진행 중」 안내 보강)',
+    version: 'v0.54 · 2026-11-11 (develop 서버에 맞춤 — 자서전 저장 안내 · 펼쳐 읽기에서 링크로 공유 · 책 지우기 · 자서전 문체 수필체 · 문학체 · 소설체 / v0.53 자서전 펼쳐 읽기)',
 
     // 이 화면을 백엔드가 직접 서빙하면(web/ 폴더) 빈 문자열 그대로 둔다.
     // 다른 포트에서 열어 시험할 때만 'http://127.0.0.1:8010' 처럼 채운다.
@@ -1697,13 +1863,15 @@
     // **라벨은 언제나 응답의 style 로 붙인다** — 고른 값이 아니다 (다시 만들다 실패하면 옛 글이 남는다).
     // 서버가 style 을 아직 모르면(지금 develop) 칸을 무시하고 구어체로 만든다 — 응답에 style 이 없으면 구어체로 본다.
     style: {
-      names: { spoken: '구어체', novel: '소설체', cyworld: '싸이월드체' },
+      names: { spoken: '구어체', essay: '수필체', literary: '문학체', novel: '소설체', cyworld: '싸이월드체' },
       default: 'spoken',
       pick: true,                // 자서전 · 엽서 화면에 문체 고르기를 보인다
       // 서버가 지금 받는 문체 (feature/theme-interview 4c8d0f7 · 1단계는 spoken 하나).
       // 나머지는 고르기에서 숨긴다 — 누르면 400 unsupported_style 만 온다. 4-P1 뒤 서버가 열면 여기에 더한다.
       // 고를 것이 하나뿐이면 고르기 줄은 숨기고 「문체: ○○」 라벨만 둔다. ?styles=all 이면 전부 보인다 (400 시험용)
       open: ['spoken'],
+      // 자서전은 수필체 · 문학체 · 소설체도 받는다 (서버 memoir_styled · memoir_novel — 태헌 문체 전달 3판, develop 0a5227c). 엽서는 아직 구어체만
+      memoirOpen: ['spoken', 'essay', 'literary', 'novel'],
       regenWaitMs: 40000,        // 엽서를 다른 문체로 다시 만들 때 기다리는 상한
     },
 
@@ -1719,6 +1887,8 @@
      공통
      ═══════════════════════════════════════════════════════════════ */
   const $ = (q) => document.querySelector(q);
+  let rdData = null;   // 자서전 펼쳐 읽기 — 마지막으로 받은 글 (v0.53)
+  let mmSavedId = null; // 서버가 저장한 자서전 번호 (작업 · preview 응답의 memoir_id). 저장 못 했으면 null (v0.54)
 
   /* ── 3차 인증 · 링크 — 지금 어느 모드로 도는가 (3-C1 초안) ── */
   const QS = new URLSearchParams(location.search);
@@ -4550,7 +4720,7 @@
     $('#mmCancel').hidden = !(view === 'wait' && mmJobId);
     if (view !== 'wait') $('#mmStage').hidden = true;
     if (view === 'pick') mmSync();
-    $('#mmStyle').hidden = !stylePickable() || view !== 'pick';
+    $('#mmStyle').hidden = !stylePickable('memoir') || view !== 'pick';
     window.scrollTo(0, 0);
   }
 
@@ -4931,6 +5101,7 @@
   /** 장 읽기 — 제목 · 목차 · 장 제목 · 문단. 목차를 누르면 그 장으로 간다.
       일부 장 실패를 보여 줄 때(B)는 만들지 못한 장을 목차에만 「만들지 못했어요」 로 남기고 본문에는 넣지 않는다 */
   function mmPaintChapters(out) {
+    rdData = { title: out.title, chapters: out.chapters.map(c => ({ no: c.no, title: c.title, ok: !!c.ok, paras: c.ok ? c.paras : [] })) };
     $('#mmTitle').textContent = out.title;
     const box = $('#mmBody'), toc = $('#mmTocList');
     box.replaceChildren(); toc.replaceChildren();
@@ -4975,11 +5146,18 @@
       : out.chapters && out.ver && out.ver !== 'pass' ? '자서전 초안이에요. 아직 검증과 사람의 확인을 거치지 않았어요.'
       : '자서전 초안이에요. 아직 사람의 확인을 거치지 않았어요.';
     d.classList.toggle('warn', !!miss);
-    // 서버가 만든 글은 저장하지 않는다 (7-C1 §4 · 작업은 30분 보관) — 태헌 10-28
-    $('#mmKeep').hidden = origin !== 'server';
+    // 서버가 만든 자서전은 DB 에 저장된다 (013 · develop 72ad1c7 — 7-C1 §4 「저장하지 않는다」 를 뒤집음).
+    // 응답에 memoir_id 가 없으면(저장 실패 · 예전 서버) 예전처럼 30분 보관 안내를 띄운다.
+    const keep = $('#mmKeep');
+    keep.hidden = origin !== 'server';
+    keep.textContent = mmSavedId
+      ? '이 자서전은 내 계정에 저장해 두었어요. 「책으로 펼쳐 읽기」 에서 링크로 공유하거나 지울 수 있어요.'
+      : '이 자서전은 저장되지 않았어요. 30분이 지나거나 서버를 점검하면 사라질 수 있어요. 필요하면 지금 읽어 보시거나 PDF로 저장해 두세요.';
   }
 
   function mmPaint(title, body) {
+    // 장 없는 응답 — 한 줄이 한 문장. 펼쳐 읽기에서는 한 장으로 묶어 문장을 그대로 잇는다
+    rdData = { title, chapters: null, lines: body.split('\n').filter(l => l.trim()) };
     $('#mmTitle').textContent = title;
     $('#mmToc').hidden = true;
     const box = $('#mmBody');
@@ -5000,6 +5178,7 @@
     const min = CONFIG.memoir.min, max = mmMax();
     if (mmView !== 'pick' || ids.length < min || ids.length > max) return;
     const my = ++mmReq;
+    mmSavedId = null;
     mmShow('wait');                                  // 여기서 버튼과 선택이 잠긴다 — 두 번 눌러도 한 번만 간다
     const kind = mmMock();
     const style = CONFIG.style.pick ? mmStyle : '';
@@ -5018,6 +5197,7 @@
     const timer = setTimeout(() => ctl.abort(), CONFIG.memoir.timeoutMs);
     try {
       const res = kind ? await mmFake(kind, ctl.signal, style, ids) : await api.memoirPreview(mmRequest(ids), ctl.signal, style);
+      mmSavedId = (!kind && res && res.memoir_id) || null;
       if (!kind && res && typeof res === 'object') capSeen('memoirChapters', Array.isArray(res.chapters) && res.chapters.length > 0 && !!res.run);
       return mmRead(res, ids);
     } catch (e) {
@@ -5083,6 +5263,7 @@
       if (job.status === 'done') {
         mmJobDone();
         const res = job.result;
+        mmSavedId = job.memoir_id || null;           // 서버가 DB 에 남긴 자서전 (013). 저장 실패면 null
         if (res && typeof res === 'object') capSeen('memoirChapters', Array.isArray(res.chapters) && res.chapters.length > 0 && !!res.run);
         log('자서전', `작업 끝 · ${job.elapsed || '?'}초`);
         return mmRead(res, ids);
@@ -5151,6 +5332,7 @@
     if (!out || out.view === 'gone') return;
     if (out.view === 'result') {
       if (out.chapters) mmPaintChapters(out); else mmPaint(out.title, out.body);
+      if (rdData) { rdData.origin = kind ? 'mock' : 'server'; rdData.memoirId = kind ? null : mmSavedId; }
       mmMark(kind ? 'mock' : 'server', out);
       const tag = $('#mmStyleTag');
       tag.hidden = !CONFIG.style.pick;
@@ -5179,6 +5361,7 @@
     const out = mmRead(res);
     if (out.view === 'result') {
       if (out.chapters) mmPaintChapters(out); else mmPaint(out.title, out.body);
+      if (rdData) { rdData.origin = 'file'; rdData.memoirId = null; }
       mmMark('file', out);
       $('#mmStyleTag').hidden = true;
     }
@@ -5198,6 +5381,376 @@
     mmShow('pick');
   });
   $('#mmBack').addEventListener('click', () => { mmReq++; mmForget(); void openArchive(); });
+
+  /* ═══════════════════════════════════════════════════════════════
+     자서전 펼쳐 읽기 (v0.53) — 결과 화면의 글을 책으로 펼친다
+     · 글은 고치지 않는다. 문장 단위로 쪽에 부어 넘치면 다음 쪽 (문장은 자르지 않는다)
+     · PC(폭 761px~): 두 쪽 펼침(1100px 이상) · 책 양옆 화살표 · 종이책 넘김
+     · 휴대폰(760px 이하): 한 쪽 · 책 오른쪽/왼쪽 가장자리를 누르거나 밀어서 넘김 · 넘김 연출 없음
+     · 책 가운데를 누르면 위 · 아래 메뉴를 숨긴다 (다시 누르거나 「독서 메뉴 보기」)
+     ═══════════════════════════════════════════════════════════════ */
+  const rd = $('#rd'), rdBook = $('#rdBook'), rdL = $('#rdL'), rdR = $('#rdR');
+  const RD_FS = [1, 1.12, 1.25];
+  let rdFs = 0;
+  try { rdFs = (+localStorage.getItem('memoir.reader.fs') || 0) % RD_FS.length; } catch (_) {}
+  let rdPages = [], rdViews = [], rdAt = 0, rdSpread = false, rdBusy = false, rdOpener = null, rdTocAt = -1, rdChAt = {};
+  const rdMobile = () => innerWidth <= 760;
+  const rdEl = (tag, cls, text) => { const e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; };
+
+  function rdSize() {
+    const vw = innerWidth, vh = innerHeight;
+    rdSpread = vw >= 1100 && vh >= 560;
+    rd.classList.toggle('single', !rdSpread);
+    const room = vh - 56 - 112 - 28;               // 위 막대 · 아래 메뉴 · 여백
+    let bw, bh;
+    if (rdSpread) { const pw = Math.min((vw - 2 * 150) / 2, 470); bh = Math.min(room, pw * 1.42); bw = Math.round(bh / 1.42) * 2; }
+    else { bw = Math.min(vw - 32, 520); bh = Math.min(room, bw * 1.45); bw = Math.min(bw, Math.round(bh / 1.3)); }
+    rdBook.style.setProperty('--bw', `${bw}px`);
+    rdBook.style.setProperty('--bh', `${Math.round(bh)}px`);
+    const pw = rdSpread ? bw / 2 : bw;
+    rdBook.style.setProperty('--fs', `${(Math.min(18, Math.max(15.5, pw / 24)) * RD_FS[rdFs]).toFixed(1)}px`);
+    rdBook.style.setProperty('--pad', `${Math.round(Math.max(30, bh * .075))}px ${Math.round(Math.max(22, pw * .085))}px`);
+  }
+
+  /** 받은 글 → 쪽 [{ html, no, run }] */
+  function rdPaginate(d) {
+    const meas = rdEl('article', 'rd-page right rd-measure');
+    meas.style.width = getComputedStyle(rdR).width; meas.style.height = getComputedStyle(rdR).height; meas.style.left = '-9999px';
+    const pc = rdEl('div', 'rd-pc'); meas.append(pc); rdBook.append(meas);
+    const fits = () => pc.scrollHeight <= pc.clientHeight + 1;
+    const pages = []; let no = 0;
+    const flush = () => { pages.push({ html: pc.innerHTML, no: ++no, run: true }); pc.replaceChildren(); };
+    // 속표지 — 초안 · 일부 표시는 숨기지 않는다 (MEM-FE-04 · 05)
+    const cover = rdEl('div', 'rd-pc rd-cover');
+    cover.append(rdEl('span', 'k', '나의 자서전'), rdEl('h2', '', d.title), rdEl('span', 'rule'));
+    const note = $('#mmDraft');
+    if (note && !note.hidden && note.textContent) cover.append(rdEl('p', 'note', note.textContent));
+    pages.push({ html: cover.outerHTML, raw: true });
+    // 장 목록 (장이 없는 응답은 한 장으로)
+    const chapters = d.chapters || [{ no: 1, title: '', ok: true, paras: d.lines.map(l => [l]) }];
+    rdTocAt = -1; rdChAt = {};
+    if (d.chapters) {
+      const toc = rdEl('div', 'rd-toc'); toc.append(rdEl('h3', '', '목차'));
+      const ol = rdEl('ol');
+      chapters.forEach(c => {
+        const li = rdEl('li'), b = rdEl('button'); b.type = 'button';
+        if (c.ok) { b.dataset.go = c.no; b.append(rdEl('small', '', `${c.no}장`), rdEl('span', '', c.title), rdEl('i', '', '')); }
+        else { b.disabled = true; b.append(rdEl('small', '', `${c.no}장`), rdEl('span', '', `${c.title ? `${c.title} — ` : ''}만들지 못했어요`)); }
+        li.append(b); ol.append(li);
+      });
+      toc.append(ol); pc.append(toc);
+      rdTocAt = pages.length;
+      pages.push({ html: pc.innerHTML, toc: true }); pc.replaceChildren();
+    }
+    chapters.filter(c => c.ok).forEach(c => {
+      if (pc.childNodes.length) flush();
+      rdChAt[c.no] = pages.length;
+      if (c.title) { const h = rdEl('div', 'rd-ch'); h.append(rdEl('small', '', `${c.no}장`), rdEl('h3', '', c.title)); pc.append(h); }
+      c.paras.forEach(sentences => {
+        let p = rdEl('p'); pc.append(p);
+        sentences.forEach(sen => {
+          const before = p.textContent;
+          p.textContent = before ? `${before} ${sen}` : sen;
+          if (fits()) return;
+          p.textContent = before;
+          if (!before) p.remove();
+          flush();
+          p = rdEl('p', before ? 'cont' : ''); pc.append(p);
+          p.textContent = sen;                         // 한 문장이 한 쪽보다 길면 그 쪽만 넘친 채로 둔다
+        });
+      });
+    });
+    if (pc.childNodes.length) flush();
+    const end = rdEl('div', 'rd-pc rd-end'); end.append(rdEl('span', '', '· · ·'), rdEl('p', '', '당신의 이야기는 계속됩니다.'));
+    if (rdSpread && pages.length % 2) pages.push({ html: '' });           // 맺음 쪽이 오른쪽에 오게
+    pages.push({ html: end.outerHTML, raw: true });
+    meas.remove();
+    if (rdTocAt >= 0) {                                                   // 목차에 쪽 번호
+      const t = rdEl('div'); t.innerHTML = pages[rdTocAt].html;
+      t.querySelectorAll('[data-go]').forEach(b => { const pg = pages[rdChAt[b.dataset.go]]; b.querySelector('i').textContent = pg && pg.no ? String(pg.no) : ''; });
+      pages[rdTocAt].html = t.innerHTML;
+    }
+    return pages;
+  }
+  const rdHTML = (p) => !p ? '' : (p.raw ? p.html : `<div class="rd-pc">${p.html}</div>`)
+    + (p.run && rdData ? `<span class="rd-run">${rdData.title.replace(/[&<>"]/g, ch => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[ch]))}</span>` : '')
+    + (p.no ? `<span class="rd-no">${p.no}</span>` : '');
+
+  function rdBuild(keepFrac) {
+    rdSize();
+    rdPages = rdPaginate(rdData);
+    rdViews = [];
+    if (rdSpread) for (let i = 0; i < rdPages.length; i += 2) rdViews.push([rdPages[i], rdPages[i + 1]]);
+    else rdPages.forEach(p => rdViews.push([p]));
+    rdAt = keepFrac == null ? 0 : Math.min(rdViews.length - 1, Math.round(keepFrac * (rdViews.length - 1)));
+    rdPaint();
+  }
+  function rdPaint() {
+    const v = rdViews[rdAt];
+    if (rdSpread) { rdL.innerHTML = rdHTML(v[0]); rdR.innerHTML = rdHTML(v[1]); }
+    else { rdL.innerHTML = ''; rdR.innerHTML = rdHTML(v[0]); }
+    $('#rdCount').textContent = `${rdAt + 1} / ${rdViews.length}`;
+    const first = rdAt === 0, last = rdAt === rdViews.length - 1;
+    $('#rdPrev').disabled = first; $('#rdNext').disabled = last;
+    $('#rdSidePrev').disabled = first; $('#rdSideNext').disabled = last;
+    rdPlaceSide();
+  }
+  const rdFrac = () => rdViews.length > 1 ? rdAt / (rdViews.length - 1) : 0;
+  /** PC: 책 옆 책상에 자리가 있으면 큰 화살표를 양옆에 둔다 (휴대폰은 두지 않는다) */
+  function rdPlaceSide() {
+    const r = rdBook.getBoundingClientRect(), room = r.left;
+    const on = !rdMobile() && room >= 124;
+    rd.classList.toggle('side-on', on);
+    if (!on) return;
+    const gap = Math.min(40, (room - 84) / 2);
+    rd.style.setProperty('--sy', `${r.top + r.height / 2}px`);
+    rd.style.setProperty('--sl', `${Math.max(8, r.left - 16 - gap - 84)}px`);
+    rd.style.setProperty('--sr', `${Math.max(8, innerWidth - r.right - 16 - gap - 84)}px`);
+  }
+
+  /** 쪽 넘기기. PC 는 종이책처럼 넘기고, 휴대폰 · 「동작 줄이기」 는 바로 바꾼다 */
+  async function rdTurn(dir, jumpTo) {
+    const next = jumpTo != null ? jumpTo : rdAt + dir;
+    if (rdBusy || next < 0 || next >= rdViews.length || next === rdAt) return;
+    if (rdMobile() || reducedMotion()) { rdAt = next; rdPaint(); return; }
+    rdBusy = true;
+    const cur = rdViews[rdAt], nxt = rdViews[next];
+    const leaf = rdEl('div', `rd-leaf ${dir > 0 ? 'fwd' : 'bwd'}`);
+    const face = (side, p, back) => `<article class="rd-page ${side}${back ? ' back' : ''} face">${rdHTML(p)}<span class="rd-shade"></span></article>`;
+    const cast = rdEl('div', `rd-cast ${dir > 0 ? 'r' : 'l'}`);
+    const opt = { duration: 640, easing: 'cubic-bezier(.35,.05,.25,1)', fill: 'forwards' };
+    const P = 'perspective(3200px)';
+    let frames;
+    if (rdSpread) {
+      // 넘어가는 장의 앞면 = 지금 쪽, 뒷면 = 새 쪽. 반대쪽은 장이 덮을 때까지 예전 쪽 그대로
+      leaf.innerHTML = dir > 0 ? face('right', cur[1]) + face('left', nxt[0], true) : face('left', cur[0]) + face('right', nxt[1], true);
+      if (dir > 0) rdR.innerHTML = rdHTML(nxt[1]); else rdL.innerHTML = rdHTML(nxt[0]);
+      const to = dir > 0 ? -180 : 180;
+      frames = [{ transform: `${P} rotateY(0deg)` }, { offset: .5, transform: `${P} translateZ(10px) rotateY(${to / 2}deg)` }, { transform: `${P} rotateY(${to}deg)` }];
+    } else if (dir > 0) {
+      leaf.innerHTML = face('right', cur[0]) + face('left', null, true);
+      rdR.innerHTML = rdHTML(nxt[0]);
+      frames = [{ transform: `${P} rotateY(0deg)`, opacity: 1 }, { offset: .8, transform: `${P} translateZ(8px) rotateY(-150deg)`, opacity: 1 }, { transform: `${P} rotateY(-178deg)`, opacity: 0 }];
+    } else {
+      leaf.innerHTML = face('right', nxt[0]) + face('left', null, true);
+      frames = [{ transform: `${P} rotateY(-178deg)`, opacity: 0 }, { offset: .2, transform: `${P} translateZ(8px) rotateY(-150deg)`, opacity: 1 }, { transform: `${P} rotateY(0deg)`, opacity: 1 }];
+    }
+    rdBook.append(cast, leaf);
+    const shades = [...leaf.querySelectorAll('.rd-shade')];
+    await Promise.all([
+      leaf.animate(frames, opt).finished,
+      cast.animate([{ opacity: 0 }, { opacity: 1, offset: .4 }, { opacity: 0 }], opt).finished,
+      ...shades.map(sh => sh.animate([{ opacity: 0 }, { opacity: .85, offset: .45 }, { opacity: 0 }], opt).finished),
+    ]).catch(() => {});
+    rdAt = next; rdPaint();
+    leaf.remove(); cast.remove();
+    rdBusy = false;
+  }
+
+  function rdChrome(show) {
+    rd.classList.toggle('chrome-off', !show);
+    $('#rdShowMenu').hidden = show;
+  }
+  function rdOpen() {
+    if (!rdData) return;
+    rdOpener = document.activeElement;
+    rd.hidden = false;
+    document.body.classList.add('rd-lock');
+    $('#rdTitle').textContent = rdData.title;
+    // 공유 · 지우기는 서버가 만든 글에만 (예시 · 결과 파일은 아님). 지우기는 저장된 자서전(memoir_id)이 있을 때만
+    rd.querySelector('[data-rd="share"]').hidden = rdData.origin !== 'server';
+    rd.querySelector('[data-rd="del"]').hidden = !(rdData.origin === 'server' && rdData.memoirId);
+    rdChrome(true);
+    rdBuild();
+    if (!reducedMotion()) rdBook.animate([{ opacity: 0, transform: 'translateY(18px) scale(.97)' }, { opacity: 1, transform: 'none' }], { duration: 380, easing: 'ease-out' });
+    $('#rdBack').focus({ preventScroll: true });
+    log('자서전', `펼쳐 읽기 · ${rdViews.length}${rdSpread ? '펼침' : '쪽'}`);
+  }
+  function rdClose() {
+    rd.hidden = true;
+    document.body.classList.remove('rd-lock');
+    rdBook.querySelectorAll('.rd-leaf, .rd-cast').forEach(e => e.remove());
+    rdBusy = false;
+    if (rdOpener && rdOpener.focus) rdOpener.focus({ preventScroll: true });
+  }
+  $('#rdOpen').addEventListener('click', rdOpen);
+  $('#rdBack').addEventListener('click', rdClose);
+  $('#rdPrev').addEventListener('click', () => void rdTurn(-1));
+  $('#rdNext').addEventListener('click', () => void rdTurn(1));
+  [['#rdSidePrev', -1], ['#rdSideNext', 1]].forEach(([q, d]) => {
+    const b = $(q);
+    b.addEventListener('pointerdown', (e) => e.preventDefault());   // 눌러도 초점을 가져가지 않는다 — 키보드 ← → 가 계속 먹게
+    b.addEventListener('click', () => void rdTurn(d));
+  });
+  $('#rdShowMenu').addEventListener('click', () => rdChrome(true));
+  rd.querySelector('.rd-menu').addEventListener('click', (e) => {
+    const b = e.target.closest('[data-rd]');
+    if (!b) return;
+    if (b.dataset.rd === 'toc') {
+      if (rdTocAt < 0) { void rdTurn(-1, 0); return; }
+      const v = rdSpread ? Math.floor(rdTocAt / 2) : rdTocAt;
+      void rdTurn(v > rdAt ? 1 : -1, v);
+    }
+    if (b.dataset.rd === 'fs') {
+      rdFs = (rdFs + 1) % RD_FS.length;
+      try { localStorage.setItem('memoir.reader.fs', rdFs); } catch (_) {}
+      rdBuild(rdFrac());
+      toast(['글자 보통', '글자 크게', '글자 아주 크게'][rdFs]);
+    }
+    if (b.dataset.rd === 'pdf') rdPrint();
+    if (b.dataset.rd === 'share') void rdShare(b);
+    if (b.dataset.rd === 'del') void rdDelete(b);
+  });
+
+  /* 링크로 공유 (서버 014 · develop 72ad1c7) — book.html 의 「링크로 공유」 와 같은 요청 · 같은 안내.
+     책을 보이는 모양 그대로 보낸다 → 로그인 없이 읽는 주소 https://<주소>/b#<토큰>. 토큰은 응답에 한 번만 온다.
+     같은 글을 다시 누르면 이 기기가 기억한 마지막 링크를 다시 내민다. 끄기 화면은 아직 없다 (POST /api/shares/{id}/revoke). */
+  const RD_SHARE_KEY = 'memoir.shares';
+  function rdShareMemo(id, v) {
+    try {
+      const all = JSON.parse(localStorage.getItem(RD_SHARE_KEY) || '{}') || {};
+      const k = `${mmWho()}:${id}`;
+      if (v === undefined) return all[k] || null;
+      all[k] = v; localStorage.setItem(RD_SHARE_KEY, JSON.stringify(all));
+    } catch (_) {}
+    return null;
+  }
+  async function rdShareHand(url, title) {
+    if (navigator.share) {
+      try { await navigator.share({ title: `${title} — 나의 자서전`, url }); return; }
+      catch (e) { if (e && e.name === 'AbortError') return; }
+    }
+    try { await navigator.clipboard.writeText(url); toast('공유 링크를 복사했어요. 카카오톡 등에 붙여 넣어 보내 주세요.', 4200); }
+    catch (_) { window.prompt('이 주소를 복사해 보내 주세요', url); }
+  }
+  function rdChapters() {
+    return (rdData.chapters || [{ no: 1, title: '', ok: true, paras: rdData.lines.map(l => [l]) }]).filter(c => c.ok);
+  }
+  async function rdShare(btn) {
+    if (!rdData || rdData.origin !== 'server') { toast('예시 글은 공유할 수 없어요'); return; }
+    if (AUTH.mode !== 'session') { toast('로그인한 화면에서만 공유할 수 있어요'); return; }
+    const key = rdData.memoirId || rdData.title;
+    const sig = JSON.stringify(rdChapters().map(c => [c.title, c.paras]));
+    const old = rdShareMemo(key);
+    if (old && old.sig === sig && old.url) { await rdShareHand(old.url, rdData.title); return; }
+    const label = btn.querySelector('span'), was = label.textContent;
+    btn.disabled = true; label.textContent = '만드는 중…';
+    try {
+      const note = $('#mmDraft');
+      const out = await call('/shares', { method: 'POST', body: JSON.stringify({
+        book_id: rdData.memoirId || '',
+        book: { title: rdData.title, draft: note && !note.hidden ? note.textContent : '', made: new Date().toISOString().slice(0, 10),
+                chapters: rdChapters().map(c => ({ title: c.title, paras: c.paras })) },
+      }) });
+      rdShareMemo(key, { url: out.url, share_id: out.share_id, sig, at: new Date().toISOString() });
+      log('자서전', `공유 링크 · ${out.share_id}`);
+      await rdShareHand(out.url, rdData.title);
+    } catch (e) {
+      log('자서전', `공유 실패 · ${e.status || ''} ${e.code || e.message || e}`);
+      toast(e.code === 'too_many_shares' ? '켜 둔 공유가 너무 많아요.'
+        : e.status === 404 ? '아직 서버에 공유 기능이 없어요. 서버를 다시 켠 뒤에 해 주세요.'
+        : '공유 링크를 만들지 못했어요. 잠시 뒤에 다시 해 주세요.');
+    } finally {
+      btn.disabled = false; label.textContent = was;
+    }
+  }
+  /* 책 지우기 — 저장된 자서전을 지운다 (DELETE /api/memoirs/saved/{memoir_id}). 엽서(이야기)는 그대로 남는다 */
+  async function rdDelete(btn) {
+    if (!rdData || !rdData.memoirId) return;
+    if (!window.confirm(`「${rdData.title}」 자서전을 지울까요? 저장해 둔 이 자서전이 지워지고 되돌릴 수 없어요. 고르셨던 이야기(엽서)는 그대로 남아요.`)) return;
+    btn.disabled = true;
+    try {
+      await call(`/memoirs/saved/${encodeURIComponent(rdData.memoirId)}`, { method: 'DELETE' });
+      log('자서전', `지움 · ${rdData.memoirId}`);
+      toast('자서전을 지웠어요');
+    } catch (e) {
+      if (e.status !== 404) {
+        log('자서전', `지우기 실패 · ${e.status || ''} ${e.code || ''}`);
+        toast('지우지 못했어요. 잠시 뒤에 다시 해 주세요.');
+        btn.disabled = false;
+        return;
+      }
+      toast('이미 지워졌거나 찾을 수 없는 자서전이에요');
+    }
+    btn.disabled = false;
+    rdClose();
+    rdData = null; mmSavedId = null;
+    mmReq++;
+    mmShow('pick');                                   // 고른 이야기는 그대로 — 다시 만들 수 있다
+  }
+
+  // 책을 누르면: 목차 항목은 그 장으로 · 휴대폰은 가장자리면 넘기기 · 그 밖에는 메뉴를 숨기거나 보인다
+  let rdSwipeAt = 0;
+  rdBook.addEventListener('click', (e) => {
+    const go = e.target.closest('[data-go]');
+    if (go) {
+      const at = rdChAt[go.dataset.go];
+      if (at != null) { const v = rdSpread ? Math.floor(at / 2) : at; void rdTurn(v > rdAt ? 1 : -1, v); }
+      return;
+    }
+    if (Date.now() - rdSwipeAt < 400 || (window.getSelection && String(window.getSelection()))) return;
+    if (rdMobile()) {
+      const r = rdBook.getBoundingClientRect(), edge = Math.min(r.width * .12, 100), x = e.clientX - r.left;
+      if (x <= edge) { void rdTurn(-1); return; }
+      if (x >= r.width - edge) { void rdTurn(1); return; }
+    }
+    rdChrome(rd.classList.contains('chrome-off'));
+  });
+  // 손가락으로 밀어 넘기기 — 가로로 55px 넘게(빠르면 18px) 밀면 넘긴다. 세로로 밀면 넘기지 않는다
+  let rdSw = null;
+  $('#rdStage').addEventListener('pointerdown', (e) => {
+    // 목차 쪽은 장 이름이 단추라 그 위에서 밀어도 넘어가야 한다 — 책 밖의 단추(메뉴 · 화살표)만 뺀다
+    const btn = e.target.closest('button');
+    if (!e.isPrimary || (btn && !rdBook.contains(btn)) || rdBusy) { rdSw = null; return; }
+    if (e.pointerType === 'mouse') { rdSw = null; return; }        // 마우스는 화살표 · 키보드로 (글자 고르기를 막지 않게)
+    rdSw = { id: e.pointerId, x: e.clientX, y: e.clientY, t: e.timeStamp };
+  });
+  addEventListener('pointerup', (e) => {
+    const s = rdSw; rdSw = null;
+    if (!s || e.pointerId !== s.id || rd.hidden) return;
+    const dx = e.clientX - s.x, dy = e.clientY - s.y, v = Math.abs(dx) / Math.max(1, e.timeStamp - s.t);
+    if (Math.abs(dx) < Math.abs(dy) * 1.5) return;
+    if (Math.abs(dx) > 55 || (Math.abs(dx) > 18 && v > .45)) { rdSwipeAt = Date.now(); void rdTurn(dx < 0 ? 1 : -1); }
+    else if (Math.abs(dx) > 10) rdSwipeAt = Date.now();
+  });
+  addEventListener('pointercancel', () => { rdSw = null; });
+  addEventListener('keydown', (e) => {
+    if (rd.hidden) return;
+    if (e.key === 'ArrowRight' || e.key === 'PageDown') { e.preventDefault(); void rdTurn(1); }
+    else if (e.key === 'ArrowLeft' || e.key === 'PageUp') { e.preventDefault(); void rdTurn(-1); }
+    else if (e.key === 'Escape') { if (rd.classList.contains('chrome-off')) rdChrome(true); else rdClose(); }
+  });
+  let rdResizeT = null;
+  addEventListener('resize', () => {
+    if (rd.hidden) return;
+    clearTimeout(rdResizeT);
+    rdResizeT = setTimeout(() => { if (!rdBusy) rdBuild(rdFrac()); }, 200);
+  });
+
+  /** PDF 저장 — 인쇄 창에서 「PDF로 저장」 을 고른다. 서버로 보내지 않는다 */
+  function rdPrint() {
+    const box = $('#rdPrint'); box.replaceChildren();
+    const sec = (cls) => { const s = rdEl('section', cls); box.append(s); return s; };
+    const c = sec('rdp-cover'); c.append(rdEl('small', '', '나의 자서전'), rdEl('h1', '', rdData.title));
+    const note = $('#mmDraft'); if (note && !note.hidden && note.textContent) c.append(rdEl('p', '', note.textContent));
+    const chapters = rdData.chapters || [{ no: 1, title: '', ok: true, paras: rdData.lines.map(l => [l]) }];
+    if (rdData.chapters) {
+      const t = sec('rdp-toc'); t.append(rdEl('h2', '', '목차'));
+      const ol = rdEl('ol'); chapters.forEach(ch => ol.append(rdEl('li', '', `${ch.no}장  ${ch.ok ? ch.title : `${ch.title ? `${ch.title} — ` : ''}만들지 못했어요`}`))); t.append(ol);
+    }
+    chapters.filter(ch => ch.ok).forEach(ch => {
+      const s2 = sec('rdp-ch');
+      if (ch.title) s2.append(rdEl('small', '', `${ch.no}장`), rdEl('h2', '', ch.title));
+      ch.paras.forEach(p => s2.append(rdEl('p', '', p.join(' '))));
+    });
+    const keepTitle = document.title;
+    document.title = `${rdData.title} - 자서전`;                 // 저장할 때 파일 이름이 책 제목으로 잡히게
+    document.body.classList.add('rd-printing');
+    const done = () => { document.body.classList.remove('rd-printing'); document.title = keepTitle; removeEventListener('afterprint', done); };
+    addEventListener('afterprint', done);
+    toast('인쇄 창에서 「PDF로 저장」 을 골라 주세요');
+    setTimeout(() => window.print(), 60);
+  }
 
   /* ═══════════════════════════════════════════════════════════════
      버튼
@@ -5311,15 +5864,16 @@
      ═══════════════════════════════════════════════════════════════ */
   const STYLE_UNSUPPORTED = '지원하지 않는 문체예요. 다른 문체를 골라 주세요.';
   /** 고를 수 있는 문체 — 서버가 받는 것만 (CONFIG.style.open). ?styles=all 이면 전부 */
-  function styleOpen() {
+  function styleOpen(kind) {
     const all = Object.keys(CONFIG.style.names);
     if (new URLSearchParams(location.search).get('styles') === 'all') return all;
-    return all.filter(c => CONFIG.style.open.includes(c));
+    const open = kind === 'memoir' ? (CONFIG.style.memoirOpen || CONFIG.style.open) : CONFIG.style.open;
+    return all.filter(c => open.includes(c));
   }
-  const stylePickable = () => CONFIG.style.pick && styleOpen().length > 1;
-  function stylePicker(host, current, onPick) {
+  const stylePickable = (kind) => CONFIG.style.pick && styleOpen(kind).length > 1;
+  function stylePicker(host, current, onPick, kind) {
     host.replaceChildren();
-    Object.entries(CONFIG.style.names).filter(([code]) => styleOpen().includes(code)).forEach(([code, name]) => {
+    Object.entries(CONFIG.style.names).filter(([code]) => styleOpen(kind).includes(code)).forEach(([code, name]) => {
       const b = document.createElement('button');
       b.type = 'button'; b.className = 'tab'; b.textContent = name; b.dataset.style = code;
       b.setAttribute('role', 'radio'); b.setAttribute('aria-checked', String(code === current));
@@ -5330,7 +5884,7 @@
       host.append(b);
     });
   }
-  stylePicker($('#mmStyle'), mmStyle, (code) => { mmStyle = code; });
+  stylePicker($('#mmStyle'), mmStyle, (code) => { mmStyle = code; }, 'memoir');
 
   let regenBusy = false, cardPick = CONFIG.style.default;
   /** 완성 화면 아래 문체 줄. 서버 엽서이고 방금 만든 회차일 때만 (보관함에서 연 엽서 · 임시 정리 엽서는 아님) */
