@@ -444,7 +444,7 @@ def test_routes():
 
             # 지원하지 않는 문체 — 고른 회차가 틀린 400 과 code 로 갈린다.
             fake.writes = 0
-            for v in ("novel", "cyworld", "essay", "Spoken", "", 3, ["spoken"]):
+            for v in ("cyworld", "Essay", "LITERARY", "Novel", "Spoken", "", 3, ["spoken"]):
                 r = c.post(url, json={**three, "style": v}, headers=me)
                 check(f"style {v!r} → 400 · code unsupported_style",
                       r.status_code == 400 and r.json() == {
@@ -656,7 +656,7 @@ def test_exclude():
             check("DB 를 못 읽으면 → 422 · source_unavailable", r.status_code == 422 and failed(r, "source_unavailable"),
                   f"{r.status_code}")
             fake.db_down = False
-            r = ask([], style="novel")
+            r = ask([], style="cyworld")
             check("문체 거절은 빼기 요청에도 같다 → 400 · unsupported_style",
                   r.status_code == 400 and r.json()["code"] == "unsupported_style", f"{r.status_code}")
             check("거절한 빼기 요청은 모델을 부르지 않는다", fake.writes == 0, str(fake.writes))
@@ -852,7 +852,7 @@ def test_jobs():
             r = c.post("/api/memoirs", json=fake.pick("s-a", "s-b"), headers=me)
             check("잘못 고르면 바로 400 bad_selection · 작업을 열지 않는다",
                   r.status_code == 400 and r.json()["code"] == "bad_selection" and len(memoir_jobs._JOBS) == n)
-            r = c.post("/api/memoirs", json={**three, "style": "novel"}, headers=me)
+            r = c.post("/api/memoirs", json={**three, "style": "cyworld"}, headers=me)
             check("문체 거절 → 400 unsupported_style", r.status_code == 400 and r.json()["code"] == "unsupported_style")
             r = c.post("/api/memoirs", json=three, headers=other)
             check("남의 회차 → 404 not_found (바로)", r.status_code == 404 and r.json()["code"] == "not_found")

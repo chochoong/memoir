@@ -620,6 +620,14 @@ async def generate(recs: list[dict], ids: list[str], user_id: str, style: str, p
 
     progress(stage, chapter, chapters) 는 다섯 단계가 한 단계를 마칠 때마다 불린다 (작업 화면용).
     """
+    if style == "novel":
+        # 소설체는 엔진과 상관없이 장(회차)마다 Claude 로 쓴다 (memoir_novel · 태헌 문체 전달 3판)
+        from . import memoir_novel
+        return await memoir_novel.run(recs, ids, style, progress)
+    if style in ("essay", "literary"):
+        # 수필체 · 문학체는 회차마다 분석 한 번 + 장마다 집필 한 번 (memoir_styled · 태헌 문체 전달 3판)
+        from . import memoir_styled
+        return await memoir_styled.run(recs, ids, style, progress)
     if engine(user_id) == "pipeline":
         return await _draft_pipeline(recs, ids, style, progress)
     data, turn_map = merge(recs)

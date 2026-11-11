@@ -991,7 +991,7 @@ async def memoir_preview(request: Request, who: str = Depends(auth.current_user)
         return JSONResponse({"detail": detail, "code": code}, status_code=status)
     body = await _memoir_body(request)
     try:
-        chosen = styles.pick(body.get("style"))
+        chosen = styles.pick(body.get("style"), styles.MEMOIR)
     except styles.UnsupportedStyle:
         return _unsupported_style()
     try:
@@ -1044,7 +1044,7 @@ async def memoir_start(request: Request, who: str = Depends(auth.current_user)):
         return JSONResponse({"detail": detail, "code": code}, status_code=status)
     body = await _memoir_body(request)
     try:
-        chosen = styles.pick(body.get("style"))
+        chosen = styles.pick(body.get("style"), styles.MEMOIR)
     except styles.UnsupportedStyle:
         return _unsupported_style()
     busy = memoir_jobs.running(who)
