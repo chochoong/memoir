@@ -2344,7 +2344,8 @@ body.ebook-mode .ebook-page-controls:focus-within {
   width: min(720px, calc(100% - 32px));
   max-width: none;
   max-height: calc(100dvh - 32px);
-  overflow: auto;
+  /* 스크롤은 아래 이야기 상자 한 곳에서만 — 제목 · 버튼은 늘 보이게 둔다 */
+  overflow: hidden;
 }
 
 .review-dialog.story-review-dialog[open] {
@@ -2366,7 +2367,7 @@ body.ebook-mode .ebook-page-controls:focus-within {
 .story-review-body {
   flex: 0 1 auto;
   min-height: 56px;
-  max-height: min(38dvh, 380px);
+  max-height: none;
   margin: 0 0 18px;
   padding: 20px 22px;
   overflow: auto;
@@ -3547,7 +3548,7 @@ body.ebook-paged #ebook-content, body.ebook-paged #ebook-right-content, body.ebo
 </style>
   <style data-from="srv.css">
 /* 서버 연결로 새로 생긴 작은 조각들 — 시안 색 · 글꼴을 그대로 쓴다 */
-.srv-rv-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 14px; max-height: min(52vh, 460px); overflow: auto; }
+.srv-rv-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 14px; }
 .srv-rv-list li { padding: 0 0 14px; border-bottom: 1px dashed rgba(90, 70, 50, .2); }
 .srv-rv-list li:last-child { border-bottom: 0; }
 .srv-rv-q { margin: 0 0 6px; font-size: .92em; color: var(--muted, #7a6a5a); }

@@ -44,7 +44,8 @@
   width: min(720px, calc(100% - 32px));
   max-width: none;
   max-height: calc(100dvh - 32px);
-  overflow: auto;
+  /* 스크롤은 아래 이야기 상자 한 곳에서만 — 제목 · 버튼은 늘 보이게 둔다 */
+  overflow: hidden;
 }
 
 .review-dialog.story-review-dialog[open] {
@@ -66,7 +67,7 @@
 .story-review-body {
   flex: 0 1 auto;
   min-height: 56px;
-  max-height: min(38dvh, 380px);
+  max-height: none;
   margin: 0 0 18px;
   padding: 20px 22px;
   overflow: auto;
