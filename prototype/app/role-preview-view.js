@@ -121,6 +121,8 @@
     }
   });
   window.addEventListener('memoir:preview-auth',event=>{if(event.detail.authenticated)store.login();else store.logout();refreshOwnership();renderContext();renderIdentity();if(location.hash==='#prepare')renderPrepare();});
+  // 다른 창(문자 · 카톡)에 다녀오면 보낸 초대의 상태를 다시 읽는다 — 그사이 어르신이 시작 · 완료했을 수 있다
+  document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible'&&location.hash==='#invitations')store.loadInvitations().then(()=>{if(location.hash==='#invitations')renderInvitations();});});
   window.addEventListener('memoir:before-screen',event=>{if(event.detail.screen!=='invitations'){issued=null;invitations.querySelector('.role-issued')?.remove();}});
   window.addEventListener('memoir:screen',event=>{
     if(event.detail.screen==='prepare'){renderPrepare();renderInterrupted();}

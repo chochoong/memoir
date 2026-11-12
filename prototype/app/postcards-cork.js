@@ -47,7 +47,7 @@
     if (!reduce.matches) {
       // 1) 핀을 뽑는다 / 테이프를 뗀다
       const fly = card.cloneNode(true);
-      fly.className = 'postcard-card pc-fly';
+      fly.className = `postcard-card pc-fly${kind === 'postit' ? ' pc-fly-postit' : ''}`;
       fly.removeAttribute('data-postcard');
       Object.assign(fly.style, {left: r.left + 'px', top: r.top + 'px', width: r.width + 'px', height: r.height + 'px', transform: `rotate(${tilt})`});
       fly.style.setProperty('--tilt', tilt);
