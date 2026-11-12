@@ -21,6 +21,8 @@
   let inputMode = 'voice', micOk = false, sending = false, awaitingReply = false, drainSince = 0;
   let ttsFailed = false, resumeSent = false, level = 0, levelRaf = null, starting = false;
   let topic = '', elderId = '';
+  let queued = false;       // 「이야기 남기기」를 눌렀는데 아직 보낼 수 없다 — 보낼 수 있게 되면 바로 보낸다
+  let skippedQ = null;      // 글을 보내려고 낭독을 건너뛴 질문 — 낭독이 끝나도 tts-done 을 다시 올리지 않는다
 
   const $q = (s) => document.querySelector(s);
   const isListening = () => snap && snap.state === 'LISTENING';
@@ -103,15 +105,20 @@
       let msg = '떠오르는 기억을 천천히 적어 주세요.';
       if (inputMode === 'switching') msg = '말씀하신 소리를 마저 보내고 있어요…';
       else if (sending) msg = '보내는 중이에요…';
-      else if (snap.state === 'SPEAKING') msg = '질문을 다 읽은 뒤에 보낼 수 있어요. 미리 써 두셔도 돼요.';
+      else if (queued) msg = snap.state === 'SPEAKING' ? '질문을 다 읽으면 바로 보낼게요.' : '앞서 하신 말씀을 정리하는 중이에요. 끝나면 바로 보낼게요.';
+      else if (snap.state === 'SPEAKING') msg = ttsFailed ? '질문 소리를 틀지 못했어요. 글을 써서 보내시면 돼요.' : '질문을 읽고 있어요. 다 쓰셨으면 지금 「이야기 남기기」를 눌러도 돼요.';
       else if (snap.state === 'PROCESSING') msg = '이야기를 정리하고 있어요. 미리 써 두셔도 돼요.';
-      else if (stuck) msg = '앞서 하신 말씀이 남아 있어 글을 보낼 수 없어요. 「말로 하기」로 이어서 말씀해 주세요.';
-      else if (leftover) msg = '앞서 하신 말씀을 먼저 정리하고 있어요. 다음 질문부터 글로 보낼 수 있어요.';
+      else if (stuck) msg = '앞서 하신 말씀을 정리하는 데 시간이 걸리고 있어요. 써 두신 글은 정리가 끝나면 보낼 수 있어요.';
+      else if (leftover) msg = '앞서 하신 말씀을 먼저 정리하고 있어요. 「이야기 남기기」를 누르면 정리가 끝난 뒤 보내요.';
       else if (!micOk) msg = '마이크를 쓸 수 없어 글로 이야기를 나눠요.';
       status.textContent = awaitingReply ? '잘 받았어요' : '글로 이야기하는 중';
       hint.textContent = msg; sub.textContent = '';
       box.readOnly = sending;
-      send.disabled = !(inputMode === 'keyboard' && snap.state === 'LISTENING' && !leftover && !sending && text);
+      // 버튼은 끄지 않는다 — 지금 보낼 수 없으면 눌렀을 때 기다렸다가 보낸다 (금지 표시로 막혀 보이지 않게)
+      send.disabled = inputMode !== 'keyboard';
+      send.setAttribute('aria-busy', String(sending || queued));
+      send.classList.toggle('srv-send-wait', sending || queued);
+      void text;
     }
   }
 
@@ -133,7 +140,7 @@
     starting = true;
     elderId = opts.elderId; topic = (opts.topic || '').slice(0, CONFIG.interview.topicMax);
     snap = null; sessionId = null; closing = false; stopping = false; held = false; spoken = null;
-    inputMode = 'voice'; micOk = false; sending = false; awaitingReply = false; ttsFailed = false; resumeSent = false;
+    inputMode = 'voice'; micOk = false; sending = false; awaitingReply = false; ttsFailed = false; resumeSent = false; queued = false; skippedQ = null;
     uploadQueue = Promise.resolve();
     $q('#answer-text').value = '';
     $q('#interview-question').textContent = '첫 질문을 준비하고 있어요…';
@@ -226,6 +233,7 @@
         && s.fragments.length === prev.fragments.length && inputMode === 'voice') toast('말씀이 들어오지 않았어요. 다시 듣고 있습니다.');
     if (s.state === 'SPEAKING' || s.state === 'CLOSED' || (prev && prev.state === 'PROCESSING' && s.state === 'LISTENING')) awaitingReply = false;
     if (s.state === 'CLOSED') { void finishSession(); return; }
+    if (queued && !sending && inputMode === 'keyboard' && s.state === 'LISTENING' && !(s.audio_bytes > 0)) setTimeout(() => { if (queued) void sendText(); }, 0);
     if (location.hash === '#interview') render();
     if (s.state === 'SPEAKING' && s.next_question && spoken !== s.next_question) {
       spoken = s.next_question;
@@ -234,7 +242,7 @@
   }
 
   async function readQuestion(id, q, stream) {
-    const stopped = () => stopping || closing || id !== sessionId;
+    const stopped = () => stopping || closing || id !== sessionId || skippedQ === q;
     try {
       if (stream) {
         const res = await api.questionStream(id);
@@ -312,6 +320,7 @@
   async function toVoice() {
     if (inputMode !== 'keyboard' || !micOk || sending) return;
     if (!await askDropDraft('쓰던 글을 지우고 말로 할까요?', '지우고 말로 하기')) return;
+    queued = false;
     if (inputMode !== 'keyboard' || sending || !live()) return;
     inputMode = 'voice';
     if (recorder) recorder.setActive(micOpen());
@@ -321,8 +330,17 @@
     const box = $q('#answer-text');
     const text = box.value.trim();
     if (!text) { toast('떠오르는 기억을 한 줄 적어주세요.'); box.focus(); return; }
-    if (sending || !sessionId || inputMode !== 'keyboard' || stopping || closing) return;
-    if (!snap || snap.state !== 'LISTENING' || snap.audio_bytes > 0) return;
+    if (sending || !sessionId || inputMode !== 'keyboard' || stopping || closing || !snap) return;
+    // 질문을 읽는 중이면 낭독을 건너뛰고 듣기로 넘긴다 (다 쓰셨으니 기다리게 하지 않는다)
+    if (snap.state === 'SPEAKING' && !queued) {
+      skippedQ = snap.next_question;
+      speaker.stop();
+      try { applySnapshot(await api.ttsDone(sessionId)); } catch (_) { /* 이미 넘어갔으면 아래에서 본다 */ }
+      if (!snap || stopping || closing) return;
+    }
+    // 아직 보낼 수 없다(정리 중 · 앞서 하신 말씀이 남음 · 다음 질문 낭독 중) — 기다렸다가 보낸다
+    if (snap.state !== 'LISTENING' || snap.audio_bytes > 0) { queued = true; render(); return; }
+    queued = false;
     sending = true; render();
     const id = sessionId, before = snap.fragments.length;
     try {
@@ -378,7 +396,7 @@
       if (stopping || !live()) return;
     }
     held = false; clearInterval(holdTimer);
-    stopping = true;
+    stopping = true; queued = false;
     speaker.stop();
     if (recorder) { recorder.flushNow(); recorder.setActive(false); }
     if (!sessionId) { void finishSession(); return; }

@@ -8,3 +8,7 @@
 .srv-rv-wait { color: var(--muted, #7a6a5a); }
 .pending-story-row small { font-weight: 400; color: var(--muted, #7a6a5a); }
 .mlg-gsi { min-height: 44px; display: flex; align-items: center; }
+/* 「이야기 남기기」 — 보내는 중 · 보낼 차례를 기다리는 중 (금지 표시 대신) */
+#answer-panel [type="submit"].srv-send-wait { cursor: progress; opacity: .8; }
+.selection-footer .srv-pick-all { margin-left: auto; margin-right: 10px; }
+@media (max-width: 600px) { .selection-footer .srv-pick-all { margin: 0; } }
