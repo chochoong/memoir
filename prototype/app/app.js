@@ -52,7 +52,7 @@ function selectionRangeText(){return MEMOIR_POLICY.max===null?`${MEMOIR_POLICY.m
 function navigate(screen){if(screen==='interview'&&window.RolePreview&&!window.RolePreview.canEnterInterview())screen='prepare';if(screen==='style'&&!memoirSelection.canGenerate(state.selected.size,MEMOIR_POLICY)){toast(`자서전으로 엮을 엽서를 ${selectionRangeText()} 골라주세요.`);screen='records';}if(location.hash===`#${screen}`)show(screen);else location.hash=screen;}
 function show(screen) {
   if(window.RolePreview?.isInviteHash(`#${screen}`)){window.RolePreview.enterGuest(`#${screen}`);return;}
-  const allowed = ['home','interview','records','library','style','draft','reader','prepare','invitations','invite','start','invite-setup'];
+  const allowed = ['home','interview','records','library','style','draft','reader','prepare','invitations','invite','start','start-self','invite-setup'];
   if (!allowed.includes(screen)) screen = 'home';
   if(screen==='interview'&&window.RolePreview&&!window.RolePreview.canEnterInterview())screen='prepare';
   if(window.RolePreview?.isGuest()&&!['invite','interview'].includes(screen))screen='invite';
@@ -66,12 +66,12 @@ function show(screen) {
   }
   window.dispatchEvent(new CustomEvent('memoir:before-screen', {detail:{screen}}));
   $$('[data-screen]').forEach((panel) => { panel.hidden = panel.dataset.screen !== screen; });
-  const navScreen = ['draft','style'].includes(screen) ? 'records' : screen==='reader' ? 'library' : ['prepare','invitations','invite','start','invite-setup'].includes(screen)?'home':screen;
+  const navScreen = ['draft','style'].includes(screen) ? 'records' : screen==='reader' ? 'library' : ['prepare','invitations','invite','start','start-self','invite-setup'].includes(screen)?'home':screen;
   $$('[data-nav]').forEach((link) => {
     if (link.dataset.nav === navScreen) link.setAttribute('aria-current','page');
     else link.removeAttribute('aria-current');
   });
-  $('#topbar-title').textContent = ({home:'나의 이야기',interview:'인터뷰',prepare:'이야기 준비',invitations:'준비한 초대',invite:'초대 이야기',start:'이야기 시작',"invite-setup":'초대 주소 만들기',records:'나의 기록',library:'자서전 보기',style:'자서전 만들기',draft:'자서전 초안',reader:'자서전 읽기'})[screen];
+  $('#topbar-title').textContent = ({home:'나의 이야기',interview:'인터뷰',prepare:'이야기 준비',invitations:'준비한 초대',invite:'초대 이야기',start:'이야기 시작','start-self':'내 이야기 녹음',"invite-setup":'초대 주소 만들기',records:'나의 기록',library:'자서전 보기',style:'자서전 만들기',draft:'자서전 초안',reader:'자서전 읽기'})[screen];
   if (screen === 'records') renderRecords();
   if (screen === 'style') renderStyles();
   if (screen === 'draft') renderDraft();

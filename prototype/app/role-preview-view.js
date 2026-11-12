@@ -44,7 +44,8 @@
     note.hidden=!state.pickRecords;
     note.textContent=person?`「${person.name}」의 기록에서 고르고 있어요.`:'이야기 주인공을 먼저 등록해주세요.';
   }
-  function hasDraft(){return state.answers.length>0||!!$('#answer-text').value.trim();}
+  // 작성 중인 글 — 진행 중인 서버 인터뷰가 있고, 보내지 않은 글이 남아 있을 때만 (마친 회차에 남은 글로 막지 않는다)
+  function hasDraft(){return !!window.SrvInterview?.busy()&&!!$('#answer-text').value.trim();}
   function validRun(){return !!run&&!run.completed&&(!run.invitationId||snapshot().invitations.some(inv=>inv.id===run.invitationId&&inv.status==='in_progress'));}
   function interruptRun(id){if(run?.invitationId!==id)return;const text=[...state.answers,$('#answer-text').value].filter(value=>value.trim()).join('\n\n');if(text)interrupted.push({elderId:run.elderId,text});state.answers=[];$('#answer-text').value='';state.interviewCompleted=true;run=null;setInterviewMode('paused');}
   function refreshOwnership(){state.selected.clear();state.pickRecords=false;state.filter='all';state.query='';$('#record-search').value='';renderRecent();renderRecords();window.MemoirLibrary?.render();window.SrvRecords?.reload();window.SrvLibrary?.reload();}
@@ -80,6 +81,8 @@
     if(hasDraft()&&run?.elderId!==person.elder_id){toast('작성 중인 이야기를 먼저 마쳐주세요. 이야기 주인공을 섞지 않고 이어갈게요.');return;}
     const needsNewRun=!run||run.completed||run.elderId!==person.elder_id||run.invitationId!==(inv?.id||null);
     if(needsNewRun&&hasDraft()){toast('작성 중인 이야기를 먼저 마친 뒤 새 회차를 시작해주세요.');return;}
+    // 서버 인터뷰가 아직 열려 있으면 새 회차를 열지 않는다 — 그 인터뷰로 돌아간다
+    if(needsNewRun&&window.SrvInterview?.busy()){toast('진행 중인 인터뷰가 있어요. 「마치기」로 먼저 마친 뒤 새 이야기를 시작해 주세요.');location.hash='interview';return;}
     if(inv){const result=store.startInvitation(inv.id);if(!result.ok){renderEntry(result);return;}}
     if(!run||run.completed||run.elderId!==person.elder_id||run.invitationId!==(inv?.id||null)){
       if(hasDraft()){toast('작성 중인 이야기를 먼저 마친 뒤 새 회차를 시작해주세요.');return;}
@@ -89,7 +92,7 @@
       navigate('interview');
       // 서버 회차를 연다 (srv-interview) — 마이크 허락 · 질문 낭독이 여기서 시작된다
       void window.SrvInterview.start({elderId:person.elder_id,topic:run.topic});
-    } else navigate('interview');
+    } else {navigate('interview');const want=inv?.topic||forcedTopic;if(want&&want!==run.topic)toast(`진행 중인 「${run.topic}」 이야기로 돌아왔어요. 새 주제는 「마치기」 뒤에 시작해 주세요.`);}
     let label=$('#interview-speaker-label');if(!label){label=document.createElement('p');label.id='interview-speaker-label';label.className='role-current-speaker';$('.interview-page-heading').append(label);}
     label.textContent=`이야기 주인공: ${person.name} · ${run.topic}`;$('.studio-topline .pill').textContent=run.topic;
   }

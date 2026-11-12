@@ -15,6 +15,7 @@
   }
   const invite = addScreen('invite-setup', '초대 주소 만들기');
   const start = addScreen('start', '어떻게 시작할까요?');
+  const self = addScreen('start-self', '어떤 이야기를 들려주실까요?');
 
   // ── 처음가기 시작 카드 ──
   const hero = document.querySelector('[data-screen="home"] .hero-copy');
@@ -32,6 +33,26 @@
           <em>초대 주소 만들기 ${icons('arrow')}</em></button>
       </div>
       <button type="button" class="text-button sc-back" data-go="home">${icons('arrow', 'flip')} 처음가기로</button>`;
+  }
+
+  // 내 이야기 녹음 — 초대 만들기처럼 이야기 주제를 먼저 고른다
+  let selfTopic = topics[0];
+  function renderSelf() {
+    self.querySelector('.sc-content').innerHTML = `<p class="sc-intro">오늘 들려주실 이야기의 주제를 골라 주세요. 주제에 맞춰 첫 질문을 드려요.</p>
+      <form class="panel sc-invite-form sc-self-form" novalidate>
+        <fieldset><legend>이야기 주제</legend>
+          <div class="sc-chips" role="group" aria-label="주제">${topics.map((t) => `<label class="sc-chip"><input type="radio" name="topic" value="${t}" ${t === selfTopic ? 'checked' : ''}><span>${t}</span></label>`).join('')}</div></fieldset>
+        <button type="submit" class="button primary sc-make">${icons('mic')}<span>녹음 시작하기</span></button>
+        <p class="sc-fine">${window.MemoirGate?.isLoggedIn() ? '버튼을 누르면 마이크를 써도 되는지 여쭤봐요.' : '녹음은 로그인한 뒤에 할 수 있어요. 버튼을 누르면 로그인 창이 먼저 열려요.'}</p>
+      </form>
+      <div class="sc-links"><button type="button" class="text-button" data-go="start">${icons('arrow', 'flip')} 돌아가기</button></div>`;
+    const form = self.querySelector('form');
+    form.addEventListener('change', () => { selfTopic = form.querySelector('input[name="topic"]:checked')?.value || topics[0]; });
+    form.addEventListener('submit', (e) => {
+      e.preventDefault();
+      selfTopic = form.querySelector('input[name="topic"]:checked')?.value || topics[0];
+      window.RolePreview.beginSelf(selfTopic);
+    });
   }
 
   function renderInvite() {
@@ -84,11 +105,12 @@
     const b = event.target.closest('[data-start]');
     if (!b) return;
     event.preventDefault();
-    if (b.dataset.start === 'self') window.RolePreview.beginSelf(topics[0]);
+    if (b.dataset.start === 'self') navigate('start-self');
     else navigate('invite-setup');
   });
   window.addEventListener('memoir:screen', (event) => {
     if (event.detail.screen === 'start' && start) renderStart();
+    if (event.detail.screen === 'start-self') renderSelf();
     if (event.detail.screen === 'invite-setup') renderInvite();
   });
   window.addEventListener('memoir:preview-auth', (event) => {
@@ -100,4 +122,5 @@
   });
   if (location.hash === '#invite-setup') { navigate('invite-setup'); }
   if (location.hash === '#start' && start) { navigate('start'); }
+  if (location.hash === '#start-self') { navigate('start-self'); }
 }());

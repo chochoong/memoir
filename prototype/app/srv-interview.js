@@ -299,10 +299,21 @@
     render();
     $q('#answer-text').focus();
   }
-  function toVoice() {
+  // 보내지 않은 글이 있으면 지워진다고 한 번 여쭙는다. 「지우기」를 고르면 글을 비우고 true
+  const draft = () => $q('#answer-text').value.trim();
+  async function askDropDraft(title, ok) {
+    if (!draft()) return true;
+    const yes = await window.MemoirTrash.confirm({title, items: [draft().slice(0, 60) + (draft().length > 60 ? '…' : '')],
+      desc: '「이야기 남기기」를 누르지 않은 글은 저장되지 않아요. 계속하면 이 글은 지워져요.', ok, keep: '계속 쓰기'});
+    if (yes) $q('#answer-text').value = '';
+    else $q('#answer-text').focus();
+    return yes;
+  }
+  async function toVoice() {
     if (inputMode !== 'keyboard' || !micOk || sending) return;
+    if (!await askDropDraft('쓰던 글을 지우고 말로 할까요?', '지우고 말로 하기')) return;
+    if (inputMode !== 'keyboard' || sending || !live()) return;
     inputMode = 'voice';
-    if ($q('#answer-text').value.trim()) toast('써 두신 글은 그대로 남아 있어요. 「글로 쓰기」를 누르면 다시 보여요.');
     if (recorder) recorder.setActive(micOpen());
     render();
   }
@@ -361,8 +372,11 @@
   async function stop() {
     if (stopping) return;
     if (sending) { toast('글을 보내는 중이에요. 잠시 뒤에 눌러 주세요.'); return; }
-    if (inputMode !== 'voice' && $q('#answer-text').value.trim()
-        && !window.confirm('보내지 않은 글이 있어요.\n이 글은 보내지 않고 인터뷰를 마칠까요?')) return;
+    if (draft()) {
+      if ($q('#finish-dialog').open) $q('#finish-dialog').close();
+      if (!await askDropDraft('쓰던 글을 지우고 인터뷰를 마칠까요?', '지우고 마치기')) return;
+      if (stopping || !live()) return;
+    }
     held = false; clearInterval(holdTimer);
     stopping = true;
     speaker.stop();
@@ -389,6 +403,7 @@
     if (recorder) { recorder.stop(); recorder = null; }
     const fragments = (snap && snap.fragments) || [];
     const expect = Math.max(0, ...fragments.map((f) => f.idx));
+    $q('#answer-text').value = ''; state.answers = [];
     const btn = $q('#confirm-finish'); btn.disabled = false; btn.textContent = '이야기 확인하기';
     if ($q('#finish-dialog').open) $q('#finish-dialog').close();
     if (LINK.on) { setInterviewMode('idle'); window.SrvLinks?.done(why); return; }
@@ -550,6 +565,64 @@
 
   // 인터뷰 화면으로 돌아오면 지금 상태로 다시 그린다 (시안의 show() 가 예시 상태로 되돌리므로)
   window.addEventListener('memoir:screen', (e) => { if (e.detail.screen === 'interview' && live()) render(); });
+  /* ── 마치기 없이 다른 화면으로 가려 하면 — 인터뷰를 중단할지 여쭙는다 ──
+       · 「중단하기」: 저장하지 않고 끝낸다 — 회차를 닫고(abort) 목록에서도 지운다(DELETE /api/sessions/{id}).
+         어르신 링크 회차는 자녀의 것이라 지우지 않고 닫기만 한다.
+       · 「계속하기」: 인터뷰 화면에 그대로 머문다.
+       · 메뉴 · 버튼 클릭은 미리 막고, 브라우저 「뒤로」 같은 주소 변경은 인터뷰 주소로 되돌린 뒤 여쭙는다. */
+  let leaving = false, asking = false;
+  async function discard() {
+    const id = sessionId;
+    closing = true; stopping = true;
+    held = false; clearInterval(holdTimer);
+    stopPolling();
+    if (levelRaf) cancelAnimationFrame(levelRaf);
+    window.RadioFeedback?.setLevel?.(0);
+    speaker.stop();
+    if (recorder) { recorder.stop(); recorder = null; }
+    $q('#answer-text').value = ''; state.answers = [];
+    if (id && !LINK.on) liveForget(id);
+    setInterviewMode('idle');
+    if (!LINK.on) window.RolePreview?.complete?.({id: id || 'none', body: ''});
+    try { await api.abort(id); } catch (_) { /* 이미 닫혔으면 넘어간다 */ }
+    if (!LINK.on && id) { try { await window.Srv.call(`/sessions/${encodeURIComponent(id)}`, {method: 'DELETE'}); } catch (_) {} window.SrvRecords?.reload(); }
+  }
+  async function confirmLeave(target) {
+    if (asking) return;
+    asking = true;
+    const yes = await window.MemoirTrash.confirm({
+      title: '인터뷰를 중단할까요?',
+      desc: draft() ? '「마치기」를 누르지 않고 나가면 지금까지 나눈 이야기와 쓰던 글이 저장되지 않아요.' : '「마치기」를 누르지 않고 나가면 지금까지 나눈 이야기가 저장되지 않아요.',
+      ok: '저장하지 않고 중단하기', keep: '계속 이야기하기'});
+    asking = false;
+    if (!yes) return;
+    await discard();
+    leaving = true;
+    if (LINK.on) { window.SrvLinks?.left?.(); leaving = false; return; }
+    if (location.hash.slice(1) === target) show(target); else location.hash = target;
+    leaving = false;
+    toast('인터뷰를 저장하지 않고 중단했어요.');
+  }
+  const onInterview = () => location.hash === '#interview' || (!location.hash && LINK.on);
+  document.addEventListener('click', (e) => {
+    if (!live() || leaving) return;
+    const link = e.target.closest('[data-nav],[data-go],a[href^="#"]');
+    if (!link || link.closest('dialog')) return;
+    const target = link.dataset.nav || link.dataset.go || (link.getAttribute('href') || '').slice(1) || 'home';
+    if (target === 'interview' || !onInterview()) return;
+    e.preventDefault(); e.stopImmediatePropagation();
+    void confirmLeave(target);
+  }, true);
+  window.addEventListener('hashchange', (e) => {
+    if (!live() || leaving) return;
+    const from = new URL(e.oldURL).hash.slice(1), to = location.hash.slice(1) || 'home';
+    if (from !== 'interview' || to === 'interview') return;
+    e.stopImmediatePropagation();
+    history.replaceState(null, '', '#interview');
+    // 다른 화면이 먼저 그려졌을 수 있다 (브라우저마다 듣는 순서가 다르다) — 인터뷰 화면으로 되돌린 뒤 여쭙는다
+    setTimeout(() => { if (live() && !leaving) show('interview'); void confirmLeave(to); }, 0);
+  }, true);
+
   // 진행 중에 창을 닫으려 하면 한 번 여쭙는다
   window.addEventListener('beforeunload', (e) => { if (live()) { e.preventDefault(); e.returnValue = ''; } });
   // 남은 회차 닫기 · 기억은 자녀 화면에서만 (어르신 링크 회차는 다른 곳에서 말씀하고 계실 수 있다)
