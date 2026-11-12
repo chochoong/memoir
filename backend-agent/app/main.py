@@ -137,7 +137,9 @@ async def lifespan(app: FastAPI):
 #
 # 프로덕션에서 화면은 이 서버가 web/ 에서 직접 낸다. **같은 출처라 CORS 가 아예
 # 필요 없다** — 허용 목록이 비어 있는 것이 정상이다.
-PUBLIC_ORIGIN = env_str("PUBLIC_ORIGIN")
+# 끝의 / 는 뗀다 — 남으면 초대 · 공유 주소가 …com//i#… 가 되어 화면이 링크로 알아보지 못하고,
+# 브라우저가 보내는 Origin(끝에 / 없음)과도 글자가 달라진다.
+PUBLIC_ORIGIN = env_str("PUBLIC_ORIGIN").rstrip("/")
 _public = bool(PUBLIC_ORIGIN)
 _docs = "/docs" if (not _public or env_flag("DOCS")) else None
 
