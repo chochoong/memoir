@@ -319,7 +319,9 @@ def test_check():
     check("3개는 받는다", memoir.check_selection([a, b, c]) == [a, b, c])
     check("5개는 받는다", len(memoir.check_selection([a, b, c, d, e])) == 5)
     check("2개는 거절한다", refused([a, b]))
-    check("6개는 거절한다", refused([a, b, c, d, e, f]))
+    check("6개도 받는다 (기본 상한 없음)", len(memoir.check_selection([a, b, c, d, e, f])) == 6)
+    with _Env(MEMOIR_MAX_SESSIONS="5"):
+        check("MEMOIR_MAX_SESSIONS=5 이면 6개는 거절한다", refused([a, b, c, d, e, f]))
     check("같은 회차 두 번은 거절한다", refused([a, b, a]))
     check("대소문자만 다른 같은 회차도 거절한다",
           refused(["ABCDEF00-0000-4000-8000-000000000001", "abcdef00-0000-4000-8000-000000000001", c]))
@@ -428,21 +430,21 @@ def test_routes():
                         and isinstance(body["detail"], str) and "요" in body["detail"])
 
             r = c.post(url, json=three, headers=me)
-            check("3개를 고르면 200 · 다섯 키 + style + run", r.status_code == 200 and r.json() == shown(READY, three["session_ids"]),
+            check("3개를 고르면 200 · 다섯 키 + style + run", r.status_code == 200 and r.json() == {**shown(READY, three["session_ids"]), "memoir_id": None},
                   f"{r.status_code} {r.text[:80]}")
             check("모델은 한 번만 부른다", fake.writes == 1, str(fake.writes))
             check("모델에 간 입력은 합치기 결과다 (말씀 6개 · 회차 3개)",
                   len(fake.seen["utterances"]) == 6 and len(fake.seen["sessions"]) == 3)
             check("응답에 turn_map · missing_context · coverage_notes 가 실리지 않는다",
-                  set(r.json()) == {*memoir.SHOWN, "style", "run"})
+                  set(r.json()) == {*memoir.SHOWN, "style", "run", "memoir_id"})
 
             r = c.post(url, json={**three, "style": "spoken"}, headers=me)
             check("style spoken 을 보내면 200 · 응답 style spoken",
-                  r.status_code == 200 and r.json() == shown(READY, three["session_ids"]), f"{r.status_code} {r.text[:80]}")
+                  r.status_code == 200 and r.json() == {**shown(READY, three["session_ids"]), "memoir_id": None}, f"{r.status_code} {r.text[:80]}")
 
             # 지원하지 않는 문체 — 고른 회차가 틀린 400 과 code 로 갈린다.
             fake.writes = 0
-            for v in ("novel", "cyworld", "essay", "Spoken", "", 3, ["spoken"]):
+            for v in ("cyworld", "Essay", "LITERARY", "Novel", "Spoken", "", 3, ["spoken"]):
                 r = c.post(url, json={**three, "style": v}, headers=me)
                 check(f"style {v!r} → 400 · code unsupported_style",
                       r.status_code == 400 and r.json() == {
@@ -517,7 +519,7 @@ def test_routes():
                       r.status_code == 400 and failed(r, "speaker_unassigned"), f"{r.status_code}")
             check("화자 거절은 모델을 부르지 않는다 (통과한 2번만 불렀다)", fake.writes == 2, str(fake.writes))
 
-            # 5 는 임시 시험 제한이다 — 설정으로 바뀐다.
+            # 상한은 기본으로 없다 — MEMOIR_MAX_SESSIONS 로 걸 수 있다.
             r = c.post(url, json=fake.pick("s-a", "s-b", "s-c", "s-d"), headers=me)
             with _Env(MEMOIR_MAX_SESSIONS="3"):
                 r2 = c.post(url, json=fake.pick("s-a", "s-b", "s-c", "s-d"), headers=me)
@@ -528,7 +530,7 @@ def test_routes():
 
             fake.out = copy.deepcopy(EMPTY)
             r = c.post(url, json=three, headers=me)
-            check("자료 부족은 200 · insufficient_material", r.status_code == 200 and r.json() == shown(EMPTY, three["session_ids"]),
+            check("자료 부족은 200 · insufficient_material", r.status_code == 200 and r.json() == {**shown(EMPTY, three["session_ids"]), "memoir_id": None},
                   f"{r.status_code} {r.text[:60]}")
 
             for name in ("없는 턴을 가리키는 출처", "sentence 번호가 겹치는 출처"):
@@ -604,7 +606,7 @@ def test_exclude():
                   r.status_code == 200 and r.json()["run"]["session_ids"] == every
                   and len(fake.seen["sessions"]) == 5, f"{r.status_code} {r.text[:80]}")
             check("응답은 고른 요청과 같은 모양 (다섯 키 + style + run)",
-                  set(r.json()) == {*memoir.SHOWN, "style", "run"})
+                  set(r.json()) == {*memoir.SHOWN, "style", "run", "memoir_id"})
             with _Env(MEMOIR_MAX_SESSIONS="3"):
                 r = ask([])
                 check("한 번 호출(single) 계정은 빼기 요청에도 MEMOIR_MAX_SESSIONS — 5개 > 3 → 400",
@@ -654,7 +656,7 @@ def test_exclude():
             check("DB 를 못 읽으면 → 422 · source_unavailable", r.status_code == 422 and failed(r, "source_unavailable"),
                   f"{r.status_code}")
             fake.db_down = False
-            r = ask([], style="novel")
+            r = ask([], style="cyworld")
             check("문체 거절은 빼기 요청에도 같다 → 400 · unsupported_style",
                   r.status_code == 400 and r.json()["code"] == "unsupported_style", f"{r.status_code}")
             check("거절한 빼기 요청은 모델을 부르지 않는다", fake.writes == 0, str(fake.writes))
@@ -850,7 +852,7 @@ def test_jobs():
             r = c.post("/api/memoirs", json=fake.pick("s-a", "s-b"), headers=me)
             check("잘못 고르면 바로 400 bad_selection · 작업을 열지 않는다",
                   r.status_code == 400 and r.json()["code"] == "bad_selection" and len(memoir_jobs._JOBS) == n)
-            r = c.post("/api/memoirs", json={**three, "style": "novel"}, headers=me)
+            r = c.post("/api/memoirs", json={**three, "style": "cyworld"}, headers=me)
             check("문체 거절 → 400 unsupported_style", r.status_code == 400 and r.json()["code"] == "unsupported_style")
             r = c.post("/api/memoirs", json=three, headers=other)
             check("남의 회차 → 404 not_found (바로)", r.status_code == 404 and r.json()["code"] == "not_found")
@@ -961,8 +963,11 @@ def test_policy():
                 r = c.post(url, json=three, headers=me)
                 check("목록에 없는 계정은 한 번 호출로 쓴다 (파이프라인을 부르지 않는다)",
                       r.status_code == 200 and len(calls) == n and fake.writes >= 1, f"{r.status_code}")
-                check("limits — single 이면 memoir_max 가 MEMOIR_MAX_SESSIONS",
-                      memoir.limits(ME)["memoir_engine"] == "single" and memoir.limits(ME)["memoir_max"] == 5)
+                check("limits — single 은 기본 상한 없음 (memoir_max None)",
+                      memoir.limits(ME)["memoir_engine"] == "single" and memoir.limits(ME)["memoir_max"] is None)
+                with _Env(MEMOIR_MAX_SESSIONS="5"):
+                    check("limits — single 에 MEMOIR_MAX_SESSIONS 를 두면 그 값",
+                          memoir.limits(ME)["memoir_max"] == 5)
             with _Env(MEMOIR_PIPELINE_USERS=""):
                 check("목록이 비면 아무도 pipeline 을 쓰지 않는다", memoir.engine(ME) == "single")
             with _Env(MEMOIR_PIPELINE_USERS="*"):

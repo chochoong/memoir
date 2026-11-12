@@ -1,0 +1,451 @@
+@charset "UTF-8";
+
+/* Interview layout. Artwork and its ON AIR states live in radio-art.css. */
+.interview-page-heading {
+  margin-bottom: 24px;
+}
+
+.interview-page-heading h1 {
+  font-size: 32px;
+}
+
+[data-screen="interview"] .conversation-aside {
+  display: none;
+}
+
+.interview-studio {
+  display: grid;
+  grid-template-columns: minmax(260px, .9fr) minmax(0, 1.25fr);
+  gap: 16px 40px;
+  padding: 26px 32px 22px;
+}
+
+.studio-topline {
+  grid-column: 1 / -1;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 8px 16px;
+  padding-bottom: 8px;
+}
+
+.studio-topline .pill {
+  color: #835d4d;
+  font-size: 14px;
+}
+
+.studio-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  color: #765c50;
+  font-size: 14px;
+  line-height: 1.6;
+}
+
+.studio-main {
+  display: contents;
+}
+
+.studio-visual {
+  grid-column: 1;
+  grid-row: 2 / span 5;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  align-self: center;
+  min-width: 0;
+}
+
+.studio-visual .radio-scene {
+  width: 100%;
+  max-width: 400px;
+  aspect-ratio: 6 / 5;
+  margin: 0 auto;
+}
+
+.studio-visual .radio-scene .radio-illustration {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+
+.studio-words,
+.studio-status-line,
+.studio-actions,
+.interview-studio .answer-panel,
+.interview-studio .preview-hint {
+  grid-column: 2;
+  min-width: 0;
+}
+
+.studio-words {
+  padding-top: 18px;
+}
+
+.studio-kicker {
+  display: block;
+  margin-bottom: 10px;
+  color: #806859;
+  font-size: 14px;
+}
+
+.interview-studio .interview-question {
+  margin: 0;
+  color: var(--ink);
+  font-family: var(--serif);
+  font-size: 30px;
+  font-weight: 600;
+  line-height: 1.6;
+  letter-spacing: -.045em;
+  overflow-wrap: anywhere;
+  text-wrap: pretty;
+}
+
+.interview-studio .question-hint {
+  margin-top: 14px;
+  color: #7a6659;
+  font-size: 17px;
+  line-height: 1.7;
+  overflow-wrap: anywhere;
+}
+
+.studio-status-line {
+  color: #7a6255;
+  font-size: 16px;
+  line-height: 1.5;
+}
+
+.studio-actions {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 8px 16px;
+}
+
+.studio-actions .button {
+  min-width: 0;
+  min-height: 64px;
+  font-size: 18px;
+  padding: 14px 20px;
+}
+
+.studio-actions #pause-interview {
+  grid-column: 1 / -1;
+  width: 100%;
+  min-height: 64px;
+  font-size: 18px;
+}
+
+.studio-actions #toggle-answer {
+  justify-self: start;
+  min-height: 56px;
+  padding: 10px 8px;
+  border-color: transparent;
+  background: transparent;
+  box-shadow: none;
+  font-size: 18px;
+}
+
+.studio-actions #toggle-answer:hover {
+  background: #f5ebe5;
+}
+
+.studio-actions #toggle-answer .icon {
+  width: 21px;
+  height: 21px;
+}
+
+.studio-actions #finish-interview {
+  justify-self: end;
+  min-height: 48px;
+  margin: 0;
+  padding: 8px;
+  border: 0;
+  background: transparent;
+  color: #806c60;
+  font-size: 16px;
+  font-weight: 400;
+}
+
+.interview-studio .answer-panel {
+  margin: 4px 0 0;
+  scroll-margin-top: 20px;
+  scroll-margin-bottom: 120px;
+}
+
+.interview-studio .answer-panel label {
+  font-size: 17px;
+}
+
+.interview-studio .answer-panel textarea {
+  display: block;
+  min-height: 160px;
+  font-size: 18px;
+  line-height: 1.8;
+}
+
+.interview-studio .answer-panel .button {
+  min-height: 64px;
+  font-size: 18px;
+}
+
+.interview-studio .preview-hint {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0 12px;
+  margin-top: 0;
+  padding-top: 8px;
+  border-top: 1px solid #ebdfd6;
+  line-height: 1.5;
+}
+
+.interview-studio .preview-hint small {
+  color: #806d60;
+  font-size: 11px;
+}
+
+.interview-studio .preview-hint .text-button {
+  display: inline-flex;
+  min-height: 44px;
+  margin: 0;
+  padding: 8px 0;
+  font-size: 14px;
+}
+
+@media (min-width: 761px) and (max-width: 1100px) {
+  .interview-studio {
+    grid-template-columns: minmax(200px, .85fr) minmax(0, 1.25fr);
+    column-gap: 24px;
+    padding: 24px;
+  }
+
+  .interview-studio .interview-question {
+    font-size: 28px;
+  }
+}
+
+@media (max-width: 760px) {
+  /* The document remains scrollable for enlarged text and the writing form. */
+  .topbar {
+    height: auto;
+    min-height: 60px;
+    padding: 10px 20px;
+  }
+
+  .mobile-brand {
+    font-size: 25px;
+  }
+
+  .topbar .avatar {
+    width: 34px;
+    height: 34px;
+  }
+
+  main {
+    padding-top: 12px;
+    padding-bottom: calc(100px + env(safe-area-inset-bottom));
+  }
+
+  .review-notice {
+    flex-wrap: wrap;
+    gap: 3px 6px;
+    margin-bottom: 12px;
+    font-size: 11px;
+    line-height: 1.5;
+  }
+
+  .interview-page-heading {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+    border: 0;
+  }
+
+  .interview-studio {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    padding: 0;
+    border: 0;
+    border-radius: 0;
+    background: transparent;
+    box-shadow: none;
+  }
+
+  .studio-topline {
+    order: 1;
+    flex-wrap: nowrap;
+    gap: 8px;
+    padding-bottom: 6px;
+  }
+
+  .studio-topline .pill {
+    flex-shrink: 0;
+    padding: 3px 10px;
+    font-size: 14px;
+  }
+
+  .studio-status {
+    font-size: 14px;
+    text-align: right;
+  }
+
+  .studio-words {
+    order: 2;
+    padding: 0;
+  }
+
+  .studio-kicker {
+    display: none;
+  }
+
+  .interview-studio .interview-question {
+    font-size: clamp(26px, 7.2vw, 30px);
+    line-height: 1.5;
+    letter-spacing: -.05em;
+  }
+
+  .interview-studio .interview-question br {
+    display: none;
+  }
+
+  .interview-studio .question-hint {
+    margin-top: 8px;
+    font-size: 16px;
+    line-height: 1.5;
+  }
+
+  .studio-visual {
+    order: 3;
+    align-self: center;
+    width: 100%;
+  }
+
+  .studio-visual .radio-scene {
+    width: 174px;
+    max-width: 100%;
+    height: 145px;
+    aspect-ratio: 6 / 5;
+  }
+
+  .studio-status-line {
+    order: 4;
+    text-align: center;
+    font-size: 16px;
+  }
+
+  .studio-actions {
+    order: 5;
+    width: 100%;
+    gap: 4px 12px;
+  }
+
+  .studio-actions .button {
+    flex: none;
+    gap: 8px;
+  }
+
+  .studio-actions #pause-interview .icon {
+    width: 24px;
+    height: 24px;
+  }
+
+  .interview-studio .answer-panel {
+    order: 6;
+    width: 100%;
+    margin-top: 0;
+    scroll-margin-top: 16px;
+    scroll-margin-bottom: calc(110px + env(safe-area-inset-bottom));
+  }
+
+  .interview-studio .answer-panel textarea {
+    scroll-margin-top: 16px;
+    scroll-margin-bottom: calc(110px + env(safe-area-inset-bottom));
+  }
+
+  .interview-studio .preview-hint {
+    order: 7;
+    justify-content: center;
+    width: 100%;
+    padding-top: 4px;
+    border-top: 0;
+    text-align: center;
+  }
+
+  .interview-studio .preview-hint small {
+    flex-basis: 100%;
+  }
+
+  .mobile-nav {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 3px;
+    padding: 6px 8px calc(6px + env(safe-area-inset-bottom));
+  }
+
+  .mobile-nav a {
+    min-width: 0;
+    min-height: 64px;
+    max-width: none;
+    padding: 4px 2px;
+    gap: 4px;
+    font-size: 14px;
+    line-height: 1.25;
+    text-align: center;
+    overflow-wrap: anywhere;
+  }
+
+  .mobile-nav a .icon {
+    width: 22px;
+    height: 22px;
+  }
+}
+
+@media (max-width: 360px), (max-width: 760px) and (max-height: 740px) {
+  .interview-studio {
+    gap: 6px;
+  }
+
+  .studio-topline {
+    padding-bottom: 4px;
+  }
+
+  .studio-visual .radio-scene {
+    width: 138px;
+    height: 115px;
+  }
+
+  .interview-studio .interview-question {
+    font-size: 26px;
+  }
+
+  .interview-studio .question-hint {
+    margin-top: 6px;
+  }
+}
+
+/* Browser zoom can reduce the layout width below a phone's usual viewport. */
+@media (max-width: 280px) {
+  .studio-topline {
+    flex-wrap: wrap;
+  }
+
+  .studio-actions {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .studio-actions #toggle-answer,
+  .studio-actions #finish-interview {
+    justify-self: center;
+  }
+}

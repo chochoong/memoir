@@ -1,0 +1,34 @@
+/* 지우기 공통 부품 — 묻는 창 · 고르는 막대 · 되돌리기 */
+.trash-ok { background: #9b3b30; color: #fff; border-color: #9b3b30; }
+.trash-ok:hover { background: #7f2d24; }
+.trash-ok:disabled { background: #c9a59c; border-color: #c9a59c; }
+.trash-dialog { width: 460px; padding: 32px 32px 26px; }
+.trash-dialog h2 { margin: 0 0 14px; font-size: 24px; color: #6d2f2a; }
+.trash-items { margin: 0 0 14px; padding: 12px 16px 12px 34px; background: #fff3ec; border: 1px solid #ecc9b9; border-radius: 10px; font-size: 16px; line-height: 1.75; color: #4f3a30; }
+.trash-items .trash-more { list-style: none; margin-left: -18px; color: #8a6a5a; font-size: 14px; }
+.review-dialog .trash-desc { margin: 0; font-size: 15px; line-height: 1.75; }
+.trash-dialog .dialog-actions { margin-top: 20px; }
+.trash-select-bar {
+  position: fixed; left: 50%; bottom: 24px; transform: translateX(-50%); z-index: 70;
+  display: flex; align-items: center; gap: 18px; width: min(760px, calc(100% - 32px));
+  padding: 12px 14px 12px 22px; border-radius: 14px; background: #3d2f2a; color: #fff8ee; box-shadow: 0 14px 34px #2a1a1452;
+}
+.trash-select-bar[hidden] { display: none; }
+.tsb-count { flex: 1; font-size: 16px; font-weight: 600; }
+.tsb-actions { display: flex; align-items: center; gap: 8px; }
+body:not(.ebook-mode) .trash-select-bar .text-button { color: #f6dfb2; font-size: 15px; padding: 0 10px; }
+body:not(.ebook-mode) .trash-select-bar .button.outline { background: transparent; color: #fff8ee; border-color: #8c766a; min-height: 48px; }
+.trash-select-bar .trash-ok { min-height: 48px; }
+.trash-select-bar .trash-ok:disabled { background: #6e5650; border-color: #6e5650; color: #d8c6bb; opacity: 1; }
+body.trash-selecting main { padding-bottom: 120px; }
+.trash-undo { position: fixed; left: 50%; bottom: 30px; transform: translateX(-50%); z-index: 9500; display: flex; align-items: center; gap: 16px; max-width: calc(100% - 32px); padding: 12px 12px 12px 20px; border-radius: 12px; background: #3d2f2a; color: #fff8ee; font-size: 15px; box-shadow: 0 10px 30px #2a1a1440; }
+.trash-undo button { flex: none; min-height: 44px; padding: 0 16px; border: 1px solid #f1d7a8; border-radius: 8px; background: transparent; color: #f6dfb2; font-weight: 700; }
+.trash-undo button:hover { background: #f6dfb21f; }
+@media (max-width: 760px) {
+  .trash-select-bar { bottom: 86px; flex-direction: column; align-items: stretch; gap: 10px; padding: 12px 14px; }
+  .tsb-actions { justify-content: space-between; }
+  .tsb-actions .trash-ok { flex: 1; }
+  .trash-undo { bottom: 92px; font-size: 14px; }
+  .trash-dialog { padding: 26px 20px 20px; }
+}
+body:not(.ebook-mode) .trash-select-bar .button.outline:hover { background: #ffffff14; }

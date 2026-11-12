@@ -1,0 +1,238 @@
+{
+  "manifest_version": 3,
+  "prepared_at": "2026-11-11",
+  "prepared_by": "태헌 · Claude Code(로컬 점검)",
+  "status": "handoff_preparation — 서비스 연동 전",
+  "supersedes": "manifest_version 2(2026-11-11) — 분석 지시문을 보류하고 소설체 승인을 확인하기 전의 판",
+  "note": "정식 명칭은 사용자 표시용이다. internal_id 는 제안값이며 팀 백엔드의 기존 값(app/session/style.py)과의 정합은 백엔드 담당자가 정한다. 프롬프트 파일은 기준 파일과 바이트까지 같다 — 고치지 않는다.",
+  "styles": [
+    {
+      "internal_id_proposed": "essay",
+      "display_name": "수필체",
+      "internal_version": "고픽션 문학 수필체 7c + 리듬 v1",
+      "owner": "태헌(자서전 문체 실험)",
+      "prompt": {
+        "path": "essay/7c_고픽션문학수필_리듬v1.md",
+        "bytes": 13589,
+        "sha256": "4a9c43e3b163e70da1638f91b97ca0c3a1238568bed64bcd048adc6a17cd8bc0",
+        "bom": false,
+        "crlf_lines": 0,
+        "ends_with_newline": true,
+        "chars": 6105,
+        "copy_equals_source": true
+      },
+      "prompt_role": "시스템 프롬프트 — 장마다 자료 묶음(사용자 메시지)과 함께 1회 호출",
+      "input": "장 자료 묶음(reference/bundle_reference.py · essay_user_message) — 분석 결과와 확정 제목이 필요하다",
+      "output": "JSON 하나(schemas/essay_output.schema.json)",
+      "verified_runs": [
+        {
+          "experiment": "marriage_31_33_new_chapter",
+          "model": "gpt-6.1-sol",
+          "settings": "reasoning effort medium · max_output_tokens 96,000 · strict JSON 스키마",
+          "result": "새 주제 1장 완성 · 사실 32/32 · 사람이 승인한 제목"
+        },
+        {
+          "experiment": "gpt_three_chapters_test · model_comparison_claude_gpt_c1",
+          "model": "gpt-6.1-sol",
+          "settings": "같음",
+          "result": "3장 완성"
+        },
+        {
+          "experiment": "claude_sonnet_55_three_chapters",
+          "model": "claude-sonnet-5-5",
+          "settings": "effort high · max_tokens 65,536 · 재시도 0",
+          "result": "3장 완성 · 그중 1장에서 essay_id 를 예시값(e48)으로 냄"
+        },
+        {
+          "experiment": "memoir_fast_pipeline_v1",
+          "model": "claude-fable-5-1",
+          "settings": "effort high · max_tokens 32,000",
+          "result": "3장 중 2장 완성 · 1장은 출력 상한에서 잘림"
+        }
+      ],
+      "run_logs_recording_this_prompt_hash": [
+        "claude_sonnet_55_three_chapters",
+        "deepseek_v41_flash_three_chapters",
+        "deepseek_v4_pro_three_chapters",
+        "gemini_31_pro_three_chapters",
+        "gpt_three_chapters_test",
+        "model_comparison_claude_gpt_c1"
+      ],
+      "known_constraints": [
+        "출력 예시의 essay_id 값(e48)을 그대로 내는 일이 있다",
+        "지시문은 제목을 '새로 짓는다'고 적혀 있다 — 저장된 결과 9개 중 4개가 목차와 다른 제목을 냈다. 확정 제목은 목차 쪽에서 지킨다",
+        "따옴표 대사는 원문의 것만 허용한다",
+        "기준 모델은 팀이 하나로 정하지 않았다 — 위 실행들이 검증된 조합이다"
+      ]
+    },
+    {
+      "internal_id_proposed": "literary",
+      "display_name": "문학체",
+      "internal_version": "극서정 문학체 v2",
+      "owner": "태헌(자서전 문체 실험)",
+      "prompt": {
+        "path": "literary/prompt_극서정문학체_v2.md",
+        "bytes": 16126,
+        "sha256": "fd70d60bb8ad4e14e63fe5889ae09b18c6c9b3d1d928a3ca9320bbdca2276049",
+        "bom": false,
+        "crlf_lines": 0,
+        "ends_with_newline": true,
+        "chars": 7366,
+        "copy_equals_source": true
+      },
+      "prompt_role": "시스템 프롬프트 — 장마다 자료 묶음(사용자 메시지)과 함께 1회 호출",
+      "input": "장 자료 묶음(reference/bundle_reference.py · literary_user_message) — 분석 결과가 필요하다. 제목은 임시값으로도 된다",
+      "output": "JSON 하나(schemas/literary_output.schema.json)",
+      "verified_runs": [
+        {
+          "experiment": "extreme_lyrical_v2_41_43",
+          "model": "claude-sonnet-5-5",
+          "settings": "effort high · max_tokens 128,000 · 스트리밍 · 재시도 0 · temperature 미설정 · 구조화 출력",
+          "usage": {
+            "input_tokens": 13838,
+            "output_tokens": 47856,
+            "cache_creation_input_tokens": 0,
+            "cache_read_input_tokens": 0
+          },
+          "cost_usd": 0.5062,
+          "seconds": 320.6,
+          "result": "1장 완성(4,139자) · 사실 27/27 · 사용자가 만족한 기준 원고",
+          "prompt_sha256_logged": "fd70d60bb8ad4e14e63fe5889ae09b18c6c9b3d1d928a3ca9320bbdca2276049",
+          "matches_package_prompt": true
+        }
+      ],
+      "known_constraints": [
+        "검증은 한 장 · 한 번의 실행뿐이다 — 다른 모델에서는 문체 강도가 달라질 수 있다",
+        "은유는 각색 기록에 하나하나 남기지 않는다(설계)",
+        "원문에 없는 깨달음 · 회고를 화자의 것으로 세우는 문장이 나온다 — 본인 확인이 필요하다",
+        "프롬프트의 예시 이미지가 본문에 옮겨지는 현상이 있었다",
+        "문단 안 줄바꿈을 허용한다 — 저장 · 표시에서 보존해야 한다",
+        "참고 분량은 원문 1,234자에 4500~7000자 한 조합만 검증됐다"
+      ]
+    },
+    {
+      "internal_id_proposed": "novel",
+      "display_name": "소설체",
+      "internal_version": "구운몽ST 최소 수정 v1",
+      "owner": "다애(구운몽ST 원본 개발) · 최소 수정본 작성: 태헌",
+      "approval": "다애님 승인 완료 — 소설체 최소 수정 v1",
+      "prompt": {
+        "path": "novel/prompt_소설체_최소수정v1.md",
+        "bytes": 9494,
+        "sha256": "4b05811de3436f4b6e090c77c29b8370ef6d83b6ec062d8ec29998c21bda4993",
+        "bom": false,
+        "crlf_lines": 0,
+        "ends_with_newline": true,
+        "chars": 4005,
+        "copy_equals_source": true
+      },
+      "derived_from": {
+        "what": "다애님의 구운몽ST 범용 프롬프트(팀 공유 2026-11-09)에서 꿈 · 기시감 · 미래 예지 서술을 요구하는 구절만 뺀 파생본",
+        "original_file": "범용프롬프트.txt",
+        "original_sha256": "d7c86e53c68fe4bb04c44768dcd02191c9aebe366011495e63291ac853c16372",
+        "original_bytes": 12221,
+        "original_is_registered_style": false,
+        "edits": {
+          "edited_lines": 14,
+          "deleted_paragraphs": 2,
+          "identical_lines": "93/111",
+          "removed_chars": 1225,
+          "added_chars": 103,
+          "char_similarity": 0.87,
+          "new_prohibitions": 0,
+          "added_sentence": "사건은 실제 경험을 바탕으로 현실적인 장면과 일반적인 회상 구조로 전개한다.",
+          "reversible": "수정본 + 변경 기록으로 원본 해시가 되살아난다",
+          "detail": "novel_prompt_diff.md"
+        }
+      },
+      "prompt_role": "프롬프트 템플릿 — {{SOURCE_TEXT}} 한 군데에 그 장의 원문을 넣은 글 전체를 사용자 메시지 하나로 보낸다(시스템 프롬프트 없음)",
+      "input": "원문만(reference/bundle_reference.py · novel_user_message) — 분석 결과 · 사실 원장 · 제목을 쓰지 않는다",
+      "output": "소설 본문 텍스트만(JSON 아님 · 제목 없음 · 사실 표시와 각색 기록 없음)",
+      "verified_runs": [
+        {
+          "experiment": "novel_guunmong_minimal_v1_31_33",
+          "model": "claude-sonnet-5-5",
+          "settings": "effort high · max_tokens 65,536 · 스트리밍 · 재시도 0 · 시스템 없음 · 형식 강제 없음",
+          "usage": {
+            "input_tokens": 5765,
+            "output_tokens": 7891,
+            "cache_creation_input_tokens": 0,
+            "cache_read_input_tokens": 0
+          },
+          "cost_usd": 0.0904,
+          "seconds": 71.4,
+          "prompt_sha256_logged": "4b05811de3436f4b6e090c77c29b8370ef6d83b6ec062d8ec29998c21bda4993",
+          "matches_package_prompt": true,
+          "result": "결혼 31~33 · 공백 제외 3,427자 · 따옴표 발화 33 · 일화 3/3 · 꿈 · 기시감 · 예지 없음(문맥 판정) · 사실 32개 중 그대로 27 · 바뀜 0"
+        }
+      ],
+      "earlier_runs_with_original_prompt": "참고 — 원본 프롬프트로는 가장 38~47(GPT · Sonnet 각 1회)과 결혼 31~33(Sonnet 1회)을 돌렸다. 정식 소설체의 검증 원고가 아니다",
+      "known_constraints": [
+        "수정본의 검증은 한 원문 · 한 번의 생성이다 — 재현성 · 다른 원문 · 장 이어 쓰기 · GPT 는 보지 않았다",
+        "꿈 · 기시감을 금지하는 문장을 새로 넣지 않았다(요구하는 구절만 뺐다) — 다시 나오지 않는다는 보장은 아니다",
+        "따옴표 발화는 모두 창작이고 본문에서 실제 발언과 구분되지 않는다(원문에 직접 인용이 없을 때)",
+        "실존 인물의 말을 짓는다 — 검증 원고에서 가족 어른들의 말이 창작됐다(원문에는 직접 인용이 없다)",
+        "출력에 제목 · 사실 표시 · 각색 기록이 없다 — 기존 사실 검증기를 그대로 쓸 수 없다. 원문과 맞대는 사후 대조가 따로 필요하다",
+        "원문의 '지금'의 회고가 빠지는 일이 있다",
+        "검증 원고에서 따옴표가 곧은 모양으로 나왔다(프롬프트의 견본은 굽은 따옴표)"
+      ],
+      "approval_note": "사용자(태헌)가 전달한 승인이다. 승인 날짜와 증빙 파일은 확인되지 않아 적지 않았다"
+    }
+  ],
+  "analysis_dependency": {
+    "required_by": [
+      "essay",
+      "literary"
+    ],
+    "not_required_by": [
+      "novel"
+    ],
+    "what": "수필체 · 문학체의 사용자 메시지는 이야기별 분석 결과(사실 원장 · 지킬 세부 · 감정 기록 · 회고 · 인물 · 때 · 곳 · 들은 이야기 · 직접 인용)와 장별 설계(집필 방향 · 주의 · 다른 장과의 겹침)로 만든다",
+    "included": {
+      "analysis_output_schema": "schemas/analysis_output.schema.json",
+      "bundle_builder_reference": "reference/bundle_reference.py — 실제로 보낸 입력 8건(수필체 6 · 문학체 1 · 소설체 1)과 글자까지 같음을 로컬에서 확인",
+      "synthetic_examples": [
+        "examples/analysis.sample.json",
+        "examples/stories.sample.json",
+        "examples/essay_user_message.sample.md",
+        "examples/literary_user_message.sample.md"
+      ],
+      "analysis_prompt": {
+        "path": "analysis/0_원문분석_목차통합_안전사본.md",
+        "bytes": 11105,
+        "sha256": "6c2f1afea07e982e7401ed2ef09d357d8e3a202eb7aaab93eda9d9852306d828",
+        "bom": false,
+        "crlf_lines": 0,
+        "ends_with_newline": true,
+        "chars": 5529,
+        "role": "분석 + 장 설계 지시문(한 호출) — schemas/analysis_output.schema.json 모양의 출력을 만든다. 시스템 프롬프트로 파일 그대로 쓴다",
+        "derived_from": "실험에 쓴 분석 지시문 원본(로컬 보관 · 저장소에 올리지 않는다)",
+        "changes": {
+          "changed_items": 1,
+          "changed_lines": 1,
+          "identical_lines": "74/75",
+          "what": "people 필드 설명의 예시 가운데 실제 인터뷰의 인물 이름 하나를 가상 식별자로 바꿨다(관계어는 그대로)",
+          "placeholder": "가상인물_A",
+          "rules_changed": 0,
+          "fields_changed": 0,
+          "sentences_rewritten": 0
+        },
+        "original_hash_published": false,
+        "why_original_hash_is_not_published": "원본과 사본은 짧은 이름 하나만 다르다 — 원본의 해시를 함께 공개하면 이름을 넣어 보며 해시를 맞추는 방식으로 실제 이름을 되찾을 수 있다",
+        "verified": "구조와 입력 조립만 확인했다(무료). 이 사본으로 모델을 부른 적은 없다 — 원본 때와 같은 분석이 나오는지는 실서비스 연동 후 검증이 필요하다",
+        "experiments_with_original": "결혼 31~33 수필체의 분석(원본의 현재 판). 문학체 기준 원고와 수필체 3장(가장 38~47)의 분석은 앞선 판으로 만들었다 — 이야기별 분석 절은 두 판이 글자까지 같다",
+        "call_settings_in_experiments": "claude-fable-5-1 · effort high · 스트리밍 · 구조화 출력 · 재시도 0 · 출력 상한 32,000"
+      }
+    },
+    "not_included": [
+      "제목 후보 · 평가 · 선정 단계(0b · 0c 지시문과 선정 로직)",
+      "민감한 기억 판정 규칙(실험은 낱말 규칙 + 사람이 고른 이야기 번호 목록)",
+      "일화 누락 검사(지킬 세부 덮음)",
+      "분석 호출 실행기(입력 방법은 인수인계 문서 backend_handoff.md §3 에 적었다)",
+      "분석 지시문 원본과 원본 · 사본의 전체 차이(실제 이름이 들어 있다)"
+    ],
+    "already_on_develop": [
+      "backend-agent/tools/memoir_literary.py — 수필체 출력 스키마와 사실 대조(check_essay)가 들어 있다(실험 폴더의 것과 해시가 같다)"
+    ]
+  }
+}

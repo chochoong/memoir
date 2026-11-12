@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="180" height="240" viewBox="0 0 180 240" preserveAspectRatio="none">
+  <filter id="soft-grain" x="0" y="0" width="100%" height="100%">
+    <feTurbulence type="fractalNoise" baseFrequency=".73" numOctaves="3" seed="19"/>
+    <feColorMatrix type="saturate" values="0"/>
+    <feComponentTransfer><feFuncA type="linear" slope=".055"/></feComponentTransfer>
+  </filter>
+  <rect width="180" height="240" filter="url(#soft-grain)"/>
+</svg>

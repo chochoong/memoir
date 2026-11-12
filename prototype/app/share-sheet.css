@@ -1,0 +1,57 @@
+/* 보내기 공통 창 · 자서전 나누기 · 인터뷰 초대 보내기 */
+.share-dialog { width: 540px; padding: 30px 32px 24px; max-height: calc(100vh - 32px); overflow: auto; }
+.share-dialog h2 { margin: 6px 0 16px; font-size: 24px; }
+.share-card { display: flex; gap: 14px; align-items: center; padding: 14px 16px; border: 1px solid var(--line); border-radius: 14px; background: #fffdf6; box-shadow: 0 6px 16px -10px #4a33184d; }
+.share-card-art { flex: none; }
+.share-mini-cover { display: block; width: 46px; height: 62px; border-radius: 2px 4px 4px 2px; background: linear-gradient(90deg, #0004 0 8%, #fff1 10%, transparent 16%), var(--c); box-shadow: -2px 1px 0 #0003, 2px 2px 4px #0003; }
+.share-mini-mic { display: grid; place-items: center; width: 52px; height: 52px; border-radius: 50%; background: var(--blush); color: var(--burgundy); }
+.share-mini-mic .icon { width: 26px; height: 26px; }
+.share-card-copy { display: grid; gap: 2px; min-width: 0; }
+.share-card small { font-size: 12px; color: var(--muted); }
+.share-card strong { font-size: 17px; line-height: 1.45; color: var(--ink); }
+.share-card em { font-style: normal; font-size: 13px; color: var(--muted); }
+.share-msg-label { display: flex; align-items: baseline; gap: 8px; margin: 16px 0 6px; font-size: 15px; font-weight: 700; color: var(--ink); }
+.share-msg-label small { font-weight: 400; font-size: 12.5px; color: var(--muted); }
+#share-msg { width: 100%; resize: vertical; min-height: 96px; padding: 12px 14px; border: 1px solid var(--line); border-radius: 10px; background: #fffdf5; font-size: 15.5px; line-height: 1.7; color: var(--ink); }
+.share-link { display: flex; gap: 8px; margin-top: 10px; }
+.share-link input { flex: 1; min-width: 0; min-height: 48px; padding: 0 12px; border: 1px solid var(--line); border-radius: 10px; background: #f8f1df; font-size: 14px; color: var(--muted); }
+.share-link .button { min-height: 48px; white-space: nowrap; }
+.share-link .icon { width: 16px; height: 16px; }
+.share-channels { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin-top: 14px; }
+.share-channels button { display: grid; justify-items: center; gap: 6px; min-height: 76px; padding: 8px 4px; border: 1px solid var(--line); border-radius: 12px; background: #fffdf6; font-size: 14px; color: var(--ink); }
+.share-channels button:hover { background: var(--soft); }
+.sc-dot { display: grid; place-items: center; width: 34px; height: 34px; border-radius: 50%; font-size: 15px; font-weight: 800; }
+.sc-dot .icon { width: 18px; height: 18px; }
+.sc-dot.kakao { background: #fee500; color: #3a1d1d; }
+.sc-dot.sms { background: #dcefdc; color: #2f6b3a; }
+.sc-dot.mail { background: #dfe8f6; color: #2d4f86; }
+.sc-dot.more { background: #ece4d4; color: #6c6252; letter-spacing: -1px; }
+.review-dialog .share-status { margin: 10px 0 0; min-height: 0; font-size: 14px; line-height: 1.6; color: var(--burgundy); }
+.review-dialog .share-status:empty { display: none; }
+.share-extras { display: flex; flex-wrap: wrap; gap: 0 18px; margin-top: 8px; padding-top: 6px; border-top: 1px solid var(--line); }
+.share-extras .text-button { font-size: 14px; }
+body:not(.ebook-mode) .share-extras .share-stop, body.ebook-mode .share-extras .share-stop { color: #9b3b30; }
+.review-dialog .share-note { margin: 6px 0 0; font-size: 12.5px; line-height: 1.6; color: var(--muted); }
+.share-setup-box { display: grid; gap: 14px; }
+.review-dialog .share-setup-lead { margin: 0; font-size: 15.5px; line-height: 1.75; }
+.share-setup-box fieldset { border: 0; margin: 0; padding: 0; }
+.share-setup-box legend { font-size: 15px; font-weight: 700; margin-bottom: 8px; color: var(--ink); }
+.share-days { grid-template-columns: repeat(3, 1fr); }
+.share-create { width: 100%; }
+/* 책장 · 독서 메뉴 */
+body:not(.ebook-mode) .ml-share { min-height: 44px; font-size: 14px; color: var(--burgundy); }
+.ml-share .icon { width: 16px; height: 16px; }
+.ms-on { display: inline-flex; margin-left: 6px; padding: 1px 8px; border-radius: 999px; background: #e3efe0; color: #2f6b3a; font-size: 11px; font-weight: 700; }
+/* 받는 분 미리보기 */
+.share-guest-banner { position: fixed; z-index: 60; left: 0; right: 0; margin: 0 auto; width: max-content; top: 76px; display: flex; align-items: center; gap: 14px; max-width: calc(100% - 24px); padding: 8px 8px 8px 16px; border-radius: 999px; background: #2f6b3a; color: #fff; font-size: 14px; box-shadow: 0 8px 20px #0003; }
+.share-guest-banner[hidden] { display: none; }
+.share-guest-banner button { min-height: 40px; padding: 0 14px; border: 1px solid #ffffff80; border-radius: 999px; background: transparent; color: #fff; font-weight: 700; white-space: nowrap; }
+body.share-guest-view #ebook-remove-book, body.share-guest-view #ebook-share-book, body.share-guest-view #ebook-toggle-bookmark, body.share-guest-view #ebook-open-bookmarks,
+body.share-guest-nopdf #ebook-save-pdf { display: none; }
+@media (max-width: 760px) {
+  .share-dialog { padding: 24px 18px 18px; }
+  .share-channels button { min-height: 70px; font-size: 13px; }
+  .share-guest-banner { top: 70px; width: auto; left: 12px; right: 12px; border-radius: 14px; font-size: 13px; line-height: 1.5; }
+  /* 휴대폰 독서 메뉴는 다섯 칸 — PDF 저장은 「공유」 창 안에서 */
+  body .ebook-toolbar.has-share #ebook-save-pdf { display: none; }
+}

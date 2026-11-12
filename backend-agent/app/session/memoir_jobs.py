@@ -10,9 +10,10 @@
 검증 30, gemini-3.1-pro-preview · 10-28). Cloudflare 는 100초가 넘는 응답을 끊고 화면은
 120초에 접는다. 기다리는 요청(/api/memoirs/preview)은 그대로 둔다 — 예전 화면 · 한 번 호출용.
 
-**저장하지 않는다** (7-C1 §4 · 태헌). 작업은 이 프로세스 메모리에만 있다. 서버를 다시 켜면
-사라지고 GET 은 404 job_not_found 다 — 화면은 「다시 만들어 주세요」 로 안내한다. 끝난 작업은
-MEMOIR_JOB_KEEP_SECONDS (기본 1800) 동안 둔다.
+**작업은 메모리에만 있다.** 서버를 다시 켜면 사라지고 GET 은 404 job_not_found 다. 끝난 작업은
+MEMOIR_JOB_KEEP_SECONDS (기본 1800) 동안 둔다. **다 쓴 자서전은 따로 DB 에 남는다** (013 memoir ·
+keep()) — 작업 응답의 memoir_id 로 /api/memoirs/saved/{memoir_id} 에서 다시 읽는다. 저장에
+실패해도 작업은 done 이다 (memoir_id 가 null).
 
 **한 사람에 하나씩.** 만드는 중인 작업이 있으면 새로 시작하지 않고 409 busy 와 그 job_id 를
 준다 — 같은 버튼을 두 번 눌러 모델 호출이 두 배로 나가지 않게. 재시도는 하지 않는다 (8P 0회).
@@ -28,7 +29,7 @@ import time
 import uuid
 from dataclasses import dataclass, field
 
-from . import memoir
+from . import memoir, store
 from .conf import env_int
 
 log = logging.getLogger("memoir")
@@ -57,6 +58,7 @@ class Job:
     chapter: int = 0
     chapters: int = 0
     result: dict | None = None
+    memoir_id: str | None = None      # DB 에 남긴 자서전 (keep). 저장 못 했으면 None
     error: Exception | None = None
     started: float = field(default_factory=time.monotonic)
     finished: float | None = None
@@ -101,6 +103,7 @@ async def start(recs: list[dict], ids: list[str], user_id: str, style: str) -> J
     async def work() -> None:
         try:
             job.result = await memoir.generate(recs, ids, user_id, style, progress)
+            job.memoir_id = await keep(job.result, ids, user_id, style)
             job.status = DONE
         except asyncio.CancelledError:
             job.status, job.error = FAILED, Cancelled("그만두었다")
@@ -119,6 +122,24 @@ async def start(recs: list[dict], ids: list[str], user_id: str, style: str) -> J
     job.task = asyncio.create_task(work())
     log.info("자서전 작업 %s 시작 — 회차 %d개 · 엔진 %s", job.job_id[:8], len(ids), memoir.engine(user_id))
     return job
+
+
+async def keep(result: dict, ids: list[str], user_id: str, style: str) -> str | None:
+    """다 쓴 자서전을 DB 에 남긴다 (013). memoir_id 를 돌려준다. **실패는 삼킨다** — 로그만."""
+    if not store.enabled():
+        return None
+    mid = f"m_{uuid.uuid4().hex}"
+    try:
+        await store.save_memoir({
+            "memoir_id": mid, "user_id": user_id, "session_ids": list(ids),
+            "style": result.get("style") or style or "", "engine": memoir.engine(user_id),
+            "status": str(result.get("status") or ""), "title": str(result.get("title") or "")[:200],
+            "result": result})
+    except Exception as e:                                   # noqa: BLE001
+        log.error("자서전 저장 실패 (%s: %s)", type(e).__name__, str(e)[:120])
+        return None
+    log.info("자서전 저장 %s — 회차 %d개", mid, len(ids))
+    return mid
 
 
 def cancel(job: Job) -> None:

@@ -140,7 +140,7 @@ class _FakeLinks:
         async def load_photo(photo_id):
             return self.photos.get(photo_id)
 
-        async def load_session(session_id):
+        async def load_session(session_id, hidden=False):
             ctl = sc.get(session_id)
             return {"fragments": list(ctl.fragments)} if ctl else self.saved.get(session_id)
 

@@ -1,0 +1,25 @@
+/* 6. 로그인 전 가림 */
+.login-gate-card { display: none; }
+body.pre-login .login-gate-card {
+  display: flex; align-items: center; justify-content: space-between; gap: 24px;
+  margin-top: 20px; padding: 26px 30px; border: 1px dashed var(--line);
+  background: repeating-linear-gradient(135deg, #fffaeb 0 14px, #fbf3dc 14px 28px);
+}
+.login-gate-card h2 { margin: 6px 0 8px; font-size: 22px; line-height: 1.45; }
+.login-gate-card p { margin: 0; color: var(--muted); font-size: 15px; line-height: 1.8; max-width: 560px; }
+.login-gate-card .lg-login { flex: none; display: inline-flex; align-items: center; gap: 10px; flex-direction: row-reverse; }
+body.pre-login [data-screen="home"] :is(.home-shortcuts, .home-lower, .page-footnote) { display: none !important; }
+/* 메뉴의 엽서 · 자서전은 흐리게 + 자물쇠 */
+body.pre-login [data-locked] { opacity: .55; }
+body.pre-login [data-locked] .nav-count { display: none; }
+body.pre-login .side-nav [data-locked]::after {
+  content: ""; width: 14px; height: 14px; margin-left: 6px; flex: none;
+  background: currentColor;
+  -webkit-mask: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2'><rect x='5' y='11' width='14' height='10' rx='2'/><path d='M8 11V8a4 4 0 0 1 8 0v3'/></svg>") center/contain no-repeat;
+          mask: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2'><rect x='5' y='11' width='14' height='10' rx='2'/><path d='M8 11V8a4 4 0 0 1 8 0v3'/></svg>") center/contain no-repeat;
+}
+@media (max-width: 760px) {
+  body.pre-login .login-gate-card { flex-direction: column; align-items: stretch; padding: 22px 20px; }
+  .login-gate-card h2 { font-size: 20px; }
+  .login-gate-card .lg-login { justify-content: center; }
+}

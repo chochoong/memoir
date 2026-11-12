@@ -16,6 +16,8 @@ backend-agent/eval/memoir_input_*.json
 backend-agent/eval/memoir_output_*.json
 # 자서전 5단계 파이프라인 실행 기록 (단위 8P) — 원응답이 들어 있다. 팀 공유는 r1_summary.md 만 옮긴다
 backend-agent/eval/runs/
+# 자서전 비교 실험 — 원문 · 공통 입력 · 비교 결과 · 개인 설정 (exp/memoir-integrated)
+backend-agent/eval/exp/
 
 # Node
 node_modules/

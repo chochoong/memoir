@@ -1,0 +1,114 @@
+/* 3. 엽서 — 코르크 보드에 핀 · 테이프로 붙여 둔 엽서. 누르면 뽑아서 손에 들고 본다.
+   엽서 고르기(자서전 만들기) 목록은 예전 모양 그대로 둔다(.record-card). */
+#record-list:has(> .pc-slot) {
+  display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 38px 28px;
+  margin: 6px -4px 0; padding: 40px 30px 44px; border-radius: 10px;
+  border: 12px solid #7b5234;
+  box-shadow: inset 0 0 0 1px #00000026, inset 0 10px 24px #3b220e40, 0 10px 26px #4a2f1430;
+  background:
+    radial-gradient(circle at 20% 30%, #00000014 0 1px, transparent 1.6px) 0 0 / 9px 11px,
+    radial-gradient(circle at 70% 60%, #ffffff1c 0 1px, transparent 1.5px) 0 0 / 13px 7px,
+    radial-gradient(circle at 40% 80%, #5a35151f 0 1.4px, transparent 2px) 3px 2px / 17px 15px,
+    radial-gradient(ellipse at 30% 20%, #d6ab78, transparent 60%),
+    radial-gradient(ellipse at 80% 90%, #b8854f, transparent 55%),
+    #c99a64;
+}
+#record-list > .pc-slot {
+  --tilt: -1.6deg; position: relative; display: flex;
+  transform: rotate(var(--tilt)); transform-origin: 50% 12px;
+}
+#record-list > .pc-slot > .postcard-card {
+  position: relative; flex: 1; width: 100%; display: flex; flex-direction: column; align-items: stretch; gap: 10px;
+  min-height: 214px; padding: 30px 18px 16px; border: 0; border-radius: 3px;
+  background: linear-gradient(#fffdf6, #fbf4e2); color: #3a3126; text-align: left;
+  box-shadow: 0 1px 0 #ffffff80 inset, 0 2px 2px #3b220e33, 0 10px 18px -6px #3b220e66;
+  transform-origin: 50% 12px;
+  transition: transform .25s cubic-bezier(.3,.7,.3,1), box-shadow .25s;
+  cursor: pointer;
+}
+#record-list > .pc-slot:nth-child(3n+2) { --tilt: 1.8deg; }
+#record-list > .pc-slot:nth-child(3n) { --tilt: -.6deg; }
+#record-list > .pc-slot:nth-child(4n+3) { --tilt: 2.4deg; }
+#record-list > .pc-slot > .postcard-card:hover,
+#record-list > .pc-slot > .postcard-card:focus-visible {
+  transform: rotate(calc(var(--tilt) * -.6)) translateY(-5px);
+  box-shadow: 0 2px 2px #3b220e33, 0 20px 26px -8px #3b220e80;
+  background: linear-gradient(#fffdf6, #fbf4e2);
+}
+#record-list > .pc-slot > .postcard-card:focus-visible { outline: 3px solid var(--burgundy); outline-offset: 4px; }
+/* 엽서 줄 · 우표 */
+#record-list > .pc-slot > .postcard-card .record-copy { order: 2; }
+#record-list > .pc-slot > .postcard-card .record-copy strong { display: block; font-family: var(--serif); font-size: 18px; line-height: 1.5; margin: 4px 0 6px; padding-right: 54px; }
+#record-list > .pc-slot > .postcard-card .record-copy p {
+  font-size: 14px; line-height: 26px; color: #5d5243; margin: 0;
+  background: repeating-linear-gradient(transparent 0 25px, #d9c9a6 25px 26px);
+  display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 3; line-clamp: 3; overflow: hidden;
+}
+#record-list > .pc-slot > .postcard-card .record-meta { font-size: 12px; color: #8a7a62; }
+#record-list > .pc-slot > .postcard-card .memory-thumbnail {
+  position: absolute; top: 18px; right: 14px; width: 46px; height: 54px; border-radius: 2px;
+  background: #fff8e6; color: var(--burgundy);
+  box-shadow: 0 0 0 3px #fffdf6, 0 0 0 4px #c9b48f; outline: 2px dotted #c9b48f; outline-offset: 2px;
+  transform: rotate(3deg);
+}
+#record-list > .pc-slot > .postcard-card .memory-thumbnail .icon { width: 22px; height: 22px; }
+#record-list > .pc-slot > .postcard-card > .icon:last-child { display: none; }
+/* 붙이는 방법: 압정 · 종이테이프 · 포스트잇 */
+#record-list > .pc-slot > .postcard-card::before {
+  content: ""; position: absolute; left: 50%; top: -9px; width: 20px; height: 20px; margin-left: -10px; border-radius: 50%;
+  background: radial-gradient(circle at 35% 30%, #ffd9cf 0 2px, #c4483e 3px, #8e2a24 10px);
+  box-shadow: 0 4px 3px -1px #2a120c80, 2px 7px 4px -3px #2a120c55;
+  z-index: 2;
+}
+#record-list > .pc-slot:nth-child(3n+2) > .postcard-card::before {
+  top: -12px; width: 92px; height: 26px; margin-left: -46px; border-radius: 1px;
+  background: repeating-linear-gradient(90deg, #f3e2b380 0 6px, #ecd69f80 6px 12px);
+  box-shadow: 0 1px 2px #3b220e33; transform: rotate(-4deg);
+  clip-path: polygon(0 8%, 4% 0, 8% 10%, 12% 0, 100% 0, 96% 92%, 92% 100%, 88% 90%, 84% 100%, 0 100%);
+}
+#record-list > .pc-slot:nth-child(4n) > .postcard-card { background: linear-gradient(#fdeba4, #f8df8c); }
+#record-list > .pc-slot:nth-child(4n) > .postcard-card::before {
+  top: -6px; width: 44%; height: 18px; margin-left: -22%; border-radius: 0;
+  background: #00000000; box-shadow: none;
+}
+#record-list > .pc-slot:nth-child(4n) > .postcard-card .record-copy p { background: none; }
+#record-list > .pc-slot:nth-child(4n) > .postcard-card .memory-thumbnail { background: #fdf1c6; }
+#record-list > .pc-slot > .postcard-card[data-pulled] { visibility: hidden; }
+
+/* 손에 든 엽서 */
+.pc-hold { position: fixed; inset: 0; z-index: 80; display: grid; place-items: center; perspective: 1400px; }
+.pc-hold-dim { position: absolute; inset: 0; background: #2b1d0f80; backdrop-filter: blur(2px); opacity: 0; transition: opacity .35s; }
+.pc-hold.on .pc-hold-dim { opacity: 1; }
+.pc-held {
+  position: relative; width: min(560px, 90vw); max-height: 82vh; overflow: auto;
+  padding: 44px 40px 30px; border-radius: 4px; color: #3a3126;
+  background: linear-gradient(160deg, #fffdf6, #f8efd7); box-shadow: 0 30px 60px -18px #1b0f0599, 0 4px 10px #1b0f0540;
+  transform-style: preserve-3d; transition: transform .18s ease-out; will-change: transform;
+}
+.pc-held.postit { background: linear-gradient(160deg, #fdeba4, #f6da82); }
+.pc-held .pc-stamp {
+  position: absolute; top: 22px; right: 22px; width: 58px; height: 68px; display: grid; place-items: center;
+  background: #fff8e6; color: var(--burgundy); box-shadow: 0 0 0 3px #fffdf6, 0 0 0 4px #c9b48f; outline: 2px dotted #c9b48f; outline-offset: 2px; transform: rotate(4deg);
+}
+.pc-held .pc-stamp .icon { width: 28px; height: 28px; }
+.pc-held .pc-meta { font-size: 13px; color: #8a7a62; }
+.pc-held h2 { font-family: var(--serif); font-size: 26px; line-height: 1.5; margin: 6px 80px 16px 0; }
+.pc-held .pc-body p {
+  font-family: var(--serif); font-size: 19px; line-height: 36px; margin: 0 0 6px; color: #4d4234;
+  background: repeating-linear-gradient(transparent 0 35px, #dccca9 35px 36px);
+}
+.pc-held .pc-actions { display: flex; gap: 10px; justify-content: flex-end; margin-top: 22px; }
+.pc-held .pc-note { font-size: 12px; color: #8a7a62; margin-top: 12px; }
+.pc-pin { position: fixed; z-index: 90; width: 20px; height: 20px; border-radius: 50%; pointer-events: none;
+  background: radial-gradient(circle at 35% 30%, #ffd9cf 0 2px, #c4483e 3px, #8e2a24 10px); box-shadow: 0 4px 3px -1px #2a120c80; }
+.pc-fly { position: fixed; z-index: 85; margin: 0; pointer-events: none; transform-origin: 50% 12px; }
+@media (max-width: 760px) {
+  #record-list:has(> .pc-slot) { grid-template-columns: 1fr; padding: 32px 18px 34px; border-width: 9px; gap: 34px; }
+  .pc-held { padding: 38px 24px 24px; }
+  .pc-held h2 { font-size: 22px; margin-right: 70px; }
+  .pc-held .pc-body p { font-size: 17px; line-height: 32px; background-size: 100% 32px; background-image: repeating-linear-gradient(transparent 0 31px, #dccca9 31px 32px); }
+}
+@media (prefers-reduced-motion: reduce) {
+  #record-list > .pc-slot > .postcard-card { transition: none; }
+  .pc-held { transition: none; }
+}
