@@ -104,8 +104,16 @@
   });
 
   // 같은 창에서 다른 초대 링크(#토큰)를 열면 주소만 바뀌고 화면은 그대로다 — 새로 읽는다
-  const SCREENS = ['home', 'interview', 'invite', 'records', 'library', 'style', 'draft', 'reader', 'prepare', 'invitations', 'start', 'invite-setup'];
+  const SCREENS = ['home', 'interview', 'invite', 'records', 'library', 'style', 'draft', 'reader', 'prepare', 'invitations', 'start', 'start-self', 'invite-setup'];
   window.addEventListener('hashchange', () => { const h = location.hash.slice(1); if (h && !SCREENS.includes(h)) location.reload(); });
-  window.SrvLinks = {failed, done};
+  // 어르신이 인터뷰를 중단했다 — 초대 화면으로 (링크는 이미 시작했으니 다시 시작할 수 없다)
+  function left() {
+    show('invite');
+    h1.textContent = '인터뷰를 중단했어요';
+    content.innerHTML = `<div class="panel role-guest-card"><span class="eyebrow">내말싸미 · 이야기 초대</span><h2>이야기를 저장하지 않고 마쳤어요</h2>
+      <p>이 링크로는 다시 시작할 수 없어요. 다시 이야기하시려면 링크를 보내 주신 분께 새 링크를 부탁해 주세요.</p></div>`;
+    h1.focus({preventScroll: true});
+  }
+  window.SrvLinks = {failed, done, left};
   void load();
 }());
