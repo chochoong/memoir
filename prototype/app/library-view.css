@@ -1,0 +1,84 @@
+/* Thin-book display. The shelf structure and shading adapt
+ * chochoong/memoir prototype/book.html .sh-plank (861–866) and .sh-cover (870–879),
+ * commit 088b23f40efce837909cdc54faa388fa2c2016fb,
+ * blob 6666df60a5ab273814d37d8dff626f8ba488c1b9. Source was read only.
+ * The original shelf structure is adapted to the current ivory/burgundy palette.
+ * Covers cycle through the selected burgundy, navy, and deep-green directions.
+ */
+[data-screen="library"] { --cover-serif:"Memoir Cover Serif","Batang","바탕",serif; padding-top:10px; }
+[data-screen="library"] > h1 { margin:0 0 10px; }
+[data-screen="library"] .ml-intro { margin-bottom:32px; font-size:17px; color:var(--muted); }
+[data-screen="library"] .ml-shelf-heading { display:flex; align-items:baseline; justify-content:space-between; gap:16px; flex-wrap:wrap; margin-bottom:18px; }
+[data-screen="library"] .ml-shelf-heading h2 { font-size:22px; font-weight:600; }
+[data-screen="library"] .ml-shelf-heading h2 > span { color:var(--burgundy); margin-left:8px; font-size:17px; }
+[data-screen="library"] .ml-shelf-heading p { font-size:13px; color:var(--muted); }
+[data-screen="library"] .ml-shelves { --ml-columns:3; --ml-display-height:268px; padding-top:8px; }
+[data-screen="library"] .ml-columns-1 { --ml-columns:1; }
+[data-screen="library"] .ml-columns-2 { --ml-columns:2; }
+[data-screen="library"] .ml-columns-4 { --ml-columns:4; }
+[data-screen="library"] .ml-shelf-row { position:relative; isolation:isolate; margin-bottom:34px; }
+[data-screen="library"] .ml-shelf-row:last-child { margin-bottom:0; }
+[data-screen="library"] .ml-shelf-row:before { content:""; position:absolute; top:0; left:5px; right:5px; height:var(--ml-display-height); border-radius:3px 3px 0 0; background:linear-gradient(0deg,#dfc6a633,transparent 74%),linear-gradient(90deg,#e5d1b51a,transparent 10%,transparent 90%,#e5d1b51a); box-shadow:inset 0 -18px 18px -20px #815a31b3; pointer-events:none; }
+[data-screen="library"] .ml-books { position:relative; z-index:1; display:grid; grid-template-columns:repeat(var(--ml-columns),minmax(0,1fr)); align-items:start; gap:28px; list-style:none; margin:0; padding:0 26px; }
+[data-screen="library"] .ml-books > li { min-width:0; }
+[data-screen="library"] .ml-book-card { display:flex; flex-direction:column; align-items:stretch; width:100%; border:0; border-radius:3px; padding:0; background:none; text-align:left; }
+[data-screen="library"] .ml-cover-bay { display:flex; justify-content:center; align-items:flex-end; height:var(--ml-display-height); padding:14px 5px 0; }
+[data-screen="library"] .ml-cover { --ml-cover-color:#5f1d2c; --ml-cover-ink:#e6c58e; --ml-cover-spine:#3d1420; position:relative; display:flex; flex-direction:column; align-items:center; width:min(100%,180px); min-height:238px; aspect-ratio:.75; padding:28px 18px 20px 24px; color:var(--ml-cover-ink); border-radius:2px 4px 4px 2px; background:url("cover-grain.svg") center/100% 100% no-repeat,radial-gradient(ellipse at 23% 16%,#ffffff05,transparent 54%),radial-gradient(ellipse at 78% 72%,#00000009,transparent 62%),linear-gradient(90deg,#00000036 0,#00000012 4%,#ffffff0a 7%,transparent 12%,transparent 92%,#00000018 100%),var(--ml-cover-color); box-shadow:-3px 1px 0 var(--ml-cover-spine),2px 1px 0 #efe5d3,3px 2px 0 #bba68b,4px 5px 8px #3c261430,inset 0 0 0 1px #0000002b,inset 0 1px 0 #ffffff12; transition:transform .25s ease; }
+[data-screen="library"] .ml-cover:after { content:""; position:absolute; top:2px; bottom:2px; left:10px; width:1px; background:#00000030; box-shadow:1px 0 1px #ffffff0c; pointer-events:none; }
+[data-screen="library"] .ml-cover-title { display:-webkit-box; -webkit-box-orient:vertical; -webkit-line-clamp:3; line-clamp:3; overflow:hidden; margin-top:8px; font-family:var(--cover-serif); font-size:21px; font-weight:600; line-height:1.65; letter-spacing:-.02em; text-align:center; overflow-wrap:anywhere; }
+[data-screen="library"] .ml-cover-rule { position:relative; width:31px; margin-top:auto; padding-top:18px; opacity:.75; }
+[data-screen="library"] .ml-cover-rule:before { content:""; position:absolute; left:50%; bottom:-2px; width:11px; height:14px; transform:translateX(-50%); background:currentColor; clip-path:polygon(50% 0,59% 41%,100% 50%,59% 59%,50% 100%,41% 59%,0 50%,41% 41%); }
+[data-screen="library"] .ml-cover-volume { margin-top:10px; font-family:Georgia,serif; font-size:18px; line-height:1.3; letter-spacing:.12em; opacity:.85; }
+[data-screen="library"] .ml-tone-0 .ml-cover { --ml-cover-color:#5f1d2c; --ml-cover-ink:#e6c58e; --ml-cover-spine:#3d1420; }
+[data-screen="library"] .ml-tone-1 .ml-cover { --ml-cover-color:#1c293b; --ml-cover-ink:#eee2cc; --ml-cover-spine:#111b29; }
+[data-screen="library"] .ml-tone-2 .ml-cover { --ml-cover-color:#1a3128; --ml-cover-ink:#e6c58e; --ml-cover-spine:#102018; }
+[data-screen="library"] .ml-book-card:hover .ml-cover,[data-screen="library"] .ml-book-card:focus-visible .ml-cover { transform:translateY(-5px); }
+[data-screen="library"] .ml-shelf-plank { position:absolute; z-index:2; top:var(--ml-display-height); left:4px; right:4px; height:16px; border-radius:2px 2px 3px 3px; background:repeating-linear-gradient(90deg,#ffffff00 0 37px,#3c1e0a1f 37px 39px,#ffffff00 39px 71px),linear-gradient(#a2724c,#7d5437 40%,#5f3e28); box-shadow:0 14px 16px -8px #3c230f80,inset 0 1px 0 #ffebc859; pointer-events:none; }
+[data-screen="library"] .ml-book-copy { display:flex; flex-direction:column; align-self:stretch; padding:29px 1px 0; }
+[data-screen="library"] .ml-volume-label { display:flex; align-items:center; gap:8px; flex-wrap:wrap; font-size:11px; color:#80665c; }
+[data-screen="library"] .ml-sample-label { padding:1px 5px; border:1px solid #dfcfc2; border-radius:3px; color:#81716b; font-size:10px; }
+[data-screen="library"] .ml-book-copy > strong { display:block; font-size:18px; font-weight:600; line-height:1.65; letter-spacing:-.045em; margin:7px 0; }
+[data-screen="library"] .ml-book-meta { font-size:12px; color:var(--muted); line-height:1.8; }
+[data-screen="library"] .ml-read-label { display:flex; align-items:center; gap:14px; padding-top:8px; color:var(--burgundy); font-size:15px; }
+[data-screen="library"] .ml-read-label > span { font-size:22px; line-height:1; }
+[data-screen="library"] .ml-collection-note { margin-top:34px; padding-top:26px; border-top:1px solid #e7d9cb; text-align:center; font-family:var(--serif); font-size:16px; line-height:1.9; color:#8a7164; }
+[data-screen="library"] .ml-memory-note { text-align:center; color:#897870; font-size:12px; line-height:1.8; margin-top:14px; }
+@media(max-width:1100px) and (min-width:761px) {
+  [data-screen="library"] .ml-books { gap:20px; padding:0 18px; }
+  [data-screen="library"] .ml-cover { padding:27px 13px 20px 19px; }
+  [data-screen="library"] .ml-cover-title { font-size:18px; }
+}
+@media(max-width:760px) {
+  [data-screen="library"] > h1 { font-size:28px; line-height:1.5; }
+  [data-screen="library"] .ml-intro { margin-bottom:27px; font-size:16px; line-height:1.8; }
+  [data-screen="library"] .ml-shelf-heading { display:block; margin-bottom:14px; }
+  [data-screen="library"] .ml-shelf-heading h2 { font-size:21px; }
+  [data-screen="library"] .ml-shelf-heading p { margin-top:5px; font-size:13px; line-height:1.8; }
+  [data-screen="library"] .ml-shelves { --ml-display-height:244px; }
+  [data-screen="library"] .ml-shelf-row { margin-bottom:28px; }
+  [data-screen="library"] .ml-books { gap:18px; padding:0 13px; }
+  [data-screen="library"] .ml-cover-bay { padding:12px 4px 0; }
+  [data-screen="library"] .ml-cover { width:min(100%,165px); min-height:224px; padding:22px 12px 18px 17px; }
+  [data-screen="library"] .ml-cover-title { -webkit-line-clamp:4; line-clamp:4; margin-top:5px; font-size:18px; line-height:1.65; }
+  [data-screen="library"] .ml-cover:after { left:8px; }
+  [data-screen="library"] .ml-cover-rule { padding-top:14px; }
+  [data-screen="library"] .ml-shelf-plank { height:14px; left:2px; right:2px; }
+  [data-screen="library"] .ml-book-copy { padding-top:27px; }
+  [data-screen="library"] .ml-volume-label { font-size:10px; gap:5px; }
+  [data-screen="library"] .ml-book-copy > strong { font-size:18px; }
+  [data-screen="library"] .ml-book-meta { font-size:11px; }
+  [data-screen="library"] .ml-read-label { font-size:15px; }
+  [data-screen="library"] .ml-collection-note { font-size:15px; margin-top:28px; }
+}
+@media(max-width:360px) {
+  [data-screen="library"] .ml-shelves { --ml-display-height:270px; }
+  [data-screen="library"] .ml-books { padding:0 32px; }
+  [data-screen="library"] .ml-cover { width:180px; min-height:244px; padding:28px 18px 20px 24px; }
+  [data-screen="library"] .ml-cover-title { font-size:20px; margin-top:8px; }
+  [data-screen="library"] .ml-volume-label { font-size:11px; }
+  [data-screen="library"] .ml-book-meta { font-size:12px; }
+}
+@media(prefers-reduced-motion:reduce) {
+  [data-screen="library"] .ml-cover { transition:none; }
+  [data-screen="library"] .ml-book-card:hover .ml-cover,[data-screen="library"] .ml-book-card:focus-visible .ml-cover { transform:none; }
+}

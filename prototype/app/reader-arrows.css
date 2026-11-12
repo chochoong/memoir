@@ -1,0 +1,38 @@
+/* 이북 쪽 넘기기 화살표 */
+.ra-side, .ra-pill { display: none; }
+body.ebook-mode.ebook-paged .ra-side:not([hidden]) { display: block; }
+body.ebook-mode.ebook-paged .ra-pill:not([hidden]) { display: flex; }
+.ra-btn {
+  position: fixed; z-index: 40; top: var(--ra-y); transform: translateY(-50%);
+  display: grid; justify-items: center; gap: 8px; width: 84px; padding: 0; border: 0; background: none;
+  color: var(--ebook-ink); font-family: "Malgun Gothic", "Apple SD Gothic Neo", sans-serif; font-size: 14px; font-weight: 600; cursor: pointer;
+}
+.ra-btn.ra-prev { left: var(--ra-left); }
+.ra-btn.ra-next { right: var(--ra-right); }
+.ra-btn .icon {
+  box-sizing: content-box; width: 30px; height: 30px; padding: 17px; border-radius: 50%; stroke-width: 2.2;
+  background: color-mix(in srgb, var(--ebook-bg) 94%, transparent); border: 1px solid var(--ebook-rule);
+  box-shadow: 0 8px 20px -6px #1e120866, 0 2px 4px #1e120826; transition: transform .15s, background .15s, box-shadow .15s;
+}
+.ra-btn span { white-space: nowrap; padding: 2px 8px; border-radius: 999px; background: color-mix(in srgb, var(--ebook-bg) 80%, transparent); }
+.ra-prev .icon { transform: rotate(180deg); }
+.ra-btn:not(.is-end):hover .icon { background: var(--ebook-bg); box-shadow: 0 12px 24px -6px #1e120880, 0 2px 4px #1e120833; }
+.ra-btn.ra-next:not(.is-end):hover .icon { transform: translateX(3px) scale(1.08); }
+.ra-btn.ra-prev:not(.is-end):hover .icon { transform: translateX(-3px) rotate(180deg) scale(1.08); }
+.ra-btn.ra-next:not(.is-end):active .icon { transform: scale(.95); }
+.ra-btn.ra-prev:not(.is-end):active .icon { transform: rotate(180deg) scale(.95); }
+.ra-btn.is-end, .ra-pbtn.is-end { opacity: .3; cursor: default; }
+/* 휴대폰: 책 아래 막대 */
+.ra-pill {
+  position: fixed; z-index: 46; left: 50%; transform: translateX(-50%);
+  align-items: center; gap: 4px; padding: 4px; border-radius: 999px;
+  background: color-mix(in srgb, var(--ebook-bg) 94%, transparent); border: 1px solid var(--ebook-rule);
+  box-shadow: 0 8px 22px -8px #1e120873; -webkit-backdrop-filter: blur(8px); backdrop-filter: blur(8px);
+  font-family: "Malgun Gothic", "Apple SD Gothic Neo", sans-serif; color: var(--ebook-ink);
+  transition: bottom .18s ease;
+}
+.ra-pbtn { display: inline-flex; align-items: center; gap: 4px; min-width: 88px; min-height: 48px; padding: 0 14px; border: 0; border-radius: 999px; background: transparent; color: inherit; font-size: 16px; font-weight: 600; justify-content: center; }
+.ra-pbtn:not(.is-end):active { background: var(--ebook-rule); }
+.ra-pbtn .icon { width: 22px; height: 22px; stroke-width: 2.2; }
+.ra-count { min-width: 74px; text-align: center; font-size: 14px; color: var(--ebook-muted); font-variant-numeric: tabular-nums; }
+/* 읽기 막대에 겹쳐 있던 쪽수 단추는 키보드용으로만 남는다(기존 그대로) */

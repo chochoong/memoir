@@ -1,0 +1,68 @@
+{
+  "source_file": "NotoSerifKR.ttf",
+  "source_bytes": 23795420,
+  "source_sha256": "11f8d5de6f1b79195efba3828aaa2ec95c1178f5ae976fb23c8d53250a9938f3",
+  "source_name_metadata": {
+    "1": [
+      "Noto Serif KR ExtraLight"
+    ],
+    "2": [
+      "Regular"
+    ],
+    "6": [
+      "NotoSerifKR-ExtraLight"
+    ],
+    "13": [
+      "This Font Software is licensed under the SIL Open Font License, Version 1.1. This license is available with a FAQ at: https://openfontlicense.org"
+    ],
+    "14": [
+      "https://openfontlicense.org"
+    ],
+    "16": [
+      "Noto Serif KR"
+    ],
+    "17": [
+      "ExtraLight"
+    ]
+  },
+  "source_variable_axes": [
+    {
+      "tag": "wght",
+      "min": 200.0,
+      "default": 200.0,
+      "max": 900.0
+    }
+  ],
+  "derived_file": "memoir-cover-serif-600-ko.woff2",
+  "derived_bytes": 1165692,
+  "derived_sha256": "c1029f5eca8716a277b653724b121f40009c56b126a4dd177264aa193345071b",
+  "derived_family": [
+    "Memoir Cover Serif"
+  ],
+  "derived_subfamily": [
+    "SemiBold"
+  ],
+  "derived_weight": 600,
+  "derived_is_variable": false,
+  "embedding_fsType": 0,
+  "unicode_ranges_requested": [
+    "U+0020-024F",
+    "U+1100-11FF",
+    "U+1E00-1EFF",
+    "U+2000-206F",
+    "U+20A0-20CF",
+    "U+2100-218F",
+    "U+2E00-2E7F",
+    "U+3000-303F",
+    "U+3130-318F",
+    "U+A960-A97F",
+    "U+AC00-D7A3",
+    "U+D7B0-D7FF",
+    "U+FF00-FFEF"
+  ],
+  "mapped_codepoints": 12327,
+  "modern_hangul_syllables": 11172,
+  "missing_modern_hangul": 0,
+  "printable_ascii_complete": true,
+  "license": "SIL Open Font License 1.1; see OFL-NotoSerifKR.txt"
+}

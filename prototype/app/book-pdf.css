@@ -1,0 +1,78 @@
+/* 4. 자서전 PDF 저장 */
+/* 읽기 화면: 아래 독서 메뉴가 네 칸이 된다 */
+/* 독서 메뉴: 목차 · 책갈피 · 보기 설정 · PDF 저장 · 책 지우기 — 숨긴 칸은 자리를 차지하지 않는다 */
+body .ebook-toolbar.has-pdf { grid-template-columns: none; grid-auto-flow: column; grid-auto-columns: minmax(0, 1fr); max-width: 760px; }
+body .ebook-toolbar #ebook-remove-book { color: #a2463a; }
+body.ebook-mode[data-reader-theme="night"] .ebook-toolbar #ebook-remove-book { color: #e59a8e; }
+
+/* 책장: 책 아래 작은 버튼 */
+[data-screen="library"] .ml-books > li { display: flex; flex-direction: column; }
+.ml-pdf { align-self: flex-start; margin: 2px 0 0 0; min-height: 44px; font-size: 14px; color: var(--muted); }
+.ml-pdf:hover { color: var(--burgundy); }
+
+
+/* 고르는 창 */
+.pdf-dialog { width: 560px; padding: 32px 34px 26px; }
+.pdf-dialog h2 { margin: 8px 0 16px; font-size: 24px; }
+.pdf-preview { display: flex; justify-content: center; gap: 14px; padding: 18px 0 20px; margin-bottom: 6px; background: var(--soft, #f1e7c9); border-radius: 12px; }
+.pdf-sheet { width: 74px; height: 104px; background: #fffdf6; border-radius: 2px; box-shadow: 0 6px 14px -6px #4a33184d, 0 0 0 1px #e3d4b4; padding: 10px 9px; display: flex; flex-direction: column; gap: 6px; }
+.pdf-cover { background: #6f2c3c; justify-content: center; align-items: center; text-align: center; }
+.pdf-cover b { font-family: var(--serif); font-size: 8.5px; line-height: 1.45; color: #f1dcb4; font-weight: 600; }
+.pdf-cover i { width: 18px; height: 1px; background: #e6c991; }
+.pdf-sheet s { display: block; height: 3px; background: #e2d6be; border-radius: 2px; }
+.pdf-toc s:nth-child(2) { width: 80%; } .pdf-toc s:nth-child(3) { width: 65%; }
+.pdf-text u { display: block; width: 50%; height: 5px; background: #c9b48f; border-radius: 2px; margin-bottom: 3px; }
+.pdf-text s:nth-child(odd) { width: 88%; }
+.pdf-options { display: grid; gap: 14px; }
+.pdf-options fieldset { border: 0; padding: 0; margin: 0; }
+.pdf-options legend { font-size: 15px; font-weight: 700; margin-bottom: 8px; color: var(--ink); }
+.pdf-seg { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.pdf-seg label { cursor: pointer; }
+.pdf-seg input { position: absolute; opacity: 0; pointer-events: none; }
+.pdf-seg span { display: flex; flex-direction: column; justify-content: center; min-height: 58px; padding: 8px 14px; border: 1px solid var(--line); border-radius: 10px; background: #fffdf5; }
+.pdf-seg b { font-size: 16px; color: var(--ink); }
+.pdf-seg small { font-size: 12.5px; color: var(--muted); }
+.pdf-seg input:checked + span { border-color: var(--burgundy); background: var(--blush); box-shadow: inset 0 0 0 1px var(--burgundy); }
+.pdf-seg input:checked + span b { color: var(--burgundy); }
+.pdf-seg input:focus-visible + span { outline: 3px solid var(--burgundy); outline-offset: 2px; }
+.pdf-check { display: flex; align-items: center; gap: 10px; font-size: 15px; min-height: 44px; }
+.pdf-check input { width: 20px; height: 20px; accent-color: var(--burgundy); }
+.review-dialog .pdf-pages { margin: -4px 0 0; font-size: 13.5px; color: var(--muted); }
+.pdf-make { width: 100%; }
+.review-dialog .pdf-help { margin: 0; font-size: 13.5px; line-height: 1.7; color: var(--muted); }
+.pdf-help small { font-size: 12px; opacity: .85; }
+@media (max-width: 760px) { .pdf-dialog { padding: 26px 18px 20px; } .pdf-sheet { width: 60px; height: 84px; } }
+
+/* 인쇄용 책 — 화면에는 보이지 않는다 */
+#print-book { display: none; }
+@media print {
+  body.printing-book > *:not(#print-book) { display: none !important; }
+  body.printing-book { background: #fff !important; margin: 0; }
+  body.printing-book #print-book { display: block; color: #2b241c; font-family: "Batang", "바탕", "Noto Serif KR", "Nanum Myeongjo", "AppleMyungjo", serif; }
+  #print-book section { break-after: page; }
+  #print-book section:last-child { break-after: auto; }
+  .pb-cover { height: 100%; min-height: 170mm; display: flex; flex-direction: column; justify-content: center; text-align: center; }
+  .pb-a4 .pb-cover { min-height: 240mm; }
+  .pb-kicker { font-size: 10pt; letter-spacing: .25em; color: #8a6d4c; }
+  .pb-cover h1 { font-size: 24pt; line-height: 1.5; margin: 14pt 0; letter-spacing: -.03em; color: #5b2333; }
+  .pb-rule { display: block; width: 28mm; height: .6pt; background: #b08a5a; margin: 6pt auto 16pt; }
+  .pb-by { font-size: 11pt; color: #6e5a45; }
+  .pb-date { font-size: 9.5pt; color: #9a8a76; margin-top: 4pt; }
+  .pb-toc h2 { font-size: 16pt; margin: 10mm 0 8mm; letter-spacing: .2em; }
+  .pb-toc ol { list-style: none; padding: 0; margin: 0; }
+  .pb-toc li { display: flex; gap: 10pt; padding: 6pt 0; border-bottom: .5pt solid #e2d6c0; font-size: 12pt; }
+  .pb-toc li span { color: #a0805a; font-size: 10pt; min-width: 18pt; }
+  .pb-num { display: block; font-size: 9.5pt; letter-spacing: .2em; color: #a0805a; margin-top: 12mm; }
+  .pb-chapter h2 { font-size: 17pt; margin: 4pt 0 12pt; color: #4d3a2a; letter-spacing: -.02em; }
+  .pb-chapter p { font-size: 11pt; line-height: 2; margin: 0 0 9pt; text-indent: 1em; text-align: left; orphans: 2; widows: 2; word-break: keep-all; }
+  .pb-a4 .pb-chapter p { font-size: 12pt; }
+  .pb-large .pb-chapter p { font-size: 14pt; line-height: 1.95; }
+  .pb-large.pb-a4 .pb-chapter p { font-size: 15pt; }
+  .pb-large .pb-chapter h2 { font-size: 20pt; }
+  .pb-end { text-align: center; padding-top: 50mm; color: #7a6650; }
+  .pb-end span { font-size: 16pt; color: #b08a5a; }
+  .pb-end p { font-size: 12pt; margin: 8pt 0 30mm; }
+  .pb-end small { font-size: 8.5pt; line-height: 1.8; color: #9a8a76; }
+}
+body .ebook-toolbar.has-remove button span { white-space: nowrap; }
+@media (max-width: 760px) { body .ebook-toolbar.has-remove { gap: 0; } body .ebook-toolbar.has-remove button { font-size: 13px; padding-left: 0; padding-right: 0; } }

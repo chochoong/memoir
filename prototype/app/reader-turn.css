@@ -1,0 +1,56 @@
+/* 종이책 넘김 — 휘는 그늘 · 밑장 그림자 (두 쪽 · 한 쪽 보기 공통) */
+.paper-turn .pt-shade { position: absolute; inset: 0; z-index: 3; pointer-events: none; opacity: 0;
+  background: linear-gradient(90deg, #2a180c59 0%, #2a180c14 22%, #ffffff33 62%, #ffffff00 78%, #2a180c2e 100%); }
+.paper-turn .ebook-turn-back .pt-shade { background: linear-gradient(270deg, #2a180c59 0%, #2a180c14 22%, #ffffff33 62%, #ffffff00 78%, #2a180c2e 100%); }
+.paper-turn.turn-back:not(.single) .ebook-turn-front .pt-shade { background: linear-gradient(270deg, #2a180c59 0%, #2a180c14 22%, #ffffff33 62%, #ffffff00 78%, #2a180c2e 100%); }
+.paper-turn.turn-back:not(.single) .ebook-turn-back .pt-shade { background: linear-gradient(90deg, #2a180c59 0%, #2a180c14 22%, #ffffff33 62%, #ffffff00 78%, #2a180c2e 100%); }
+.paper-turn .ebook-turn-face { isolation: isolate; }
+.paper-turn .ebook-turn-face > .ebook-cover-page { min-height: 100%; }
+body.ebook-paged .ebook-flip-sheet.paper-turn::after { display: none; }
+
+/* 밑장에 지는 그림자 */
+.pt-cast { position: absolute; z-index: 7; top: 0; bottom: 0; pointer-events: none; opacity: 0; }
+body.ebook-spread .pt-cast { left: 50%; right: 0; background: linear-gradient(90deg, #1e120852, #1e120814 35%, transparent 70%); }
+body.ebook-spread .pt-cast.back { left: 0; right: 50%; background: linear-gradient(270deg, #1e120852, #1e120814 35%, transparent 70%); }
+.pt-cast.single { left: 0; right: 0; background: linear-gradient(90deg, #1e12084d, #1e120812 40%, transparent 75%); }
+
+/* 한 쪽 보기(휴대폰 · 좁은 창)에서도 넘기는 종이를 보인다 */
+body.ebook-paged:not(.ebook-spread) .ebook-flip-sheet.paper-turn {
+  display: block; position: absolute; z-index: 8; inset: 0; width: 100%; height: 100%; margin: 0;
+  padding: 0 !important; background: transparent !important; box-shadow: none; overflow: visible !important;
+  transform-style: preserve-3d; backface-visibility: visible !important; pointer-events: none;
+}
+body.ebook-paged:not(.ebook-spread) .paper-turn .ebook-turn-face {
+  position: absolute; inset: 0; margin: 0; overflow: hidden; pointer-events: none;
+  padding: 24px clamp(18px, 4vw, 40px);
+  background: var(--page-grain, none), var(--ebook-bg); color: var(--ebook-ink);
+  font-size: var(--ebook-font-size); line-height: var(--ebook-line-height); font-family: var(--ebook-font-family);
+  backface-visibility: hidden; -webkit-backface-visibility: hidden;
+  border-radius: 1px 4px 4px 1px; box-shadow: 10px 2px 26px #23140d33, inset -1px 0 var(--ebook-rule);
+}
+body.ebook-paged:not(.ebook-spread) .paper-turn .ebook-turn-back { transform: rotateY(180deg); box-shadow: -10px 2px 26px #23140d33; }
+body.ebook-paged:not(.ebook-spread) .paper-turn .ebook-turn-face .ebook-section + .ebook-section { margin-top: 1.7em; }
+/* 두 쪽 보기 넘김 종이에도 종이 결 */
+@media (min-width: 1100px) {
+  body.ebook-spread.ebook-paged .paper-turn .ebook-turn-face { background-color: var(--ebook-bg); background-image: var(--page-grain, none); }
+}
+/* 두 쪽 보기: 넘어오는 종이가 덮기 전까지 보이는 예전 쪽 */
+@media (min-width: 1100px) {
+  body.ebook-spread.ebook-paged #ebook-viewport > .pt-under {
+    position: absolute; z-index: 6; top: 0; bottom: 0; width: 50%; height: 100%; margin: 0; overflow: hidden; pointer-events: none;
+    padding: var(--ebook-spread-page-padding); font-family: var(--ebook-font-family); font-size: var(--ebook-font-size);
+    line-height: var(--ebook-line-height); color: var(--ebook-ink); overflow-wrap: anywhere;
+  }
+  body.ebook-spread.ebook-paged #ebook-viewport > .pt-under.left { left: 0; border-radius: 6px 0 0 4px;
+    background: var(--page-grain, none), linear-gradient(to right, #6b4a2a12, transparent 8%, transparent 78%, #4a301a1c 93%, #3a231238), var(--ebook-bg); }
+  body.ebook-spread.ebook-paged #ebook-viewport > .pt-under.right { right: 0; border-radius: 0 6px 4px 0;
+    background: var(--page-grain, none), linear-gradient(to right, #3a231238, #4a301a1c 7%, transparent 22%, transparent 92%, #6b4a2a12), var(--ebook-bg); }
+  body.ebook-spread.ebook-paged .pt-under .ebook-cover-page { display: flex; flex-direction: column; justify-content: center; min-height: 100%; }
+}
+
+/* 한 쪽 보기: 바깥 원근이 겹치지 않게(넘김 종이 자체의 원근만) */
+body.ebook-paged:not(.ebook-spread) .ebook-viewport { perspective: none; }
+
+/* 손가락 밀기 고침(23c6871부터 있던 문제) — 쪽마다 세로 스크롤 상자라서 바깥 .ebook-stage 의 pan-y 가 쪽 안까지 닿지 않았다.
+   브라우저가 가로 밀기를 가져가 pointercancel 이 나고 넘김이 되지 않았다. 쪽 자체에도 같은 값을 준다. */
+body.ebook-paged #ebook-content, body.ebook-paged #ebook-right-content, body.ebook-paged #ebook-viewport { touch-action: pan-y; }

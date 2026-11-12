@@ -1,0 +1,45 @@
+/* 6. 엽서 지우기 */
+.pc-actions { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.pc-actions[hidden] { display: none; }
+body:not(.ebook-mode) .pc-trash { color: #8f4a3c; font-size: 15px; min-height: 48px; }
+.pc-trash .icon { width: 16px; height: 16px; }
+.pc-confirm { margin-top: 6px; padding: 16px 18px; border: 1px solid #e3b9a9; border-radius: 10px; background: #fff3ec; }
+.pc-confirm[hidden] { display: none; }
+.pc-confirm strong { display: block; font-size: 18px; color: #6d2f2a; }
+.pc-confirm p { margin: 6px 0 12px; font-size: 14.5px; line-height: 1.7; color: #7a5a4c; }
+.pc-confirm > div { display: flex; gap: 10px; justify-content: flex-end; flex-wrap: wrap; }
+.pc-confirm-delete { background: #9b3b30; color: #fff; border-color: #9b3b30; }
+.pc-confirm-delete:hover { background: #7f2d24; }
+.pc-held.confirming .pc-body { opacity: .55; }
+/* 보드 위 엽서마다 × — PC는 엽서에 마우스를 올리거나 키보드로 갔을 때, 터치 화면은 늘 보인다 */
+.pc-x {
+  position: absolute; top: -14px; right: -14px; z-index: 3; width: 44px; height: 44px; padding: 0;
+  display: grid; place-items: center; border: 0; background: none; color: #6d3a2e; cursor: pointer;
+  opacity: 0; transition: opacity .15s, transform .15s;
+}
+.pc-x::before { content: ""; position: absolute; inset: 7px; border-radius: 50%; background: #fffaf0; border: 1px solid #c9a98a; box-shadow: 0 2px 6px #3b220e40; }
+.pc-x .icon { position: relative; width: 16px; height: 16px; stroke-width: 2.2; }
+.pc-slot:hover .pc-x, .pc-x:focus-visible, .pc-slot:focus-within .pc-x { opacity: 1; }
+.pc-x:hover::before { background: #9b3b30; border-color: #9b3b30; }
+.pc-x:hover { color: #fff; }
+.pc-x:focus-visible { outline: none; }
+.pc-x:focus-visible::before { outline: 3px solid var(--burgundy); outline-offset: 2px; }
+@media (hover: none) { .pc-x { opacity: .92; } }
+.pc-slot:has(> [data-pulled]) .pc-x { visibility: hidden; }
+
+/* 여러 장 지우기 */
+.pc-select-toggle { min-height: 56px; }
+.pc-select-toggle[aria-pressed="true"] { background: var(--blush); border-color: var(--burgundy); }
+.pc-select-toggle .icon { width: 18px; height: 18px; }
+#record-list.pc-selecting .pc-x { display: none; }
+#record-list.pc-selecting .pc-slot::after {
+  content: ""; position: absolute; top: 12px; left: 12px; z-index: 3; width: 30px; height: 30px; border-radius: 50%;
+  background: #fffdf6; border: 2px solid #b39a7c; box-shadow: 0 1px 3px #3b220e33; pointer-events: none;
+}
+#record-list.pc-selecting .pc-slot.is-picked::after {
+  background: var(--burgundy) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23fff' stroke-width='3' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M5 12.5l4.5 4.5L19 7.5'/%3E%3C/svg%3E") center/18px no-repeat;
+  border-color: var(--burgundy);
+}
+#record-list.pc-selecting .pc-slot > .postcard-card .record-meta { padding-left: 34px; }
+#record-list.pc-selecting .pc-slot.is-picked > .postcard-card { outline: 3px solid var(--burgundy); outline-offset: 3px; transform: rotate(calc(var(--tilt) * -1)) translateY(-6px); }
+#record-list.pc-selecting .pc-slot:not(.is-picked) > .postcard-card { filter: saturate(.85); }

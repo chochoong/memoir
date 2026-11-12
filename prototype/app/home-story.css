@@ -1,0 +1,17 @@
+/* Each recent story has one native button, including its surrounding space. */
+/* The home promise uses the surrounding UI font; cover/reader serif stays local. */
+#home-heading{font-family:inherit;letter-spacing:-.02em}
+@media(max-width:360px){
+  #home-heading br{display:none}
+  [data-screen="home"] .hero{min-height:690px}
+}
+.recent-row{width:100%;border:0;border-top:1px solid #efe5dd;border-radius:0;background:transparent;color:inherit;font:inherit;text-align:left;white-space:normal;cursor:pointer;touch-action:pan-y;-webkit-tap-highlight-color:#713c3220}
+.recent-row .memory-thumbnail{flex-shrink:0}
+.recent-row .recent-copy{flex:1;overflow-wrap:anywhere}
+.recent-row .recent-copy strong{line-height:1.6}
+.recent-row .recent-copy small{line-height:1.7}
+.recent-chevron{display:flex;align-items:center;justify-content:center;flex-shrink:0;color:#98725e}
+.recent-row:hover{background:#f3e9df80}
+.recent-row:active{background:#eddfd180}
+.recent-row:focus-visible{outline:3px solid var(--burgundy);outline-offset:3px;border-radius:5px}
+@media(max-width:359px){.recent-panel{padding-left:16px;padding-right:16px}.recent-row{gap:10px}.recent-row .memory-thumbnail{width:42px;height:50px}.recent-chevron .icon{width:18px}}

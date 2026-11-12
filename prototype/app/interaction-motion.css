@@ -1,0 +1,54 @@
+/* Approved motion layer: a stationary mobile selection with an icon-only snap.
+   The animation itself is driven by interaction-motion.js. */
+@media (max-width: 760px) {
+  body:not(.ebook-mode) .mobile-nav a[data-nav] {
+    position: relative;
+    isolation: isolate;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: 22px auto;
+    align-content: center;
+    justify-items: center;
+    background: transparent;
+  }
+
+  /* Sharing the icon's grid cell keeps the capsule aligned when text wraps.
+     Absolute positioning leaves the existing link size and label gap intact. */
+  body:not(.ebook-mode) .mobile-nav a[data-nav]::before {
+    content: "";
+    position: absolute;
+    grid-area: 1 / 1;
+    place-self: center;
+    width: 44px;
+    height: 30px;
+    border-radius: 15px;
+    background: transparent;
+    pointer-events: none;
+    z-index: 0;
+  }
+
+  body:not(.ebook-mode) .mobile-nav a[data-nav] > .icon {
+    grid-area: 1 / 1;
+    position: relative;
+    z-index: 1;
+    transform-box: fill-box;
+    transform-origin: center;
+  }
+
+  body:not(.ebook-mode) .mobile-nav a[data-nav][aria-current="page"] {
+    background: transparent;
+    color: var(--burgundy);
+  }
+
+  body:not(.ebook-mode) .mobile-nav a[data-nav][aria-current="page"]::before {
+    background: var(--blush);
+  }
+}
+
+/* Scale only: preserve native focus outlines and existing rotated SVGs. */
+@media (prefers-reduced-motion: reduce) {
+  body:not(.ebook-mode) .mobile-nav a[data-nav] > .icon,
+  body:not(.ebook-mode) .motion-press {
+    scale: none !important;
+  }
+}
