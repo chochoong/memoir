@@ -1,0 +1,153 @@
+@charset "UTF-8";
+
+.pending-stories {
+  margin: 0 0 22px;
+  padding: 0 0 18px;
+  border-bottom: 1px solid var(--line);
+}
+
+.pending-stories > summary {
+  padding: 12px 0;
+  color: var(--burgundy);
+  font-size: 16px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.pending-stories > summary:focus-visible {
+  outline: 3px solid var(--burgundy);
+  outline-offset: 5px;
+}
+
+.pending-story-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
+  padding: 16px 0;
+  border-top: 1px solid var(--line);
+}
+
+.pending-story-row strong {
+  min-width: 0;
+  font-size: 17px;
+  font-weight: 500;
+  overflow-wrap: anywhere;
+}
+
+.pending-story-row button {
+  flex: 0 0 auto;
+  min-height: 48px;
+}
+
+.review-dialog.story-review-dialog {
+  width: min(720px, calc(100% - 32px));
+  max-width: none;
+  max-height: calc(100dvh - 32px);
+  overflow: auto;
+}
+
+.review-dialog.story-review-dialog[open] {
+  display: flex;
+  flex-direction: column;
+}
+
+.story-review-dialog > .eyebrow,
+.story-review-dialog > h2,
+.story-review-dialog > .small-copy,
+.story-review-dialog > .dialog-actions {
+  flex-shrink: 0;
+}
+
+.story-review-dialog h2 {
+  margin-bottom: 20px;
+}
+
+.story-review-body {
+  flex: 0 1 auto;
+  min-height: 56px;
+  max-height: min(38dvh, 380px);
+  margin: 0 0 18px;
+  padding: 20px 22px;
+  overflow: auto;
+  overscroll-behavior: contain;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--canvas);
+}
+
+.story-review-dialog .story-review-body p {
+  margin: 0;
+  color: var(--ink);
+  font-size: 18px;
+  line-height: 1.9;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.story-review-dialog .story-review-body p + p {
+  margin-top: 1.2em;
+}
+
+#postcard-body p {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.story-review-dialog .dialog-actions {
+  margin-top: 22px;
+}
+
+@media (max-width: 600px) {
+  .review-dialog.story-review-dialog {
+    padding: 20px;
+  }
+
+  .story-review-dialog h2 {
+    margin-bottom: 12px;
+    font-size: 22px;
+    line-height: 1.45;
+  }
+
+  .story-review-dialog #story-review-note {
+    margin: 0;
+    font-size: 12px;
+    line-height: 1.7;
+  }
+
+  .story-review-dialog .dialog-actions {
+    margin-top: 16px;
+  }
+
+  .story-review-dialog .dialog-actions .button {
+    min-height: 52px;
+    padding: 10px;
+  }
+
+  .pending-stories > summary {
+    font-size: 14px;
+  }
+
+  .pending-story-row {
+    align-items: flex-start;
+    gap: 12px;
+  }
+
+  .pending-story-row strong {
+    padding-top: 9px;
+    font-size: 15px;
+  }
+
+  .pending-story-row button {
+    font-size: 13px;
+  }
+
+  .story-review-body {
+    margin-bottom: 12px;
+    padding: 16px;
+  }
+
+  .story-review-dialog .story-review-body p {
+    font-size: 17px;
+  }
+}

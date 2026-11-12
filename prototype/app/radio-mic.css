@@ -1,0 +1,12 @@
+/* 8. 인터뷰 마이크 — 충격 방지 거치대에 매단 스튜디오 콘덴서 마이크로 다시 그림(radio-art.js). 색은 라디오 그림과 같은 갈색 · 놋쇠 계열 */
+.radio-scene .rd-shock-rod { stroke: #4a3a2e; stroke-width: 3; stroke-linecap: round; }
+.radio-scene .rd-shock-ring { fill: none; stroke: #3d2e22; stroke-width: 3.2; stroke-linecap: round; }
+.radio-scene .rd-shock-ring.back { stroke: #6d5a49; stroke-width: 2.6; }
+.radio-scene .rd-elastic { stroke: #b48a62; stroke-width: 1.4; stroke-linecap: round; opacity: .9; }
+.radio-scene .rd-cable { fill: none; stroke: #2b2420; stroke-width: 3; stroke-linecap: round; }
+.radio-scene .rd-mic-led {
+  fill: var(--radio-sign-fill, var(--_radio-sign-fill, #5a4a3e));
+  stroke: #1d1916; stroke-width: 1;
+  filter: var(--radio-sign-glow, var(--_radio-sign-glow, none));
+  transition: fill .3s;
+}

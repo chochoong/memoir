@@ -1,0 +1,24 @@
+/* 자서전 책장 — 책마다 「PDF로 저장 · 책 지우기」, 여러 권 고르기 */
+[data-screen="library"] .ml-actions { display: flex; flex-wrap: wrap; gap: 0 14px; padding-left: 0; }
+[data-screen="library"] .ml-actions .ml-pdf { margin: 0; }
+body:not(.ebook-mode) .ml-remove { min-height: 44px; font-size: 14px; color: #8f4a3c; }
+.ml-remove .icon { width: 15px; height: 15px; stroke-width: 2; }
+.ml-remove:hover { color: #9b3b30; }
+.ml-select-toggle { min-height: 48px; margin-left: auto; }
+.ml-select-toggle .icon { width: 18px; height: 18px; }
+.ml-select-toggle[aria-pressed="true"] { background: var(--blush); border-color: var(--burgundy); }
+[data-screen="library"] .ml-shelf-heading:has(.ml-select-toggle) { align-items: center; }
+[data-screen="library"].ml-selecting .ml-actions { visibility: hidden; }
+[data-screen="library"].ml-selecting .ml-books > li { position: relative; }
+[data-screen="library"].ml-selecting .ml-cover-bay { position: relative; }
+[data-screen="library"].ml-selecting .ml-cover::before {
+  content: ""; position: absolute; bottom: 10px; right: 10px; z-index: 2; width: 30px; height: 30px; border-radius: 50%;
+  background: #fffdf6; border: 2px solid #b39a7c; box-shadow: 0 1px 3px #0005;
+}
+[data-screen="library"].ml-selecting li.is-picked .ml-cover::before {
+  background: var(--burgundy) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23fff' stroke-width='3' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M5 12.5l4.5 4.5L19 7.5'/%3E%3C/svg%3E") center/18px no-repeat;
+  border-color: #fff;
+}
+[data-screen="library"].ml-selecting li.is-picked .ml-cover { transform: translateY(-10px); outline: 3px solid var(--burgundy); outline-offset: 4px; }
+[data-screen="library"].ml-selecting li:not(.is-picked) .ml-cover { filter: saturate(.8) brightness(.95); }
+@media (max-width: 760px) { [data-screen="library"] .ml-actions { gap: 0 14px; } }

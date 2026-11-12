@@ -1,0 +1,43 @@
+/* 1. 시작 갈래 — 고르는 화면(B안) · 초대 주소 만들기 */
+.sc-screen { max-width: 880px; }
+.sc-screen > h1 { font-size: 34px; margin: 8px 0 10px; }
+.sc-intro { color: var(--muted); font-size: 17px; line-height: 1.8; margin: 0 0 26px; max-width: 620px; }
+.sc-choices { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+.sc-choice {
+  display: flex; flex-direction: column; align-items: flex-start; gap: 10px; text-align: left;
+  padding: 30px 28px 26px; border: 1px solid var(--line); border-radius: 16px; background: var(--paper);
+  box-shadow: var(--shadow); cursor: pointer; transition: transform .2s, border-color .2s, box-shadow .2s;
+}
+.sc-choice:hover, .sc-choice:focus-visible { transform: translateY(-3px); border-color: var(--burgundy); box-shadow: 0 14px 30px -12px #5c46204d; }
+.sc-choice:focus-visible { outline: 3px solid var(--burgundy); outline-offset: 3px; }
+.sc-choice-icon { display: grid; place-items: center; width: 64px; height: 64px; border-radius: 50%; background: var(--blush); color: var(--burgundy); margin-bottom: 6px; }
+.sc-choice-icon .icon { width: 30px; height: 30px; }
+.sc-choice strong { font-size: 22px; line-height: 1.45; color: var(--ink); }
+.sc-choice span:not(.sc-choice-icon) { font-size: 15.5px; line-height: 1.75; color: var(--muted); }
+.sc-choice em { margin-top: auto; padding-top: 12px; font-style: normal; font-weight: 600; color: var(--burgundy); display: inline-flex; align-items: center; gap: 8px; }
+.sc-choice em .icon { width: 18px; height: 18px; }
+.sc-back, .sc-links .text-button { margin-top: 22px; display: inline-flex; align-items: center; gap: 6px; }
+.sc-links { display: flex; gap: 18px; flex-wrap: wrap; }
+.sc-invite-form { padding: 28px 30px 24px; display: grid; gap: 22px; }
+.sc-invite-form fieldset { border: 0; margin: 0; padding: 0; display: grid; gap: 12px; }
+.sc-invite-form legend { display: flex; align-items: center; gap: 10px; font-size: 19px; font-weight: 700; margin-bottom: 12px; }
+.sc-step { display: grid; place-items: center; width: 28px; height: 28px; border-radius: 50%; background: var(--burgundy); color: #fff; font-size: 14px; }
+.sc-chips { display: flex; flex-wrap: wrap; gap: 10px; }
+.sc-chip input { position: absolute; opacity: 0; pointer-events: none; }
+.sc-chip span { display: inline-flex; align-items: center; min-height: 46px; padding: 0 18px; border: 1px solid var(--line); border-radius: 999px; background: #fffdf5; font-size: 16px; cursor: pointer; }
+.sc-chip input:checked + span { border-color: var(--burgundy); background: var(--blush); color: var(--burgundy); font-weight: 600; }
+.sc-chip input:focus-visible + span { outline: 3px solid var(--burgundy); outline-offset: 2px; }
+.sc-name { display: grid; gap: 6px; max-width: 360px; font-size: 14px; color: var(--muted); }
+.sc-name[hidden] { display: none; }
+.sc-name input { min-height: 48px; padding: 0 14px; border: 1px solid var(--line); border-radius: 10px; font-size: 17px; }
+.sc-error { color: #a33; font-size: 14px; margin: 0; min-height: 0; }
+.sc-error:empty { display: none; }
+.sc-make { justify-self: start; display: inline-flex; align-items: center; gap: 10px; min-height: 54px; padding: 0 24px; font-size: 17px; }
+.sc-fine { margin: -8px 0 0; font-size: 13px; color: var(--muted); }
+.sc-fine:empty { display: none; }
+@media (max-width: 760px) {
+  .sc-choices { grid-template-columns: 1fr; }
+  .sc-screen > h1 { font-size: 28px; }
+  .sc-invite-form { padding: 22px 18px; }
+  .sc-make { justify-self: stretch; justify-content: center; }
+}

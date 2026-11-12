@@ -1,0 +1,200 @@
+/* Selected PC layout: the existing four navigation links stay at the top.
+   Keep these overrides outside mobile and the full-screen book reader. */
+@media (min-width: 761px) {
+  html:has(> body:not(.ebook-mode)) {
+    scroll-padding-top: 116px;
+  }
+
+  body:not(.ebook-mode) {
+    --pc-navigation-height: 104px;
+    --pc-navigation-gutter: clamp(24px, 3vw, 48px);
+  }
+
+  body:not(.ebook-mode) .sidebar {
+    position: fixed;
+    inset: 0 0 auto;
+    z-index: 40;
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    gap: 24px;
+    width: 100%;
+    height: var(--pc-navigation-height);
+    min-height: 0;
+    padding: 0 calc(var(--pc-navigation-gutter) + 68px) 0 var(--pc-navigation-gutter);
+    background: var(--paper);
+    border-right: 0;
+    border-bottom: 1px solid var(--line);
+  }
+
+  body:not(.ebook-mode) .sidebar .brand {
+    flex: 0 0 185px;
+    gap: 12px;
+    margin: 0;
+    font-size: 30px;
+  }
+
+  body:not(.ebook-mode) .sidebar .brand-mark {
+    width: 37px;
+    height: 43px;
+  }
+
+  body:not(.ebook-mode) .sidebar .brand-mark .icon {
+    width: 26px;
+    height: 26px;
+  }
+
+  body:not(.ebook-mode) .sidebar .brand small {
+    margin-top: 8px;
+    font-size: 11px;
+  }
+
+  body:not(.ebook-mode) .sidebar .nav-label,
+  body:not(.ebook-mode) .sidebar .sidebar-note,
+  body:not(.ebook-mode) .sidebar .sidebar-foot {
+    display: none;
+  }
+
+  body:not(.ebook-mode) .side-nav {
+    display: flex;
+    flex: 0 1 auto;
+    align-items: center;
+    gap: 10px;
+    min-width: 0;
+    margin: 0;
+  }
+
+  body:not(.ebook-mode) .side-nav a {
+    flex: 0 0 auto;
+    justify-content: center;
+    gap: 10px;
+    min-height: 58px;
+    padding: 0 16px;
+    font-size: 18px;
+    white-space: nowrap;
+  }
+
+  body:not(.ebook-mode) .side-nav .icon {
+    width: 23px;
+    height: 23px;
+    flex-shrink: 0;
+  }
+
+  body:not(.ebook-mode) .side-nav .nav-count {
+    margin-left: 3px;
+  }
+
+  body:not(.ebook-mode) .sidebar .help-button {
+    flex: 0 0 auto;
+    gap: 8px;
+    width: auto;
+    margin: 0 0 0 auto;
+    padding: 8px 0;
+    white-space: nowrap;
+  }
+
+  body:not(.ebook-mode) .workspace {
+    margin-left: 0;
+    padding-top: var(--pc-navigation-height);
+  }
+
+  /* The account button remains in its original DOM and retains its handler. */
+  body:not(.ebook-mode) .workspace > .topbar {
+    position: fixed;
+    inset: 30px var(--pc-navigation-gutter) auto auto;
+    z-index: 41;
+    width: 44px;
+    height: 44px;
+    max-width: none;
+    gap: 0;
+    margin: 0;
+    padding: 0;
+    border: 0;
+  }
+
+  body:not(.ebook-mode) .workspace > .topbar > :not(.avatar) {
+    display: none;
+  }
+
+  body:not(.ebook-mode) .workspace > .topbar .avatar {
+    width: 44px;
+    height: 44px;
+    margin: 0;
+  }
+
+  body:not(.ebook-mode) #main-content {
+    max-width: 1240px;
+    margin: 0 auto;
+    padding-top: 26px;
+    padding-right: 40px;
+    padding-left: 40px;
+    scroll-margin-top: 12px;
+  }
+
+  body:not(.ebook-mode) #main-content :is([id], [tabindex], a, button, input, textarea, select, summary) {
+    scroll-margin-top: 12px;
+    scroll-margin-bottom: 24px;
+  }
+
+  body:not(.ebook-mode) .toast {
+    left: 50%;
+  }
+}
+
+/* Give the same four links a full horizontal row on narrower PC screens. */
+@media (min-width: 761px) and (max-width: 1279px) {
+  html:has(> body:not(.ebook-mode)) {
+    scroll-padding-top: 144px;
+  }
+
+  body:not(.ebook-mode) {
+    --pc-navigation-height: 132px;
+    --pc-navigation-gutter: 24px;
+  }
+
+  body:not(.ebook-mode) .sidebar {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    grid-template-rows: 54px 56px;
+    column-gap: 24px;
+    row-gap: 4px;
+    padding: 8px var(--pc-navigation-gutter) 10px;
+  }
+
+  body:not(.ebook-mode) .sidebar .brand {
+    grid-area: 1 / 1;
+    justify-self: start;
+    font-size: 28px;
+  }
+
+  body:not(.ebook-mode) .sidebar .brand small {
+    margin-top: 5px;
+    font-size: 10px;
+  }
+
+  body:not(.ebook-mode) .sidebar .help-button {
+    grid-area: 1 / 2;
+    margin: 0 68px 0 0;
+    min-height: 48px;
+  }
+
+  body:not(.ebook-mode) .side-nav {
+    grid-area: 2 / 1 / 3 / -1;
+    justify-content: center;
+    gap: 8px;
+    width: 100%;
+  }
+
+  body:not(.ebook-mode) .side-nav a {
+    min-height: 52px;
+  }
+
+  body:not(.ebook-mode) .workspace > .topbar {
+    top: 14px;
+  }
+
+  body:not(.ebook-mode) #main-content {
+    padding-right: 24px;
+    padding-left: 24px;
+  }
+}

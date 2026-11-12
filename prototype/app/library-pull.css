@@ -1,0 +1,26 @@
+/* 2. 책장에서 책을 꺼내 펼치는 연출 — prototype/bookshelf.html 「02 꺼내는 책」(.fly …)을 옮김 */
+.lp-host { position: fixed; inset: 0; z-index: 60; pointer-events: auto; background: #2b1d0f00; transition: background .35s; }
+.lp-host.dim { background: #2b1d0f59; }
+.lp-host.instant { transition: none; }
+.lp-fly { position: fixed; transform-origin: 0 50%; transform-style: preserve-3d; pointer-events: none; --paper-c: #fbf6ea; }
+.lp-fly > * { position: absolute; }
+.lp-back { inset: 0; border-radius: 2px 5px 5px 2px; background: var(--c); box-shadow: 0 28px 50px rgba(50,30,15,.35), inset 0 0 0 1px rgba(0,0,0,.15); }
+.lp-pages { top: 2.5%; bottom: 2.5%; left: 0; right: 3%; transform: translateZ(calc(var(--th) - 1px)); background: linear-gradient(90deg, #ddd0b4 0, #f7f1e3 7%, var(--paper-c) 100%); border-radius: 0 3px 3px 0; }
+.lp-edge { top: 2.5%; bottom: 2.5%; left: 97%; width: var(--th); transform-origin: 0 50%; transform: rotateY(-90deg); background: repeating-linear-gradient(90deg, #f3ead6 0 2px, #d9cbb0 2px 3px); }
+.lp-cover { inset: 0; transform-origin: 0 50%; transform-style: preserve-3d; transform: translateZ(var(--th)); }
+.lp-face { position: absolute; inset: 0; backface-visibility: hidden; -webkit-backface-visibility: hidden; }
+.lp-inside { transform: rotateY(180deg); border-radius: 5px 2px 2px 5px; background: var(--c); }
+.lp-inside::before { content: ""; position: absolute; top: 2.5%; bottom: 2.5%; left: 3%; right: 0; background: linear-gradient(90deg, var(--paper-c) 0, #f7f1e3 92%, #ddd0b4 100%); border-radius: 3px 0 0 3px; }
+.lp-scope { --cover-serif: "Memoir Cover Serif","Batang","바탕",serif; }
+.lp-scope .ml-cover { width: 100% !important; height: 100% !important; min-height: 0 !important; aspect-ratio: auto !important; margin: 0; transition: none; }
+
+/* 책장 표지 규칙(library-view.css, 미디어 쿼리 밖)을 같은 모양으로 */
+.lp-scope .ml-cover { --ml-cover-color:#5f1d2c; --ml-cover-ink:#e6c58e; --ml-cover-spine:#3d1420; position:relative; display:flex; flex-direction:column; align-items:center; width:min(100%,180px); min-height:238px; aspect-ratio:.75; padding:28px 18px 20px 24px; color:var(--ml-cover-ink); border-radius:2px 4px 4px 2px; background:url("cover-grain.svg") center/100% 100% no-repeat,radial-gradient(ellipse at 23% 16%,#ffffff05,transparent 54%),radial-gradient(ellipse at 78% 72%,#00000009,transparent 62%),linear-gradient(90deg,#00000036 0,#00000012 4%,#ffffff0a 7%,transparent 12%,transparent 92%,#00000018 100%),var(--ml-cover-color); box-shadow:-3px 1px 0 var(--ml-cover-spine),2px 1px 0 #efe5d3,3px 2px 0 #bba68b,4px 5px 8px #3c261430,inset 0 0 0 1px #0000002b,inset 0 1px 0 #ffffff12; transition:transform .25s ease; }
+.lp-scope .ml-cover:after { content:""; position:absolute; top:2px; bottom:2px; left:10px; width:1px; background:#00000030; box-shadow:1px 0 1px #ffffff0c; pointer-events:none; }
+.lp-scope .ml-cover-title { display:-webkit-box; -webkit-box-orient:vertical; -webkit-line-clamp:3; line-clamp:3; overflow:hidden; margin-top:8px; font-family:var(--cover-serif); font-size:21px; font-weight:600; line-height:1.65; letter-spacing:-.02em; text-align:center; overflow-wrap:anywhere; }
+.lp-scope .ml-cover-rule { position:relative; width:31px; margin-top:auto; padding-top:18px; opacity:.75; }
+.lp-scope .ml-cover-rule:before { content:""; position:absolute; left:50%; bottom:-2px; width:11px; height:14px; transform:translateX(-50%); background:currentColor; clip-path:polygon(50% 0,59% 41%,100% 50%,59% 59%,50% 100%,41% 59%,0 50%,41% 41%); }
+.lp-scope .ml-cover-volume { margin-top:10px; font-family:Georgia,serif; font-size:18px; line-height:1.3; letter-spacing:.12em; opacity:.85; }
+.lp-scope.ml-tone-0 .ml-cover { --ml-cover-color:#5f1d2c; --ml-cover-ink:#e6c58e; --ml-cover-spine:#3d1420; }
+.lp-scope.ml-tone-1 .ml-cover { --ml-cover-color:#1c293b; --ml-cover-ink:#eee2cc; --ml-cover-spine:#111b29; }
+.lp-scope.ml-tone-2 .ml-cover { --ml-cover-color:#1a3128; --ml-cover-ink:#e6c58e; --ml-cover-spine:#102018; }
