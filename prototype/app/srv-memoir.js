@@ -25,9 +25,13 @@
       sample: '느티나무 그늘은 오후마다 조금씩 자리를 옮겨 앉았다. 아이들의 웃음은 그늘을 따라 흘렀고, 골목 끝으로 저녁 빛이 번질 무렵에야 하나둘 제 이름을 부르는 목소리 쪽으로 흩어졌다.'},
     {id: 'novel', title: '이야기 소설', description: '한 장면씩 생생하게 펼쳐지는 글 · 소설체', icon: 'spark',
       sample: '“조금만 더 놀다 가자!” 누군가 소리치자 아이들이 다시 느티나무 아래로 모여들었다. 골목 끝으로 노을이 번지고 있었다. 멀리서 저녁을 먹으라는 목소리가 들려왔다.'},
-  ].filter((s) => (CONFIG.style.memoirOpen || ['spoken']).includes(s.id));
+  ].filter((s) => s.id !== 'spoken' && (CONFIG.style.memoirOpen || []).includes(s.id));   // 자서전은 구어체를 고르지 않는다 (요청 11-12)
   styles.splice(0, styles.length, ...SERVER_STYLES);
-  state.style = 'spoken';
+  state.style = styles[0] ? styles[0].id : 'essay';
+  // 예전 책(구어체 · 시안 문체)을 펼쳤다가 돌아와도 문체 이름이 깨지지 않게 — 고를 수 없는 문체는 이름만 보여 준다
+  window.selectedStyle = () => styles.find((s) => s.id === state.style)
+    || {id: state.style, title: CONFIG.style.names[state.style] || '구어체', description: '', icon: 'pen', sample: styles[0] ? styles[0].sample : ''};
+  window.addEventListener('memoir:before-screen', (e) => { if (e.detail.screen === 'style' && !styles.some((s) => s.id === state.style) && styles[0]) state.style = styles[0].id; });
   const styleTitle = (id) => (styles.find((s) => s.id === id) || styles[0]).title;
 
   /* ── 고친 글 (이 기기에만) ── */
@@ -58,7 +62,7 @@
 
   const dialog = document.getElementById('generation-dialog');
   dialog.querySelector('p').id = 'generation-stage';
-  dialog.insertAdjacentHTML('beforeend', `<p class="small-copy srv-gen-note">몇 분 걸릴 수 있어요. 창을 닫아도 서버는 계속 만들고, 다 되면 알려 드려요.</p>
+  dialog.insertAdjacentHTML('beforeend', `<p class="small-copy srv-gen-note">몇 분 걸릴 수 있어요. 이 창을 닫거나 다른 화면으로 가도 서버는 계속 만들어요. 다 만든 자서전은 「자서전 보기」 책장에 저장돼요.</p>
     <div class="dialog-actions srv-gen-actions"><button type="button" class="button outline" data-gen="stop">그만두기</button><button type="button" class="button primary" data-gen="hide">닫고 기다리기</button></div>`);
   let job = null;          // {job_id, elderId, style, title}
   let seq = 0, stagePast = false;
@@ -78,7 +82,7 @@
     if (!memoirSelection.canGenerate(chosen.length, MEMOIR_POLICY)) { navigate('records'); toast(`엽서를 ${selectionRangeText()} 골라주세요.`); return; }
     // 서버는 회차가 만들어진 순서로 엮는다. 화면도 같은 순서로 보낸다
     const ids = chosen.sort((a, b) => Date.parse(a.created_at) - Date.parse(b.created_at)).map((r) => r.session_id);
-    const style = styles.some((s) => s.id === state.style) ? state.style : 'spoken';
+    const style = styles.some((s) => s.id === state.style) ? state.style : (styles[0] ? styles[0].id : 'essay');
     state.generating = true;
     stagePast = false;
     dialog.querySelector('#generation-stage').textContent = '자서전 만들기를 시작하고 있어요…';
@@ -112,7 +116,8 @@
       try { r = await api.memoirJob(j.job_id); misses = 0; }
       catch (e) {
         if (my !== seq) return;
-        if (e.status === 404) { finish(); toast(SAYS.job_not_found); return; }
+        // 작업은 서버 메모리에 30분만 남는다. 다 만든 책은 DB 에 저장되므로 오래 지나 돌아왔으면 책장을 본다
+        if (e.status === 404) { finish(); void reloadLibrary(); toast(visible ? SAYS.job_not_found : '만들던 자서전은 「자서전 보기」 책장에서 확인해 주세요.'); return; }
         if (++misses >= 5) { finish(); toast('자서전 소식을 받지 못하고 있어요. 잠시 뒤 다시 열어 주세요.'); return; }
         await sleepMs(CONFIG.memoir.pollMs); continue;
       }
@@ -137,9 +142,12 @@
       state.style = styles.some((s) => s.id === r.style) ? r.style : j.style;
       state.draftElderId = j.elderId; state.spread = 0; state.pendingMemoirTitle = null;
       state.savedMemoirId = r.memoir_id || (r.result && r.result.memoir_id) || null;
-      state.draftKept = false;
+      state.draftKept = !(['#style', '#records', '#draft'].includes(location.hash) && !window.SrvInterview?.busy());
       state.selected.clear(); state.pickRecords = false;
-      if (AUTH.elderId === j.elderId) { navigate('draft'); toast('자서전 초안이 나왔어요. 읽어 보고 책으로 보관해 주세요.'); }
+      // 자서전을 고르던 화면에 있을 때만 초안으로 옮긴다 — 인터뷰 · 다른 화면을 보고 있으면 알리기만 한다
+      const here = ['#style', '#records', '#draft'].includes(location.hash) && !window.SrvInterview?.busy();
+      if (AUTH.elderId === j.elderId && here) { navigate('draft'); toast('자서전 초안이 나왔어요. 읽어 보고 책으로 보관해 주세요.'); }
+      else if (AUTH.elderId === j.elderId) toast('자서전이 다 만들어졌어요. 「자서전 보기」 책장에서 펼쳐 보세요.');
       else toast('다른 이야기 주인공의 자서전이 다 만들어졌어요. 그분을 고르면 책장에서 볼 수 있어요.');
       void reloadLibrary();
       return;
@@ -165,6 +173,30 @@
   const fresh = gen.cloneNode(true); gen.replaceWith(fresh);
   fresh.innerHTML = fresh.innerHTML.replace('초안 미리보기', '자서전 만들기');
   fresh.addEventListener('click', () => { if (job && state.generating) { if (!dialog.open) dialog.showModal(); return; } void generate(); });
+
+  /* ── 자서전에 넣을 엽서 고르기: 처음엔 전체 선택 · 「전체 해제 / 전체 선택」 버튼 ── */
+  const allBtn = document.createElement('button');
+  allBtn.type = 'button'; allBtn.id = 'toggle-all-postcards'; allBtn.className = 'button outline compact srv-pick-all'; allBtn.hidden = true;
+  document.getElementById('choose-style').before(allBtn);
+  const pickable = () => currentRecords().map((r) => r.id);
+  const allPicked = () => { const ids = pickable(); return ids.length > 0 && ids.every((id) => state.selected.has(id)); };
+  function selectAll(on) {
+    const ids = pickable();
+    const max = MEMOIR_POLICY.max == null ? Infinity : MEMOIR_POLICY.max;
+    state.selected.clear();
+    if (on) ids.slice(0, max).forEach((id) => state.selected.add(id));
+  }
+  const updateOriginal = window.updateSelection;
+  window.updateSelection = function () {
+    updateOriginal();
+    allBtn.hidden = !state.pickRecords || !pickable().length;
+    allBtn.textContent = allPicked() ? '전체 해제' : '전체 선택';
+  };
+  allBtn.addEventListener('click', () => { selectAll(!allPicked()); renderRecords(); });
+  const startOriginal = window.startMemoirFromPostcards;
+  window.startMemoirFromPostcards = function () { startOriginal(); selectAll(true); renderRecords(); };
+  // 고르는 중에 엽서 목록이 늦게 도착하면 (로그인 · 화자 바꿈 직후) 그때 전체 선택
+  window.addEventListener('memoir:records', () => { if (state.pickRecords && !state.selected.size) { selectAll(true); renderRecords(); } });
 
   /* ═══ 책장 ═══ */
   const fmtDate = (iso) => { const d = new Date(iso); return isNaN(d) ? '' : `${d.getFullYear()}. ${d.getMonth() + 1}. ${d.getDate()}.`; };
