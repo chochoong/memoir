@@ -846,6 +846,72 @@ async def assign_elder(session_id: str, user_id: str, elder_id: str) -> str:
         raise StoreUnavailable("화자를 저장하지 못했습니다") from e
 
 
+async def rename_elder(user_id: str, elder_id: str, display_name: str) -> bool:
+    """
+    화자 이름을 바꾼다. 이 계정이 관리하는 화자가 아니면 False.
+
+    elder.display_name 한 칸만 바꾼다 — 기록은 이름이 아니라 elder_id 에 묶여 있다.
+    같은 화자를 관리하는 다른 자녀에게도 새 이름이 보인다 (같은 분이다).
+    """
+    async def run(con):
+        return await con.fetchval(
+            """
+            UPDATE elder e SET display_name = $3
+              FROM user_elder ue
+             WHERE ue.user_id = $1 AND ue.elder_id = $2 AND e.elder_id = ue.elder_id
+            RETURNING e.elder_id
+            """,
+            user_id, elder_id, display_name)
+    return bool(await _auth_write("화자 이름 바꾸기", run))
+
+
+# 「아직 쓸 수 있는 링크」 — 거두지도 끝나지도 않았고, 시작했거나 기한이 남은 것.
+_LINK_USABLE = ("revoked_at IS NULL AND ended_at IS NULL"
+                " AND (session_id IS NOT NULL OR expires_at > now())")
+
+
+async def unlink_elder(user_id: str, elder_id: str, live: int = 0) -> dict | None:
+    """
+    이 계정과 화자의 연결(user_elder 한 줄)을 끊는다.
+
+    None = 이 계정의 화자가 아니다. 돌려준 dict 의 "deleted" 가 False 면 **기록이 남아
+    끊지 않았다** — "records" 에 남은 수가 있다 (이 계정 것만 센다).
+
+    elder 줄은 남긴다. 다른 자녀가 같은 분을 관리할 수 있고, 예전 기록이 그 줄을 가리킨다.
+    끊긴 뒤에는 owns_elder 가 False 라 그 화자로 회차 · 링크 · 자서전을 새로 만들 수 없다.
+
+    live 는 부르는 쪽이 메모리에서 센 진행 중 회차 수다. DB 의 회차 수와 겹칠 수 있어
+    더하지 않고 큰 쪽을 쓴다.
+
+    세기와 지우기를 한 트랜잭션에서 하고, 처음에 user_elder 줄을 잠근다 — 그사이 다른
+    기기에서 이 화자로 회차를 여는 것(owns_elder 확인)과 엇갈리지 않게.
+    """
+    async def run(con):
+        async with con.transaction():
+            if not await con.fetchval(
+                    "SELECT 1 FROM user_elder WHERE user_id = $1 AND elder_id = $2 FOR UPDATE",
+                    user_id, elder_id):
+                return None
+            row = await con.fetchrow(
+                f"""
+                SELECT (SELECT count(*) FROM session
+                         WHERE user_id = $1 AND elder_id = $2 AND deleted_at IS NULL) AS sessions,
+                       (SELECT count(*) FROM memoir
+                         WHERE user_id = $1 AND elder_id = $2 AND deleted_at IS NULL) AS memoirs,
+                       (SELECT count(*) FROM interview_link
+                         WHERE user_id = $1 AND elder_id = $2 AND {_LINK_USABLE}) AS links
+                """,
+                user_id, elder_id)
+            records = {k: int(row[k]) for k in ("sessions", "memoirs", "links")}
+            records["sessions"] = max(records["sessions"], live)
+            if any(records.values()):
+                return {"deleted": False, "records": records}
+            await con.execute("DELETE FROM user_elder WHERE user_id = $1 AND elder_id = $2",
+                              user_id, elder_id)
+            return {"deleted": True, "records": records}
+    return await _auth_write("화자 지우기", run)
+
+
 async def owns_elder(user_id: str, elder_id: str) -> bool:
     async def run(con):
         return await con.fetchval(

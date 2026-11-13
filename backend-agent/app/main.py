@@ -383,6 +383,49 @@ async def create_elder(req: ElderReq, who: str = Depends(auth.current_user)):
     return {"elder_id": e["elder_id"], "name": e["display_name"]}
 
 
+def _no_elder() -> JSONResponse:
+    # 없는 화자 · 남의 화자 · 이미 지운 화자를 가리지 않는다 — 남의 화자가 있는지 알려 주지 않는다.
+    return JSONResponse({"detail": "화자를 찾을 수 없어요", "code": "elder_not_found"},
+                        status_code=404)
+
+
+@app.patch("/api/elders/{elder_id}")
+async def rename_elder(elder_id: str, req: ElderReq, who: str = Depends(auth.current_user)):
+    """
+    화자 이름을 바꾼다. 기록은 이름이 아니라 elder_id 에 묶여 있어 그대로 따라온다.
+    같은 이름 막기는 하지 않는다 — 만들 때(POST)와 같다.
+    """
+    name = req.name.strip()
+    if not name:
+        raise HTTPException(422, "이름을 적어 주세요")
+    if not await _read(store.rename_elder(who, elder_id, name)):
+        return _no_elder()
+    log.info("화자 이름 바꿈 %s", elder_id)
+    return {"elder_id": elder_id, "name": name}
+
+
+@app.delete("/api/elders/{elder_id}")
+async def delete_elder(elder_id: str, who: str = Depends(auth.current_user)):
+    """
+    이 계정의 화자 목록에서 뺀다 (user_elder 한 줄). elder 줄 · 예전 기록은 남는다.
+
+    **기록이 하나라도 있으면 지우지 않는다 (409 has_records)** — 숨기지 않은 회차 ·
+    지우지 않은 자서전 · 아직 쓸 수 있는 링크. 실수로 엽서 · 자서전을 잃지 않게.
+
+    진행 중인 회차도 센다. 회차는 열 때 DB 에 적지만 그 쓰기는 실패를 삼키므로,
+    메모리에 떠 있는 회차를 DB 만 보고 놓칠 수 있다.
+    """
+    live = sum(1 for c in sc.live_sessions() if c.user_id == who and c.elder_id == elder_id)
+    got = await _read(store.unlink_elder(who, elder_id, live))
+    if got is None:
+        return _no_elder()
+    if not got["deleted"]:
+        return JSONResponse({"detail": "이 분의 이야기 기록이 남아 있어 지울 수 없어요",
+                             "code": "has_records", "records": got["records"]}, status_code=409)
+    log.info("화자 지움 %s", elder_id)
+    return {"elder_id": elder_id, "deleted": True}
+
+
 @app.post("/api/sessions")
 async def create_session(req: StartReq, request: Request,
                          who: str = Depends(auth.current_user)):
