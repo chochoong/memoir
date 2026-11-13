@@ -10,10 +10,12 @@
     <span class="eyebrow share-eyebrow"></span><h2 id="share-title"></h2>
     <div class="share-setup"></div>
     <div class="share-main">
+      <figure class="share-image" hidden><img alt="보낼 엽서 그림"><figcaption>이 그림이 그대로 보내져요</figcaption></figure>
       <div class="share-card" aria-label="받는 분에게 보이는 모습"><span class="share-card-art" aria-hidden="true"></span><span class="share-card-copy"><small></small><strong></strong><em></em></span></div>
       <label class="share-msg-label" for="share-msg">함께 보낼 글 <small>고쳐 써도 돼요</small></label>
       <textarea id="share-msg" rows="4"></textarea>
       <div class="share-link"><input id="share-link" readonly aria-label="보낼 링크"><button type="button" class="button outline compact" data-share="copy">${icons('check')}<span>링크 복사</span></button></div>
+      <div class="share-imgbar" hidden><button type="button" class="button outline compact" data-share="img-save">${icons('download')}<span>그림 저장</span></button><button type="button" class="button outline compact" data-share="img-copy">${icons('check')}<span>그림 복사</span></button></div>
       <div class="share-channels" role="group" aria-label="보내는 방법">
         <button type="button" data-share="kakao"><span class="sc-dot kakao" aria-hidden="true">K</span>카카오톡</button>
         <button type="button" data-share="sms"><span class="sc-dot sms" aria-hidden="true">${icons('letter')}</span>문자</button>
@@ -38,6 +40,14 @@
     $d('.share-card').dataset.kind = o.kind;
     $d('.share-card-art').innerHTML = o.card.art || '';
     $d('#share-msg').value = o.message;
+    // 그림 모드(엽서) — 링크 대신 그림 한 장을 보낸다. 카드 자리에 실제로 보낼 그림을 보여 준다
+    const img = !!o.image;
+    $d('.share-image').hidden = !img; $d('.share-card').hidden = img;
+    $d('.share-link').hidden = img; $d('.share-imgbar').hidden = !img;
+    if (img && !o.picture) {
+      const fig = $d('.share-image'); fig.classList.add('loading'); $d('.share-image img').removeAttribute('src');
+      o.picture = o.image.make().then((r) => { if (current === o) { $d('.share-image img').src = r.url; fig.classList.remove('loading'); } return r; });
+    }
     $d('#share-link').value = o.link || '';
     $d('.share-status').textContent = o.status || '';
     $d('.share-note').textContent = o.note || '';
@@ -59,7 +69,7 @@
   function open(o) {
     current = o; fill(o);
     if (!dialog.open) dialog.showModal();
-    (o.setup ? $d('.share-setup input:checked, .share-setup button') : $d('[data-share="copy"]'))?.focus();
+    (o.setup ? $d('.share-setup input:checked, .share-setup button') : o.image ? $d('[data-share="kakao"]') : $d('[data-share="copy"]'))?.focus();
   }
   const text = () => `${$d('#share-msg').value.trim()}\n${$d('#share-link').value}`;
   // 휴대폰 · 태블릿인가 — 카카오톡이 공유 창에 나오는 기기. 아이패드는 스스로를 맥이라고 하므로 터치로 가린다
@@ -75,6 +85,7 @@
     const b = e.target.closest('[data-share]');
     if (!b || !current) return;
     const how = b.dataset.share;
+    if (current.image) { await sendPicture(how); return; }
     if (how === 'copy') {
       try { await navigator.clipboard.writeText(text()); $d('.share-status').textContent = '글과 링크를 함께 복사했어요. 원하는 곳에 붙여 넣어 보내 주세요.'; }
       catch { $d('#share-link').select(); $d('.share-status').textContent = '자동 복사가 되지 않았어요. 선택된 링크를 직접 복사해 주세요.'; }
@@ -110,7 +121,46 @@
     }
     current.onSent?.(how);
   });
-  dialog.addEventListener('close', () => { current?.onClose?.(); current = null; });
+  /* ── 그림(엽서) 보내기 ──
+       휴대폰: 공유 창에 그림 파일을 넘긴다 → 카카오톡 · 문자 · 메일에 엽서 그림이 그대로 간다.
+       PC: 공유 창에 카카오톡이 없다 → 그림을 복사해 대화방에 붙여 넣게 한다(안 되면 내려받기). */
+  async function sendPicture(how) {
+    const o = current, st = (t) => { $d('.share-status').textContent = t; };
+    st('엽서 그림을 준비하고 있어요…');
+    let pic;
+    try { pic = await o.picture; } catch (_) { pic = null; }
+    if (!pic || !pic.blob) { st('엽서 그림을 만들지 못했어요. 「다른 앱」이나 잠시 뒤 다시 눌러 주세요.'); return; }
+    const name = o.image.name || '엽서.png', msg = $d('#share-msg').value.trim();
+    const save = () => { const a = document.createElement('a'); a.href = pic.url; a.download = name; document.body.append(a); a.click(); a.remove(); };
+    const copyPic = async () => { try { await navigator.clipboard.write([new ClipboardItem({'image/png': pic.blob})]); return true; } catch (_) { return false; } };
+    const copyText = async () => { try { await navigator.clipboard.writeText(msg); return true; } catch (_) { return false; } };
+    if (how === 'img-save') { save(); st('엽서 그림을 내려받았어요. 사진처럼 보내거나 간직할 수 있어요.'); o.onSent?.('save'); return; }
+    if (how === 'img-copy') { st(await copyPic() ? '엽서 그림을 복사했어요. 대화방에 붙여 넣기(Ctrl+V · ⌘V) 해 주세요.' : (save(), '그림 복사가 되지 않아 내려받았어요. 내려받은 그림을 보내 주세요.')); o.onSent?.('copy'); return; }
+    if (isPhone()) {
+      const file = new File([pic.blob], name, {type: 'image/png'});
+      if (navigator.canShare && navigator.canShare({files: [file]})) {
+        if (how === 'kakao') st('공유 창이 열리면 「카카오톡」을 골라 주세요.');
+        else if (how === 'sms') st('공유 창이 열리면 「메시지」(문자)를 골라 주세요.');
+        else if (how === 'mail') st('공유 창이 열리면 메일 앱을 골라 주세요.');
+        try { await navigator.share({files: [file], text: msg}); st('보냈어요.'); o.onSent?.(how); }
+        catch (err) { st(err && err.name === 'AbortError' ? '보내지 않았어요. 다시 누르거나 「그림으로 저장」해서 보내 주세요.' : (save(), '공유 창을 열지 못해 그림을 내려받았어요. 사진첩에서 보내 주세요.')); }
+        return;
+      }
+      save(); await copyText(); st('이 휴대폰은 그림을 바로 넘길 수 없어 내려받았어요. 사진첩에서 엽서 그림을 골라 보내 주세요.'); o.onSent?.(how); return;
+    }
+    // PC
+    if (how === 'mail') {
+      save(); await copyText();
+      location.href = `mailto:?subject=${encodeURIComponent(o.title || '내말싸미 엽서')}&body=${encodeURIComponent(msg)}`;
+      st('엽서 그림을 내려받았어요. 메일에 그림 파일을 첨부해 보내 주세요.'); o.onSent?.(how); return;
+    }
+    if (how === 'more') { save(); st('엽서 그림을 내려받았어요. 보내실 곳에 그림 파일을 올려 주세요.'); o.onSent?.(how); return; }
+    // 카카오톡 · 문자 — 그림을 복사해 붙여 넣기
+    if (await copyPic()) st(how === 'kakao' ? '엽서 그림을 복사했어요. 카카오톡 PC 대화방에 붙여 넣기(Ctrl+V · ⌘V) 해 주세요.' : 'PC에서는 문자를 바로 보낼 수 없어요. 엽서 그림을 복사했으니 카카오톡 PC 등에 붙여 넣어 주세요.');
+    else { save(); st('그림 복사가 되지 않아 내려받았어요. 대화방에 그림 파일을 끌어다 놓아 보내 주세요.'); }
+    o.onSent?.(how);
+  }
+  dialog.addEventListener('close', () => { if (current?.picture) current.picture.then((r) => r && setTimeout(() => URL.revokeObjectURL(r.url), 60000)).catch(() => {}); current?.onClose?.(); current = null; });
 
   const api = {
     open, close: () => dialog.close(), refill: (o) => { current = o; fill(o); $d('[data-share="copy"]').focus(); },

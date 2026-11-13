@@ -3691,6 +3691,18 @@ body:not(.ebook-mode) .search-field input { background: transparent; }
 /* 자서전에 넣을 엽서를 고르는 중에는 「엽서 지우기」를 감춘다 (고르기와 지우기가 섞이지 않게) */
 [data-screen="records"].records-picking .pc-select-toggle { display: none; }
 
+/* 엽서 나누기 — 보낼 엽서 그림 미리보기 (share-sheet 그림 모드) */
+.share-dialog .share-image { margin: 4px 0 14px; text-align: center; }
+.share-dialog .share-image img { display: block; width: min(100%, 300px); aspect-ratio: 4 / 5; margin: 0 auto; border-radius: 10px; box-shadow: 0 8px 22px #3b220e33; background: #c99e70; object-fit: cover; }
+.share-dialog .share-image.loading img { visibility: hidden; }
+.share-dialog .share-image.loading { min-height: 200px; background: linear-gradient(90deg, #f3e9da, #fbf4ea, #f3e9da); background-size: 200% 100%; animation: si-wait 1.2s linear infinite; border-radius: 10px; }
+@keyframes si-wait { to { background-position: -200% 0; } }
+.share-dialog .share-image figcaption { margin-top: 8px; font-size: 13px; color: var(--muted, #796e68); }
+.share-dialog .share-imgbar { display: flex; gap: 8px; margin: 10px 0 12px; }
+.share-dialog .share-imgbar .button { flex: 1; justify-content: center; }
+.share-dialog .share-imgbar[hidden], .share-dialog .share-link[hidden], .share-dialog .share-card[hidden] { display: none; }
+@media (max-width: 600px) { .share-dialog .share-image img { width: min(78%, 260px); } }
+
 </style>
 </head>
 <body>
@@ -9045,20 +9057,31 @@ renderRecent();renderQuestion();setInterviewMode('reading');show(location.hash.s
 
   // 엽서 공유 — 엽서 글을 그대로 보낸다 (카카오톡 · 문자 · 이메일 · 복사). 엽서만 따로 여는 공유 주소는 아직 서버에 없어서,
   // 링크 칸에는 내말싸미 첫 화면을 둔다
+  /** 엽서 나누기 — 엽서를 그림 한 장으로 그려 보낸다 (postcard-image.js). 받는 분은 보드 위 엽서 모습 그대로 받는다 */
   function sharePostcard(record) {
     const elders = window.Srv?.AUTH?.elders || [], me = elders.find((e) => e.elder_id === record.elder_id);
     const who = me && me.name !== '나' ? window.Srv.honor(me.name) : '';
     const text = postcardBody(record).replace(/\n\s*\n/g, '\n\n').trim();
-    const home = window.Srv?.DEMO ? `${location.href.split('#')[0].split('?')[0]}?demo=1` : `${location.origin}/`;
-    window.MemoirShare.open({
+    const idx = recordData.filter((r) => r.elder_id === record.elder_id).findIndex((r) => r.id === record.id);
+    const o = {
       kind: 'postcard', eyebrow: '엽서 나누기', title: record.title,
-      card: {kicker: '내말싸미 · 엽서', title: `「${record.title}」`, sub: `${who ? `${who}의 이야기 · ` : ''}${record.date}`, art: `<span class="share-mini-mic">${icons(record.icon || 'letter')}</span>`},
-      message: `「${record.title}」\n\n${text}\n\n— ${who ? `${who}의 이야기 · ` : ''}내말싸미에서 남긴 엽서`,
-      link: home,
+      card: {kicker: '', title: '', sub: ''},
+      message: `${who ? `${who}의 이야기` : '제 이야기'}를 엽서로 나눠요. 「${record.title}」\n— 내말싸미에서 남긴 엽서`,
+      link: '',
       status: '',
-      note: '엽서 글이 그대로 보내져요. 가족 이야기가 담겨 있으니 믿을 수 있는 분에게만 보내 주세요. 링크는 내말싸미 첫 화면이에요.',
+      note: '엽서가 그림 한 장으로 보내져요. 가족 이야기가 담겨 있으니 믿을 수 있는 분에게만 보내 주세요.',
       extras: [],
-    });
+      image: {
+        name: window.MemoirPostcardImage.fileName(record.title),
+        make: async () => {
+          const r = await window.MemoirPostcardImage.render({title: record.title, body: text, date: record.date, category: (typeof categories !== 'undefined' && categories[record.category]) || '', icon: record.icon, who, yellow: idx % 4 === 3});
+          // 그림에 다 담지 못한 긴 엽서는 함께 보내는 글에 전체를 붙인다
+          if (r.clipped) { const box = document.getElementById('share-msg'); if (box && box.value === o.message) box.value = o.message = `${o.message}\n\n「${record.title}」\n${text}`; }
+          return r;
+        },
+      },
+    };
+    window.MemoirShare.open(o);
   }
 
   // 6. 엽서 지우기 — 손에 든 엽서 · 보드 위 × · 여러 장 골라 지우기. 늘 한 번 더 묻고, 지운 뒤 잠시 「되돌리기」를 둔다.
@@ -10026,10 +10049,12 @@ renderRecent();renderQuestion();setInterviewMode('reading');show(location.hash.s
     <span class="eyebrow share-eyebrow"></span><h2 id="share-title"></h2>
     <div class="share-setup"></div>
     <div class="share-main">
+      <figure class="share-image" hidden><img alt="보낼 엽서 그림"><figcaption>이 그림이 그대로 보내져요</figcaption></figure>
       <div class="share-card" aria-label="받는 분에게 보이는 모습"><span class="share-card-art" aria-hidden="true"></span><span class="share-card-copy"><small></small><strong></strong><em></em></span></div>
       <label class="share-msg-label" for="share-msg">함께 보낼 글 <small>고쳐 써도 돼요</small></label>
       <textarea id="share-msg" rows="4"></textarea>
       <div class="share-link"><input id="share-link" readonly aria-label="보낼 링크"><button type="button" class="button outline compact" data-share="copy">${icons('check')}<span>링크 복사</span></button></div>
+      <div class="share-imgbar" hidden><button type="button" class="button outline compact" data-share="img-save">${icons('download')}<span>그림 저장</span></button><button type="button" class="button outline compact" data-share="img-copy">${icons('check')}<span>그림 복사</span></button></div>
       <div class="share-channels" role="group" aria-label="보내는 방법">
         <button type="button" data-share="kakao"><span class="sc-dot kakao" aria-hidden="true">K</span>카카오톡</button>
         <button type="button" data-share="sms"><span class="sc-dot sms" aria-hidden="true">${icons('letter')}</span>문자</button>
@@ -10054,6 +10079,14 @@ renderRecent();renderQuestion();setInterviewMode('reading');show(location.hash.s
     $d('.share-card').dataset.kind = o.kind;
     $d('.share-card-art').innerHTML = o.card.art || '';
     $d('#share-msg').value = o.message;
+    // 그림 모드(엽서) — 링크 대신 그림 한 장을 보낸다. 카드 자리에 실제로 보낼 그림을 보여 준다
+    const img = !!o.image;
+    $d('.share-image').hidden = !img; $d('.share-card').hidden = img;
+    $d('.share-link').hidden = img; $d('.share-imgbar').hidden = !img;
+    if (img && !o.picture) {
+      const fig = $d('.share-image'); fig.classList.add('loading'); $d('.share-image img').removeAttribute('src');
+      o.picture = o.image.make().then((r) => { if (current === o) { $d('.share-image img').src = r.url; fig.classList.remove('loading'); } return r; });
+    }
     $d('#share-link').value = o.link || '';
     $d('.share-status').textContent = o.status || '';
     $d('.share-note').textContent = o.note || '';
@@ -10075,7 +10108,7 @@ renderRecent();renderQuestion();setInterviewMode('reading');show(location.hash.s
   function open(o) {
     current = o; fill(o);
     if (!dialog.open) dialog.showModal();
-    (o.setup ? $d('.share-setup input:checked, .share-setup button') : $d('[data-share="copy"]'))?.focus();
+    (o.setup ? $d('.share-setup input:checked, .share-setup button') : o.image ? $d('[data-share="kakao"]') : $d('[data-share="copy"]'))?.focus();
   }
   const text = () => `${$d('#share-msg').value.trim()}\n${$d('#share-link').value}`;
   // 휴대폰 · 태블릿인가 — 카카오톡이 공유 창에 나오는 기기. 아이패드는 스스로를 맥이라고 하므로 터치로 가린다
@@ -10091,6 +10124,7 @@ renderRecent();renderQuestion();setInterviewMode('reading');show(location.hash.s
     const b = e.target.closest('[data-share]');
     if (!b || !current) return;
     const how = b.dataset.share;
+    if (current.image) { await sendPicture(how); return; }
     if (how === 'copy') {
       try { await navigator.clipboard.writeText(text()); $d('.share-status').textContent = '글과 링크를 함께 복사했어요. 원하는 곳에 붙여 넣어 보내 주세요.'; }
       catch { $d('#share-link').select(); $d('.share-status').textContent = '자동 복사가 되지 않았어요. 선택된 링크를 직접 복사해 주세요.'; }
@@ -10126,13 +10160,194 @@ renderRecent();renderQuestion();setInterviewMode('reading');show(location.hash.s
     }
     current.onSent?.(how);
   });
-  dialog.addEventListener('close', () => { current?.onClose?.(); current = null; });
+  /* ── 그림(엽서) 보내기 ──
+       휴대폰: 공유 창에 그림 파일을 넘긴다 → 카카오톡 · 문자 · 메일에 엽서 그림이 그대로 간다.
+       PC: 공유 창에 카카오톡이 없다 → 그림을 복사해 대화방에 붙여 넣게 한다(안 되면 내려받기). */
+  async function sendPicture(how) {
+    const o = current, st = (t) => { $d('.share-status').textContent = t; };
+    st('엽서 그림을 준비하고 있어요…');
+    let pic;
+    try { pic = await o.picture; } catch (_) { pic = null; }
+    if (!pic || !pic.blob) { st('엽서 그림을 만들지 못했어요. 「다른 앱」이나 잠시 뒤 다시 눌러 주세요.'); return; }
+    const name = o.image.name || '엽서.png', msg = $d('#share-msg').value.trim();
+    const save = () => { const a = document.createElement('a'); a.href = pic.url; a.download = name; document.body.append(a); a.click(); a.remove(); };
+    const copyPic = async () => { try { await navigator.clipboard.write([new ClipboardItem({'image/png': pic.blob})]); return true; } catch (_) { return false; } };
+    const copyText = async () => { try { await navigator.clipboard.writeText(msg); return true; } catch (_) { return false; } };
+    if (how === 'img-save') { save(); st('엽서 그림을 내려받았어요. 사진처럼 보내거나 간직할 수 있어요.'); o.onSent?.('save'); return; }
+    if (how === 'img-copy') { st(await copyPic() ? '엽서 그림을 복사했어요. 대화방에 붙여 넣기(Ctrl+V · ⌘V) 해 주세요.' : (save(), '그림 복사가 되지 않아 내려받았어요. 내려받은 그림을 보내 주세요.')); o.onSent?.('copy'); return; }
+    if (isPhone()) {
+      const file = new File([pic.blob], name, {type: 'image/png'});
+      if (navigator.canShare && navigator.canShare({files: [file]})) {
+        if (how === 'kakao') st('공유 창이 열리면 「카카오톡」을 골라 주세요.');
+        else if (how === 'sms') st('공유 창이 열리면 「메시지」(문자)를 골라 주세요.');
+        else if (how === 'mail') st('공유 창이 열리면 메일 앱을 골라 주세요.');
+        try { await navigator.share({files: [file], text: msg}); st('보냈어요.'); o.onSent?.(how); }
+        catch (err) { st(err && err.name === 'AbortError' ? '보내지 않았어요. 다시 누르거나 「그림으로 저장」해서 보내 주세요.' : (save(), '공유 창을 열지 못해 그림을 내려받았어요. 사진첩에서 보내 주세요.')); }
+        return;
+      }
+      save(); await copyText(); st('이 휴대폰은 그림을 바로 넘길 수 없어 내려받았어요. 사진첩에서 엽서 그림을 골라 보내 주세요.'); o.onSent?.(how); return;
+    }
+    // PC
+    if (how === 'mail') {
+      save(); await copyText();
+      location.href = `mailto:?subject=${encodeURIComponent(o.title || '내말싸미 엽서')}&body=${encodeURIComponent(msg)}`;
+      st('엽서 그림을 내려받았어요. 메일에 그림 파일을 첨부해 보내 주세요.'); o.onSent?.(how); return;
+    }
+    if (how === 'more') { save(); st('엽서 그림을 내려받았어요. 보내실 곳에 그림 파일을 올려 주세요.'); o.onSent?.(how); return; }
+    // 카카오톡 · 문자 — 그림을 복사해 붙여 넣기
+    if (await copyPic()) st(how === 'kakao' ? '엽서 그림을 복사했어요. 카카오톡 PC 대화방에 붙여 넣기(Ctrl+V · ⌘V) 해 주세요.' : 'PC에서는 문자를 바로 보낼 수 없어요. 엽서 그림을 복사했으니 카카오톡 PC 등에 붙여 넣어 주세요.');
+    else { save(); st('그림 복사가 되지 않아 내려받았어요. 대화방에 그림 파일을 끌어다 놓아 보내 주세요.'); }
+    o.onSent?.(how);
+  }
+  dialog.addEventListener('close', () => { if (current?.picture) current.picture.then((r) => r && setTimeout(() => URL.revokeObjectURL(r.url), 60000)).catch(() => {}); current?.onClose?.(); current = null; });
 
   const api = {
     open, close: () => dialog.close(), refill: (o) => { current = o; fill(o); $d('[data-share="copy"]').focus(); },
     setStatus: (t) => { $d('.share-status').textContent = t; },
   };
   window.MemoirShare = api;
+}());
+
+</script>
+<script data-from="postcard-image.js">
+(function () {
+  'use strict';
+  /* ═══════════════════════════════════════════════════════════════
+     postcard-image — 엽서를 그림(PNG) 한 장으로 그린다. 「엽서 공유」가 글 대신 엽서 그 자체를 보내게.
+       · 1080×1350(4:5) — 카카오톡 · 문자에서 잘리지 않고 크게 보이는 비율
+       · 코르크 보드 위에 핀으로 꽂힌 엽서: 분류 · 날짜 · 제목 · 줄 친 본문 · 우표 · 누구의 이야기
+       · 서버 없이 이 기기에서만 그린다. 글이 길면 글자를 줄이고, 그래도 넘치면 「…」로 끝낸다(전체 글은 함께 보내는 글에)
+     ═══════════════════════════════════════════════════════════════ */
+  const W = 1080, H = 1350;
+  const TITLE_FONT = '"Memoir Cover Serif", "Noto Serif KR", "Batang", "바탕", serif';
+  const BODY_FONT = '"Malgun Gothic", "Apple SD Gothic Neo", "Noto Sans KR", "Noto Sans CJK KR", sans-serif';
+  const PAPER = ['#fffdf6', '#fbf3e3'], YELLOW = ['#fdeba4', '#f8df8c'];
+
+  /** 글자 단위로 줄을 나눈다 — 한국어는 띄어쓰기 없이 길게 이어지는 경우가 많아 단어보다 글자로 끊는 게 안전하다 */
+  function wrap(ctx, text, width) {
+    const lines = [];
+    String(text).split('\n').forEach((para) => {
+      if (!para.trim()) { if (lines.length && lines[lines.length - 1] !== '') lines.push(''); return; }
+      let line = '';
+      for (const word of para.trim().split(/(\s+)/)) {
+        const next = line + word;
+        if (ctx.measureText(next).width <= width) { line = next; continue; }
+        if (line.trim()) { lines.push(line.trimEnd()); line = ''; }
+        if (ctx.measureText(word).width <= width) { line = word.trimStart(); continue; }
+        for (const ch of word) { if (ctx.measureText(line + ch).width > width) { lines.push(line); line = ''; } line += ch; }
+      }
+      if (line.trim()) lines.push(line.trimEnd());
+    });
+    while (lines.length && lines[lines.length - 1] === '') lines.pop();
+    return lines;
+  }
+  function roundRect(ctx, x, y, w, h, r) {
+    ctx.beginPath(); ctx.moveTo(x + r, y); ctx.arcTo(x + w, y, x + w, y + h, r); ctx.arcTo(x + w, y + h, x, y + h, r);
+    ctx.arcTo(x, y + h, x, y, r); ctx.arcTo(x, y, x + w, y, r); ctx.closePath();
+  }
+  /** 화면의 아이콘(SVG 심볼)을 그림으로 — 우표 안에 넣는다 */
+  function iconImage(name, color) {
+    const sym = document.getElementById(`i-${name}`) || document.getElementById('i-letter');
+    if (!sym) return Promise.resolve(null);
+    const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="${sym.getAttribute('viewBox') || '0 0 24 24'}" width="96" height="96" fill="none" stroke="${color}" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">${sym.innerHTML}</svg>`;
+    return new Promise((res) => { const img = new Image(); img.onload = () => res(img); img.onerror = () => res(null); img.src = `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`; });
+  }
+  function cork(ctx) {
+    const g = ctx.createLinearGradient(0, 0, W, H);
+    g.addColorStop(0, '#c99e70'); g.addColorStop(1, '#b4865a');
+    ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
+    // 코르크 알갱이 — 늘 같은 무늬가 나오게 정해진 수열로 찍는다
+    let s = 7;
+    const rnd = () => { s = (s * 16807) % 2147483647; return s / 2147483647; };
+    for (let i = 0; i < 2600; i++) {
+      ctx.fillStyle = rnd() > .5 ? 'rgba(92,58,30,.16)' : 'rgba(255,236,200,.14)';
+      ctx.fillRect(rnd() * W, rnd() * H, 2 + rnd() * 3, 2 + rnd() * 3);
+    }
+    ctx.strokeStyle = '#7a5235'; ctx.lineWidth = 26; ctx.strokeRect(13, 13, W - 26, H - 26);
+  }
+
+  /**
+   * @param {{title:string, body:string, date:string, category?:string, icon?:string, who?:string, yellow?:boolean}} card
+   * @returns {Promise<{blob: Blob, clipped: boolean, url: string}>}
+   */
+  async function render(card) {
+    try { await Promise.all([document.fonts.load(`600 56px ${TITLE_FONT}`, card.title || '가'), document.fonts.ready]); } catch (_) { /* 기본 글꼴로 그린다 */ }
+    const c = document.createElement('canvas'); c.width = W; c.height = H;
+    const ctx = c.getContext('2d');
+    cork(ctx);
+
+    // 엽서 종이 — 보드 위에 살짝 기울여 꽂는다
+    const px = 110, py = 150, pw = W - 220, ph = H - 330;
+    ctx.save();
+    ctx.translate(W / 2, py + ph / 2); ctx.rotate(-1.2 * Math.PI / 180); ctx.translate(-W / 2, -(py + ph / 2));
+    ctx.shadowColor = 'rgba(59,34,14,.38)'; ctx.shadowBlur = 38; ctx.shadowOffsetY = 18;
+    const paper = ctx.createLinearGradient(0, py, 0, py + ph);
+    const tone = card.yellow ? YELLOW : PAPER;
+    paper.addColorStop(0, tone[0]); paper.addColorStop(1, tone[1]);
+    ctx.fillStyle = paper; roundRect(ctx, px, py, pw, ph, 10); ctx.fill();
+    ctx.shadowColor = 'transparent';
+
+    const ix = px + 70, iw = pw - 140;
+    // 우표
+    const sw = 150, sh = 170, sx = px + pw - 70 - sw, sy = py + 64;
+    ctx.fillStyle = '#fffaf0'; ctx.fillRect(sx, sy, sw, sh);
+    ctx.setLineDash([7, 6]); ctx.strokeStyle = '#b89a7c'; ctx.lineWidth = 3; ctx.strokeRect(sx + 9, sy + 9, sw - 18, sh - 18); ctx.setLineDash([]);
+    const ic = await iconImage(card.icon || 'letter', '#8a465e');
+    if (ic) ctx.drawImage(ic, sx + (sw - 84) / 2, sy + (sh - 84) / 2, 84, 84);
+
+    // 분류 · 날짜
+    ctx.fillStyle = '#8a7568'; ctx.font = `500 30px ${BODY_FONT}`; ctx.textBaseline = 'alphabetic';
+    ctx.fillText([card.category, card.date].filter(Boolean).join('  ·  '), ix, py + 112);
+    // 제목 — 우표 옆 폭 안에서 두 줄까지
+    ctx.fillStyle = '#2f2622'; ctx.font = `600 58px ${TITLE_FONT}`;
+    const tw = sx - ix - 30, tAll = wrap(ctx, card.title || '엽서', tw), tLines = tAll.slice(0, 2);
+    if (tAll.length > 2) { let t = tLines[1]; while (t && ctx.measureText(`${t}…`).width > tw) t = t.slice(0, -1); tLines[1] = `${t.trimEnd()}…`; }
+    tLines.forEach((t, i) => ctx.fillText(t, ix, py + 196 + i * 78));
+    let top = Math.max(py + 196 + (tLines.length - 1) * 78 + 60, sy + sh + 40);
+
+    // 본문 — 줄 친 종이. 넘치면 글자를 줄이고, 그래도 넘치면 마지막 줄을 「…」로
+    const footH = 120, bottom = py + ph - footH;
+    let size = 40, lh = 72, lines;
+    for (;;) {
+      ctx.font = `400 ${size}px ${BODY_FONT}`;
+      lines = wrap(ctx, card.body || '', iw);
+      if (top + lines.length * lh <= bottom || size <= 30) break;
+      size -= 2; lh = Math.round(size * 1.78);
+    }
+    const max = Math.max(1, Math.floor((bottom - top) / lh));
+    const clipped = lines.length > max;
+    if (clipped) { lines = lines.slice(0, max); let last = lines[max - 1]; while (last && ctx.measureText(`${last}…`).width > iw) last = last.slice(0, -1); lines[max - 1] = `${last.trimEnd()}…`; }
+    ctx.strokeStyle = 'rgba(160,130,105,.32)'; ctx.lineWidth = 2;
+    const rows = Math.floor((bottom - top) / lh);
+    for (let i = 0; i < rows; i++) { const y = top + (i + 1) * lh - lh * .28; ctx.beginPath(); ctx.moveTo(ix, y); ctx.lineTo(ix + iw, y); ctx.stroke(); }
+    ctx.fillStyle = '#3d322d';
+    lines.forEach((t, i) => ctx.fillText(t, ix, top + (i + 1) * lh - lh * .42));
+
+    // 누구의 이야기
+    ctx.fillStyle = '#7a4a55'; ctx.font = `600 34px ${TITLE_FONT}`; ctx.textAlign = 'right';
+    ctx.fillText(card.who ? `— ${card.who}의 이야기` : '— 나의 이야기', px + pw - 70, py + ph - 56);
+    ctx.textAlign = 'left';
+    ctx.restore();
+
+    // 핀
+    const pinX = W / 2, pinY = py + 6;
+    ctx.fillStyle = 'rgba(40,20,10,.35)'; ctx.beginPath(); ctx.ellipse(pinX + 8, pinY + 14, 22, 12, 0, 0, Math.PI * 2); ctx.fill();
+    const pin = ctx.createRadialGradient(pinX - 8, pinY - 8, 4, pinX, pinY, 26);
+    pin.addColorStop(0, '#e46b5f'); pin.addColorStop(1, '#8d1f1c');
+    ctx.fillStyle = pin; ctx.beginPath(); ctx.arc(pinX, pinY, 24, 0, Math.PI * 2); ctx.fill();
+
+    // 맨 아래 — 내말싸미
+    ctx.fillStyle = '#fff6e6'; ctx.textAlign = 'center';
+    ctx.font = `600 38px ${TITLE_FONT}`; ctx.fillText('내말싸미', W / 2, H - 92);
+    ctx.font = `400 26px ${BODY_FONT}`; ctx.fillStyle = 'rgba(255,246,230,.85)';
+    ctx.fillText('목소리로 남긴 이야기 · naemalssami.com', W / 2, H - 52);
+    ctx.textAlign = 'left';
+
+    const blob = await new Promise((res) => c.toBlob(res, 'image/png'));
+    return {blob, clipped, url: URL.createObjectURL(blob)};
+  }
+  const fileName = (title) => `${String(title || '엽서').replace(/[\\/:*?"<>|]/g, '').trim().slice(0, 40) || '엽서'}.png`;
+  window.MemoirPostcardImage = {render, fileName};
 }());
 
 </script>

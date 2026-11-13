@@ -126,3 +126,15 @@ body:not(.ebook-mode) .search-field input { background: transparent; }
 .selection-footer .srv-mini-btn span { display: inline; margin: 0; font-size: inherit; color: inherit; }
 /* 자서전에 넣을 엽서를 고르는 중에는 「엽서 지우기」를 감춘다 (고르기와 지우기가 섞이지 않게) */
 [data-screen="records"].records-picking .pc-select-toggle { display: none; }
+
+/* 엽서 나누기 — 보낼 엽서 그림 미리보기 (share-sheet 그림 모드) */
+.share-dialog .share-image { margin: 4px 0 14px; text-align: center; }
+.share-dialog .share-image img { display: block; width: min(100%, 300px); aspect-ratio: 4 / 5; margin: 0 auto; border-radius: 10px; box-shadow: 0 8px 22px #3b220e33; background: #c99e70; object-fit: cover; }
+.share-dialog .share-image.loading img { visibility: hidden; }
+.share-dialog .share-image.loading { min-height: 200px; background: linear-gradient(90deg, #f3e9da, #fbf4ea, #f3e9da); background-size: 200% 100%; animation: si-wait 1.2s linear infinite; border-radius: 10px; }
+@keyframes si-wait { to { background-position: -200% 0; } }
+.share-dialog .share-image figcaption { margin-top: 8px; font-size: 13px; color: var(--muted, #796e68); }
+.share-dialog .share-imgbar { display: flex; gap: 8px; margin: 10px 0 12px; }
+.share-dialog .share-imgbar .button { flex: 1; justify-content: center; }
+.share-dialog .share-imgbar[hidden], .share-dialog .share-link[hidden], .share-dialog .share-card[hidden] { display: none; }
+@media (max-width: 600px) { .share-dialog .share-image img { width: min(78%, 260px); } }
