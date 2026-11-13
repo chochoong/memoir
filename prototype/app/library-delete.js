@@ -19,10 +19,11 @@
     const heading = shelf.querySelector('.ml-shelf-heading');
     if (heading && !heading.querySelector('.ml-select-toggle')) {
       const t = document.createElement('button');
-      t.type = 'button'; t.className = 'button outline compact ml-select-toggle';
+      // 「모아둔 작은 책 N권 | 책 지우기」 — 개수 옆의 작은 버튼 (엽서보기와 같은 모양)
+      t.type = 'button'; t.className = 'srv-mini-btn ml-select-toggle';
       t.innerHTML = `${icons('check')}<span>책 지우기</span>`;
       t.addEventListener('click', () => setSelecting(!selecting));
-      heading.append(t);
+      (heading.querySelector('h2') || heading).append(t);
     }
     sync();
   }

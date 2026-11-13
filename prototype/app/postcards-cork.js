@@ -228,7 +228,7 @@
     ], {duration: 520, delay: i * 80, easing: 'cubic-bezier(.5,0,.8,.4)'})));
   }
 
-  // ── 보드 위 엽서마다 「지우기」(×) ──
+  // ── 보드 위 엽서를 칸(slot)으로 감싼다 — 고르기 표시 · 떼어 내는 연출의 자리. (엽서마다 붙던 × 는 너저분해서 뺐다)
   function wrap() {
     const cards = [...list.children].filter((el) => el.classList.contains('postcard-card'));
     if (!cards.length) { syncSelectUi(); return; }
@@ -237,8 +237,6 @@
       slot.className = 'pc-slot';
       card.replaceWith(slot);
       slot.append(card);
-      const title = card.querySelector('strong')?.textContent || '엽서';
-      slot.insertAdjacentHTML('beforeend', `<button type="button" class="pc-x" data-pc-remove="${escapeText(card.dataset.postcard)}" aria-label="「${escapeText(title)}」 엽서 지우기" title="엽서 지우기">${icons('close')}</button>`);
     });
     syncSelectUi();
   }
@@ -253,14 +251,16 @@
     commitDelete([id]);
   }
 
-  // ── 여러 장 골라 한 번에 지우기 ──
+  // ── 엽서 골라 지우기 (한 장도 여러 장도) ──
   let selecting = false;
   const picked = new Set();
   const toolbar = document.querySelector('[data-screen="records"] .records-toolbar');
   const toggle = document.createElement('button');
-  toggle.type = 'button'; toggle.className = 'button outline compact pc-select-toggle';
-  toggle.innerHTML = `${icons('check')}<span>여러 장 지우기</span>`;
-  toolbar?.append(toggle);
+  // 「엽서 N장 | 엽서 지우기」 — 개수 옆의 작은 버튼. 켰을 때만 엽서를 골라 지운다 (책장의 「N권 | 책 지우기」와 같은 모양)
+  toggle.type = 'button'; toggle.className = 'srv-mini-btn pc-select-toggle';
+  toggle.innerHTML = `${icons('check')}<span>엽서 지우기</span>`;
+  document.getElementById('selection-count')?.after(toggle);
+  void toolbar;
   const visibleIds = () => [...list.querySelectorAll('.pc-slot > .postcard-card')].map((c) => Number(c.dataset.postcard));
   let selectBar = null;
   function ensureBar() {
@@ -281,7 +281,10 @@
   }
   function syncSelectUi() {
     const hasBoard = !!list.querySelector('.pc-slot');
-    toggle.hidden = !hasBoard && !selecting;
+    // 검색 · 분류로 보이는 엽서가 없을 때는 자리만 남기고 숨긴다 — 버튼이 빠지면 검색칸이 옆으로 밀려 다닌다
+    const hasAny = (window.currentRecords ? currentRecords().length : 0) > 0 || !!(state.query || state.filter !== 'all');
+    toggle.hidden = !hasBoard && !selecting && !hasAny;
+    toggle.classList.toggle('pc-toggle-ghost', !hasBoard && !selecting && hasAny);
     if (selecting && !hasBoard && !state.query && state.filter === 'all') { setSelecting(false); return; }
     list.querySelectorAll('.pc-slot').forEach((slot) => {
       const card = slot.querySelector('.postcard-card');
@@ -318,4 +321,19 @@
     pull(card);
   }, true);
   wrap();
+
+  /* ── 검색하며 글자를 칠 때 검색칸이 위아래로 튀지 않게 ──
+       결과가 줄면 보드가 짧아져 페이지 끝이 올라오고, 브라우저가 스크롤을 끌어올려 검색칸이 움직인다.
+       그때 모자라는 만큼만 보드 높이를 붙잡고 스크롤을 제자리로 돌린다. 검색어를 지우면 놓는다. */
+  let keepY = null;
+  document.addEventListener('input', (e) => { if (e.target.id === 'record-search') keepY = scrollY; }, true);
+  document.addEventListener('input', (e) => {
+    if (e.target.id !== 'record-search' || keepY === null) return;
+    const y = keepY; keepY = null;
+    if (!e.target.value.trim()) { list.style.minHeight = ''; return; }
+    const lack = y + innerHeight - document.documentElement.scrollHeight;
+    if (lack > 0) list.style.minHeight = `${list.offsetHeight + lack}px`;
+    if (Math.abs(scrollY - y) > 1) scrollTo({top: y, behavior: 'instant'});
+  });
+  window.addEventListener('memoir:screen', (e) => { if (e.detail.screen !== 'records') list.style.minHeight = ''; });
 }());

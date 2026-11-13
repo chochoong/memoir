@@ -4,10 +4,8 @@
 body:not(.ebook-mode) .ml-remove { min-height: 44px; font-size: 14px; color: #8f4a3c; }
 .ml-remove .icon { width: 15px; height: 15px; stroke-width: 2; }
 .ml-remove:hover { color: #9b3b30; }
-.ml-select-toggle { min-height: 48px; margin-left: auto; }
-.ml-select-toggle .icon { width: 18px; height: 18px; }
-.ml-select-toggle[aria-pressed="true"] { background: var(--blush); border-color: var(--burgundy); }
-[data-screen="library"] .ml-shelf-heading:has(.ml-select-toggle) { align-items: center; }
+/* 「책 지우기」는 h2 안 개수 옆 작은 버튼(.srv-mini-btn, srv.css) — 설명 글이 오른쪽 끝으로 밀리지 않게 왼쪽부터 */
+[data-screen="library"] .ml-shelf-heading { justify-content: flex-start; }
 [data-screen="library"].ml-selecting .ml-actions { visibility: hidden; }
 [data-screen="library"].ml-selecting .ml-books > li { position: relative; }
 [data-screen="library"].ml-selecting .ml-cover-bay { position: relative; }
