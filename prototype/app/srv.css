@@ -42,3 +42,4 @@
 .em-blocked .emb-stats li b { margin-left: auto; font-size: 15px; color: var(--burgundy); }
 .em-blocked .emb-why { margin: 12px 0 0; font-size: 14px; line-height: 1.7; }
 .em-blocked .emb-actions { display: flex; align-items: center; gap: 12px; margin-top: 12px; }
+.srv-go-home { margin-top: 18px; display: inline-flex; align-items: center; justify-content: center; gap: 8px; text-decoration: none; }

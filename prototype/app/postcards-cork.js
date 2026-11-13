@@ -38,8 +38,8 @@
       <div class="pc-confirm" role="alertdialog" aria-labelledby="pc-confirm-title" aria-describedby="pc-confirm-desc" hidden>
         <strong id="pc-confirm-title">이 엽서를 지울까요?</strong>
         <p id="pc-confirm-desc">지운 엽서는 보드에서 사라지고, 앞으로 만드는 자서전에도 들어가지 않아요. 이미 만든 책은 그대로예요.</p>
-        <div><button type="button" class="button outline compact" data-pc-keep>그대로 두기</button><button type="button" class="button compact pc-confirm-delete" data-pc-confirm>지우기</button></div></div>
-      <div class="pc-actions"><button type="button" class="text-button pc-trash" data-pc-delete>${icons('close')}<span>엽서 지우기</span></button><button type="button" class="button outline compact" data-pc-close>${kind === 'pin' ? '보드에 다시 꽂기' : '보드에 다시 붙이기'}</button></div></article>`;
+        <div><button type="button" class="button outline compact pc-confirm-delete" data-pc-confirm>지우기</button><button type="button" class="button primary compact" data-pc-keep>그대로 두기</button></div></div>
+      <div class="pc-actions"><button type="button" class="text-button pc-trash" data-pc-delete>${icons('close')}<span>엽서 지우기</span></button><span class="pc-actions-right"><button type="button" class="button outline compact pc-share" data-pc-share>${icons('share')}<span>엽서 공유</span></button><button type="button" class="button outline compact" data-pc-close>${kind === 'pin' ? '보드에 다시 꽂기' : '보드에 다시 붙이기'}</button></span></div></article>`;
     document.body.append(hold);
     const held = hold.querySelector('.pc-held');
     holding = {card, hold, held, kind, tilt, opener: card};
@@ -92,6 +92,7 @@
     }
     held.focus({preventScroll: true});
     hold.querySelector('[data-pc-close]').addEventListener('click', putBack);
+    hold.querySelector('[data-pc-share]').addEventListener('click', () => sharePostcard(record));
     hold.querySelector('[data-pc-delete]').addEventListener('click', () => askDelete(true));
     hold.querySelector('[data-pc-keep]').addEventListener('click', () => askDelete(false));
     hold.querySelector('[data-pc-confirm]').addEventListener('click', () => removeHeld(id));
@@ -139,6 +140,24 @@
     hold.remove();
     card.focus({preventScroll: true});
     holding = null;
+  }
+
+  // 엽서 공유 — 엽서 글을 그대로 보낸다 (카카오톡 · 문자 · 이메일 · 복사). 엽서만 따로 여는 공유 주소는 아직 서버에 없어서,
+  // 링크 칸에는 내말싸미 첫 화면을 둔다
+  function sharePostcard(record) {
+    const elders = window.Srv?.AUTH?.elders || [], me = elders.find((e) => e.elder_id === record.elder_id);
+    const who = me && me.name !== '나' ? window.Srv.honor(me.name) : '';
+    const text = postcardBody(record).replace(/\n\s*\n/g, '\n\n').trim();
+    const home = window.Srv?.DEMO ? `${location.href.split('#')[0].split('?')[0]}?demo=1` : `${location.origin}/`;
+    window.MemoirShare.open({
+      kind: 'postcard', eyebrow: '엽서 나누기', title: record.title,
+      card: {kicker: '내말싸미 · 엽서', title: `「${record.title}」`, sub: `${who ? `${who}의 이야기 · ` : ''}${record.date}`, art: `<span class="share-mini-mic">${icons(record.icon || 'letter')}</span>`},
+      message: `「${record.title}」\n\n${text}\n\n— ${who ? `${who}의 이야기 · ` : ''}내말싸미에서 남긴 엽서`,
+      link: home,
+      status: '',
+      note: '엽서 글이 그대로 보내져요. 가족 이야기가 담겨 있으니 믿을 수 있는 분에게만 보내 주세요. 링크는 내말싸미 첫 화면이에요.',
+      extras: [],
+    });
   }
 
   // 6. 엽서 지우기 — 손에 든 엽서 · 보드 위 × · 여러 장 골라 지우기. 늘 한 번 더 묻고, 지운 뒤 잠시 「되돌리기」를 둔다.

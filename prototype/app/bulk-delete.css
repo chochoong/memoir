@@ -32,3 +32,7 @@ body.trash-selecting main { padding-bottom: 120px; }
   .trash-dialog { padding: 26px 20px 20px; }
 }
 body:not(.ebook-mode) .trash-select-bar .button.outline:hover { background: #ffffff14; }
+
+/* 한 번 더 묻는 창 — 지우기 · 중단하기는 테두리만, 「그대로 두기 · 계속하기」에 색 (11-13) */
+.trash-dialog .trash-ok { background: transparent; color: #9b3b30; border-color: #c99a90; }
+.trash-dialog .trash-ok:hover { background: #fbe9e4; color: #7f2d24; }
