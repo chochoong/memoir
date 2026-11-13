@@ -210,6 +210,9 @@ async def _auth_error(request: Request, e: auth.AuthError):
 
 # ---------------------------------------------------------------- 모델
 
+VoiceKey = Literal["default", "young"]
+
+
 class StartReq(BaseModel):
     title: str
     # 가족이 적은 설명. **어르신의 말씀이 아니다** — 0번 조각에 남지만 대화 기록에
@@ -228,6 +231,9 @@ class StartReq(BaseModel):
     # 누구의 이야기인가 (「누구의 이야기를 남길까요?」 에서 고른 화자). 이 자녀의 화자여야 한다.
     # 지금은 없어도 연다 — 화면이 보내기 전까지. 없으면 화자 미지정 회차가 된다.
     elder_id: str | None = Field(None, max_length=64)
+    # 질문을 읽는 목소리. default = 지금 목소리(Kore) · young = 젊고 밝은 목소리(Leda).
+    # 이름 목록은 tts.VOICES 와 같아야 한다 (tests/test_voice.py 가 본다). 모르는 이름은 422.
+    voice: VoiceKey = "default"
 
 
 class ElderAssignReq(BaseModel):
@@ -262,6 +268,7 @@ class LinkReq(BaseModel):
     theme: Literal["family", "self", "hobby"] | None = None
     topic: str = Field("", max_length=100)
     photo_id: str | None = Field(None, max_length=64)
+    voice: VoiceKey = "default"
 
 
 # ---------------------------------------------------------------- API
@@ -461,7 +468,7 @@ async def create_session(req: StartReq, request: Request,
     ctl = sc.put(sc.SessionController(
         user_id=who, title=req.title, pace=req.pace, max_turn=req.max_turn,
         photo_id=req.photo_id, theme=req.theme, topic=req.topic.strip(),
-        elder_id=req.elder_id,
+        elder_id=req.elder_id, voice=req.voice,
         question_fn=gemini_question, closed_fn=postcard.on_closed))
     await ctl.start(req.seed)
     if not req.elder_id:
@@ -1241,7 +1248,8 @@ async def create_link(req: LinkReq, who: str = Depends(auth.current_user)):
     topic = req.topic.strip()
     rec, raw = await link.issue(who, {
         "elder_id": req.elder_id, "title": req.title.strip() or topic or "인터뷰",
-        "seed": req.seed, "theme": req.theme, "topic": topic, "photo_id": req.photo_id})
+        "seed": req.seed, "theme": req.theme, "topic": topic, "photo_id": req.photo_id,
+        "voice": req.voice})
     return _issued(rec, raw)
 
 
@@ -1427,7 +1435,8 @@ async def link_start(request: Request, body: LinkStartReq | None = None):
         ctl = sc.put(sc.SessionController(
             user_id=rec["user_id"], title=rec["title"], session_id=session_id,
             photo_id=rec["photo_id"], theme=rec["theme"], topic=picked or rec["topic"],
-            elder_id=rec["elder_id"], question_fn=gemini_question, closed_fn=link.on_closed, via_link=True))
+            elder_id=rec["elder_id"], voice=rec.get("voice") or "default",
+            question_fn=gemini_question, closed_fn=link.on_closed, via_link=True))
         # 다른 낱말을 고르셨으면 자녀의 시작 자료(seed)는 쓰지 않는다 — 다른 주제의 자료가
         # 0번 조각으로 들어가 질문을 그쪽으로 끌고 간다
         await ctl.start(picked if picked else rec["seed"])

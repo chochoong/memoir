@@ -226,6 +226,8 @@ class SessionController:
     elder_id: str | None = None
     # 어르신 링크(/api/i/start)로 연 회차. 같은 계정이 새 회차를 열 때 대신 닫지 않는다 (main._open_checks)
     via_link: bool = False
+    # 질문을 읽는 목소리 (tts.VOICES 의 키). 회차를 열 때 정하고 끝까지 같다.
+    voice: str = tts.DEFAULT_VOICE_KEY
     question_fn: QuestionFn = fixed_questions
     stt_fn: SttFn = stt.azure_transcribe
     tts_fn: TtsFn = tts.synthesize
@@ -271,9 +273,14 @@ class SessionController:
 
     # ------------------------------------------------------------ 조회
 
+    def _voice_kw(self) -> dict:
+        # 기본 목소리면 넘기지 않는다 — 시험의 tts_fn · stream_fn 은 글자 하나만 받는다.
+        return {} if self.voice == tts.DEFAULT_VOICE_KEY else {"voice": self.voice}
+
     def snapshot(self) -> dict:
         return {
             "session_id": self.session_id,
+            "voice": self.voice,
             "state": self.machine.state.value,
             "turn": self.machine.turn,
             "max_turn": self.machine.max_turn,
@@ -883,7 +890,7 @@ class SessionController:
         if self.stream_fn:
             # 조각은 Speech 가 모으고, 여기서는 첫 소리가 온 시각만 적는다.
             # 그 순간부터 소리를 틀 수 있으니 낭독 칸은 거기까지다.
-            speech = self.stream_fn(q)
+            speech = self.stream_fn(q, **self._voice_kw())
             self._speech = speech
 
             async def first() -> None:
@@ -895,7 +902,7 @@ class SessionController:
 
         async def run() -> None:
             try:
-                self._question_audio = await self.tts_fn(q)
+                self._question_audio = await self.tts_fn(q, **self._voice_kw())
             except asyncio.CancelledError:
                 raise
             except Exception as e:                      # noqa: BLE001

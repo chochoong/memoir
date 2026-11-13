@@ -108,7 +108,7 @@ class Fake:
         self.saved = (tts_gemini.stream, tts_gemini.available, tts._post, tts._creds)
         fake = self
 
-        async def stream(text):
+        async def stream(text, voice=None):
             fake.calls["gemini"] += 1
             async for x in fake.gemini(text):
                 yield x
@@ -128,14 +128,14 @@ class Fake:
         tts_gemini._cool_until = 0.0
 
 
-async def gemini_ok(text):
+async def gemini_ok(text, voice=None):
     await asyncio.sleep(0.05)
     for c in chunks(quiet(200) + tone(600) + quiet(300)):
         yield c, RATE
         await asyncio.sleep(0.005)
 
 
-async def azure_ok(text):
+async def azure_ok(text, voice=None):
     await asyncio.sleep(0.02)
     return quiet(100) + tone(400) + quiet(150)
 
@@ -147,17 +147,17 @@ class Quota(Exception):
         return "429 RESOURCE_EXHAUSTED {'retryDelay': '120s'}"
 
 
-async def gemini_429(text):
+async def gemini_429(text, voice=None):
     raise Quota()
     yield  # noqa: unreachable — 비동기 생성기로 만든다
 
 
-async def gemini_silent(text):
+async def gemini_silent(text, voice=None):
     await asyncio.sleep(5)
     yield quiet(40), RATE
 
 
-async def gemini_breaks(text):
+async def gemini_breaks(text, voice=None):
     for c in chunks(tone(400))[:5]:
         yield c, RATE
     raise RuntimeError("연결이 끊겼다")

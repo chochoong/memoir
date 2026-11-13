@@ -799,7 +799,7 @@ async def create_elder(user_id: str, display_name: str) -> dict:
 # 표는 010 이 만들었다. 권한을 정하는 함수라 계정 함수와 같이 실패를 삼키지 않는다.
 
 # token_hash 는 읽지 않는다. device_hash 는 「시작한 기기인가」를 대조하는 데만 쓰고 내보내지 않는다.
-_LINK_COLS = """link_id, user_id, elder_id, title, seed, theme, topic, picked_topic, photo_id, session_id,
+_LINK_COLS = """link_id, user_id, elder_id, title, seed, theme, topic, picked_topic, photo_id, voice, session_id,
                 device_hash, created_at, expires_at, revoked_at, started_at, ended_at"""
 
 
@@ -924,11 +924,12 @@ async def create_link(rec: dict) -> None:
         await con.execute(
             """
             INSERT INTO interview_link (link_id, token_hash, user_id, elder_id, title, seed,
-                                        theme, topic, photo_id, expires_at)
-            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+                                        theme, topic, photo_id, expires_at, voice)
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
             """,
             rec["link_id"], rec["token_hash"], rec["user_id"], rec["elder_id"], rec["title"],
-            rec["seed"], rec["theme"], rec["topic"], _pid(rec["photo_id"]), rec["expires_at"])
+            rec["seed"], rec["theme"], rec["topic"], _pid(rec["photo_id"]), rec["expires_at"],
+            rec.get("voice") or "default")
     await _auth_write("링크 기록", run)
 
 

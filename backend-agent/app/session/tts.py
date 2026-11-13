@@ -102,6 +102,24 @@ def _creds() -> tuple[str, str] | None:
     return None
 
 
+# 회차를 열 때 고르는 목소리 (StartReq · LinkReq 의 voice). 키는 화면과 맞춘 이름이고,
+# 값은 Gemini 목소리 이름이다 — None 이면 .env 의 GEMINI_TTS_VOICE (기본 Kore).
+#
+# **Gemini 로 읽을 때만 뜻이 있다.** TTS_PROVIDER 가 azure 이거나 Gemini 가 막혀 Azure 가
+# 대신 읽으면 어느 쪽을 골랐든 Azure 기본 목소리다. Gemini 에는 어린이 목소리가 없다 —
+# Leda 는 젊고 밝은 여성 목소리다 (2026-11-13 들어 보고 고름).
+VOICES: dict[str, str | None] = {
+    "default": None,
+    "young": "Leda",
+}
+DEFAULT_VOICE_KEY = "default"
+
+
+def gemini_voice(key: str | None) -> str | None:
+    """화면의 목소리 이름 → Gemini 목소리. 모르는 이름은 기본으로 읽는다."""
+    return VOICES.get(key or DEFAULT_VOICE_KEY)
+
+
 def provider() -> str:
     return "gemini" if env_str("TTS_PROVIDER").lower() == "gemini" else "azure"
 
@@ -135,7 +153,7 @@ def _ssml(text: str) -> str:
     )
 
 
-async def synthesize(text: str) -> bytes:
+async def synthesize(text: str, voice: str | None = None) -> bytes:
     """
     질문 한 문장을 mp3 로. **실패하면 빈 바이트다. 예외를 올리지 않는다.**
 
@@ -156,7 +174,8 @@ async def synthesize(text: str) -> bytes:
         # 한 번에 받는 갈래다. 예산(1.6초)을 지키면 늘 빈손이라 따로 기다린다.
         wait = env_float("GEMINI_TTS_TIMEOUT", 3.0)
         try:
-            pcm, rate = await asyncio.wait_for(tts_gemini.synth(text), timeout=wait)
+            pcm, rate = await asyncio.wait_for(tts_gemini.synth(text, gemini_voice(voice)),
+                                               timeout=wait)
             trim = Trim(rate)
             pcm = trim.feed(pcm) + trim.end()
             if pcm:
@@ -277,8 +296,9 @@ class Speech:
     self.source 에 남는다 ("gemini" · "azure" · "" = 못 읽었다).
     """
 
-    def __init__(self, text: str):
+    def __init__(self, text: str, voice: str | None = None):
         self.text = text
+        self.voice = voice                             # VOICES 의 키. Gemini 갈래만 쓴다
         self.rate = PCM_RATE
         self.chunks: list[bytes] = []
         self.done = False
@@ -288,8 +308,8 @@ class Speech:
         self._task: asyncio.Task | None = None
 
     @classmethod
-    def start(cls, text: str) -> "Speech":
-        sp = cls(text)
+    def start(cls, text: str, voice: str | None = None) -> "Speech":
+        sp = cls(text, voice)
         sp._task = asyncio.create_task(sp._run())
         return sp
 
@@ -380,7 +400,7 @@ class Speech:
             return False
         first_wait = env_float("GEMINI_TTS_FIRST_TIMEOUT", 1.3)
         gap_wait = env_float("GEMINI_TTS_GAP_TIMEOUT", 2.0)
-        agen = tts_gemini.stream(self.text)
+        agen = tts_gemini.stream(self.text, gemini_voice(self.voice))
         trim: Trim | None = None
         heard = False
         try:
