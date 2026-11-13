@@ -3703,6 +3703,29 @@ body:not(.ebook-mode) .search-field input { background: transparent; }
 .share-dialog .share-imgbar[hidden], .share-dialog .share-link[hidden], .share-dialog .share-card[hidden] { display: none; }
 @media (max-width: 600px) { .share-dialog .share-image img { width: min(78%, 260px); } }
 
+/* 읽기 화면 「보기 설정」 안 「이 책 관리」 — 책 지우기 (앞으로 제목 · 글 고치기도 여기에) */
+.ebook-manage { border-top: 1px solid var(--line, #e9ded7); padding-top: 18px; }
+.ebook-manage[hidden] { display: none; }
+.ebook-manage .ebook-manage-btn {
+  display: inline-flex; align-items: center; gap: 8px; min-height: 44px; padding: 8px 16px;
+  border: 1px solid #d9b2a8; border-radius: 999px; background: transparent; color: #a2463a;
+  font: inherit; font-size: 15px; cursor: pointer;
+}
+.ebook-manage .ebook-manage-btn .icon { width: 16px; height: 16px; }
+.ebook-manage .ebook-manage-btn:hover { background: #fbeeea; border-color: #a2463a; }
+.ebook-manage .ebook-manage-btn:focus-visible { outline: 3px solid var(--burgundy, #743b49); outline-offset: 2px; }
+.ebook-manage-note { margin: 8px 0 0; font-size: 13px; color: var(--muted, #796e68); }
+body.ebook-mode[data-reader-theme="night"] .ebook-manage .ebook-manage-btn { color: #e59a8e; border-color: #8a5a52; }
+
+/* PC 이면서 화면 높이가 낮을 때(노트북 등) 독서 메뉴가 오른쪽 한 줄로 바뀐다 —
+   칸 폭을 똑같이 나누면 「보기 설정」 · 「PDF 저장」 글자가 옆 칸과 겹친다. 글자 길이만큼 칸을 준다 */
+@media (min-width: 761px) and (max-height: 740px) {
+  body.ebook-paged .ebook-toolbar, body.ebook-paged .ebook-toolbar.has-pdf {
+    width: auto; grid-auto-columns: auto; gap: 2px; justify-content: end;
+  }
+  body.ebook-paged .ebook-toolbar button { padding: 8px 10px; }
+}
+
 </style>
 </head>
 <body>
@@ -9857,25 +9880,33 @@ renderRecent();renderQuestion();setInterviewMode('reading');show(location.hash.s
   window.addEventListener('memoir:screen', (e) => { if (selecting && e.detail.screen !== 'library') setSelecting(false); });
   document.addEventListener('keydown', (e) => { if (selecting && e.key === 'Escape' && !document.querySelector('dialog[open]')) setSelecting(false); });
 
-  // ── 읽기 화면의 독서 메뉴에도 「책 지우기」 ──
+  // ── 읽기 화면: 「보기 설정」 안 「이 책 관리」에 「책 지우기」 ──
+  //    자주 쓰지 않고 되돌리기 어려운 일이라 독서 메뉴에서 빼 설정 안쪽에 둔다(독서 메뉴가 붐벼 글자가 겹치기도 했다).
+  //    앞으로 제목 · 글 고치기도 이 「이 책 관리」 칸에 함께 모은다.
   //    지우면 책을 덮어 책장에 돌려놓은 뒤(꺼내기 연출의 반대), 책장에서 빼내 치운다. 초안을 미리 읽는 중에는 보이지 않는다.
-  const toolbar = document.querySelector('#ebook-bottom-bar .ebook-toolbar');
-  let readerBtn = null;
-  if (toolbar) {
-    readerBtn = document.createElement('button');
-    readerBtn.id = 'ebook-remove-book'; readerBtn.type = 'button';
-    readerBtn.innerHTML = `${icons('close')}<span>책 지우기</span>`;
-    toolbar.append(readerBtn);
-    toolbar.classList.add('has-remove');
-    readerBtn.addEventListener('click', removeFromReader);
+  const settings = document.getElementById('ebook-settings');
+  let readerBtn = null, manage = null;
+  if (settings) {
+    manage = document.createElement('section');
+    manage.className = 'ebook-setting-group ebook-manage';
+    manage.innerHTML = `<h3>이 책 관리</h3>
+      <button type="button" id="ebook-remove-book" class="ebook-manage-btn">${icons('close')}<span>책 지우기</span></button>
+      <p class="ebook-manage-note">지워도 이 책을 만든 엽서는 그대로 남아 있어요.</p>`;
+    const body = settings.querySelector('.ebook-settings-body');
+    const note = body?.querySelector('.ebook-sheet-note');
+    if (note) note.before(manage); else body?.append(manage);
+    readerBtn = manage.querySelector('#ebook-remove-book');
+    readerBtn.addEventListener('click', () => { if (settings.open) settings.close(); void removeFromReader(); });
   }
-  window.addEventListener('memoir:screen', (e) => { if (readerBtn && e.detail.screen === 'reader') readerBtn.hidden = !window.MemoirLibrary.findOpen(); });
+  const syncManage = () => { if (manage) manage.hidden = !window.MemoirLibrary.findOpen(); };
+  window.addEventListener('memoir:screen', (e) => { if (e.detail.screen === 'reader') syncManage(); });
+  document.getElementById('ebook-open-settings')?.addEventListener('click', syncManage, true);
   const wait = (ms) => new Promise((r) => setTimeout(r, ms));
   async function removeFromReader() {
     const id = window.MemoirLibrary.findOpen();
     if (!id) return;
     const ok = await window.MemoirTrash.confirm({title: '이 책을 지울까요?', items: [titleOf(id)], desc: DESC, ok: '지우기'});
-    if (!ok) { readerBtn.focus(); return; }
+    if (!ok) { document.getElementById('ebook-open-settings')?.focus(); return; }
     document.getElementById('ebook-exit')?.click();
     // 책이 덮여 책장에 돌아갈 때까지 기다린다
     for (let t = 0; t < 40; t++) { await wait(100); if (location.hash === '#library' && !document.querySelector('.lp-host')) break; if (t === 8 && location.hash !== '#library') navigate('library'); }

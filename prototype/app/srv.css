@@ -138,3 +138,26 @@ body:not(.ebook-mode) .search-field input { background: transparent; }
 .share-dialog .share-imgbar .button { flex: 1; justify-content: center; }
 .share-dialog .share-imgbar[hidden], .share-dialog .share-link[hidden], .share-dialog .share-card[hidden] { display: none; }
 @media (max-width: 600px) { .share-dialog .share-image img { width: min(78%, 260px); } }
+
+/* 읽기 화면 「보기 설정」 안 「이 책 관리」 — 책 지우기 (앞으로 제목 · 글 고치기도 여기에) */
+.ebook-manage { border-top: 1px solid var(--line, #e9ded7); padding-top: 18px; }
+.ebook-manage[hidden] { display: none; }
+.ebook-manage .ebook-manage-btn {
+  display: inline-flex; align-items: center; gap: 8px; min-height: 44px; padding: 8px 16px;
+  border: 1px solid #d9b2a8; border-radius: 999px; background: transparent; color: #a2463a;
+  font: inherit; font-size: 15px; cursor: pointer;
+}
+.ebook-manage .ebook-manage-btn .icon { width: 16px; height: 16px; }
+.ebook-manage .ebook-manage-btn:hover { background: #fbeeea; border-color: #a2463a; }
+.ebook-manage .ebook-manage-btn:focus-visible { outline: 3px solid var(--burgundy, #743b49); outline-offset: 2px; }
+.ebook-manage-note { margin: 8px 0 0; font-size: 13px; color: var(--muted, #796e68); }
+body.ebook-mode[data-reader-theme="night"] .ebook-manage .ebook-manage-btn { color: #e59a8e; border-color: #8a5a52; }
+
+/* PC 이면서 화면 높이가 낮을 때(노트북 등) 독서 메뉴가 오른쪽 한 줄로 바뀐다 —
+   칸 폭을 똑같이 나누면 「보기 설정」 · 「PDF 저장」 글자가 옆 칸과 겹친다. 글자 길이만큼 칸을 준다 */
+@media (min-width: 761px) and (max-height: 740px) {
+  body.ebook-paged .ebook-toolbar, body.ebook-paged .ebook-toolbar.has-pdf {
+    width: auto; grid-auto-columns: auto; gap: 2px; justify-content: end;
+  }
+  body.ebook-paged .ebook-toolbar button { padding: 8px 10px; }
+}
