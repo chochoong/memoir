@@ -594,6 +594,14 @@
   }
 
   const curElder = () => AUTH.elders.find(e => e.elder_id === AUTH.elderId) || null;
-  window.Srv = { CONFIG, QS, AUTH, LINK, api, call, ApiError, sleep, log, sp, idHeaders, curElder,
+  /** 이야기 주인공 이름 + 「님」 — 화면 · 보내는 글에서 이름을 부를 때 모두 이것을 쓴다 (11-13 통일).
+      「나」(내 이야기)는 붙이지 않고, 이미 「님」으로 끝나면 두 번 붙이지 않는다 */
+  const honor = (name) => {
+    const n = String(name || '').trim();
+    if (!n) return '이야기 주인공';
+    if (n === '나' || /님$/.test(n)) return n;
+    return `${n} 님`;
+  };
+  window.Srv = { CONFIG, QS, AUTH, LINK, api, call, ApiError, sleep, log, sp, idHeaders, curElder, honor,
     AUTH_SAYS, LINK_SAYS, THEME_LABEL, linkStateOf, authLost };
 }());

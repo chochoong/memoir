@@ -1,7 +1,8 @@
 (function () {
   'use strict';
   // 자서전(책장)에서도 엽서와 같은 규칙으로 지운다:
-  //  · 책마다 「책 지우기」  · 「여러 권 지우기」로 골라서 한 번에  · 늘 한 번 더 묻고, 지운 뒤 잠시 「되돌리기」
+  //  · 맨 위 「책 지우기」를 켰을 때만 책을 골라 지운다 (책마다 붙던 버튼은 너저분해서 뺐다)
+  //  · 늘 한 번 더 묻고, 지운 뒤 잠시 「되돌리기」
   //  책을 지워도 그 책을 만든 엽서는 그대로 남는다.
   const shelf = document.querySelector('[data-screen="library"]');
   if (!shelf) return;
@@ -19,21 +20,10 @@
     if (heading && !heading.querySelector('.ml-select-toggle')) {
       const t = document.createElement('button');
       t.type = 'button'; t.className = 'button outline compact ml-select-toggle';
-      t.innerHTML = `${icons('check')}<span>여러 권 지우기</span>`;
+      t.innerHTML = `${icons('check')}<span>책 지우기</span>`;
       t.addEventListener('click', () => setSelecting(!selecting));
       heading.append(t);
     }
-    shelf.querySelectorAll('.ml-books > li').forEach((li) => {
-      const id = li.querySelector('[data-library-book]')?.dataset.libraryBook;
-      if (!id || li.querySelector('.ml-remove')) return;
-      let row = li.querySelector('.ml-actions');
-      if (!row) { row = document.createElement('div'); row.className = 'ml-actions'; li.append(row); }
-      const b = document.createElement('button');
-      b.type = 'button'; b.className = 'text-button ml-remove'; b.dataset.bookRemove = id;
-      b.innerHTML = `${icons('close')}<span>책 지우기</span>`;
-      b.setAttribute('aria-label', `「${titleOf(id)}」 책 지우기`);
-      row.append(b);
-    });
     sync();
   }
   new MutationObserver(decorate).observe(shelf, {childList: true, subtree: true});
@@ -101,12 +91,6 @@
       toast(removed.length === 1 ? '책을 책장에 다시 꽂았어요.' : `책 ${removed.length}권을 책장에 다시 꽂았어요.`);
     }, commitServer);
   }
-  async function removeOne(id) {
-    const ok = await window.MemoirTrash.confirm({title: '이 책을 지울까요?', items: [titleOf(id)], desc: DESC, ok: '지우기'});
-    if (!ok) { shelf.querySelector(`[data-book-remove="${CSS.escape(id)}"]`)?.focus(); return; }
-    await liftOut([id]);
-    commit([id]);
-  }
   async function removePicked() {
     const ids = [...picked];
     if (!ids.length) return;
@@ -121,8 +105,6 @@
 
   // 고르는 중에는 책을 눌러도 펼치지 않고 고른다(책 꺼내기 연출보다 먼저 받는다)
   document.addEventListener('click', (e) => {
-    const rm = e.target.closest('[data-book-remove]');
-    if (rm && shelf.contains(rm)) { e.preventDefault(); e.stopImmediatePropagation(); if (!selecting) removeOne(rm.dataset.bookRemove); return; }
     if (!selecting) return;
     const card = e.target.closest('[data-library-book]');
     if (!card || !shelf.contains(card)) return;

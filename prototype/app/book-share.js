@@ -54,9 +54,9 @@
     const mine = who === '나';
     return {
       kind: 'book', eyebrow: '자서전 나누기', title: book.title,
-      card: {kicker: '내말싸미 · 자서전', title: `${mine ? '' : who + ' 님의 '}「${book.title}」`, sub: `이야기 ${book.body.length}편 · 링크를 누르면 바로 읽어요`, art: coverArt(id)},
+      card: {kicker: '내말싸미 · 자서전', title: `${mine ? '' : window.Srv.honor(who) + '의 '}「${book.title}」`, sub: `이야기 ${book.body.length}편 · 링크를 누르면 바로 읽어요`, art: coverArt(id)},
       message: mine ? `제 이야기를 엮은 자서전 「${book.title}」을 나눠요. 링크를 누르면 휴대폰이나 컴퓨터에서 바로 읽을 수 있어요.`
-        : `${who} 님의 이야기를 엮은 자서전 「${book.title}」을 나눠요. 링크를 누르면 휴대폰이나 컴퓨터에서 바로 읽을 수 있어요.`,
+        : `${window.Srv.honor(who)}의 이야기를 엮은 자서전 「${book.title}」을 나눠요. 링크를 누르면 휴대폰이나 컴퓨터에서 바로 읽을 수 있어요.`,
       link: s.link,
       status: '공유 중 · 읽기만 · 「공유 그만하기」를 누를 때까지 열려요',
       note: '책에는 가족 이야기와 이름이 담겨 있어요. 믿을 수 있는 분에게만 보내 주세요.',
@@ -82,30 +82,44 @@
       make.addEventListener('click', async () => {
         if (make.disabled) return;
         make.disabled = true; make.querySelector('span').textContent = '링크를 만드는 중…';
-        try {
-          const book = await window.SrvLibrary.ensure(id);
-          if (!book) throw new Error('no book');
-          const r = await call('/shares', {method: 'POST', body: JSON.stringify({book_id: id, book: bookBody(book)})});
-          urlKeep(r.share_id, r.url);
-          const s = shares.get(id) || {ids: [], link: ''};
-          s.ids.push(r.share_id); s.link = r.url;
-          shares.set(id, s);
-          mark();
-          share.refill(opts(id));
-          share.setStatus('공유 링크를 만들었어요. 아래에서 보낼 방법을 골라 주세요.');
-        } catch (e) {
-          make.disabled = false; make.querySelector('span').textContent = again ? '새 공유 링크 만들기' : '공유 링크 만들기';
-          share.setStatus(e && e.status === 400 ? '책이 너무 크거나 모양이 맞지 않아 공유하지 못했어요.' : '공유 링크를 만들지 못했어요. 잠시 뒤 다시 눌러 주세요.');
-        }
+        const err = await makeLink(id);
+        if (!err) { share.refill(opts(id)); share.setStatus('공유 링크를 만들었어요. 아래에서 보낼 방법을 골라 주세요.'); return; }
+        make.disabled = false; make.querySelector('span').textContent = again ? '새 공유 링크 만들기' : '공유 링크 만들기';
+        share.setStatus(err);
       });
       return box;
     };
   }
+  /** 공유 링크를 하나 만든다 — 성공하면 null, 못 하면 안내 문구 */
+  async function makeLink(id) {
+    try {
+      const book = await window.SrvLibrary.ensure(id);
+      if (!book) throw new Error('no book');
+      const r = await call('/shares', {method: 'POST', body: JSON.stringify({book_id: id, book: bookBody(book)})});
+      urlKeep(r.share_id, r.url);
+      const s = shares.get(id) || {ids: [], link: ''};
+      s.ids.push(r.share_id); s.link = r.url;
+      shares.set(id, s);
+      mark();
+      return null;
+    } catch (e) {
+      return e && e.status === 400 ? '책이 너무 크거나 모양이 맞지 않아 공유하지 못했어요.' : '공유 링크를 만들지 못했어요. 잠시 뒤 다시 눌러 주세요.';
+    }
+  }
   async function openFor(id) {
     const book = await window.SrvLibrary.ensure(id);
     if (!book) return;
-    if (shares.has(id) && shares.get(id).link) share.open(opts(id));
-    else share.open({kind: 'book', eyebrow: '자서전 나누기', title: book.title, card: {kicker: '', title: '', sub: ''}, message: '', setup: setupStep(id, shares.has(id))});
+    await loadShares(); // 다른 기기에서 켜거나 끈 공유도 바로 맞춘다
+    if (shares.has(id) && shares.get(id).link) { share.open(opts(id)); return; }
+    if (!shares.has(id)) { share.open({kind: 'book', eyebrow: '자서전 나누기', title: book.title, card: {kicker: '', title: '', sub: ''}, message: '', setup: setupStep(id, false)}); return; }
+    // 공유 중인데 이 기기에 링크 주소가 없다 (다른 기기 · 다른 브라우저에서 만들었다).
+    // 서버는 주소를 한 번만 알려 주므로 같은 주소는 못 보여 준다 → 새 링크를 하나 더 만들어 바로 보여 준다.
+    // 전에 보낸 링크는 끄지 않는다 — 받은 분은 계속 읽을 수 있다. 「공유 그만하기」는 둘 다 끈다.
+    toast('이 기기에서 쓸 공유 링크를 준비하고 있어요…');
+    const err = await makeLink(id);
+    if (err) { toast(err); return; }
+    share.open(opts(id));
+    share.setStatus('이 기기에서 쓸 링크를 새로 만들었어요. 전에 보낸 링크도 그대로 열려요.');
   }
   async function stop(id) {
     const title = lib.getBook(id)?.title || '';
@@ -120,20 +134,11 @@
     toast('공유를 그만했어요. 보낸 링크는 이제 열리지 않아요.');
   }
 
-  // ── 책장: 책마다 「공유」 + 공유 중 표시 ──
+  // ── 책장: 「공유 중」 표시만 — 공유 버튼은 책을 펼친 뒤 독서 메뉴에 (책장이 너저분해서) ──
   function mark() {
     shelf.querySelectorAll('.ml-books > li').forEach((li) => {
       const id = li.querySelector('[data-library-book]')?.dataset.libraryBook;
       if (!id) return;
-      let row = li.querySelector('.ml-actions');
-      if (!row) { row = document.createElement('div'); row.className = 'ml-actions'; li.append(row); }
-      if (!row.querySelector('.ml-share')) {
-        const b = document.createElement('button');
-        b.type = 'button'; b.className = 'text-button ml-share'; b.dataset.bookShare = id;
-        b.innerHTML = `${icons('share')}<span>공유</span>`;
-        b.setAttribute('aria-label', `「${lib.getBook(id)?.title || ''}」 공유`);
-        row.prepend(b);
-      }
       const label = li.querySelector('.ml-volume-label');
       const chip = label?.querySelector('.ms-on');
       if (shares.has(id) && label && !chip) label.insertAdjacentHTML('beforeend', '<span class="ms-on">공유 중</span>');
@@ -185,7 +190,7 @@
     const s = shares.get(id);
     document.body.classList.add('share-guest-view');
     document.body.classList.toggle('share-guest-nopdf', false);
-    banner.querySelector('.sgb-who').textContent = elderName() === '나' ? '「나」님이' : `${elderName()} 님의 가족이`;
+    banner.querySelector('.sgb-who').textContent = elderName() === '나' ? '「나」님이' : `${window.Srv.honor(elderName())}의 가족이`;
     banner.hidden = false;
     if (location.hash === '#reader' && lib.findOpen() === id) return;
     lib.openBook(id);
@@ -202,5 +207,6 @@
 
   mark();
   window.addEventListener('memoir:screen', (e) => { if (e.detail.screen === 'library') void loadShares(); });
+  window.addEventListener('memoir:preview-auth', (e) => { if (e.detail.authenticated) void loadShares(); });
   window.MemoirBookShare = {open: openFor, isShared: (id) => shares.has(id)};
 }());

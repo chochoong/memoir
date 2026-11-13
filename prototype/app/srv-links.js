@@ -24,6 +24,9 @@
   const fin = document.getElementById('finish-description');
   if (fin) fin.textContent = '지금까지 들려주신 이야기는 저장돼요. 마치면 나눈 이야기를 보여 드려요.';
 
+  // 내말싸미 바로가기 — 인터뷰를 마친 분이 어떤 곳인지 둘러볼 수 있게. 초대 링크(/i) 밖의 첫 화면으로 간다
+  const homeUrl = () => window.Srv.DEMO ? `${location.href.split('#')[0].split('?')[0]}?demo=1` : `${location.origin}/`;
+  const homeLink = () => `<a class="button outline role-main-action srv-go-home" href="${escapeText(homeUrl())}">${icons('home')}<span>내말싸미 둘러보기</span></a>`;
   const topicOf = (p) => String((p && (p.topic || THEME_LABEL[p.theme])) || '살아온 이야기');
   function paint(stateKey, extra = '') {
     const say = LINK_SAYS[stateKey] || LINK_SAYS.neterr;
@@ -81,7 +84,7 @@
     h1.textContent = '오늘 이야기, 고맙습니다';
     content.innerHTML = `<div class="panel role-guest-card"><span class="eyebrow">내말싸미 · 이야기 초대</span>
       <h2>들려주신 이야기를 잘 받았어요</h2>
-      <p>링크를 보내 주신 분이 이 이야기로 엽서와 자서전을 만들 수 있어요. 이 창은 닫으셔도 돼요.</p></div>${story}`;
+      <p>링크를 보내 주신 분이 이 이야기로 엽서와 자서전을 만들 수 있어요. 이 창은 닫으셔도 돼요.</p>${homeLink()}</div>${story}`;
     h1.focus({preventScroll: true});
   }
   /** 인터뷰가 닫혔다 (srv-interview 가 부른다) — 서버가 기록을 남길 때까지 잠깐 기다렸다 보여 준다 */
@@ -111,7 +114,7 @@
     show('invite');
     h1.textContent = '인터뷰를 중단했어요';
     content.innerHTML = `<div class="panel role-guest-card"><span class="eyebrow">내말싸미 · 이야기 초대</span><h2>이야기를 저장하지 않고 마쳤어요</h2>
-      <p>이 링크로는 다시 시작할 수 없어요. 다시 이야기하시려면 링크를 보내 주신 분께 새 링크를 부탁해 주세요.</p></div>`;
+      <p>이 링크로는 다시 시작할 수 없어요. 다시 이야기하시려면 링크를 보내 주신 분께 새 링크를 부탁해 주세요.</p>${homeLink()}</div>`;
     h1.focus({preventScroll: true});
   }
   window.SrvLinks = {failed, done, left};

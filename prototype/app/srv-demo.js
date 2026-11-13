@@ -157,6 +157,19 @@
     }
     if (!db.logged) return err(401, '로그인이 필요해요', 'login_required');
     // 화자
+    if ((m = path.match(/^\/elders\/([^/]+)$/)) && (method === 'PATCH' || method === 'DELETE')) {
+      const e = db.elders.find((x) => x.elder_id === m[1]);
+      if (!e) return err(404, '이야기 주인공을 찾을 수 없어요', 'elder_not_found');
+      if (method === 'PATCH') {
+        const nm = String(body.name || '').trim();
+        if (!nm) return err(422, '이름을 적어 주세요');
+        e.name = nm; save(); return ok(e);
+      }
+      const has = db.sessions.some((s) => !s.deleted && s.elder_id === e.elder_id) || db.memoirs.some((x) => !x.deleted && x.elder_id === e.elder_id)
+        || db.links.some((k) => k.elder_id === e.elder_id && ['ready', 'in_progress'].includes(k.state));
+      if (has) return err(409, '기록이 있어 지울 수 없어요', 'has_records');
+      db.elders = db.elders.filter((x) => x.elder_id !== e.elder_id); save(); return ok({elder_id: e.elder_id, deleted: true});
+    }
     if (path === '/elders' && method === 'POST') { const e = {elder_id: 'demo-e' + (++db.seq + 10), name: String(body.name || '').trim()}; db.elders.push(e); save(); return made(e); }
     // 회차 목록 · 시작
     if (path === '/sessions' && method === 'GET') {

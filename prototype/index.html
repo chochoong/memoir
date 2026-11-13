@@ -2186,6 +2186,10 @@ body.ebook-mode .ebook-page-controls:focus-within {
 [data-screen="library"] .ml-tone-0 .ml-cover { --ml-cover-color:#5f1d2c; --ml-cover-ink:#e6c58e; --ml-cover-spine:#3d1420; }
 [data-screen="library"] .ml-tone-1 .ml-cover { --ml-cover-color:#1c293b; --ml-cover-ink:#eee2cc; --ml-cover-spine:#111b29; }
 [data-screen="library"] .ml-tone-2 .ml-cover { --ml-cover-color:#1a3128; --ml-cover-ink:#e6c58e; --ml-cover-spine:#102018; }
+/* 같은 문체가 이어질 때 두 번째 책 — 조금 밝게 (library-view.js toneOf) */
+[data-screen="library"] .ml-tone-0b .ml-cover { --ml-cover-color:#76283b; --ml-cover-ink:#e9cb96; --ml-cover-spine:#4e1a28; }
+[data-screen="library"] .ml-tone-1b .ml-cover { --ml-cover-color:#2a3c56; --ml-cover-ink:#f1e6d2; --ml-cover-spine:#1a283c; }
+[data-screen="library"] .ml-tone-2b .ml-cover { --ml-cover-color:#26443a; --ml-cover-ink:#e9cb96; --ml-cover-spine:#163026; }
 [data-screen="library"] .ml-book-card:hover .ml-cover,[data-screen="library"] .ml-book-card:focus-visible .ml-cover { transform:translateY(-5px); }
 [data-screen="library"] .ml-shelf-plank { position:absolute; z-index:2; top:var(--ml-display-height); left:4px; right:4px; height:16px; border-radius:2px 2px 3px 3px; background:repeating-linear-gradient(90deg,#ffffff00 0 37px,#3c1e0a1f 37px 39px,#ffffff00 39px 71px),linear-gradient(#a2724c,#7d5437 40%,#5f3e28); box-shadow:0 14px 16px -8px #3c230f80,inset 0 1px 0 #ffebc859; pointer-events:none; }
 [data-screen="library"] .ml-book-copy { display:flex; flex-direction:column; align-self:stretch; padding:29px 1px 0; }
@@ -3014,6 +3018,10 @@ body.pre-login .side-nav [data-locked]::after {
 .lp-scope.ml-tone-0 .ml-cover { --ml-cover-color:#5f1d2c; --ml-cover-ink:#e6c58e; --ml-cover-spine:#3d1420; }
 .lp-scope.ml-tone-1 .ml-cover { --ml-cover-color:#1c293b; --ml-cover-ink:#eee2cc; --ml-cover-spine:#111b29; }
 .lp-scope.ml-tone-2 .ml-cover { --ml-cover-color:#1a3128; --ml-cover-ink:#e6c58e; --ml-cover-spine:#102018; }
+/* 같은 문체가 이어질 때 두 번째 책 — 조금 밝게 (library-view.js toneOf) */
+.lp-scope.ml-tone-0b .ml-cover { --ml-cover-color:#76283b; --ml-cover-ink:#e9cb96; --ml-cover-spine:#4e1a28; }
+.lp-scope.ml-tone-1b .ml-cover { --ml-cover-color:#2a3c56; --ml-cover-ink:#f1e6d2; --ml-cover-spine:#1a283c; }
+.lp-scope.ml-tone-2b .ml-cover { --ml-cover-color:#26443a; --ml-cover-ink:#e9cb96; --ml-cover-spine:#163026; }
 
 </style>
   <style data-from="start-choice.css">
@@ -3194,6 +3202,10 @@ body.trash-selecting main { padding-bottom: 120px; }
 }
 body:not(.ebook-mode) .trash-select-bar .button.outline:hover { background: #ffffff14; }
 
+/* 한 번 더 묻는 창 — 지우기 · 중단하기는 테두리만, 「그대로 두기 · 계속하기」에 색 (11-13) */
+.trash-dialog .trash-ok { background: transparent; color: #9b3b30; border-color: #c99a90; }
+.trash-dialog .trash-ok:hover { background: #fbe9e4; color: #7f2d24; }
+
 </style>
   <style data-from="postcard-delete.css">
 /* 6. 엽서 지우기 */
@@ -3206,8 +3218,9 @@ body:not(.ebook-mode) .pc-trash { color: #8f4a3c; font-size: 15px; min-height: 4
 .pc-confirm strong { display: block; font-size: 18px; color: #6d2f2a; }
 .pc-confirm p { margin: 6px 0 12px; font-size: 14.5px; line-height: 1.7; color: #7a5a4c; }
 .pc-confirm > div { display: flex; gap: 10px; justify-content: flex-end; flex-wrap: wrap; }
-.pc-confirm-delete { background: #9b3b30; color: #fff; border-color: #9b3b30; }
-.pc-confirm-delete:hover { background: #7f2d24; }
+/* 지우기는 테두리만 — 색 있는 버튼(그대로 두기)을 먼저 누르는 습관이 있어서, 안전한 쪽에 색을 준다 (11-13) */
+.pc-confirm-delete { background: transparent; color: #9b3b30; border-color: #c99a90; }
+.pc-confirm-delete:hover { background: #fbe9e4; color: #7f2d24; }
 .pc-held.confirming .pc-body { opacity: .55; }
 /* 보드 위 엽서마다 × — PC는 엽서에 마우스를 올리거나 키보드로 갔을 때, 터치 화면은 늘 보인다 */
 .pc-x {
@@ -3241,6 +3254,10 @@ body:not(.ebook-mode) .pc-trash { color: #8f4a3c; font-size: 15px; min-height: 4
 #record-list.pc-selecting .pc-slot > .postcard-card .record-meta { padding-left: 34px; }
 #record-list.pc-selecting .pc-slot.is-picked > .postcard-card { outline: 3px solid var(--burgundy); outline-offset: 3px; transform: rotate(calc(var(--tilt) * -1)) translateY(-6px); }
 #record-list.pc-selecting .pc-slot:not(.is-picked) > .postcard-card { filter: saturate(.85); }
+
+.pc-actions-right { display: inline-flex; gap: 8px; flex-wrap: wrap; justify-content: flex-end; }
+.pc-share .icon { width: 16px; height: 16px; }
+@media (max-width: 420px) { .pc-actions { flex-wrap: wrap; } .pc-actions-right { width: 100%; } .pc-actions-right .button { flex: 1; justify-content: center; } }
 
 </style>
   <style data-from="library-delete.css">
@@ -3561,6 +3578,95 @@ body.ebook-paged #ebook-content, body.ebook-paged #ebook-right-content, body.ebo
 #answer-panel [type="submit"].srv-send-wait { cursor: progress; opacity: .8; }
 .selection-footer .srv-pick-all { margin-left: auto; margin-right: 10px; }
 @media (max-width: 600px) { .selection-footer .srv-pick-all { margin: 0; } }
+/* 이야기 주인공 이름 고치기 · 지우기 */
+.role-manage-elders { margin-top: 14px; display: inline-flex; align-items: center; gap: 6px; font-size: 15px; }
+.elder-manage-dialog { width: min(560px, calc(100% - 32px)); }
+.elder-manage-dialog .em-lead { margin: -6px 0 16px; }
+.em-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 10px; max-height: min(50dvh, 420px); overflow: auto; }
+.em-row { display: flex; gap: 8px; align-items: center; padding: 10px; border: 1px solid var(--line); border-radius: 10px; background: #fffdf9; }
+.em-name { flex: 1; min-width: 0; }
+.em-name input { width: 100%; font: inherit; font-size: 17px; padding: 10px 12px; min-height: 46px; border: 1px solid #cbb29b; border-radius: 8px; background: #fff; color: var(--ink); }
+.em-name input:disabled { background: transparent; border-color: transparent; color: var(--ink); font-weight: 600; }
+.em-self { font-size: 13px; color: var(--muted, #7a6a5a); padding-right: 6px; white-space: nowrap; }
+.em-del { color: #9b352e; display: inline-flex; align-items: center; gap: 4px; white-space: nowrap; }
+.em-msg { min-height: 1.6em; margin: 14px 0 0; font-size: 14px; line-height: 1.6; color: var(--muted, #7a6a5a); }
+.em-msg.bad { color: #9b352e; }
+.visually-hidden { position: absolute !important; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+@media (max-width: 600px) { .em-row { flex-wrap: wrap; } .em-name { flex-basis: 100%; } }
+.elder-pick-dialog { width: min(480px, calc(100% - 32px)); }
+.ep-list { display: flex; flex-wrap: wrap; gap: 10px; margin: 4px 0 16px; }
+.ep-list [aria-pressed="true"] { background: var(--burgundy); color: #fffaf4; border-color: var(--burgundy); }
+.ep-manage, .sc-manage { display: inline-flex; align-items: center; gap: 6px; font-size: 15px; justify-self: start; }
+/* 지울 수 없을 때 안내 상자 */
+.em-blocked { list-style: none; margin: -2px 0 4px; padding: 16px 18px; border: 1px solid #e3c7a0; border-left: 4px solid #b9874a; border-radius: 10px; background: #fff6e6; color: #4a3a2c; }
+.em-blocked .emb-head { display: flex; align-items: center; gap: 8px; font-size: 16px; }
+.em-blocked .emb-head .icon { width: 20px; height: 20px; color: #9a6a2e; flex: none; }
+.em-blocked .emb-sub { margin: 8px 0 8px; font-size: 13px; color: #7a6650; }
+.em-blocked .emb-stats { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 8px; }
+.em-blocked .emb-stats li { display: flex; align-items: center; gap: 8px; padding: 8px 10px; border-radius: 8px; background: #fffdf8; border: 1px solid #ecdcc3; font-size: 14px; }
+.em-blocked .emb-stats li .icon { width: 16px; height: 16px; color: var(--burgundy); flex: none; }
+.em-blocked .emb-stats li b { margin-left: auto; font-size: 15px; color: var(--burgundy); }
+.em-blocked .emb-why { margin: 12px 0 0; font-size: 14px; line-height: 1.7; }
+.em-blocked .emb-actions { display: flex; align-items: center; gap: 12px; margin-top: 12px; }
+.srv-go-home { margin-top: 18px; display: inline-flex; align-items: center; justify-content: center; gap: 8px; text-decoration: none; }
+
+/* 「자서전 만드는 중」 알림 — 진행 창을 닫아도 화면 아래에 남는다 (srv-memoir) */
+.srv-gen-pill {
+  position: fixed; z-index: 60; right: 24px; bottom: 24px;
+  display: inline-flex; align-items: center; gap: 10px;
+  max-width: calc(100% - 32px); min-height: 52px; padding: 8px 18px 8px 14px;
+  border: 1px solid #c9a99b; border-radius: 999px;
+  background: #fffaf0; color: #3b2a26; box-shadow: 0 8px 22px #4a2c2426;
+  font: inherit; text-align: left; cursor: pointer;
+}
+.srv-gen-pill[hidden] { display: none; }
+.srv-gen-pill:hover { border-color: #7a4a55; }
+.srv-gen-pill:focus-visible { outline: 3px solid #7a4a55; outline-offset: 2px; }
+.srv-gen-pill .sgp-text { display: flex; flex-direction: column; line-height: 1.3; min-width: 0; }
+.srv-gen-pill b { font-size: 15px; color: #6b3a48; }
+.srv-gen-pill small { font-size: 13px; color: #6d5b55; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.srv-gen-pill .sgp-spin {
+  flex: none; width: 20px; height: 20px; border-radius: 50%;
+  border: 3px solid #e7d5cc; border-top-color: #7a4a55; animation: sgp-spin 1s linear infinite;
+}
+@keyframes sgp-spin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) { .srv-gen-pill .sgp-spin { animation: none; border-top-color: #7a4a55; border-right-color: #7a4a55; } }
+@media (max-width: 760px) {
+  .srv-gen-pill { right: 16px; left: 16px; justify-content: flex-start; top: 72px; bottom: auto; min-height: 48px; }
+}
+
+/* 만드는 중에 새 자서전을 누르면 — 진행 창 위에 막는 이유 (srv-memoir) */
+.generation-dialog .srv-gen-busy, #generation-dialog .srv-gen-busy {
+  margin: 4px 0 12px; padding: 12px 14px; border: 1px solid #e0c7bc; border-radius: 10px;
+  background: #fbf0ea; color: #5b3a40; font-size: 15px; line-height: 1.6; text-align: center;
+}
+.srv-gen-busy[hidden] { display: none !important; }
+
+/* 책장의 「만드는 중」 책 — 빛이 지나가고 별이 반짝인다 */
+[data-screen="library"] .ml-making .ml-cover-making {
+  --ml-cover-color: #7a4a55; --ml-cover-ink: #fbe9c8; --ml-cover-spine: #57303a;
+  overflow: hidden; justify-content: center;
+}
+[data-screen="library"] .ml-making .ml-cover-title { font-size: 19px; }
+[data-screen="library"] .ml-making .ml-volume-label { color: #7a4a55; font-weight: 600; }
+.ml-cover-making .mlm-shine {
+  position: absolute; inset: -20% auto -20% -60%; width: 45%;
+  background: linear-gradient(100deg, transparent, #ffffff55 45%, #fff6dd88 50%, #ffffff55 55%, transparent);
+  transform: skewX(-12deg); animation: mlm-shine 2.6s ease-in-out infinite; pointer-events: none;
+}
+.ml-cover-making .mlm-spark { position: absolute; color: #ffe7a8; text-shadow: 0 0 8px #ffd77a; opacity: 0; animation: mlm-twinkle 2.2s ease-in-out infinite; pointer-events: none; }
+.ml-cover-making .s1 { top: 12%; left: 16%; font-size: 15px; }
+.ml-cover-making .s2 { top: 22%; right: 14%; font-size: 12px; animation-delay: .5s; }
+.ml-cover-making .s3 { bottom: 20%; right: 22%; font-size: 17px; animation-delay: 1s; }
+.ml-cover-making .s4 { bottom: 12%; left: 22%; font-size: 11px; animation-delay: 1.5s; }
+[data-screen="library"] .ml-making .ml-cover { box-shadow: -3px 1px 0 var(--ml-cover-spine), 0 0 0 2px #f3d79a, 0 0 22px #f0c86f88, 4px 5px 8px #3c261430; animation: mlm-glow 2.2s ease-in-out infinite; }
+@keyframes mlm-shine { 0% { left: -60%; } 60%, 100% { left: 130%; } }
+@keyframes mlm-twinkle { 0%, 100% { opacity: 0; transform: scale(.6) rotate(0); } 50% { opacity: 1; transform: scale(1.15) rotate(20deg); } }
+@keyframes mlm-glow { 0%, 100% { filter: brightness(1); } 50% { filter: brightness(1.12); } }
+@media (prefers-reduced-motion: reduce) {
+  .ml-cover-making .mlm-shine, [data-screen="library"] .ml-making .ml-cover { animation: none; }
+  .ml-cover-making .mlm-spark { animation: none; opacity: .9; }
+}
 
 </style>
 </head>
@@ -3608,7 +3714,7 @@ body.ebook-paged #ebook-content, body.ebook-paged #ebook-right-content, body.ebo
 
       <section data-screen="home" class="screen" aria-labelledby="home-heading">
         <div class="hero panel">
-          <div class="hero-copy"><div class="eyebrow">당신의 삶, 그 자체로 소중한 이야기</div><h1 id="home-heading" tabindex="-1">기억은 이야기가 되고,<br> <em>이야기는 책이 됩니다.</em></h1><p class="hero-description">사진 한 장, 마음속 기억 하나.<br>편안하게 들려주시면 한 권의 자서전으로 엮어드려요.</p><button class="button primary hero-cta" data-go="interview"><svg class="icon"><use href="#i-pen"/></svg>내 이야기 시작하기<svg class="icon end-icon"><use href="#i-arrow"/></svg></button><p class="gentle-note">잘 말하려 애쓰지 않아도 괜찮아요.</p></div>
+          <div class="hero-copy"><div class="eyebrow">당신의 삶, 그 자체로 소중한 이야기</div><h1 id="home-heading" tabindex="-1">기억은 이야기가 되고,<br> <em>이야기는 책이 됩니다.</em></h1><p class="hero-description">사진 한 장, 마음속 기억 하나.<br>편안하게 들려주시면 한 권의 자서전으로 엮어드려요.</p><button class="button primary hero-cta" data-go="interview"><svg class="icon"><use href="#i-pen"/></svg>이야기 시작하기<svg class="icon end-icon"><use href="#i-arrow"/></svg></button><p class="gentle-note">잘 말하려 애쓰지 않아도 괜찮아요.</p></div>
           <div class="hero-art"><span class="art-halo"></span><img src="data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSI2NDAiIGhlaWdodD0iNDgwIiB2aWV3Qm94PSIwIDAgNjQwIDQ4MCIgZmlsbD0ibm9uZSIgcm9sZT0iaW1nIiBhcmlhLWxhYmVsbGVkYnk9ImJvb2stdGl0bGUgYm9vay1kZXNjcmlwdGlvbiI+CiAgPHRpdGxlIGlkPSJib29rLXRpdGxlIj7sgqzsp4Tqs7wg7J207JW86riw6rCAIOuLtOq4tCDsnpDshJzsoIQ8L3RpdGxlPgogIDxkZXNjIGlkPSJib29rLWRlc2NyaXB0aW9uIj7tjrzss5Dsp4Qg7YGs66a87IOJIOyxhSDsnITroZwg7Iuc6rOo7KeRIOyCrOynhOqzvCDqsIDsobHsnZgg67mb67CU656cIOyCrOynhCDrkZAg7J6l7J20IO2PrOqwnOyguCDsnojsirXri4jri6QuPC9kZXNjPgogIDxkZWZzPgogICAgPGxpbmVhckdyYWRpZW50IGlkPSJsYW5kc2NhcGUtd2FzaCIgeDE9IjMzNyIgeTE9IjExMCIgeDI9IjMyNSIgeTI9IjQwNyIgZ3JhZGllbnRVbml0cz0idXNlclNwYWNlT25Vc2UiPgogICAgICA8c3RvcCBzdG9wLWNvbG9yPSIjRjVFNERBIiBzdG9wLW9wYWNpdHk9Ii43Ii8+CiAgICAgIDxzdG9wIG9mZnNldD0iMSIgc3RvcC1jb2xvcj0iI0Y1RTREQSIgc3RvcC1vcGFjaXR5PSIuMTIiLz4KICAgIDwvbGluZWFyR3JhZGllbnQ+CiAgICA8bGluZWFyR3JhZGllbnQgaWQ9ImxlZnQtcGFwZXIiIHgxPSIxNDgiIHkxPSIyMjUiIHgyPSIzMzgiIHkyPSIzNjUiIGdyYWRpZW50VW5pdHM9InVzZXJTcGFjZU9uVXNlIj4KICAgICAgPHN0b3Agc3RvcC1jb2xvcj0iI0ZGRkFGMyIvPgogICAgICA8c3RvcCBvZmZzZXQ9Ii42NyIgc3RvcC1jb2xvcj0iI0Y5RjBFNCIvPgogICAgICA8c3RvcCBvZmZzZXQ9IjEiIHN0b3AtY29sb3I9IiNFNUQ2QzEiLz4KICAgIDwvbGluZWFyR3JhZGllbnQ+CiAgICA8bGluZWFyR3JhZGllbnQgaWQ9InJpZ2h0LXBhcGVyIiB4MT0iMzM3IiB5MT0iMzE3IiB4Mj0iNTY4IiB5Mj0iMjgyIiBncmFkaWVudFVuaXRzPSJ1c2VyU3BhY2VPblVzZSI+CiAgICAgIDxzdG9wIHN0b3AtY29sb3I9IiNERUNFQjkiLz4KICAgICAgPHN0b3Agb2Zmc2V0PSIuMTQiIHN0b3AtY29sb3I9IiNGOEVFREYiLz4KICAgICAgPHN0b3Agb2Zmc2V0PSIuNTUiIHN0b3AtY29sb3I9IiNGRkZBRjMiLz4KICAgICAgPHN0b3Agb2Zmc2V0PSIxIiBzdG9wLWNvbG9yPSIjRjdFQ0RDIi8+CiAgICA8L2xpbmVhckdyYWRpZW50PgogICAgPGxpbmVhckdyYWRpZW50IGlkPSJwYWdlLWVkZ2UiIHgxPSIzMjAiIHkxPSIzMzAiIHgyPSIzMjUiIHkyPSI0MDAiIGdyYWRpZW50VW5pdHM9InVzZXJTcGFjZU9uVXNlIj4KICAgICAgPHN0b3Agc3RvcC1jb2xvcj0iI0U5RERDQyIvPgogICAgICA8c3RvcCBvZmZzZXQ9IjEiIHN0b3AtY29sb3I9IiNEMUJEQTYiLz4KICAgIDwvbGluZWFyR3JhZGllbnQ+CiAgICA8bGluZWFyR3JhZGllbnQgaWQ9InBob3RvLXBhcGVyIiB4MT0iMyIgeTE9IjAiIHgyPSIxNjAiIHkyPSIyMDUiIGdyYWRpZW50VW5pdHM9InVzZXJTcGFjZU9uVXNlIj4KICAgICAgPHN0b3Agc3RvcC1jb2xvcj0iI0ZGRkFGMyIvPgogICAgICA8c3RvcCBvZmZzZXQ9IjEiIHN0b3AtY29sb3I9IiNGMEU0RDMiLz4KICAgIDwvbGluZWFyR3JhZGllbnQ+CiAgICA8bGluZWFyR3JhZGllbnQgaWQ9ImhvdXNlLXNreSIgeDE9Ijg1IiB5MT0iMTgiIHgyPSI4NSIgeTI9IjE1MyIgZ3JhZGllbnRVbml0cz0idXNlclNwYWNlT25Vc2UiPgogICAgICA8c3RvcCBzdG9wLWNvbG9yPSIjRDhDQ0I3Ii8+CiAgICAgIDxzdG9wIG9mZnNldD0iMSIgc3RvcC1jb2xvcj0iI0JDQUU5MSIvPgogICAgPC9saW5lYXJHcmFkaWVudD4KICAgIDxsaW5lYXJHcmFkaWVudCBpZD0icG9ydHJhaXQtd2FsbCIgeDE9IjcxIiB5MT0iMTciIHgyPSI3MSIgeTI9IjE0NyIgZ3JhZGllbnRVbml0cz0idXNlclNwYWNlT25Vc2UiPgogICAgICA8c3RvcCBzdG9wLWNvbG9yPSIjQzJCMjk1Ii8+CiAgICAgIDxzdG9wIG9mZnNldD0iMSIgc3RvcC1jb2xvcj0iI0E4OTU3OCIvPgogICAgPC9saW5lYXJHcmFkaWVudD4KICAgIDxyYWRpYWxHcmFkaWVudCBpZD0icGhvdG8tdmlnbmV0dGUiIGN4PSIuNSIgY3k9Ii4zOCIgcj0iLjc1Ij4KICAgICAgPHN0b3Agb2Zmc2V0PSIuMzUiIHN0b3AtY29sb3I9IiM3OTY1NTIiIHN0b3Atb3BhY2l0eT0iMCIvPgogICAgICA8c3RvcCBvZmZzZXQ9IjEiIHN0b3AtY29sb3I9IiM1MTQyMzUiIHN0b3Atb3BhY2l0eT0iLjI2Ii8+CiAgICA8L3JhZGlhbEdyYWRpZW50PgogICAgPGZpbHRlciBpZD0iZ3JvdW5kLXNoYWRvdyIgeD0iLTIwJSIgeT0iLTE1MCUiIHdpZHRoPSIxNDAlIiBoZWlnaHQ9IjQwMCUiPgogICAgICA8ZmVHYXVzc2lhbkJsdXIgc3RkRGV2aWF0aW9uPSIxMyIvPgogICAgPC9maWx0ZXI+CiAgICA8ZmlsdGVyIGlkPSJwaG90by1zaGFkb3ciIHg9Ii0yNSUiIHk9Ii0yMCUiIHdpZHRoPSIxNjAlIiBoZWlnaHQ9IjE2MCUiIGNvbG9yLWludGVycG9sYXRpb24tZmlsdGVycz0ic1JHQiI+CiAgICAgIDxmZURyb3BTaGFkb3cgZHg9IjIiIGR5PSI5IiBzdGREZXZpYXRpb249IjEwIiBmbG9vZC1jb2xvcj0iIzc5NjU1MiIgZmxvb2Qtb3BhY2l0eT0iLjE3Ii8+CiAgICA8L2ZpbHRlcj4KICAgIDxmaWx0ZXIgaWQ9ImJvb2stc2hhZG93IiB4PSItMTAlIiB5PSItMTUlIiB3aWR0aD0iMTMwJSIgaGVpZ2h0PSIxNTAlIiBjb2xvci1pbnRlcnBvbGF0aW9uLWZpbHRlcnM9InNSR0IiPgogICAgICA8ZmVEcm9wU2hhZG93IGR4PSIwIiBkeT0iMTAiIHN0ZERldmlhdGlvbj0iOSIgZmxvb2QtY29sb3I9IiM3OTY1NTIiIGZsb29kLW9wYWNpdHk9Ii4xNSIvPgogICAgPC9maWx0ZXI+CiAgICA8ZmlsdGVyIGlkPSJwYXBlci1ncmFpbiIgeD0iMCIgeT0iMCIgd2lkdGg9IjEwMCUiIGhlaWdodD0iMTAwJSIgY29sb3ItaW50ZXJwb2xhdGlvbi1maWx0ZXJzPSJzUkdCIj4KICAgICAgPGZlVHVyYnVsZW5jZSB0eXBlPSJmcmFjdGFsTm9pc2UiIGJhc2VGcmVxdWVuY3k9Ii43NSIgbnVtT2N0YXZlcz0iMiIgc2VlZD0iMTciIHJlc3VsdD0iZ3JhaW4iLz4KICAgICAgPGZlQ29sb3JNYXRyaXggaW49ImdyYWluIiB0eXBlPSJtYXRyaXgiIHZhbHVlcz0iMCAwIDAgMCAuNDcgIDAgMCAwIDAgLjM5ICAwIDAgMCAwIC4zMSAgMCAwIDAgLjA3IDAiIHJlc3VsdD0idGludGVkLWdyYWluIi8+CiAgICAgIDxmZUNvbXBvc2l0ZSBpbj0idGludGVkLWdyYWluIiBpbjI9IlNvdXJjZUFscGhhIiBvcGVyYXRvcj0iaW4iIHJlc3VsdD0ibWFza2VkLWdyYWluIi8+CiAgICAgIDxmZUJsZW5kIGluPSJTb3VyY2VHcmFwaGljIiBpbjI9Im1hc2tlZC1ncmFpbiIgbW9kZT0ibXVsdGlwbHkiLz4KICAgIDwvZmlsdGVyPgogICAgPGNsaXBQYXRoIGlkPSJob3VzZS13aW5kb3ciPjxyZWN0IHg9IjEyIiB5PSIxMyIgd2lkdGg9IjE2MiIgaGVpZ2h0PSIxNDMiIHJ4PSIxIi8+PC9jbGlwUGF0aD4KICAgIDxjbGlwUGF0aCBpZD0icG9ydHJhaXQtd2luZG93Ij48cmVjdCB4PSIxMiIgeT0iMTMiIHdpZHRoPSIxMjkiIGhlaWdodD0iMTQ0IiByeD0iMSIvPjwvY2xpcFBhdGg+CiAgICA8Y2xpcFBhdGggaWQ9ImxlZnQtcGFnZS1jbGlwIj48cGF0aCBkPSJNNzcgMjQ2QzE0OSAyMTkgMjI3IDIxMCAyOTEgMjIxQzMwOCAyMjQgMzIyIDIzNCAzMzIgMjQ4TDMzOCAzODBDMzIxIDM2NSAzMDQgMzU3IDI4NiAzNTVDMjE4IDM0OSAxNTYgMzUxIDk0IDMzNUw3NyAyNDZaIi8+PC9jbGlwUGF0aD4KICAgIDxjbGlwUGF0aCBpZD0icmlnaHQtcGFnZS1jbGlwIj48cGF0aCBkPSJNMzMyIDI0OEMzNDcgMjMwIDM2MyAyMjAgMzg1IDIxOUM0MzkgMjE2IDUwMCAyMjkgNTUxIDI0OEw1NzQgMzMzQzUwNyAzNDUgNDMzIDM1NSAzNjYgMzY3QzM1NCAzNjkgMzQ2IDM3NCAzMzggMzgwTDMzMiAyNDhaIi8+PC9jbGlwUGF0aD4KICA8L2RlZnM+CgogIDwhLS0gQSBzb2Z0IGxhbmRzY2FwZSBzaXRzIGluc2lkZSB0aGUgb3RoZXJ3aXNlIHRyYW5zcGFyZW50IGNhbnZhcy4gLS0+CiAgPHBhdGggZD0iTTg3IDI3MEM1NiAyMTggODkgMTYwIDE1OSAxNDdDMjEzIDEzNiAyMjUgODggMjg4IDkyQzM0MyA5NiAzNjkgMTMyIDQyNiAxMjFDNDg4IDEwOCA1NTMgMTU2IDU1OCAyMTVDNTYzIDI2OSA2MDAgMjkyIDU2NyAzMzdDNTI5IDM5MCA0NDYgMzkxIDM1NSA0MDVDMjYzIDQxOSAxNzcgNDA4IDEyMCAzNzBDODMgMzQ1IDEwMyAyOTkgODcgMjcwWiIgZmlsbD0idXJsKCNsYW5kc2NhcGUtd2FzaCkiLz4KICA8cGF0aCBkPSJNNzYgMjY4TDE1MSAxOTlDMTYxIDE5MCAxNzAgMTkxIDE4MCAyMDFMMjMyIDI1MUwyODggMTkwQzMwMSAxNzYgMzExIDE3OCAzMjUgMTkwTDQxMCAyNjRMNDYzIDIyMkM0NzIgMjE0IDQ4MSAyMTQgNDkxIDIyM0w1NjggMjg3TDc2IDMwMlYyNjhaIiBmaWxsPSIjRENDQkI5IiBvcGFjaXR5PSIuNCIvPgogIDxwYXRoIGQ9Ik04MyAyOThDMTQyIDI2NyAxODIgMjczIDIzOCAyODVDMzAxIDI5OCAzMjYgMjQ0IDM5MCAyNTlDNDQyIDI3MSA0OTQgMjUzIDU2MyAyODhMNTczIDMzNkw5MCAzNTJMODMgMjk4WiIgZmlsbD0iI0QwQkJBNiIgb3BhY2l0eT0iLjI1Ii8+CiAgPHBhdGggZD0iTTExMiAxODhDMTI3IDE4MyAxMzggMTgyIDE1NCAxODZNNDY5IDE2NEM0ODMgMTYwIDQ5NyAxNjIgNTA4IDE2OCIgc3Ryb2tlPSIjQjU5RDg3IiBzdHJva2Utb3BhY2l0eT0iLjM1IiBzdHJva2Utd2lkdGg9IjEuNSIgc3Ryb2tlLWxpbmVjYXA9InJvdW5kIi8+CiAgPGNpcmNsZSBjeD0iNDg3IiBjeT0iMTEyIiByPSIyMyIgZmlsbD0iI0U1QzdCNSIgb3BhY2l0eT0iLjQ1Ii8+CiAgPGVsbGlwc2UgY3g9IjMzMCIgY3k9IjQwMyIgcng9IjIyNCIgcnk9IjE0IiBmaWxsPSIjNzk2NTUyIiBvcGFjaXR5PSIuMTQiIGZpbHRlcj0idXJsKCNncm91bmQtc2hhZG93KSIvPgoKICA8IS0tIFZpbnRhZ2UgcnVyYWwgcGhvdG9ncmFwaC4gLS0+CiAgPGcgdHJhbnNmb3JtPSJ0cmFuc2xhdGUoMTMyIDc4KSByb3RhdGUoLTEyIDkzIDEwMykiIGZpbHRlcj0idXJsKCNwaG90by1zaGFkb3cpIj4KICAgIDxyZWN0IHdpZHRoPSIxODYiIGhlaWdodD0iMjAzIiByeD0iMyIgZmlsbD0idXJsKCNwaG90by1wYXBlcikiLz4KICAgIDxyZWN0IHg9Ii41IiB5PSIuNSIgd2lkdGg9IjE4NSIgaGVpZ2h0PSIyMDIiIHJ4PSIyLjUiIHN0cm9rZT0iI0Q4QzdCMCIgc3Ryb2tlLW9wYWNpdHk9Ii42Ii8+CiAgICA8ZyBjbGlwLXBhdGg9InVybCgjaG91c2Utd2luZG93KSIgZmlsdGVyPSJ1cmwoI3BhcGVyLWdyYWluKSI+CiAgICAgIDxyZWN0IHg9IjEyIiB5PSIxMyIgd2lkdGg9IjE2MiIgaGVpZ2h0PSIxNDMiIGZpbGw9InVybCgjaG91c2Utc2t5KSIvPgogICAgICA8Y2lyY2xlIGN4PSIxMzkiIGN5PSI0NCIgcj0iMTYiIGZpbGw9IiNFNURBQzEiLz4KICAgICAgPHBhdGggZD0iTTYgOTZMNTEgNTJMODkgODhMMTIyIDU5TDE4MiAxMDBWMTU2SDZWOTZaIiBmaWxsPSIjQUFBNDg5Ii8+CiAgICAgIDxwYXRoIGQ9Ik0zIDExNUM0NCA5MSA2NiA5NSAxMDMgMTA1QzEzMSAxMTIgMTQ5IDkzIDE4MCA5OFYxNThIM1YxMTVaIiBmaWxsPSIjOEU5MTc1Ii8+CiAgICAgIDxwYXRoIGQ9Ik0xMiAxMzNDNTcgMTEzIDEwNyAxMTQgMTc0IDEzMVYxNTZIMTJWMTMzWiIgZmlsbD0iI0I5QUE4NyIvPgogICAgICA8cGF0aCBkPSJNODkgMTE2QzkyIDEyOSAxMDYgMTM2IDEzNCAxNTZIMTAyQzg3IDE0MyA3OSAxMzAgODEgMTE5TDg5IDExNloiIGZpbGw9IiNEN0M2QTQiLz4KICAgICAgPHBhdGggZD0iTTQ5IDkxTDkzIDc1TDEzMiA5M1YxMjJMNDkgMTE5VjkxWiIgZmlsbD0iI0Q5QzhBNSIvPgogICAgICA8cGF0aCBkPSJNNDIgOTNMODggNjdMMTM5IDkxTDEzNSA5N0w4OCA4MEw0NiA5OEw0MiA5M1oiIGZpbGw9IiM3OTY1NTIiLz4KICAgICAgPHBhdGggZD0iTTQ5IDk3TDg4IDgyTDg4IDEyMEw0OSAxMTlWOTdaIiBmaWxsPSIjQzhCNTkwIi8+CiAgICAgIDxwYXRoIGQ9Ik04OCA4MkwxMzIgOTdWMTIyTDg4IDEyMFY4MloiIGZpbGw9IiNFMkQyQjEiLz4KICAgICAgPHBhdGggZD0iTTU3IDEwMUw3MiA5N1YxMTBMNTcgMTEzVjEwMVpNOTkgOTlMMTEyIDEwM1YxMTNMOTkgMTExVjk5WiIgZmlsbD0iIzg1NzU1QSIvPgogICAgICA8cGF0aCBkPSJNNzggMTAxTDg2IDk4VjEyMEw3OCAxMjBWMTAxWiIgZmlsbD0iIzZFNjA0QyIvPgogICAgICA8cGF0aCBkPSJNNjEgMTAwVjExMk0xMDUgMTAxVjExMiIgc3Ryb2tlPSIjQzVCNzk1IiBzdHJva2Utd2lkdGg9IjEuMiIvPgogICAgICA8cGF0aCBkPSJNMTQ0IDExMVY3Nk0zNSAxMTlWODciIHN0cm9rZT0iIzc5NjU1MiIgc3Ryb2tlLXdpZHRoPSIyLjUiIHN0cm9rZS1saW5lY2FwPSJyb3VuZCIvPgogICAgICA8cGF0aCBkPSJNMTQyIDY0QzEzNCA3MCAxMzMgODAgMTQwIDg1QzEzMiA4OSAxMzcgMTAwIDE0NSA5OEMxNTUgMTAxIDE2MSA5MSAxNTQgODVDMTYxIDc3IDE1NCA2NSAxNDggNjlDMTQ3IDY0IDE0NSA2MiAxNDIgNjRaIiBmaWxsPSIjNzc3RDY1Ii8+CiAgICAgIDxwYXRoIGQ9Ik0zNCA3NkMyNyA3NyAyNiA4NCAyOSA4OEMyMiA5MiAyOCAxMDAgMzUgOTlDNDQgMTAzIDUwIDkzIDQ0IDg4QzQ4IDgyIDQxIDc1IDM4IDc5QzM4IDc3IDM2IDc2IDM0IDc2WiIgZmlsbD0iIzg1ODY2QSIvPgogICAgICA8cGF0aCBkPSJNMTkgMTM0TDQ0IDEyOE0xNDkgMTMyTDE3MCAxMzZNMjQgMTQ0TDU5IDEzOE0xMzcgMTQ2TDE2MSAxNTEiIHN0cm9rZT0iIzhEODk2RCIgc3Ryb2tlLW9wYWNpdHk9Ii43IiBzdHJva2Utd2lkdGg9IjEuNSIgc3Ryb2tlLWxpbmVjYXA9InJvdW5kIi8+CiAgICAgIDxyZWN0IHg9IjEyIiB5PSIxMyIgd2lkdGg9IjE2MiIgaGVpZ2h0PSIxNDMiIGZpbGw9InVybCgjcGhvdG8tdmlnbmV0dGUpIi8+CiAgICAgIDxwYXRoIGQ9Ik0yMSAyNEwxNjMgMjFNMTcgMTQ3TDM2IDE1MCIgc3Ryb2tlPSIjRkZGQUYzIiBzdHJva2Utb3BhY2l0eT0iLjE1IiBzdHJva2Utd2lkdGg9IjEuMiIvPgogICAgPC9nPgogICAgPHBhdGggZD0iTTU3IDE3OEM3NyAxODAgMTA0IDE3OSAxMjkgMTc2IiBzdHJva2U9IiNCQUE2OEMiIHN0cm9rZS1vcGFjaXR5PSIuNCIgc3Ryb2tlLXdpZHRoPSIxLjUiIHN0cm9rZS1saW5lY2FwPSJyb3VuZCIvPgogIDwvZz4KCiAgPCEtLSBGYW1pbHkgc2lsaG91ZXR0ZXMga2VlcCB0aGUgbWVtb3J5IHBlcnNvbmFsIHdpdGhvdXQgZGVwaWN0aW5nIGEgcmVhbCBwZXJzb24uIC0tPgogIDxnIHRyYW5zZm9ybT0idHJhbnNsYXRlKDM1NyA4Mykgcm90YXRlKDExIDc2LjUgOTgpIiBmaWx0ZXI9InVybCgjcGhvdG8tc2hhZG93KSI+CiAgICA8cmVjdCB3aWR0aD0iMTUzIiBoZWlnaHQ9IjE5MyIgcng9IjMiIGZpbGw9InVybCgjcGhvdG8tcGFwZXIpIi8+CiAgICA8cmVjdCB4PSIuNSIgeT0iLjUiIHdpZHRoPSIxNTIiIGhlaWdodD0iMTkyIiByeD0iMi41IiBzdHJva2U9IiNEOEM3QjAiIHN0cm9rZS1vcGFjaXR5PSIuNjUiLz4KICAgIDxnIGNsaXAtcGF0aD0idXJsKCNwb3J0cmFpdC13aW5kb3cpIiBmaWx0ZXI9InVybCgjcGFwZXItZ3JhaW4pIj4KICAgICAgPHJlY3QgeD0iMTIiIHk9IjEzIiB3aWR0aD0iMTI5IiBoZWlnaHQ9IjE0NCIgZmlsbD0idXJsKCNwb3J0cmFpdC13YWxsKSIvPgogICAgICA8cGF0aCBkPSJNMjAgMTNWMTU3TTEyOCAxM1YxNTciIHN0cm9rZT0iI0UzRDVCQyIgc3Ryb2tlLW9wYWNpdHk9Ii4zIiBzdHJva2Utd2lkdGg9IjciLz4KICAgICAgPHBhdGggZD0iTTMwIDE4QzQ3IDM4IDQ4IDYxIDM2IDg3TTExOSAxOEMxMDIgMzggMTA1IDYwIDExOSA4NiIgc3Ryb2tlPSIjOUI4OTZFIiBzdHJva2Utb3BhY2l0eT0iLjM1IiBzdHJva2Utd2lkdGg9IjEuMiIvPgogICAgICA8cGF0aCBkPSJNMjAgMTU4TDIzIDExMUMyNCA5NiAzMyA4OCA0OSA4NkM2NiA4NiA3OCA5OCA3OSAxMTRMNzkgMTU4SDIwWiIgZmlsbD0iIzc0NjU1MiIvPgogICAgICA8cGF0aCBkPSJNMzMgOTJMNDggMTA3TDYyIDkxTDU2IDg2SDM5TDMzIDkyWiIgZmlsbD0iI0UwQ0ZBRCIvPgogICAgICA8cGF0aCBkPSJNNDYgMTA1TDUwIDEwNUw1NCAxMzdMNDggMTQzTDQzIDEzNUw0NiAxMDVaIiBmaWxsPSIjNTQ0QTNEIi8+CiAgICAgIDxwYXRoIGQ9Ik0zMiA5NEwzOSAxMTdMNDYgMTA4TTY0IDk0TDU4IDExN0w1MCAxMDgiIHN0cm9rZT0iIzlCODg2RCIgc3Ryb2tlLXdpZHRoPSIxLjMiIHN0cm9rZS1saW5lY2FwPSJyb3VuZCIvPgogICAgICA8cGF0aCBkPSJNMzMgNjJDMzMgNDkgMzkgNDEgNTAgNDFDNjIgNDEgNjggNDkgNjcgNjNMNjUgNzdDNjMgODcgNTYgOTIgNDkgOTBDNDEgODkgMzUgODMgMzQgNzNMMzMgNjJaIiBmaWxsPSIjRDFCOTk1Ii8+CiAgICAgIDxwYXRoIGQ9Ik0zMyA2NUMyOCA0NiAzOSAzNSA1MSAzNkM2NSAzNyA3MiA0NyA2NyA2Nkw2MyA1M0M1NCA1NCA0NiA1MSA0MiA0OUM0MCA1NCAzNyA1NyAzNCA1OEwzMyA2NVoiIGZpbGw9IiM2NTU2NDMiLz4KICAgICAgPHBhdGggZD0iTTkwIDg2QzEwNiA4NSAxMTkgOTUgMTIyIDExMUwxMjggMTU3SDY5TDc0IDExMUM3NSA5NyA3OSA5MCA5MCA4NloiIGZpbGw9IiM5QTgwNjQiLz4KICAgICAgPHBhdGggZD0iTTkwIDg3TDk5IDEwMEwxMDkgODgiIGZpbGw9IiNEQkM4QTciLz4KICAgICAgPHBhdGggZD0iTTc5IDYxQzc5IDQ4IDg1IDM5IDk3IDM5QzExMSAzOCAxMTggNDkgMTE4IDY2TDExOSA4NkMxMTAgOTEgODggOTIgNzggODVMNzkgNjFaIiBmaWxsPSIjNjc1ODQzIi8+CiAgICAgIDxwYXRoIGQ9Ik04NSA1OUM4NSA1MiA5MCA0NyA5OCA0N0MxMDcgNDcgMTExIDU1IDExMSA2NUwxMTAgNzVDMTA5IDg1IDEwMyA5MSA5NyA5MEM4OSA4OSA4NSA4MiA4NCA3NEw4NSA1OVoiIGZpbGw9IiNEQkMzQTEiLz4KICAgICAgPHBhdGggZD0iTTgzIDY2QzgyIDUyIDg3IDQzIDk4IDQzQzEwOCA0MyAxMTQgNTEgMTEyIDY1QzEwNiA2MiAxMDAgNTUgOTkgNTJDOTUgNTggODkgNjAgODMgNjFWNjZaIiBmaWxsPSIjNkY1RTQ4Ii8+CiAgICAgIDxwYXRoIGQ9Ik04NiAxMDFDOTIgMTExIDEwNCAxMTIgMTExIDEwMSIgc3Ryb2tlPSIjQzhBRjhCIiBzdHJva2Utd2lkdGg9IjEuNSIvPgogICAgICA8cGF0aCBkPSJNNDkgMTU4TDUyIDEzMkM1MyAxMjEgNjEgMTE1IDc0IDExNUM4OCAxMTUgOTUgMTIzIDk4IDEzNkwxMDEgMTU4SDQ5WiIgZmlsbD0iI0Q2QzA5QiIvPgogICAgICA8cGF0aCBkPSJNNjYgMTE5TDc0IDEzMEw4MiAxMTkiIGZpbGw9IiNGMERGQzEiLz4KICAgICAgPHBhdGggZD0iTTYxIDEwMkM2MSA5MiA2NyA4NiA3NSA4NkM4NSA4NiA5MCA5NCA4OSAxMDRMODggMTEyQzg2IDEyMCA4MSAxMjQgNzUgMTIzQzY4IDEyMiA2MyAxMTcgNjIgMTEwTDYxIDEwMloiIGZpbGw9IiNEQ0M0QTEiLz4KICAgICAgPHBhdGggZD0iTTYxIDEwNUM1NyA5NSA2MyA4MyA3NSA4M0M4NyA4MyA5MyA5MyA4OSAxMDVMODYgOTdDODAgOTkgNzUgOTYgNzEgOTNDNjkgOTggNjUgMTAwIDYyIDk5TDYxIDEwNVoiIGZpbGw9IiM3NzYzNEMiLz4KICAgICAgPHBhdGggZD0iTTM1IDExOUM0MCAxMzEgNDYgMTM2IDU3IDEzNk0xMTUgMTIwQzEwOCAxMzQgMTAxIDEzNyA5MiAxMzUiIHN0cm9rZT0iI0I5QTE3RiIgc3Ryb2tlLXdpZHRoPSI4IiBzdHJva2UtbGluZWNhcD0icm91bmQiLz4KICAgICAgPHBhdGggZD0iTTY5IDEzN1YxNTdNODAgMTM3VjE1NyIgc3Ryb2tlPSIjQkRBMzdFIiBzdHJva2Utd2lkdGg9IjEuMiIvPgogICAgICA8Y2lyY2xlIGN4PSI3NSIgY3k9IjEzOSIgcj0iMS4zIiBmaWxsPSIjOUQ4NTY2Ii8+CiAgICAgIDxjaXJjbGUgY3g9Ijc1IiBjeT0iMTQ5IiByPSIxLjMiIGZpbGw9IiM5RDg1NjYiLz4KICAgICAgPHJlY3QgeD0iMTIiIHk9IjEzIiB3aWR0aD0iMTI5IiBoZWlnaHQ9IjE0NCIgZmlsbD0idXJsKCNwaG90by12aWduZXR0ZSkiLz4KICAgICAgPHBhdGggZD0iTTE3IDI1TDEzNCAyMU0xMzEgMjlMMTMzIDU1IiBzdHJva2U9IiNGRkZBRjMiIHN0cm9rZS1vcGFjaXR5PSIuMTciLz4KICAgIDwvZz4KICAgIDxwYXRoIGQ9Ik01MyAxNzZDNjggMTc0IDg0IDE3NCAxMDEgMTc2IiBzdHJva2U9IiNCQUE2OEMiIHN0cm9rZS1vcGFjaXR5PSIuNCIgc3Ryb2tlLXdpZHRoPSIxLjUiIHN0cm9rZS1saW5lY2FwPSJyb3VuZCIvPgogIDwvZz4KCiAgPCEtLSBCb3VuZCBjb3ZlciwgaW5kaXZpZHVhbCBwYWdlIGVkZ2VzLCBhbmQgdGhlIGN1cnZlZCBvcGVuIHNwcmVhZC4gLS0+CiAgPGcgZmlsdGVyPSJ1cmwoI2Jvb2stc2hhZG93KSI+CiAgICA8cGF0aCBkPSJNNjYgMjU4TDI4NSAyMjRDMzA3IDIyNCAzMjQgMjM5IDMzNCAyNTNDMzQ4IDIzNSAzNjggMjI1IDM4OCAyMjdMNTU5IDI1OEw1OTAgMzUwQzU5MiAzNTYgNTg5IDM2MyA1ODIgMzY1TDM1NiA0MDdDMzQ4IDQwOSAzNDAgNDA3IDMzMyA0MDJDMzI0IDQwNCAzMTYgNDA0IDMwNyA0MDFMODAgMzY1Qzc0IDM2NCA3MCAzNjEgNjkgMzU1TDU2IDI4MEM1NCAyNjggNTYgMjYxIDY2IDI1OFoiIGZpbGw9IiM3NDNCNDkiLz4KICAgIDxwYXRoIGQ9Ik03MSAzNDVMMzA2IDM4NEMzMTggMzg2IDMyNyAzOTAgMzM2IDM5NkMzNDMgMzkwIDM1MSAzODUgMzY1IDM4M0w1ODMgMzQ0IiBzdHJva2U9IiNBRjdCODIiIHN0cm9rZS13aWR0aD0iMiIgc3Ryb2tlLWxpbmVjYXA9InJvdW5kIi8+CiAgICA8cGF0aCBkPSJNNzYgMjUyTDI5MSAyMjVDMzA3IDIyNyAzMjIgMjM5IDMzMiAyNTNDMzQ3IDIzNCAzNjcgMjI1IDM4OCAyMjVMNTU2IDI1M0w1ODEgMzQyTDM2NSAzODNDMzUzIDM4NSAzNDUgMzg5IDMzNyAzOTVDMzI3IDM4NyAzMTcgMzgyIDMwNCAzODFMODQgMzUxTDc2IDI1MloiIGZpbGw9InVybCgjcGFnZS1lZGdlKSIvPgogICAgPHBhdGggZD0iTTg0IDM0MEMxNTggMzU2IDIyNCAzNTcgMjkxIDM2NkMzMTEgMzY5IDMyMyAzNzUgMzM3IDM4N0MzNTAgMzc4IDM2MCAzNzQgMzc0IDM3Mkw1NzYgMzM1TTg2IDM0NkMxNjEgMzYwIDIyNiAzNjMgMjk0IDM3MkMzMTMgMzc1IDMyNCAzODAgMzM3IDM5MEMzNTAgMzgyIDM2MCAzNzkgMzc0IDM3N0w1NzggMzQwIiBzdHJva2U9IiNCOEE1OEQiIHN0cm9rZS1vcGFjaXR5PSIuNTgiIHN0cm9rZS13aWR0aD0iMS4yIi8+CiAgICA8cGF0aCBkPSJNODAgMjQ5QzE1MSAyMjIgMjI2IDIxNCAyOTEgMjI0QzMwOCAyMjcgMzIxIDIzNyAzMzIgMjUxTDMzOCAzODVDMzIwIDM3MCAzMDQgMzYyIDI4NiAzNjBDMjE2IDM1NCAxNTUgMzU3IDg5IDM0MEw4MCAyNDlaIiBmaWxsPSIjRjhFREREIi8+CiAgICA8cGF0aCBkPSJNMzMyIDI1MUMzNDcgMjMzIDM2NCAyMjQgMzg1IDIyM0M0MzkgMjIwIDUwMyAyMzMgNTU0IDI1Mkw1NzcgMzM4QzUwOCAzNTAgNDM0IDM2MCAzNjYgMzcyQzM1NCAzNzQgMzQ1IDM3OSAzMzggMzg1TDMzMiAyNTFaIiBmaWxsPSIjRUZFMUNEIi8+CiAgICA8cGF0aCBkPSJNNzcgMjQ2QzE0OSAyMTkgMjI3IDIxMCAyOTEgMjIxQzMwOCAyMjQgMzIyIDIzNCAzMzIgMjQ4TDMzOCAzODBDMzIxIDM2NSAzMDQgMzU3IDI4NiAzNTVDMjE4IDM0OSAxNTYgMzUxIDk0IDMzNUw3NyAyNDZaIiBmaWxsPSJ1cmwoI2xlZnQtcGFwZXIpIi8+CiAgICA8cGF0aCBkPSJNMzMyIDI0OEMzNDcgMjMwIDM2MyAyMjAgMzg1IDIxOUM0MzkgMjE2IDUwMCAyMjkgNTUxIDI0OEw1NzQgMzMzQzUwNyAzNDUgNDMzIDM1NSAzNjYgMzY3QzM1NCAzNjkgMzQ2IDM3NCAzMzggMzgwTDMzMiAyNDhaIiBmaWxsPSJ1cmwoI3JpZ2h0LXBhcGVyKSIvPgogICAgPHBhdGggZD0iTTc3IDI0NkMxNDkgMjE5IDIyNyAyMTAgMjkxIDIyMUMzMDggMjI0IDMyMiAyMzQgMzMyIDI0OEMzNDcgMjMwIDM2MyAyMjAgMzg1IDIxOUM0MzkgMjE2IDUwMCAyMjkgNTUxIDI0OCIgc3Ryb2tlPSIjRkZGQUYzIiBzdHJva2Utd2lkdGg9IjIiLz4KICAgIDxnIGNsaXAtcGF0aD0idXJsKCNsZWZ0LXBhZ2UtY2xpcCkiIHN0cm9rZT0iI0JCQTg4RSIgc3Ryb2tlLWxpbmVjYXA9InJvdW5kIj4KICAgICAgPHBhdGggZD0iTTExOCAyNjhDMTcxIDI1MiAyMjAgMjUwIDI2OSAyNTYiIHN0cm9rZS13aWR0aD0iMiIgb3BhY2l0eT0iLjciLz4KICAgICAgPHBhdGggZD0iTTEyMCAyNzlDMTczIDI2NSAyMjUgMjY0IDI4NSAyNzNNMTIyIDI5MEMxNzggMjc4IDIzMSAyNzkgMjg3IDI4N00xMjUgMzAxQzE4MSAyOTIgMjM1IDI5MSAyODkgMzAxTTEyNyAzMTJDMTc5IDMwNSAyMjQgMzA2IDI2OSAzMTMiIG9wYWNpdHk9Ii40NiIgc3Ryb2tlLXdpZHRoPSIxLjMiLz4KICAgICAgPHBhdGggZD0iTTEzMyAzMjhDMTU2IDMyNiAxNzYgMzI2IDE5OCAzMjgiIG9wYWNpdHk9Ii4zOCIgc3Ryb2tlLXdpZHRoPSIxLjIiLz4KICAgIDwvZz4KICAgIDxnIGNsaXAtcGF0aD0idXJsKCNyaWdodC1wYWdlLWNsaXApIiBzdHJva2U9IiNCQkE4OEUiIHN0cm9rZS1saW5lY2FwPSJyb3VuZCI+CiAgICAgIDxwYXRoIGQ9Ik0zNzkgMjU5QzQyMiAyNTEgNDY5IDI1NiA1MTQgMjY4IiBzdHJva2Utd2lkdGg9IjIiIG9wYWNpdHk9Ii43Ii8+CiAgICAgIDxwYXRoIGQ9Ik0zNzYgMjczQzQyMiAyNjYgNDcwIDI3MCA1MjIgMjgyTTM3NyAyODVDNDI1IDI3OSA0NzQgMjgyIDUyNSAyOTVNMzc4IDI5N0M0MjYgMjkxIDQ3OCAyOTMgNTMwIDMwNk0zODAgMzA5QzQyMCAzMDUgNDY0IDMwNiA1MDEgMzEzIiBvcGFjaXR5PSIuNDYiIHN0cm9rZS13aWR0aD0iMS4zIi8+CiAgICAgIDxwYXRoIGQ9Ik0zODYgMzM0TDQ0NyAzMjgiIG9wYWNpdHk9Ii4zOCIgc3Ryb2tlLXdpZHRoPSIxLjIiLz4KICAgIDwvZz4KICAgIDxwYXRoIGQ9Ik0zMzIgMjQ4QzMzNCAyODYgMzM2IDMzMyAzMzggMzgwIiBzdHJva2U9IiNBNzhFNzEiIHN0cm9rZS1vcGFjaXR5PSIuNDUiIHN0cm9rZS13aWR0aD0iMS40Ii8+CiAgICA8cGF0aCBkPSJNMzM2IDI0OEMzNDAgMjc5IDM0MiAzMjIgMzQyIDM3MCIgc3Ryb2tlPSIjRkZGQUYzIiBzdHJva2Utb3BhY2l0eT0iLjciIHN0cm9rZS13aWR0aD0iMS4yIi8+CiAgICA8cGF0aCBkPSJNNDUzIDM1MUw0NjcgMzQ4TDQ3NiAzOThMNDY4IDM5NEw0NjAgNDAyTDQ1MyAzNTFaIiBmaWxsPSIjNzQzQjQ5Ii8+CiAgICA8cGF0aCBkPSJNNDU4IDM1Mkw0NjYgMzkxIiBzdHJva2U9IiNBNTZGNzkiIHN0cm9rZS13aWR0aD0iMSIvPgogIDwvZz4KCiAgPCEtLSBTbWFsbCBib3RhbmljYWwgbWFya3Mgc29mdGVuIHRoZSBjb21wb3NpdGlvbiB3aXRob3V0IG9ic2N1cmluZyB0aGUgYm9vay4gLS0+CiAgPGcgc3Ryb2tlPSIjQTg5MDc4IiBzdHJva2UtbGluZWNhcD0icm91bmQiIHN0cm9rZS1saW5lam9pbj0icm91bmQiPgogICAgPHBhdGggZD0iTTgzIDM4MEM3MyAzNjkgNjUgMzU1IDYzIDM0MCIgc3Ryb2tlLXdpZHRoPSIxLjUiLz4KICAgIDxwYXRoIGQ9Ik02OSAzNTlDNTcgMzU5IDQ5IDM1MSA0OSAzNDNDNjEgMzQzIDY5IDM1MCA2OSAzNTlaIiBmaWxsPSIjQzlCMzlCIiBzdHJva2U9Im5vbmUiLz4KICAgIDxwYXRoIGQ9Ik03NSAzNjlDNzQgMzU2IDc5IDM0NyA4NiAzNDNDOTIgMzU0IDg2IDM2NCA3NSAzNjlaIiBmaWxsPSIjRDlDNkFGIiBzdHJva2U9Im5vbmUiLz4KICAgIDxwYXRoIGQ9Ik01NTggMzkzQzU3MSAzODMgNTgxIDM2OCA1ODQgMzUzIiBzdHJva2Utd2lkdGg9IjEuNSIvPgogICAgPHBhdGggZD0iTTU3MyAzNzlDNTc0IDM2NyA1NjggMzYxIDU2MSAzNTlDNTU3IDM2OSA1NjIgMzc3IDU3MyAzNzlaIiBmaWxsPSIjRDlDNkFGIiBzdHJva2U9Im5vbmUiLz4KICAgIDxwYXRoIGQ9Ik01NzkgMzY4QzU5MCAzNzAgNTk4IDM2MiA2MDAgMzU1QzU4OSAzNTMgNTgyIDM1OSA1NzkgMzY4WiIgZmlsbD0iI0M5QjM5QiIgc3Ryb2tlPSJub25lIi8+CiAgPC9nPgogIDxwYXRoIGQ9Ik0xMDggMTI4VjE0ME0xMDIgMTM0SDExNE01NTIgMTkxVjIwMU01NDcgMTk2SDU1NyIgc3Ryb2tlPSIjQjY4RDgyIiBzdHJva2Utd2lkdGg9IjEuNSIgc3Ryb2tlLWxpbmVjYXA9InJvdW5kIiBvcGFjaXR5PSIuNjUiLz4KICA8Y2lyY2xlIGN4PSI5NiIgY3k9IjMwOSIgcj0iMiIgZmlsbD0iI0I2OEQ4MiIgb3BhY2l0eT0iLjU1Ii8+CiAgPGNpcmNsZSBjeD0iNTQxIiBjeT0iMTI5IiByPSIyLjUiIGZpbGw9IiNDNkEyOEUiIG9wYWNpdHk9Ii42NSIvPgo8L3N2Zz4K" alt="펼친 자서전과 오래된 사진을 담은 따뜻한 삽화"><div class="art-caption"><span>한 장의 기억이</span><strong>한 권의 선물이 되도록.</strong></div></div>
         </div>
         <div class="home-shortcuts"><button class="shortcut" data-go="records"><span class="shortcut-icon"><svg class="icon"><use href="#i-letter"/></svg></span><span><strong>엽서보기</strong><small>차곡차곡 모아둔 이야기</small></span><svg class="icon"><use href="#i-chevron"/></svg></button><button class="shortcut" data-go="library"><span class="shortcut-icon"><svg class="icon"><use href="#i-book"/></svg></span><span><strong>자서전 보기</strong><small>나의 얇은 책들이 모이는 책장</small></span><svg class="icon"><use href="#i-chevron"/></svg></button></div>
@@ -4293,7 +4399,15 @@ body.ebook-paged #ebook-content, body.ebook-paged #ebook-right-content, body.ebo
   }
 
   const curElder = () => AUTH.elders.find(e => e.elder_id === AUTH.elderId) || null;
-  window.Srv = { CONFIG, QS, AUTH, LINK, api, call, ApiError, sleep, log, sp, idHeaders, curElder,
+  /** 이야기 주인공 이름 + 「님」 — 화면 · 보내는 글에서 이름을 부를 때 모두 이것을 쓴다 (11-13 통일).
+      「나」(내 이야기)는 붙이지 않고, 이미 「님」으로 끝나면 두 번 붙이지 않는다 */
+  const honor = (name) => {
+    const n = String(name || '').trim();
+    if (!n) return '이야기 주인공';
+    if (n === '나' || /님$/.test(n)) return n;
+    return `${n} 님`;
+  };
+  window.Srv = { CONFIG, QS, AUTH, LINK, api, call, ApiError, sleep, log, sp, idHeaders, curElder, honor,
     AUTH_SAYS, LINK_SAYS, THEME_LABEL, linkStateOf, authLost };
 }());
 
@@ -4458,6 +4572,19 @@ body.ebook-paged #ebook-content, body.ebook-paged #ebook-right-content, body.ebo
     }
     if (!db.logged) return err(401, '로그인이 필요해요', 'login_required');
     // 화자
+    if ((m = path.match(/^\/elders\/([^/]+)$/)) && (method === 'PATCH' || method === 'DELETE')) {
+      const e = db.elders.find((x) => x.elder_id === m[1]);
+      if (!e) return err(404, '이야기 주인공을 찾을 수 없어요', 'elder_not_found');
+      if (method === 'PATCH') {
+        const nm = String(body.name || '').trim();
+        if (!nm) return err(422, '이름을 적어 주세요');
+        e.name = nm; save(); return ok(e);
+      }
+      const has = db.sessions.some((s) => !s.deleted && s.elder_id === e.elder_id) || db.memoirs.some((x) => !x.deleted && x.elder_id === e.elder_id)
+        || db.links.some((k) => k.elder_id === e.elder_id && ['ready', 'in_progress'].includes(k.state));
+      if (has) return err(409, '기록이 있어 지울 수 없어요', 'has_records');
+      db.elders = db.elders.filter((x) => x.elder_id !== e.elder_id); save(); return ok({elder_id: e.elder_id, deleted: true});
+    }
     if (path === '/elders' && method === 'POST') { const e = {elder_id: 'demo-e' + (++db.seq + 10), name: String(body.name || '').trim()}; db.elders.push(e); save(); return made(e); }
     // 회차 목록 · 시작
     if (path === '/sessions' && method === 'GET') {
@@ -4689,6 +4816,62 @@ body.ebook-paged #ebook-content, body.ebook-paged #ebook-right-content, body.ebo
     return addElder(SELF);
   }
 
+  /* ── 이야기 주인공 이름 바꾸기 · 지우기 (서버 API 요청 중 — README 「서버에 요청한 API」) ──
+       PATCH  /api/elders/{elder_id} {name}  → 200 {elder_id, name}
+       DELETE /api/elders/{elder_id}         → 200 {elder_id, deleted: true} · 기록이 있으면 409 {code: "has_records"}
+       서버에 아직 없으면 404(코드 없음) · 405 가 온다 → 'unsupported' 로 알린다. 엽서 · 자서전은 이름이 아니라
+       elder_id 에 묶여 있어서 이름을 바꿔도 그대로 따라온다. */
+  const notReady = (e) => e.status === 405 || e.status === 501 || (e.status === 404 && !e.code);
+  async function renameElder(id, name) {
+    const elder = AUTH.elders.find((e) => e.elder_id === id);
+    if (!elder) return failure('elder_not_found');
+    if (typeof name !== 'string' || !name.trim()) return failure('invalid_name');
+    const trimmed = name.trim().slice(0, 30);
+    if (trimmed === elder.name) return success({elder: copy(elder), changed: false});
+    if (trimmed === SELF || elder.name === SELF) return failure('self');
+    if (AUTH.elders.some((e) => e.elder_id !== id && e.name === trimmed)) return failure('duplicate_name');
+    try {
+      const r = await window.Srv.call(`/elders/${encodeURIComponent(id)}`, {method: 'PATCH', body: JSON.stringify({name: trimmed})});
+      elder.name = String((r && r.name) || trimmed);
+      changed();
+      return success({elder: copy(elder), changed: true});
+    } catch (e) {
+      return failure(notReady(e) ? 'unsupported' : e.status === 404 ? 'elder_not_found' : e.status === 409 ? 'duplicate_name' : 'server');
+    }
+  }
+  /** 이분에게 묶인 기록 수 — 지우기 전에 보여 준다 (엽서 · 엽서 전 이야기 · 자서전 · 아직 쓸 수 있는 초대) */
+  async function elderRecords(id) {
+    const q = encodeURIComponent(id);
+    const [s, m, l] = await Promise.all([
+      window.Srv.call(`/sessions?limit=100&elder_id=${q}`).catch(() => null),
+      window.Srv.call(`/memoirs/saved?limit=100&elder_id=${q}`).catch(() => null),
+      api.linkList(100, id).catch(() => null),
+    ]);
+    if (!s || !m || !l) return null;
+    const sessions = (s.sessions || []).filter((x) => x.elder_id === id);
+    return {
+      postcards: sessions.filter((x) => x.has_postcard).length,
+      stories: sessions.filter((x) => !x.has_postcard).length,
+      memoirs: (m.memoirs || []).length,
+      links: (l.links || []).filter((x) => ['ready', 'in_progress'].includes(x.state)).length,
+    };
+  }
+  async function deleteElder(id) {
+    const elder = AUTH.elders.find((e) => e.elder_id === id);
+    if (!elder) return failure('elder_not_found');
+    if (elder.name === SELF) return failure('self');
+    try {
+      await window.Srv.call(`/elders/${encodeURIComponent(id)}`, {method: 'DELETE'});
+    } catch (e) {
+      if (e.status === 404 && e.code) { /* 이미 없다 — 목록에서만 빼면 된다 */ }
+      else return failure(notReady(e) ? 'unsupported' : e.status === 409 ? 'has_records' : 'server');
+    }
+    AUTH.elders = AUTH.elders.filter((e) => e.elder_id !== id);
+    if (AUTH.elderId === id) { AUTH.elderId = ''; try { localStorage.removeItem(KEY); } catch (_) {} pickKept(); }
+    changed();
+    return success({elder: copy(elder)});
+  }
+
   function selectElder(id) {
     const elder = AUTH.elders.find((c) => c.elder_id === id);
     if (!elder) return failure('elder_not_found');
@@ -4746,7 +4929,7 @@ body.ebook-paged #ebook-content, body.ebook-paged #ebook-right-content, body.ebo
   const unused = () => failure('unsupported');
 
   const store = Object.freeze({
-    snapshot, login, logout, addElder, selectElder, ensureSelf, setAccount,
+    snapshot, login, logout, addElder, selectElder, ensureSelf, setAccount, renameElder, deleteElder, elderRecords,
     issueInvitation, revoke, reissue, loadInvitations, invitationByAddress, canRevoke, canReissue,
     startInvitation: unused, completeInvitation: unused, invitationByReference: unused, seedReviewInvitations: unused,
     onChange: (fn) => { listeners.add(fn); return () => listeners.delete(fn); },
@@ -5640,12 +5823,12 @@ let toastTimer;
 function toast(message){clearTimeout(toastTimer);$('#toast').textContent=message;$('#toast').hidden=false;toastTimer=setTimeout(()=>{$('#toast').hidden=true;},3300);}
 function selectedStyle(){return styles.find((style)=>style.id===state.style);}
 function selectionRangeText(){return MEMOIR_POLICY.max===null?`${MEMOIR_POLICY.min}장 이상`:`${MEMOIR_POLICY.min}~${MEMOIR_POLICY.max}장`;}
-function navigate(screen){if(screen==='interview'&&window.RolePreview&&!window.RolePreview.canEnterInterview())screen='prepare';if(screen==='style'&&!memoirSelection.canGenerate(state.selected.size,MEMOIR_POLICY)){toast(`자서전으로 엮을 엽서를 ${selectionRangeText()} 골라주세요.`);screen='records';}if(location.hash===`#${screen}`)show(screen);else location.hash=screen;}
+function navigate(screen){if(screen==='interview'&&window.RolePreview&&!window.RolePreview.canEnterInterview())screen='start';if(screen==='style'&&!memoirSelection.canGenerate(state.selected.size,MEMOIR_POLICY)){toast(`자서전으로 엮을 엽서를 ${selectionRangeText()} 골라주세요.`);screen='records';}if(location.hash===`#${screen}`)show(screen);else location.hash=screen;}
 function show(screen) {
   if(window.RolePreview?.isInviteHash(`#${screen}`)){window.RolePreview.enterGuest(`#${screen}`);return;}
   const allowed = ['home','interview','records','library','style','draft','reader','prepare','invitations','invite','start','start-self','invite-setup'];
   if (!allowed.includes(screen)) screen = 'home';
-  if(screen==='interview'&&window.RolePreview&&!window.RolePreview.canEnterInterview())screen='prepare';
+  if(screen==='interview'&&window.RolePreview&&!window.RolePreview.canEnterInterview())screen='start';
   if(window.RolePreview?.isGuest()&&!['invite','interview'].includes(screen))screen='invite';
   if(['draft','reader'].includes(screen)&&state.draftElderId!==currentElderId()){screen=screen==='reader'?'library':'records';toast('선택한 이야기 주인공의 목록에서 다시 열어주세요.');}
   if (screen === 'style' && !memoirSelection.canGenerate(state.selected.size,MEMOIR_POLICY)) { navigate('records'); return; }
@@ -6428,8 +6611,18 @@ renderRecent();renderQuestion();setInterviewMode('reading');show(location.hash.s
     }
   }
 
-  function bookMarkup(book, index) {
-    return `<li><button type="button" class="ml-book-card ml-tone-${index % 3}" data-library-book="${escapeText(book.id)}">
+  // 표지 색은 문체를 따른다 — 소설체 · 문학체 · 수필체가 늘 같은 색이라 책장만 봐도 어떤 책인지 안다.
+  // 같은 문체 책이 이어지면 두 번째마다 조금 밝은 색(…b)으로 — 같은 색이 나란히 붙어 단조롭지 않게.
+  // 색 자체는 library-view.css · library-pull.css 의 .ml-tone-* 에 있다.
+  const STYLE_TONE = {novel: 0, literary: 1, essay: 2};
+  function toneOf(book, index, list) {
+    const base = STYLE_TONE[book.style];
+    if (base === undefined) return String(index % 3); // 예전 문체(구어체 등) — 순서대로
+    const nth = list.slice(0, index).filter((b) => b.style === book.style).length;
+    return nth % 2 ? `${base}b` : String(base);
+  }
+  function bookMarkup(book, index, list) {
+    return `<li><button type="button" class="ml-book-card ml-tone-${toneOf(book, index, list)}" data-library-book="${escapeText(book.id)}">
       <span class="ml-cover-bay" aria-hidden="true"><span class="ml-cover"><span class="ml-cover-title">${escapeText(book.title)}</span><span class="ml-cover-rule"></span><span class="ml-cover-volume">${String(index + 1).padStart(2, '0')}</span></span></span>
       <span class="ml-book-copy"><span class="ml-volume-label">작은 책 ${String(index + 1).padStart(2, '0')}</span><strong>${escapeText(book.title)}</strong><span class="ml-book-meta">이야기 ${book.count || book.body.length}개 · ${escapeText(book.date)}</span><span class="ml-read-label">${readingLabel(book)} <span aria-hidden="true">→</span></span></span>
     </button></li>`;
@@ -6440,7 +6633,7 @@ renderRecent();renderQuestion();setInterviewMode('reading');show(location.hash.s
     const columns = shelfColumns();
     let rows = '';
     for (let start = 0; start < visibleBooks.length; start += columns) {
-      rows += `<div class="ml-shelf-row"><ul class="ml-books" aria-label="책장 ${Math.floor(start / columns) + 1}번째 칸">${visibleBooks.slice(start, start + columns).map((book, index) => bookMarkup(book, start + index)).join('')}</ul><span class="ml-shelf-plank" aria-hidden="true"></span></div>`;
+      rows += `<div class="ml-shelf-row"><ul class="ml-books" aria-label="책장 ${Math.floor(start / columns) + 1}번째 칸">${visibleBooks.slice(start, start + columns).map((book, index) => bookMarkup(book, start + index, visibleBooks)).join('')}</ul><span class="ml-shelf-plank" aria-hidden="true"></span></div>`;
     }
     return `<div class="ml-shelves ml-columns-${columns}" role="group" aria-label="나의 자서전 책장">${rows}</div>`;
   }
@@ -6598,13 +6791,69 @@ renderRecent();renderQuestion();setInterviewMode('reading');show(location.hash.s
   let job = null;          // {job_id, elderId, style, title}
   let seq = 0, stagePast = false;
 
+  /* ── 「자서전 만드는 중」 알림 — 창을 닫고 기다리는 동안 화면에 늘 떠 있다 (휴대폰은 위, PC 는 오른쪽 아래). 누르면 진행 창을 다시 연다 ── */
+  const pill = document.createElement('button');
+  pill.type = 'button'; pill.className = 'srv-gen-pill'; pill.hidden = true;
+  pill.setAttribute('aria-label', '자서전 만드는 중 — 진행 상황 보기');
+  pill.innerHTML = `<span class="sgp-spin" aria-hidden="true"></span><span class="sgp-text"><b>자서전 만드는 중</b><small class="sgp-stage">시작하고 있어요</small></span>`;
+  document.body.append(pill);
+  let lastStage = '시작하고 있어요';
+  function paintPill() {
+    const on = !!(job && state.generating) && !dialog.open && !document.body.classList.contains('ebook-mode') && location.hash !== '#interview' && location.hash !== '#library'; // 인터뷰 중에는 말씀에 집중하게, 책장은 「만드는 중」 책이 대신 보여 준다
+    pill.hidden = !on;
+    if (on) pill.querySelector('.sgp-stage').textContent = lastStage;
+    paintShelf();
+  }
+  pill.addEventListener('click', () => { if (job && state.generating && !dialog.open) dialog.showModal(); paintPill(); });
+  dialog.addEventListener('close', () => { busyNote.hidden = true; paintPill(); });
+  window.addEventListener('memoir:screen', paintPill);
+
+  /* ── 만드는 동안은 새 자서전을 시작하지 않는다 — 한 번에 한 권 (서버도 409 busy 로 막는다) ──
+       「자서전 만들기」 · 「자서전 만들기(문체 화면)」를 누르면 막는다는 말과 함께 지금 만드는 책의 진행 창을 연다. */
+  const busyNote = document.createElement('p');
+  busyNote.className = 'srv-gen-busy'; busyNote.hidden = true; busyNote.setAttribute('role', 'alert');
+  busyNote.innerHTML = '<b>지금 만들고 있는 자서전이 있어요.</b><br>한 번에 한 권씩 만들어요. 이 책이 다 만들어진 뒤에 새로 만들 수 있어요.';
+  dialog.querySelector('#generation-stage').before(busyNote);
+  const running = () => !!(job && state.generating);
+  function showBusy() { busyNote.hidden = false; if (!dialog.open) dialog.showModal(); paintPill(); }
+  document.addEventListener('click', (e) => {
+    if (!running() || !e.target.closest('#choose-style')) return;
+    e.preventDefault(); e.stopImmediatePropagation(); showBusy();
+  }, true);
+
+  /* ── 책장에 「만드는 중」인 책 한 권 — 반짝이며 기다린다. 누르면 진행 창 ── */
+  const shelfScreen = document.querySelector('[data-screen="library"]');
+  function paintShelf() {
+    if (!shelfScreen) return;
+    const want = running() && job.elderId === AUTH.elderId;
+    let li = shelfScreen.querySelector('.ml-making-item');
+    if (!want) { if (li) { const row = li.closest('.ml-shelf-row.ml-making-row'); (row || li).remove(); } return; }
+    const shelves = shelfScreen.querySelector('.ml-shelves');
+    if (!shelves) return;
+    if (!li) {
+      li = document.createElement('li'); li.className = 'ml-making-item';
+      li.innerHTML = `<button type="button" class="ml-book-card ml-making" data-gen-open aria-label="만들고 있는 자서전 — 진행 상황 보기">
+        <span class="ml-cover-bay" aria-hidden="true"><span class="ml-cover ml-cover-making"><span class="ml-cover-title">새 책을<br>엮는 중</span><span class="ml-cover-rule"></span><span class="mlm-spark s1">✦</span><span class="mlm-spark s2">✧</span><span class="mlm-spark s3">✦</span><span class="mlm-spark s4">✧</span><span class="mlm-shine"></span></span></span>
+        <span class="ml-book-copy"><span class="ml-volume-label">만드는 중</span><strong>${escapeText(job.title || '새 자서전')}</strong><span class="ml-book-meta mlm-stage"></span><span class="ml-read-label">진행 보기 <span aria-hidden="true">→</span></span></span></button>`;
+      const firstRow = shelves.querySelector('.ml-books');
+      if (firstRow) firstRow.prepend(li);
+      else { const row = document.createElement('div'); row.className = 'ml-shelf-row ml-making-row'; row.innerHTML = '<ul class="ml-books" aria-label="만들고 있는 책"></ul><span class="ml-shelf-plank" aria-hidden="true"></span>'; row.firstChild.append(li); shelves.prepend(row); }
+    }
+    li.querySelector('.mlm-stage').textContent = lastStage;
+  }
+  if (shelfScreen) new MutationObserver(() => { if (running() && !shelfScreen.querySelector('.ml-making-item')) paintShelf(); }).observe(shelfScreen, {childList: true, subtree: true});
+  document.addEventListener('click', (e) => { if (e.target.closest('[data-gen-open]')) { e.preventDefault(); if (running() && !dialog.open) dialog.showModal(); paintPill(); } });
+
   function paintStage(j) {
     if (j.stage && j.stage !== 'analysis') stagePast = true;
     const st = j.stage === 'chapter' && j.chapters ? `${j.chapters}장 중 ${j.chapter}장을 쓰고 있어요`
       : j.stage === 'analysis' && stagePast ? '이야기를 다시 정리하고 있어요'
       : STAGE[j.stage] || '자서전을 만들고 있어요';
     const sec = Number(j.elapsed) || 0;
-    dialog.querySelector('#generation-stage').textContent = `${st} · ${sec >= 60 ? `${Math.floor(sec / 60)}분 ${sec % 60}초` : `${sec}초`} 지났어요`;
+    const ago = sec >= 60 ? `${Math.floor(sec / 60)}분 ${sec % 60}초` : `${sec}초`;
+    dialog.querySelector('#generation-stage').textContent = `${st} · ${ago} 지났어요`;
+    lastStage = `${st} · ${ago}`;
+    paintPill();
   }
 
   async function generate() {
@@ -6624,7 +6873,7 @@ renderRecent();renderQuestion();setInterviewMode('reading');show(location.hash.s
     } catch (e) {
       if (e.status === 409 && e.code === 'busy' && e.body && e.body.job_id) {
         first = {job_id: e.body.job_id, status: 'running'};
-        toast('이미 만들고 있는 자서전이 있어요. 그 자서전을 이어서 기다려요.');
+        busyNote.hidden = false; // 다른 기기 · 창에서 시작한 책 — 서버가 409 busy 로 알려 준다
       } else {
         state.generating = false; dialog.close();
         toast(why(e));
@@ -6641,6 +6890,8 @@ renderRecent();renderQuestion();setInterviewMode('reading');show(location.hash.s
     const t0 = Date.now();
     let misses = 0;
     state.generating = true;
+    lastStage = '이어서 기다리고 있어요';
+    paintPill();
     for (;;) {
       if (my !== seq) return;
       let r;
@@ -6684,13 +6935,13 @@ renderRecent();renderQuestion();setInterviewMode('reading');show(location.hash.s
       return;
     }
   }
-  function finish() { state.generating = false; job = null; jobKeep(null); if (dialog.open) dialog.close(); }
+  function finish() { state.generating = false; job = null; jobKeep(null); if (dialog.open) dialog.close(); paintPill(); }
   const sleepMs = (ms) => new Promise((r) => setTimeout(r, ms));
 
   dialog.addEventListener('click', async (e) => {
     const b = e.target.closest('[data-gen]');
     if (!b) return;
-    if (b.dataset.gen === 'hide') { dialog.close(); toast('다 만들어지면 알려 드릴게요. 다른 화면을 둘러보셔도 돼요.'); return; }
+    if (b.dataset.gen === 'hide') { dialog.close(); toast('다 만들어지면 알려 드릴게요. 「자서전 만드는 중」 알림을 누르면 진행 상황을 볼 수 있어요.'); return; }
     if (b.dataset.gen === 'stop' && job) {
       if (!window.confirm('자서전 만들기를 그만둘까요?')) return;
       const id = job.job_id;
@@ -6703,7 +6954,7 @@ renderRecent();renderQuestion();setInterviewMode('reading');show(location.hash.s
   const gen = document.getElementById('generate-draft');
   const fresh = gen.cloneNode(true); gen.replaceWith(fresh);
   fresh.innerHTML = fresh.innerHTML.replace('초안 미리보기', '자서전 만들기');
-  fresh.addEventListener('click', () => { if (job && state.generating) { if (!dialog.open) dialog.showModal(); return; } void generate(); });
+  fresh.addEventListener('click', () => { if (running()) { showBusy(); return; } void generate(); });
 
   /* ── 자서전에 넣을 엽서 고르기: 처음엔 전체 선택 · 「전체 해제 / 전체 선택」 버튼 ── */
   const allBtn = document.createElement('button');
@@ -6725,7 +6976,7 @@ renderRecent();renderQuestion();setInterviewMode('reading');show(location.hash.s
   };
   allBtn.addEventListener('click', () => { selectAll(!allPicked()); renderRecords(); });
   const startOriginal = window.startMemoirFromPostcards;
-  window.startMemoirFromPostcards = function () { startOriginal(); selectAll(true); renderRecords(); };
+  window.startMemoirFromPostcards = function () { if (running()) { showBusy(); return; } startOriginal(); selectAll(true); renderRecords(); };
   // 고르는 중에 엽서 목록이 늦게 도착하면 (로그인 · 화자 바꿈 직후) 그때 전체 선택
   window.addEventListener('memoir:records', () => { if (state.pickRecords && !state.selected.size) { selectAll(true); renderRecords(); } });
 
@@ -7312,7 +7563,7 @@ renderRecent();renderQuestion();setInterviewMode('reading');show(location.hash.s
   function snapshot(){return store.snapshot();}
   function elder(){const data=snapshot();return data.elders.find(item=>item.elder_id===data.selectedElderId)||null;}
   const changeIcon='<svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M20 7a8 8 0 0 0-13-3L4 7m0-5v5h5M4 17a8 8 0 0 0 13 3l3-3m0 5v-5h-5"/></svg>';
-  function changeMarkup(person){return `<button type="button" class="role-change" data-go="prepare" aria-label="${person?`이야기 주인공 변경, 현재 ${escapeText(person.name)}`:'이야기 주인공 이름 등록하기'}">${person?changeIcon:''}<span>${person?'변경':'이름 등록하기'}</span></button>`;}
+  function changeMarkup(person){return `<button type="button" class="role-change" data-role="pick-elder" aria-label="${person?`이야기 주인공 변경, 현재 ${escapeText(person.name)}`:'이야기 주인공 이름 등록하기'}">${person?changeIcon:''}<span>${person?'변경':'이름 등록하기'}</span></button>`;}
   function renderIdentity(){
     const person=elder();
     const identity=JSON.stringify([person?.elder_id,person?.name]);
@@ -7337,11 +7588,11 @@ renderRecent();renderQuestion();setInterviewMode('reading');show(location.hash.s
   function validRun(){return !!run&&!run.completed&&(!run.invitationId||snapshot().invitations.some(inv=>inv.id===run.invitationId&&inv.status==='in_progress'));}
   function interruptRun(id){if(run?.invitationId!==id)return;const text=[...state.answers,$('#answer-text').value].filter(value=>value.trim()).join('\n\n');if(text)interrupted.push({elderId:run.elderId,text});state.answers=[];$('#answer-text').value='';state.interviewCompleted=true;run=null;setInterviewMode('paused');}
   function refreshOwnership(){state.selected.clear();state.pickRecords=false;state.filter='all';state.query='';$('#record-search').value='';renderRecent();renderRecords();window.MemoirLibrary?.render();window.SrvRecords?.reload();window.SrvLibrary?.reload();}
-  function headingCopy(){const person=elder();return person?`${escapeText(person.name)} 님의 이야기`:'이야기 주인공 등록';}
+  function headingCopy(){const person=elder();return person?`${escapeText(window.Srv.honor(person.name))}의 이야기`:'이야기 주인공 등록';}
   function renderPrepare(){
     const data=snapshot(),person=elder();
     const nameForm=`<form id="speaker-form" class="role-name-form"><label for="speaker-name">이야기 주인공 이름</label><div class="role-name-actions"><input id="speaker-name" name="name" maxlength="30" required autocomplete="off" placeholder="이름 하나만 적어주세요"><button type="submit" class="button outline">이름 등록</button></div><p class="role-error" id="speaker-error" role="status"></p></form>`;
-    prepare.querySelector('.role-content').innerHTML=`<p class="role-intro">계정은 이야기를 모으는 사람, 이야기 주인공은 삶을 들려주는 사람입니다.</p><div class="role-account-strip"><span>이야기를 모으는 계정 <strong>${data.user?escapeText(data.user.name||data.user.email||'로그인됨'):'로그인 전'}</strong></span><button type="button" class="text-button" data-login>${data.user?'계정 보기':'로그인'}</button></div><div class="panel role-preparation"><h2>${person?'이야기 주인공':'먼저, 이름을 알려주세요'}</h2>${data.elders.length?`<div class="role-speakers" role="group" aria-label="이야기 주인공 선택">${data.elders.map(item=>`<button type="button" class="button outline" data-speaker="${escapeText(item.elder_id)}" aria-pressed="${item.elder_id===data.selectedElderId}">${escapeText(item.name)}</button>`).join('')}</div><details class="role-add-speaker"><summary>다른 분 이름 추가</summary>${nameForm}</details>`:nameForm}${person?`<div class="role-topic"><label for="prepared-topic">이번에 나눌 주제</label><select id="prepared-topic">${topics.map(topic=>`<option${run?.topic===topic?' selected':''}>${topic}</option>`).join('')}</select></div><p class="role-subcopy">${headingCopy()}를 담습니다. 떠오르는 기억부터 편하게 들려주세요.</p><button type="button" class="button primary role-main-action" data-role="start-local">${run&&!run.completed&&run.elderId===person.elder_id?'이어서 이야기하기':'이 기기에서 시작하기'} ${icons('arrow')}</button><div class="role-secondary-actions"><button type="button" class="text-button" data-role="issue">초대 주소 준비하기</button><button type="button" class="text-button" data-go="invitations">준비한 초대 보기</button></div>`:''}</div>`;
+    prepare.querySelector('.role-content').innerHTML=`<p class="role-intro">계정은 이야기를 모으는 사람, 이야기 주인공은 삶을 들려주는 사람입니다.</p><div class="role-account-strip"><span>이야기를 모으는 계정 <strong>${data.user?escapeText(data.user.name||data.user.email||'로그인됨'):'로그인 전'}</strong></span><button type="button" class="text-button" data-login>${data.user?'계정 보기':'로그인'}</button></div><div class="panel role-preparation"><h2>${person?'이야기 주인공':'먼저, 이름을 알려주세요'}</h2>${data.elders.length?`<div class="role-speakers" role="group" aria-label="이야기 주인공 선택">${data.elders.map(item=>`<button type="button" class="button outline" data-speaker="${escapeText(item.elder_id)}" aria-pressed="${item.elder_id===data.selectedElderId}">${escapeText(item.name)}</button>`).join('')}</div><button type="button" class="text-button role-manage-elders" data-role="manage-elders">${icons('pen')}<span>이름 고치기 · 지우기</span></button><details class="role-add-speaker"><summary>다른 분 이름 추가</summary>${nameForm}</details>`:nameForm}${person?`<div class="role-topic"><label for="prepared-topic">이번에 나눌 주제</label><select id="prepared-topic">${topics.map(topic=>`<option${run?.topic===topic?' selected':''}>${topic}</option>`).join('')}</select></div><p class="role-subcopy">${headingCopy()}를 담습니다. 떠오르는 기억부터 편하게 들려주세요.</p><button type="button" class="button primary role-main-action" data-role="start-local">${run&&!run.completed&&run.elderId===person.elder_id?'이어서 이야기하기':'이 기기에서 시작하기'} ${icons('arrow')}</button><div class="role-secondary-actions"><button type="button" class="text-button" data-role="issue">초대 주소 준비하기</button><button type="button" class="text-button" data-go="invitations">준비한 초대 보기</button></div>`:''}</div>`;
   }
   function renderInterrupted(){
     const entries=interrupted.filter(item=>item.elderId===snapshot().selectedElderId);
@@ -7418,7 +7669,8 @@ renderRecent();renderQuestion();setInterviewMode('reading');show(location.hash.s
   window.addEventListener('memoir:screen',event=>{
     if(event.detail.screen==='prepare'){renderPrepare();renderInterrupted();}
     if(event.detail.screen==='invitations'){renderInvitations();store.loadInvitations().then(r=>{if(location.hash==='#invitations'){renderInvitations();if(!r.ok)toast('보낸 초대 목록을 불러오지 못했어요.');}});}
-    context.hidden=guest||event.detail.screen!=='home';
+    // 처음가기에서는 주인공을 고르지 않는다 — 녹음할 사람은 「이야기 시작하기」에서, 초대할 사람은 「초대 주소 만들기」에서 정한다 (11-13)
+    context.hidden=true;
     renderContext();
   });
   function renderContext(){
@@ -7426,6 +7678,8 @@ renderRecent();renderQuestion();setInterviewMode('reading');show(location.hash.s
     context.innerHTML=`<span class="role-context-label">이야기 주인공</span><span class="role-name-action"><strong class="role-context-name">${escapeText(person?.name||'아직 등록하지 않았어요')}</strong>${changeMarkup(person)}</span>`;
   }
   window.RolePreview={store,renderIdentity,
+    // 기록 · 자서전을 볼 주인공을 바꾼다 (「누구의 기록을 볼까요?」 창)
+    selectElder(id){if(hasDraft()&&run?.elderId!==id){toast('작성 중인 이야기를 먼저 마친 뒤 다른 분을 선택해주세요.');return false;}store.selectElder(id);refreshOwnership();renderIdentity();renderContext();return true;},
     async beginSelf(topic){if(!snapshot().user){window.MemoirLogin.open();toast('로그인하면 내 이야기를 녹음해 모아 둘 수 있어요.');return;}const before=snapshot().selectedElderId;const r=await store.ensureSelf();if(!r.ok){toast('지금은 시작하지 못했어요. 잠시 뒤 다시 눌러 주세요.');return;}store.selectElder(r.elder.elder_id);if(before!==r.elder.elder_id)refreshOwnership();begin(null,topic);},
     async issueFor(elderId,topic){store.selectElder(elderId);refreshOwnership();showIssued(await store.issueInvitation({elderId,topic}));},
     isLoggedIn:()=>!!snapshot().user,currentElderId:()=>run&&!run.completed&&location.hash==='#interview'?run.elderId:snapshot().selectedElderId,canEnterInterview:validRun,canFinish:()=>!run?.invitationId||validRun(),isGuest:()=>guest,isInviteHash:hash=>/^#invite-preview-/.test(hash),enterGuest,
@@ -7438,7 +7692,166 @@ renderRecent();renderQuestion();setInterviewMode('reading');show(location.hash.s
   refreshOwnership();
   if(window.RolePreview.isInviteHash(location.hash))enterGuest(location.hash);
   else if(location.hash==='#invite')enterGuest('');
-  else show(location.hash==='#interview'?'prepare':location.hash.slice(1)||'home');
+  else show(location.hash==='#interview'?'start':location.hash.slice(1)||'home');
+}());
+
+</script>
+<script data-from="srv-elders.js">
+(function () {
+  'use strict';
+  /* ═══════════════════════════════════════════════════════════════
+     srv-elders — 이야기 주인공 이름 고치기 · 지우기 창
+       · 「이야기 준비」 화면의 「이름 고치기 · 지우기」에서 연다.
+       · 이름 바꾸기: PATCH /api/elders/{id}. 엽서 · 자서전은 elder_id 에 묶여 있어 그대로 따라온다.
+       · 지우기: 엽서 · 엽서 전 이야기 · 자서전 · 아직 쓸 수 있는 초대가 하나라도 있으면 막는다(기록을 잃지 않게).
+         아무 기록이 없을 때만 한 번 더 물은 뒤 DELETE /api/elders/{id}.
+       · 「나」(내 이야기)는 바꾸거나 지울 수 없다. 진행 중인 인터뷰의 주인공도 지울 수 없다.
+       · 서버에 아직 이 API 가 없으면 「서버 준비 중」으로 알린다 (README 「서버에 요청한 API」).
+     ═══════════════════════════════════════════════════════════════ */
+  const store = window.SrvStore;
+  const SELF = '나';
+  const dialog = document.createElement('dialog');
+  dialog.className = 'review-dialog elder-manage-dialog';
+  dialog.setAttribute('aria-labelledby', 'elder-manage-title');
+  dialog.innerHTML = `<form method="dialog"><button class="dialog-close" aria-label="닫기">${icons('close')}</button></form>
+    <span class="eyebrow">이야기 주인공</span><h2 id="elder-manage-title">이름 고치기 · 지우기</h2>
+    <p class="small-copy em-lead">이름을 바꿔도 그분의 엽서와 자서전은 그대로 이어져요.</p>
+    <ul class="em-list"></ul>
+    <p class="em-msg" role="status"></p>`;
+  document.body.append(dialog);
+  const list = dialog.querySelector('.em-list'), msg = dialog.querySelector('.em-msg');
+  const say = (t, bad) => { msg.textContent = t || ''; msg.classList.toggle('bad', !!bad); };
+  const WHY = {
+    unsupported: '서버가 아직 이 기능을 지원하지 않아요. 서버가 준비되면 바로 쓸 수 있어요.',
+    duplicate_name: '이미 같은 이름의 이야기 주인공이 있어요.',
+    invalid_name: '이름을 적어 주세요.',
+    self: '「나」는 내 이야기를 담는 자리라 바꾸거나 지울 수 없어요.',
+    elder_not_found: '이 이야기 주인공을 찾을 수 없어요. 창을 닫고 다시 열어 주세요.',
+    has_records: '이분의 기록이 남아 있어 지울 수 없어요. 이름만 바꿀 수 있어요.',
+    server: '지금은 처리하지 못했어요. 잠시 뒤 다시 해 주세요.',
+  };
+
+  function render() {
+    const data = store.snapshot();
+    list.innerHTML = data.elders.map((e) => {
+      const self = e.name === SELF;
+      return `<li class="em-row" data-elder="${escapeText(e.elder_id)}">
+        <label class="em-name"><span class="visually-hidden">${escapeText(e.name)} 이름</span>
+          <input value="${escapeText(e.name)}" maxlength="30" autocomplete="off" ${self ? 'disabled' : ''}></label>
+        ${self ? '<span class="em-self">내 이야기</span>' : `<button type="button" class="button outline compact" data-em="save">이름 저장</button>
+        <button type="button" class="text-button em-del" data-em="del">${icons('close')}<span>지우기</span></button>`}
+      </li>`;
+    }).join('') || '<li class="em-empty">등록한 이야기 주인공이 없어요.</li>';
+  }
+  function refreshScreens() {
+    // 지금 화면을 다시 그린다 — 처음가기 「이야기 주인공」 줄 · 엽서 · 자서전 제목의 이름이 함께 바뀐다
+    const here = location.hash.slice(1) || 'home';
+    if (here !== 'interview') show(here);
+    window.RolePreview?.renderIdentity?.();
+  }
+  function open() {
+    if (!store.snapshot().user) { window.MemoirLogin.open(); return; }
+    render(); say('');
+    if (!dialog.open) dialog.showModal();
+    list.querySelector('input:not([disabled])')?.focus();
+  }
+
+  async function save(row) {
+    const id = row.dataset.elder, input = row.querySelector('input'), btn = row.querySelector('[data-em="save"]');
+    btn.disabled = true; say('저장하는 중이에요…');
+    const r = await store.renameElder(id, input.value);
+    btn.disabled = false;
+    if (!r.ok) {
+      say(WHY[r.error] || WHY.server, true);
+      // 서버에 저장되지 않은 이름이 저장된 것처럼 남지 않게 되돌린다 (빈칸 · 같은 이름은 고칠 수 있게 둔다)
+      if (r.error === 'unsupported' || r.error === 'server' || r.error === 'self') input.value = store.snapshot().elders.find((e) => e.elder_id === id)?.name || input.value;
+      input.focus(); return;
+    }
+    if (!r.changed) { say('바뀐 이름이 없어요.'); return; }
+    say(`이름을 바꿨어요 → 「${r.elder.name}」. 엽서와 자서전도 새 이름으로 보여요.`);
+    render(); refreshScreens();
+  }
+  /** 지울 수 없을 때 — 그 사람 줄 바로 아래에 상자로: 무엇이 남아 있는지 · 왜 못 지우는지 · 대신 할 수 있는 것 */
+  function blocked(row, name, stats) {
+    list.querySelectorAll('.em-blocked').forEach((x) => x.remove());
+    const box = document.createElement('div');
+    box.className = 'em-blocked'; box.setAttribute('role', 'alert');
+    box.innerHTML = `<div class="emb-head">${icons('book')}<strong>${escapeText(window.Srv.honor(name))}은 지울 수 없어요</strong></div>
+      <p class="emb-sub">이분의 기록이 남아 있어요</p>
+      <ul class="emb-stats">${stats.map(([ic, label, n, unit]) => `<li>${icons(ic)}<span>${label}</span><b>${n}${unit}</b></li>`).join('')}</ul>
+      <p class="emb-why">기록을 잃지 않도록, 기록이 있는 분은 지우지 않고 <b>이름만 바꿀 수 있어요.</b></p>
+      <div class="emb-actions"><button type="button" class="button outline compact" data-emb="rename">${icons('pen')}<span>이름 바꾸기</span></button><button type="button" class="text-button" data-emb="close">닫기</button></div>`;
+    row.after(box);
+    box.querySelector('[data-emb="rename"]').addEventListener('click', () => { box.remove(); const i = row.querySelector('input'); i.focus(); i.select(); });
+    box.querySelector('[data-emb="close"]').addEventListener('click', () => { box.remove(); row.querySelector('[data-em="del"]')?.focus(); });
+    box.scrollIntoView({block: 'nearest'});
+  }
+  async function remove(row) {
+    list.querySelectorAll('.em-blocked').forEach((x) => x.remove());
+    const id = row.dataset.elder, name = store.snapshot().elders.find((e) => e.elder_id === id)?.name || '';
+    if (window.SrvInterview?.busy() && window.RolePreview?.currentElderId?.() === id) { say('이분과 인터뷰 중이에요. 인터뷰를 마친 뒤 지워 주세요.', true); return; }
+    say('이분의 기록을 확인하고 있어요…');
+    const n = await store.elderRecords(id);
+    if (!n) { say(WHY.server, true); return; }
+    const stats = [['letter', '엽서', n.postcards, '장'], ['pen', '엽서 전 이야기', n.stories, '개'], ['book', '자서전', n.memoirs, '권'], ['share', '보낸 초대', n.links, '개']].filter((x) => x[2]);
+    say('');
+    if (stats.length) { blocked(row, name, stats); return; }
+    dialog.close();
+    const yes = await window.MemoirTrash.confirm({title: '이 이야기 주인공을 지울까요?', items: [name], desc: '아직 남긴 기록이 없는 분이에요. 지우면 목록에서 사라져요.', ok: '지우기', keep: '그대로 두기'});
+    dialog.showModal();
+    if (!yes) return;
+    const r = await store.deleteElder(id);
+    if (!r.ok) { say(WHY[r.error] || WHY.server, true); return; }
+    say(`이야기 주인공 「${name}」 — 지웠어요.`);
+    render(); refreshScreens();
+    window.SrvRecords?.reload(); window.SrvLibrary?.reload();
+  }
+
+  dialog.addEventListener('click', (e) => {
+    const b = e.target.closest('[data-em]');
+    if (!b) return;
+    const row = b.closest('.em-row');
+    if (b.dataset.em === 'save') void save(row);
+    if (b.dataset.em === 'del') void remove(row);
+  });
+  dialog.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter' && e.target.matches('.em-name input') && !e.isComposing && e.keyCode !== 229) { e.preventDefault(); void save(e.target.closest('.em-row')); }
+  });
+  document.addEventListener('click', (e) => {
+    if (e.target.closest('[data-role="manage-elders"]')) { e.preventDefault(); open(); }
+  });
+  /* ── 「누구의 기록을 볼까요?」 — 엽서보기 · 자서전 보기 제목 옆 「변경」 ──
+       기록 · 자서전은 이야기 주인공마다 따로 모인다. 「나」(내 이야기)도 여기서 고른다. */
+  const picker = document.createElement('dialog');
+  picker.className = 'review-dialog elder-pick-dialog';
+  picker.setAttribute('aria-labelledby', 'elder-pick-title');
+  picker.innerHTML = `<form method="dialog"><button class="dialog-close" aria-label="닫기">${icons('close')}</button></form>
+    <span class="eyebrow">이야기 주인공</span><h2 id="elder-pick-title">누구의 기록을 볼까요?</h2>
+    <div class="ep-list" role="group" aria-label="이야기 주인공"></div>
+    <button type="button" class="text-button ep-manage" data-role="manage-elders">${icons('pen')}<span>이름 고치기 · 지우기</span></button>`;
+  document.body.append(picker);
+  function openPicker() {
+    const data = store.snapshot();
+    if (!data.user) { window.MemoirLogin.open(); return; }
+    const box = picker.querySelector('.ep-list');
+    box.innerHTML = data.elders.length ? data.elders.map((e) => `<button type="button" class="button outline" data-pick="${escapeText(e.elder_id)}" aria-pressed="${e.elder_id === data.selectedElderId}">${escapeText(e.name === SELF ? '나 (내 이야기)' : e.name)}</button>`).join('')
+      : '<p class="small-copy">아직 이야기 주인공이 없어요. 「이야기 시작하기」로 첫 이야기를 남겨 주세요.</p>';
+    picker.querySelector('.ep-manage').hidden = !data.elders.some((e) => e.name !== SELF);
+    if (!picker.open) picker.showModal();
+    box.querySelector('[aria-pressed="true"]')?.focus();
+  }
+  picker.addEventListener('click', (e) => {
+    const b = e.target.closest('[data-pick]');
+    if (b) { if (window.RolePreview?.selectElder?.(b.dataset.pick) !== false) picker.close(); return; }
+    if (e.target.closest('[data-role="manage-elders"]')) picker.close();
+  });
+  document.addEventListener('click', (e) => {
+    if (e.target.closest('[data-role="pick-elder"]')) { e.preventDefault(); e.stopImmediatePropagation(); openPicker(); }
+  }, true);
+  // 이름을 고치거나 지운 뒤에는 고르던 창도 새 목록으로
+  dialog.addEventListener('close', () => { if (location.hash === '#records' || location.hash === '#library') window.RolePreview?.renderIdentity?.(); });
+
+  window.MemoirElders = {open, pick: openPicker};
 }());
 
 </script>
@@ -7647,7 +8060,7 @@ renderRecent();renderQuestion();setInterviewMode('reading');show(location.hash.s
       if (opts.link) { window.SrvLinks?.failed(e); return false; }
       toast(msg);
       window.RolePreview?.complete?.({id: 'failed'});
-      navigate('prepare');
+      navigate('start');
       return false;
     } finally { starting = false; }
   }
@@ -8122,6 +8535,9 @@ renderRecent();renderQuestion();setInterviewMode('reading');show(location.hash.s
   const fin = document.getElementById('finish-description');
   if (fin) fin.textContent = '지금까지 들려주신 이야기는 저장돼요. 마치면 나눈 이야기를 보여 드려요.';
 
+  // 내말싸미 바로가기 — 인터뷰를 마친 분이 어떤 곳인지 둘러볼 수 있게. 초대 링크(/i) 밖의 첫 화면으로 간다
+  const homeUrl = () => window.Srv.DEMO ? `${location.href.split('#')[0].split('?')[0]}?demo=1` : `${location.origin}/`;
+  const homeLink = () => `<a class="button outline role-main-action srv-go-home" href="${escapeText(homeUrl())}">${icons('home')}<span>내말싸미 둘러보기</span></a>`;
   const topicOf = (p) => String((p && (p.topic || THEME_LABEL[p.theme])) || '살아온 이야기');
   function paint(stateKey, extra = '') {
     const say = LINK_SAYS[stateKey] || LINK_SAYS.neterr;
@@ -8179,7 +8595,7 @@ renderRecent();renderQuestion();setInterviewMode('reading');show(location.hash.s
     h1.textContent = '오늘 이야기, 고맙습니다';
     content.innerHTML = `<div class="panel role-guest-card"><span class="eyebrow">내말싸미 · 이야기 초대</span>
       <h2>들려주신 이야기를 잘 받았어요</h2>
-      <p>링크를 보내 주신 분이 이 이야기로 엽서와 자서전을 만들 수 있어요. 이 창은 닫으셔도 돼요.</p></div>${story}`;
+      <p>링크를 보내 주신 분이 이 이야기로 엽서와 자서전을 만들 수 있어요. 이 창은 닫으셔도 돼요.</p>${homeLink()}</div>${story}`;
     h1.focus({preventScroll: true});
   }
   /** 인터뷰가 닫혔다 (srv-interview 가 부른다) — 서버가 기록을 남길 때까지 잠깐 기다렸다 보여 준다 */
@@ -8209,7 +8625,7 @@ renderRecent();renderQuestion();setInterviewMode('reading');show(location.hash.s
     show('invite');
     h1.textContent = '인터뷰를 중단했어요';
     content.innerHTML = `<div class="panel role-guest-card"><span class="eyebrow">내말싸미 · 이야기 초대</span><h2>이야기를 저장하지 않고 마쳤어요</h2>
-      <p>이 링크로는 다시 시작할 수 없어요. 다시 이야기하시려면 링크를 보내 주신 분께 새 링크를 부탁해 주세요.</p></div>`;
+      <p>이 링크로는 다시 시작할 수 없어요. 다시 이야기하시려면 링크를 보내 주신 분께 새 링크를 부탁해 주세요.</p>${homeLink()}</div>`;
     h1.focus({preventScroll: true});
   }
   window.SrvLinks = {failed, done, left};
@@ -8500,8 +8916,8 @@ renderRecent();renderQuestion();setInterviewMode('reading');show(location.hash.s
       <div class="pc-confirm" role="alertdialog" aria-labelledby="pc-confirm-title" aria-describedby="pc-confirm-desc" hidden>
         <strong id="pc-confirm-title">이 엽서를 지울까요?</strong>
         <p id="pc-confirm-desc">지운 엽서는 보드에서 사라지고, 앞으로 만드는 자서전에도 들어가지 않아요. 이미 만든 책은 그대로예요.</p>
-        <div><button type="button" class="button outline compact" data-pc-keep>그대로 두기</button><button type="button" class="button compact pc-confirm-delete" data-pc-confirm>지우기</button></div></div>
-      <div class="pc-actions"><button type="button" class="text-button pc-trash" data-pc-delete>${icons('close')}<span>엽서 지우기</span></button><button type="button" class="button outline compact" data-pc-close>${kind === 'pin' ? '보드에 다시 꽂기' : '보드에 다시 붙이기'}</button></div></article>`;
+        <div><button type="button" class="button outline compact pc-confirm-delete" data-pc-confirm>지우기</button><button type="button" class="button primary compact" data-pc-keep>그대로 두기</button></div></div>
+      <div class="pc-actions"><button type="button" class="text-button pc-trash" data-pc-delete>${icons('close')}<span>엽서 지우기</span></button><span class="pc-actions-right"><button type="button" class="button outline compact pc-share" data-pc-share>${icons('share')}<span>엽서 공유</span></button><button type="button" class="button outline compact" data-pc-close>${kind === 'pin' ? '보드에 다시 꽂기' : '보드에 다시 붙이기'}</button></span></div></article>`;
     document.body.append(hold);
     const held = hold.querySelector('.pc-held');
     holding = {card, hold, held, kind, tilt, opener: card};
@@ -8554,6 +8970,7 @@ renderRecent();renderQuestion();setInterviewMode('reading');show(location.hash.s
     }
     held.focus({preventScroll: true});
     hold.querySelector('[data-pc-close]').addEventListener('click', putBack);
+    hold.querySelector('[data-pc-share]').addEventListener('click', () => sharePostcard(record));
     hold.querySelector('[data-pc-delete]').addEventListener('click', () => askDelete(true));
     hold.querySelector('[data-pc-keep]').addEventListener('click', () => askDelete(false));
     hold.querySelector('[data-pc-confirm]').addEventListener('click', () => removeHeld(id));
@@ -8601,6 +9018,24 @@ renderRecent();renderQuestion();setInterviewMode('reading');show(location.hash.s
     hold.remove();
     card.focus({preventScroll: true});
     holding = null;
+  }
+
+  // 엽서 공유 — 엽서 글을 그대로 보낸다 (카카오톡 · 문자 · 이메일 · 복사). 엽서만 따로 여는 공유 주소는 아직 서버에 없어서,
+  // 링크 칸에는 내말싸미 첫 화면을 둔다
+  function sharePostcard(record) {
+    const elders = window.Srv?.AUTH?.elders || [], me = elders.find((e) => e.elder_id === record.elder_id);
+    const who = me && me.name !== '나' ? window.Srv.honor(me.name) : '';
+    const text = postcardBody(record).replace(/\n\s*\n/g, '\n\n').trim();
+    const home = window.Srv?.DEMO ? `${location.href.split('#')[0].split('?')[0]}?demo=1` : `${location.origin}/`;
+    window.MemoirShare.open({
+      kind: 'postcard', eyebrow: '엽서 나누기', title: record.title,
+      card: {kicker: '내말싸미 · 엽서', title: `「${record.title}」`, sub: `${who ? `${who}의 이야기 · ` : ''}${record.date}`, art: `<span class="share-mini-mic">${icons(record.icon || 'letter')}</span>`},
+      message: `「${record.title}」\n\n${text}\n\n— ${who ? `${who}의 이야기 · ` : ''}내말싸미에서 남긴 엽서`,
+      link: home,
+      status: '',
+      note: '엽서 글이 그대로 보내져요. 가족 이야기가 담겨 있으니 믿을 수 있는 분에게만 보내 주세요. 링크는 내말싸미 첫 화면이에요.',
+      extras: [],
+    });
   }
 
   // 6. 엽서 지우기 — 손에 든 엽서 · 보드 위 × · 여러 장 골라 지우기. 늘 한 번 더 묻고, 지운 뒤 잠시 「되돌리기」를 둔다.
@@ -8940,7 +9375,7 @@ renderRecent();renderQuestion();setInterviewMode('reading');show(location.hash.s
   // 내 이야기 녹음 — 초대 만들기처럼 이야기 주제를 먼저 고른다
   let selfTopic = topics[0];
   function renderSelf() {
-    self.querySelector('.sc-content').innerHTML = `<p class="sc-intro">오늘 들려주실 이야기의 주제를 골라 주세요. 주제에 맞춰 첫 질문을 드려요.</p>
+    self.querySelector('.sc-content').innerHTML = `<p class="sc-intro">오늘 들려주실 이야기의 주제를 골라 주세요. 주제에 맞춰 첫 질문을 드려요.<br><b>「나」의 이야기</b>로 저장돼요. 다른 분의 이야기는 「초대 주소 만들기」로 담아 주세요.</p>
       <form class="panel sc-invite-form sc-self-form" novalidate>
         <fieldset><legend>이야기 주제</legend>
           <div class="sc-chips" role="group" aria-label="주제">${topics.map((t) => `<label class="sc-chip"><input type="radio" name="topic" value="${t}" ${t === selfTopic ? 'checked' : ''}><span>${t}</span></label>`).join('')}</div></fieldset>
@@ -8965,6 +9400,7 @@ renderRecent();renderQuestion();setInterviewMode('reading');show(location.hash.s
         <fieldset><legend><span class="sc-step">1</span>누구에게 보낼까요?</legend>
           ${others.length ? `<div class="sc-chips" role="group" aria-label="등록한 분">${others.map((e, i) => `<label class="sc-chip"><input type="radio" name="who" value="${escapeText(e.elder_id)}" ${i === 0 ? 'checked' : ''}><span>${escapeText(e.name)}</span></label>`).join('')}<label class="sc-chip"><input type="radio" name="who" value="__new" ${others.length ? '' : 'checked'}><span>새로 적기</span></label></div>` : '<input type="hidden" name="who" value="__new">'}
           <label class="sc-name" ${others.length ? 'hidden' : ''}><span>부르는 이름</span><input name="name" maxlength="30" autocomplete="off" placeholder="예: 어머니, 김순자"></label>
+          ${others.length ? `<button type="button" class="text-button sc-manage" data-role="manage-elders">${icons('pen')}<span>이름 고치기 · 지우기</span></button>` : ''}
           <p class="sc-error" role="status"></p></fieldset>
         <fieldset><legend><span class="sc-step">2</span>어떤 이야기를 여쭤볼까요?</legend>
           <div class="sc-chips" role="group" aria-label="주제">${topics.map((t, i) => `<label class="sc-chip"><input type="radio" name="topic" value="${t}" ${i === 0 ? 'checked' : ''}><span>${t}</span></label>`).join('')}</div></fieldset>
@@ -9031,7 +9467,7 @@ renderRecent();renderQuestion();setInterviewMode('reading');show(location.hash.s
 <script data-from="book-pdf.js">
 (function () {
   'use strict';
-  // 4. 자서전 PDF 저장 — 책장(책마다)과 읽기 화면(위쪽 막대)에서 연다.
+  // 4. 자서전 PDF 저장 — 읽기 화면(아래 독서 메뉴) · 초안 화면에서 연다.
   //    시안에서는 인쇄용 책 모양을 만들어 브라우저 인쇄 창을 띄우고, 거기서 「PDF로 저장」을 고르게 한다.
   //    실제 서비스에서는 서버가 같은 모양의 PDF 파일을 만들어 바로 내려받게 하는 것을 전제로 한다.
   const model = window.MemoirReaderState;
@@ -9105,10 +9541,10 @@ renderRecent();renderQuestion();setInterviewMode('reading');show(location.hash.s
       @page :first { @bottom-center { content: none; } }`;
     printRoot.className = `pb-${big ? 'a4' : 'a5'} ${large ? 'pb-large' : ''}`;
     const toc = opts.toc.checked ? `<section class="pb-toc"><h2>차례</h2><ol>${b.sections.map((s) => `<li><span>${String(s.number).padStart(2, '0')}</span>${escapeText(s.title)}</li>`).join('')}</ol></section>` : '';
-    printRoot.innerHTML = `<section class="pb-cover"><span class="pb-kicker">${escapeText(b.elder)}의 작은 자서전</span><h1>${escapeText(b.title)}</h1><span class="pb-rule"></span><p class="pb-by">이야기 · ${escapeText(b.elder)}　　엮음 · 내말싸미</p><p class="pb-date">${escapeText(b.date)}</p></section>
+    printRoot.innerHTML = `<section class="pb-cover"><span class="pb-kicker">${escapeText(window.Srv.honor(b.elder))}의 작은 자서전</span><h1>${escapeText(b.title)}</h1><span class="pb-rule"></span><p class="pb-by">이야기 · ${escapeText(b.elder)}　　엮음 · 내말싸미</p><p class="pb-date">${escapeText(b.date)}</p></section>
       ${toc}
       ${b.sections.map((s) => `<section class="pb-chapter"><span class="pb-num">${String(s.number).padStart(2, '0')}</span><h2>${escapeText(s.title)}</h2>${s.paras.map((p) => `<p>${escapeText(p)}</p>`).join('')}</section>`).join('')}
-      <section class="pb-end"><span>✧</span><p>당신의 이야기는 계속됩니다.</p><small>이 책은 ${escapeText(b.elder)} 님이 들려준 이야기를 바탕으로 내말싸미에서 엮었습니다.<br>${escapeText(b.date)}</small></section>`;
+      <section class="pb-end"><span>✧</span><p>당신의 이야기는 계속됩니다.</p><small>이 책은 ${escapeText(b.elder === '나' ? '제가' : window.Srv.honor(b.elder) + '이')} 들려준 이야기를 바탕으로 내말싸미에서 엮었습니다.<br>${escapeText(b.date)}</small></section>`;
   }
 
   opts.addEventListener('submit', (e) => {
@@ -9117,30 +9553,14 @@ renderRecent();renderQuestion();setInterviewMode('reading');show(location.hash.s
     dialog.close();
     document.body.classList.add('printing-book');
     // 저장할 때 파일 이름이 책 제목으로 잡히도록
-    savedTitle = document.title; document.title = `${current.title} - ${current.elder}의 자서전`;
+    savedTitle = document.title; document.title = `${current.title} - ${window.Srv.honor(current.elder)}의 자서전`;
     // 창이 닫힌 뒤 인쇄 창을 띄운다
     requestAnimationFrame(() => setTimeout(() => { window.print(); }, 60));
   });
   let savedTitle = null;
   window.addEventListener('afterprint', () => { document.body.classList.remove('printing-book'); if (savedTitle) { document.title = savedTitle; savedTitle = null; } });
 
-  // ── 책장: 책마다 「PDF로 저장」 ──
-  const shelf = document.querySelector('[data-screen="library"]');
-  function decorate() {
-    shelf?.querySelectorAll('.ml-books > li').forEach((li) => {
-      if (li.querySelector('.ml-pdf')) return;
-      const id = li.querySelector('[data-library-book]')?.dataset.libraryBook;
-      if (!id) return;
-      const btn = document.createElement('button');
-      btn.type = 'button'; btn.className = 'text-button ml-pdf'; btn.dataset.bookPdf = id;
-      btn.innerHTML = `${icons('download')}<span>PDF 저장</span>`;
-      btn.setAttribute('aria-label', `${li.querySelector('strong')?.textContent || '이 책'} PDF로 저장`);
-      let row = li.querySelector('.ml-actions');
-      if (!row) { row = document.createElement('div'); row.className = 'ml-actions'; li.append(row); }
-      row.prepend(btn);
-    });
-  }
-  if (shelf) new MutationObserver(decorate).observe(shelf, {childList: true, subtree: true});
+  // 책장 카드에는 버튼을 두지 않는다 — 책을 펼친 뒤 독서 메뉴의 「PDF 저장」에서 (책장이 너저분해서)
   document.addEventListener('click', (e) => {
     const btn = e.target.closest('[data-book-pdf]');
     if (!btn) return;
@@ -9158,6 +9578,16 @@ renderRecent();renderQuestion();setInterviewMode('reading');show(location.hash.s
     btn.addEventListener('click', () => open(bookFrom(state.title, state.document?.body || state.body, state.document?.sections)));
   }
 
+  // ── 초안 화면: 「글 파일(.txt)로 내려받기」 대신 PDF — txt 는 휴대폰 · PC 에서 따로 열 앱이 있어야 편하게 읽힌다 ──
+  const dl = document.getElementById('download-draft');
+  if (dl) {
+    const pdfBtn = dl.cloneNode(false); // 시안의 txt 내려받기 연결을 떼어 낸다
+    pdfBtn.innerHTML = `${icons('download')}<span>PDF로 저장하기</span>`;
+    dl.replaceWith(pdfBtn);
+    // 고친 글(state.body)을 그대로 담는다 — 장 제목은 서버가 준 sections 를 쓴다
+    pdfBtn.addEventListener('click', () => open(bookFrom(state.title, state.body, state.document?.sections)));
+  }
+
   window.MemoirPdf = {open, bookFrom};
 }());
 
@@ -9172,7 +9602,7 @@ renderRecent();renderQuestion();setInterviewMode('reading');show(location.hash.s
   dialog.className = 'review-dialog trash-dialog';
   dialog.setAttribute('aria-labelledby', 'trash-title');
   dialog.innerHTML = `<h2 id="trash-title"></h2><ul class="trash-items"></ul><p class="trash-desc"></p>
-    <div class="dialog-actions"><button type="button" class="button outline" data-trash-keep>그대로 두기</button><button type="button" class="button trash-ok" data-trash-ok></button></div>`;
+    <div class="dialog-actions"><button type="button" class="button outline trash-ok" data-trash-ok></button><button type="button" class="button primary" data-trash-keep>그대로 두기</button></div>`;
   document.body.append(dialog);
   let settle = null;
   function confirm({title, items = [], desc, ok, keep = '그대로 두기'}) {
@@ -9247,7 +9677,8 @@ renderRecent();renderQuestion();setInterviewMode('reading');show(location.hash.s
 (function () {
   'use strict';
   // 자서전(책장)에서도 엽서와 같은 규칙으로 지운다:
-  //  · 책마다 「책 지우기」  · 「여러 권 지우기」로 골라서 한 번에  · 늘 한 번 더 묻고, 지운 뒤 잠시 「되돌리기」
+  //  · 맨 위 「책 지우기」를 켰을 때만 책을 골라 지운다 (책마다 붙던 버튼은 너저분해서 뺐다)
+  //  · 늘 한 번 더 묻고, 지운 뒤 잠시 「되돌리기」
   //  책을 지워도 그 책을 만든 엽서는 그대로 남는다.
   const shelf = document.querySelector('[data-screen="library"]');
   if (!shelf) return;
@@ -9265,21 +9696,10 @@ renderRecent();renderQuestion();setInterviewMode('reading');show(location.hash.s
     if (heading && !heading.querySelector('.ml-select-toggle')) {
       const t = document.createElement('button');
       t.type = 'button'; t.className = 'button outline compact ml-select-toggle';
-      t.innerHTML = `${icons('check')}<span>여러 권 지우기</span>`;
+      t.innerHTML = `${icons('check')}<span>책 지우기</span>`;
       t.addEventListener('click', () => setSelecting(!selecting));
       heading.append(t);
     }
-    shelf.querySelectorAll('.ml-books > li').forEach((li) => {
-      const id = li.querySelector('[data-library-book]')?.dataset.libraryBook;
-      if (!id || li.querySelector('.ml-remove')) return;
-      let row = li.querySelector('.ml-actions');
-      if (!row) { row = document.createElement('div'); row.className = 'ml-actions'; li.append(row); }
-      const b = document.createElement('button');
-      b.type = 'button'; b.className = 'text-button ml-remove'; b.dataset.bookRemove = id;
-      b.innerHTML = `${icons('close')}<span>책 지우기</span>`;
-      b.setAttribute('aria-label', `「${titleOf(id)}」 책 지우기`);
-      row.append(b);
-    });
     sync();
   }
   new MutationObserver(decorate).observe(shelf, {childList: true, subtree: true});
@@ -9347,12 +9767,6 @@ renderRecent();renderQuestion();setInterviewMode('reading');show(location.hash.s
       toast(removed.length === 1 ? '책을 책장에 다시 꽂았어요.' : `책 ${removed.length}권을 책장에 다시 꽂았어요.`);
     }, commitServer);
   }
-  async function removeOne(id) {
-    const ok = await window.MemoirTrash.confirm({title: '이 책을 지울까요?', items: [titleOf(id)], desc: DESC, ok: '지우기'});
-    if (!ok) { shelf.querySelector(`[data-book-remove="${CSS.escape(id)}"]`)?.focus(); return; }
-    await liftOut([id]);
-    commit([id]);
-  }
   async function removePicked() {
     const ids = [...picked];
     if (!ids.length) return;
@@ -9367,8 +9781,6 @@ renderRecent();renderQuestion();setInterviewMode('reading');show(location.hash.s
 
   // 고르는 중에는 책을 눌러도 펼치지 않고 고른다(책 꺼내기 연출보다 먼저 받는다)
   document.addEventListener('click', (e) => {
-    const rm = e.target.closest('[data-book-remove]');
-    if (rm && shelf.contains(rm)) { e.preventDefault(); e.stopImmediatePropagation(); if (!selecting) removeOne(rm.dataset.bookRemove); return; }
     if (!selecting) return;
     const card = e.target.closest('[data-library-book]');
     if (!card || !shelf.contains(card)) return;
@@ -9624,6 +10036,15 @@ renderRecent();renderQuestion();setInterviewMode('reading');show(location.hash.s
     (o.setup ? $d('.share-setup input:checked, .share-setup button') : $d('[data-share="copy"]'))?.focus();
   }
   const text = () => `${$d('#share-msg').value.trim()}\n${$d('#share-link').value}`;
+  // 휴대폰 · 태블릿인가 — 카카오톡이 공유 창에 나오는 기기. 아이패드는 스스로를 맥이라고 하므로 터치로 가린다
+  const isPhone = () => (navigator.userAgentData && typeof navigator.userAgentData.mobile === 'boolean' && navigator.userAgentData.mobile)
+    || /Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent)
+    || (/Macintosh/.test(navigator.userAgent) && navigator.maxTouchPoints > 1);
+  async function copyFor(how, all, tip) {
+    const st = $d('.share-status');
+    try { await navigator.clipboard.writeText(all); st.textContent = `글과 링크를 복사했어요. ${tip || `${CH[how]}에 붙여 넣어 보내 주세요.`}`; }
+    catch { $d('#share-link').select(); st.textContent = '자동 복사가 되지 않았어요. 선택된 링크를 직접 복사해 보내 주세요.'; }
+  }
   dialog.addEventListener('click', async (e) => {
     const b = e.target.closest('[data-share]');
     if (!b || !current) return;
@@ -9638,14 +10059,28 @@ renderRecent();renderQuestion();setInterviewMode('reading');show(location.hash.s
     // 공유 창이 없는 컴퓨터에서는 글과 링크를 복사해 붙여 넣게 한다 (카카오 SDK 키가 없어 카카오톡을 직접 열 수 없다)
     const msg = $d('#share-msg').value.trim(), link = $d('#share-link').value, all = text();
     const status = (t) => { $d('.share-status').textContent = t; };
-    if (how === 'sms') { location.href = `sms:?&body=${encodeURIComponent(all)}`; status('문자 앱을 열었어요. 받는 분을 골라 보내 주세요.'); }
-    else if (how === 'mail') { location.href = `mailto:?subject=${encodeURIComponent(current.title || '내말싸미')}&body=${encodeURIComponent(all)}`; status('메일 앱을 열었어요. 받는 분 주소를 적어 보내 주세요.'); }
+    // 문자 — PC(윈도우 · 맥)에는 문자 앱이 없다. sms: 를 열면 윈도우가 「이 'sms' 링크를 무엇으로 열까요?」를 묻는다
+    // (11-13 제보 스크린샷). PC 에서는 열지 않고 복사한다
+    if (how === 'sms' && !isPhone()) { await copyFor(how, all, 'PC에서는 문자를 바로 보낼 수 없어요. 휴대폰 문자나 카카오톡 PC에 붙여 넣어 보내 주세요.'); }
+    else if (how === 'sms') { location.href = `sms:?&body=${encodeURIComponent(all)}`; status('문자 앱을 열었어요. 받는 분을 골라 보내 주세요.'); }
+    // 이메일 — PC 에 메일 프로그램이 없으면 같은 「무엇으로 열까요?」 창이 뜰 수 있다. 그래서 PC 에서는 먼저 복사해 둔다
+    else if (how === 'mail') {
+      if (!isPhone()) await copyFor(how, all, '메일 앱이 열리지 않으면, 쓰시는 메일(네이버 · 지메일 등)에 붙여 넣어 보내 주세요.');
+      location.href = `mailto:?subject=${encodeURIComponent(current.title || '내말싸미')}&body=${encodeURIComponent(all)}`;
+      if (isPhone()) status('메일 앱을 열었어요. 받는 분 주소를 적어 보내 주세요.');
+    }
+    // 카카오톡은 휴대폰의 공유 창에만 있다. PC(윈도우 · 맥)의 공유 창에는 카카오톡 PC가 나오지 않아서,
+    // 창을 닫으면 아무것도 남지 않았다 (11-13 제보 「PC 에서만 카톡이 안 열린다」). PC 에서는 공유 창 대신 복사한다
+    else if (how === 'kakao' && !isPhone()) { await copyFor(how, all, '카카오톡 PC에서 보낼 대화방을 열고 붙여 넣기(Ctrl+V · ⌘V) 해 주세요.'); }
     else if (navigator.share) {
-      try { await navigator.share({title: current.title || '내말싸미', text: msg, url: link}); status(how === 'kakao' ? '공유 창에서 카카오톡을 골라 보내 주세요.' : '보냈어요.'); }
-      catch (err) { if (err && err.name === 'AbortError') { status(''); return; } status('공유 창을 열지 못했어요. 「링크 복사」로 보내 주세요.'); return; }
+      if (how === 'kakao') status('공유 창이 열리면 「카카오톡」을 골라 주세요.');
+      try { await navigator.share({title: current.title || '내말싸미', text: msg, url: link}); status(how === 'kakao' ? '카카오톡에서 보내기를 마쳐 주세요.' : '보냈어요.'); }
+      catch (err) {
+        if (err && err.name === 'AbortError') { status(how === 'kakao' ? '보내지 않았어요. 다시 누르거나 「링크 복사」로 보내 주세요.' : ''); return; }
+        await copyFor(how, all); return;
+      }
     } else {
-      try { await navigator.clipboard.writeText(all); status(`이 기기에서는 ${CH[how]}을(를) 바로 열 수 없어요. 글과 링크를 복사했으니 ${CH[how]}에 붙여 넣어 보내 주세요.`); }
-      catch { $d('#share-link').select(); status('자동 복사가 되지 않았어요. 선택된 링크를 직접 복사해 보내 주세요.'); }
+      await copyFor(how, all);
     }
     current.onSent?.(how);
   });
@@ -9716,9 +10151,9 @@ renderRecent();renderQuestion();setInterviewMode('reading');show(location.hash.s
     const mine = who === '나';
     return {
       kind: 'book', eyebrow: '자서전 나누기', title: book.title,
-      card: {kicker: '내말싸미 · 자서전', title: `${mine ? '' : who + ' 님의 '}「${book.title}」`, sub: `이야기 ${book.body.length}편 · 링크를 누르면 바로 읽어요`, art: coverArt(id)},
+      card: {kicker: '내말싸미 · 자서전', title: `${mine ? '' : window.Srv.honor(who) + '의 '}「${book.title}」`, sub: `이야기 ${book.body.length}편 · 링크를 누르면 바로 읽어요`, art: coverArt(id)},
       message: mine ? `제 이야기를 엮은 자서전 「${book.title}」을 나눠요. 링크를 누르면 휴대폰이나 컴퓨터에서 바로 읽을 수 있어요.`
-        : `${who} 님의 이야기를 엮은 자서전 「${book.title}」을 나눠요. 링크를 누르면 휴대폰이나 컴퓨터에서 바로 읽을 수 있어요.`,
+        : `${window.Srv.honor(who)}의 이야기를 엮은 자서전 「${book.title}」을 나눠요. 링크를 누르면 휴대폰이나 컴퓨터에서 바로 읽을 수 있어요.`,
       link: s.link,
       status: '공유 중 · 읽기만 · 「공유 그만하기」를 누를 때까지 열려요',
       note: '책에는 가족 이야기와 이름이 담겨 있어요. 믿을 수 있는 분에게만 보내 주세요.',
@@ -9744,30 +10179,44 @@ renderRecent();renderQuestion();setInterviewMode('reading');show(location.hash.s
       make.addEventListener('click', async () => {
         if (make.disabled) return;
         make.disabled = true; make.querySelector('span').textContent = '링크를 만드는 중…';
-        try {
-          const book = await window.SrvLibrary.ensure(id);
-          if (!book) throw new Error('no book');
-          const r = await call('/shares', {method: 'POST', body: JSON.stringify({book_id: id, book: bookBody(book)})});
-          urlKeep(r.share_id, r.url);
-          const s = shares.get(id) || {ids: [], link: ''};
-          s.ids.push(r.share_id); s.link = r.url;
-          shares.set(id, s);
-          mark();
-          share.refill(opts(id));
-          share.setStatus('공유 링크를 만들었어요. 아래에서 보낼 방법을 골라 주세요.');
-        } catch (e) {
-          make.disabled = false; make.querySelector('span').textContent = again ? '새 공유 링크 만들기' : '공유 링크 만들기';
-          share.setStatus(e && e.status === 400 ? '책이 너무 크거나 모양이 맞지 않아 공유하지 못했어요.' : '공유 링크를 만들지 못했어요. 잠시 뒤 다시 눌러 주세요.');
-        }
+        const err = await makeLink(id);
+        if (!err) { share.refill(opts(id)); share.setStatus('공유 링크를 만들었어요. 아래에서 보낼 방법을 골라 주세요.'); return; }
+        make.disabled = false; make.querySelector('span').textContent = again ? '새 공유 링크 만들기' : '공유 링크 만들기';
+        share.setStatus(err);
       });
       return box;
     };
   }
+  /** 공유 링크를 하나 만든다 — 성공하면 null, 못 하면 안내 문구 */
+  async function makeLink(id) {
+    try {
+      const book = await window.SrvLibrary.ensure(id);
+      if (!book) throw new Error('no book');
+      const r = await call('/shares', {method: 'POST', body: JSON.stringify({book_id: id, book: bookBody(book)})});
+      urlKeep(r.share_id, r.url);
+      const s = shares.get(id) || {ids: [], link: ''};
+      s.ids.push(r.share_id); s.link = r.url;
+      shares.set(id, s);
+      mark();
+      return null;
+    } catch (e) {
+      return e && e.status === 400 ? '책이 너무 크거나 모양이 맞지 않아 공유하지 못했어요.' : '공유 링크를 만들지 못했어요. 잠시 뒤 다시 눌러 주세요.';
+    }
+  }
   async function openFor(id) {
     const book = await window.SrvLibrary.ensure(id);
     if (!book) return;
-    if (shares.has(id) && shares.get(id).link) share.open(opts(id));
-    else share.open({kind: 'book', eyebrow: '자서전 나누기', title: book.title, card: {kicker: '', title: '', sub: ''}, message: '', setup: setupStep(id, shares.has(id))});
+    await loadShares(); // 다른 기기에서 켜거나 끈 공유도 바로 맞춘다
+    if (shares.has(id) && shares.get(id).link) { share.open(opts(id)); return; }
+    if (!shares.has(id)) { share.open({kind: 'book', eyebrow: '자서전 나누기', title: book.title, card: {kicker: '', title: '', sub: ''}, message: '', setup: setupStep(id, false)}); return; }
+    // 공유 중인데 이 기기에 링크 주소가 없다 (다른 기기 · 다른 브라우저에서 만들었다).
+    // 서버는 주소를 한 번만 알려 주므로 같은 주소는 못 보여 준다 → 새 링크를 하나 더 만들어 바로 보여 준다.
+    // 전에 보낸 링크는 끄지 않는다 — 받은 분은 계속 읽을 수 있다. 「공유 그만하기」는 둘 다 끈다.
+    toast('이 기기에서 쓸 공유 링크를 준비하고 있어요…');
+    const err = await makeLink(id);
+    if (err) { toast(err); return; }
+    share.open(opts(id));
+    share.setStatus('이 기기에서 쓸 링크를 새로 만들었어요. 전에 보낸 링크도 그대로 열려요.');
   }
   async function stop(id) {
     const title = lib.getBook(id)?.title || '';
@@ -9782,20 +10231,11 @@ renderRecent();renderQuestion();setInterviewMode('reading');show(location.hash.s
     toast('공유를 그만했어요. 보낸 링크는 이제 열리지 않아요.');
   }
 
-  // ── 책장: 책마다 「공유」 + 공유 중 표시 ──
+  // ── 책장: 「공유 중」 표시만 — 공유 버튼은 책을 펼친 뒤 독서 메뉴에 (책장이 너저분해서) ──
   function mark() {
     shelf.querySelectorAll('.ml-books > li').forEach((li) => {
       const id = li.querySelector('[data-library-book]')?.dataset.libraryBook;
       if (!id) return;
-      let row = li.querySelector('.ml-actions');
-      if (!row) { row = document.createElement('div'); row.className = 'ml-actions'; li.append(row); }
-      if (!row.querySelector('.ml-share')) {
-        const b = document.createElement('button');
-        b.type = 'button'; b.className = 'text-button ml-share'; b.dataset.bookShare = id;
-        b.innerHTML = `${icons('share')}<span>공유</span>`;
-        b.setAttribute('aria-label', `「${lib.getBook(id)?.title || ''}」 공유`);
-        row.prepend(b);
-      }
       const label = li.querySelector('.ml-volume-label');
       const chip = label?.querySelector('.ms-on');
       if (shares.has(id) && label && !chip) label.insertAdjacentHTML('beforeend', '<span class="ms-on">공유 중</span>');
@@ -9847,7 +10287,7 @@ renderRecent();renderQuestion();setInterviewMode('reading');show(location.hash.s
     const s = shares.get(id);
     document.body.classList.add('share-guest-view');
     document.body.classList.toggle('share-guest-nopdf', false);
-    banner.querySelector('.sgb-who').textContent = elderName() === '나' ? '「나」님이' : `${elderName()} 님의 가족이`;
+    banner.querySelector('.sgb-who').textContent = elderName() === '나' ? '「나」님이' : `${window.Srv.honor(elderName())}의 가족이`;
     banner.hidden = false;
     if (location.hash === '#reader' && lib.findOpen() === id) return;
     lib.openBook(id);
@@ -9864,6 +10304,7 @@ renderRecent();renderQuestion();setInterviewMode('reading');show(location.hash.s
 
   mark();
   window.addEventListener('memoir:screen', (e) => { if (e.detail.screen === 'library') void loadShares(); });
+  window.addEventListener('memoir:preview-auth', (e) => { if (e.detail.authenticated) void loadShares(); });
   window.MemoirBookShare = {open: openFor, isShared: (id) => shares.has(id)};
 }());
 
@@ -9902,12 +10343,13 @@ renderRecent();renderQuestion();setInterviewMode('reading');show(location.hash.s
   function open() {
     const address = document.getElementById('issued-address')?.value;
     const found = invitationOf(address);
-    const name = found?.person?.name || '이야기 주인공';
+    const name = found?.person?.name || '';
+    const honor = window.Srv.honor(name);
     const topic = found?.inv?.topic || '살아온 이야기';
     share.open({
-      kind: 'invite', eyebrow: '인터뷰 초대 보내기', title: `${name} 님에게 초대 보내기`,
-      card: {kicker: '내말싸미 · 이야기 초대', title: `${name} 님, 이야기를 들려주세요`, sub: `주제 「${topic}」 · 누르면 휴대폰에서 바로 시작해요`, art: `<span class="share-mini-mic">${icons('mic')}</span>`},
-      message: `${name}, 안녕하세요. ${name}의 「${topic}」 이야기를 듣고 싶어서 초대 링크를 보내요.\n링크를 누르면 휴대폰에서 바로 시작할 수 있어요. 질문에 답하듯 편하게 말씀해 주시면 돼요.`,
+      kind: 'invite', eyebrow: '인터뷰 초대 보내기', title: `${honor}에게 초대 보내기`,
+      card: {kicker: '내말싸미 · 이야기 초대', title: `${honor}, 이야기를 들려주세요`, sub: `주제 「${topic}」 · 누르면 휴대폰에서 바로 시작해요`, art: `<span class="share-mini-mic">${icons('mic')}</span>`},
+      message: `${honor}, 안녕하세요. ${honor}의 「${topic}」 이야기를 듣고 싶어서 초대 링크를 보내요.\n링크를 누르면 휴대폰에서 바로 시작할 수 있어요. 질문에 답하듯 편하게 말씀해 주시면 돼요.`,
       link: address,
       status: '',
       note: '이 링크는 받는 분 한 분만 쓰도록 만든 초대예요. 다른 사람에게 전달되지 않게 해 주세요. 보낸 뒤에도 「초대 취소」로 막을 수 있어요.',

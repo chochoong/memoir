@@ -38,7 +38,7 @@
   // 내 이야기 녹음 — 초대 만들기처럼 이야기 주제를 먼저 고른다
   let selfTopic = topics[0];
   function renderSelf() {
-    self.querySelector('.sc-content').innerHTML = `<p class="sc-intro">오늘 들려주실 이야기의 주제를 골라 주세요. 주제에 맞춰 첫 질문을 드려요.</p>
+    self.querySelector('.sc-content').innerHTML = `<p class="sc-intro">오늘 들려주실 이야기의 주제를 골라 주세요. 주제에 맞춰 첫 질문을 드려요.<br><b>「나」의 이야기</b>로 저장돼요. 다른 분의 이야기는 「초대 주소 만들기」로 담아 주세요.</p>
       <form class="panel sc-invite-form sc-self-form" novalidate>
         <fieldset><legend>이야기 주제</legend>
           <div class="sc-chips" role="group" aria-label="주제">${topics.map((t) => `<label class="sc-chip"><input type="radio" name="topic" value="${t}" ${t === selfTopic ? 'checked' : ''}><span>${t}</span></label>`).join('')}</div></fieldset>
@@ -63,6 +63,7 @@
         <fieldset><legend><span class="sc-step">1</span>누구에게 보낼까요?</legend>
           ${others.length ? `<div class="sc-chips" role="group" aria-label="등록한 분">${others.map((e, i) => `<label class="sc-chip"><input type="radio" name="who" value="${escapeText(e.elder_id)}" ${i === 0 ? 'checked' : ''}><span>${escapeText(e.name)}</span></label>`).join('')}<label class="sc-chip"><input type="radio" name="who" value="__new" ${others.length ? '' : 'checked'}><span>새로 적기</span></label></div>` : '<input type="hidden" name="who" value="__new">'}
           <label class="sc-name" ${others.length ? 'hidden' : ''}><span>부르는 이름</span><input name="name" maxlength="30" autocomplete="off" placeholder="예: 어머니, 김순자"></label>
+          ${others.length ? `<button type="button" class="text-button sc-manage" data-role="manage-elders">${icons('pen')}<span>이름 고치기 · 지우기</span></button>` : ''}
           <p class="sc-error" role="status"></p></fieldset>
         <fieldset><legend><span class="sc-step">2</span>어떤 이야기를 여쭤볼까요?</legend>
           <div class="sc-chips" role="group" aria-label="주제">${topics.map((t, i) => `<label class="sc-chip"><input type="radio" name="topic" value="${t}" ${i === 0 ? 'checked' : ''}><span>${t}</span></label>`).join('')}</div></fieldset>
