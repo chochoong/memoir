@@ -29,9 +29,7 @@ body:not(.ebook-mode) .pc-trash { color: #8f4a3c; font-size: 15px; min-height: 4
 .pc-slot:has(> [data-pulled]) .pc-x { visibility: hidden; }
 
 /* 여러 장 지우기 */
-.pc-select-toggle { min-height: 56px; }
-.pc-select-toggle[aria-pressed="true"] { background: var(--blush); border-color: var(--burgundy); }
-.pc-select-toggle .icon { width: 18px; height: 18px; }
+/* 「엽서 지우기」는 「엽서 N장」 옆 작은 버튼(.srv-mini-btn, srv.css) */
 #record-list.pc-selecting .pc-x { display: none; }
 #record-list.pc-selecting .pc-slot::after {
   content: ""; position: absolute; top: 12px; left: 12px; z-index: 3; width: 30px; height: 30px; border-radius: 50%;
@@ -48,3 +46,5 @@ body:not(.ebook-mode) .pc-trash { color: #8f4a3c; font-size: 15px; min-height: 4
 .pc-actions-right { display: inline-flex; gap: 8px; flex-wrap: wrap; justify-content: flex-end; }
 .pc-share .icon { width: 16px; height: 16px; }
 @media (max-width: 420px) { .pc-actions { flex-wrap: wrap; } .pc-actions-right { width: 100%; } .pc-actions-right .button { flex: 1; justify-content: center; } }
+/* 검색 결과가 없을 때 — 자리는 지키고 보이지만 않게 (검색칸이 옆으로 밀리지 않게) */
+.pc-select-toggle.pc-toggle-ghost { visibility: hidden; pointer-events: none; }
