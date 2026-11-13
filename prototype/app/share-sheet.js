@@ -62,6 +62,15 @@
     (o.setup ? $d('.share-setup input:checked, .share-setup button') : $d('[data-share="copy"]'))?.focus();
   }
   const text = () => `${$d('#share-msg').value.trim()}\n${$d('#share-link').value}`;
+  // 휴대폰 · 태블릿인가 — 카카오톡이 공유 창에 나오는 기기. 아이패드는 스스로를 맥이라고 하므로 터치로 가린다
+  const isPhone = () => (navigator.userAgentData && typeof navigator.userAgentData.mobile === 'boolean' && navigator.userAgentData.mobile)
+    || /Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent)
+    || (/Macintosh/.test(navigator.userAgent) && navigator.maxTouchPoints > 1);
+  async function copyFor(how, all, tip) {
+    const st = $d('.share-status');
+    try { await navigator.clipboard.writeText(all); st.textContent = `글과 링크를 복사했어요. ${tip || `${CH[how]}에 붙여 넣어 보내 주세요.`}`; }
+    catch { $d('#share-link').select(); st.textContent = '자동 복사가 되지 않았어요. 선택된 링크를 직접 복사해 보내 주세요.'; }
+  }
   dialog.addEventListener('click', async (e) => {
     const b = e.target.closest('[data-share]');
     if (!b || !current) return;
@@ -76,14 +85,28 @@
     // 공유 창이 없는 컴퓨터에서는 글과 링크를 복사해 붙여 넣게 한다 (카카오 SDK 키가 없어 카카오톡을 직접 열 수 없다)
     const msg = $d('#share-msg').value.trim(), link = $d('#share-link').value, all = text();
     const status = (t) => { $d('.share-status').textContent = t; };
-    if (how === 'sms') { location.href = `sms:?&body=${encodeURIComponent(all)}`; status('문자 앱을 열었어요. 받는 분을 골라 보내 주세요.'); }
-    else if (how === 'mail') { location.href = `mailto:?subject=${encodeURIComponent(current.title || '내말싸미')}&body=${encodeURIComponent(all)}`; status('메일 앱을 열었어요. 받는 분 주소를 적어 보내 주세요.'); }
+    // 문자 — PC(윈도우 · 맥)에는 문자 앱이 없다. sms: 를 열면 윈도우가 「이 'sms' 링크를 무엇으로 열까요?」를 묻는다
+    // (11-13 제보 스크린샷). PC 에서는 열지 않고 복사한다
+    if (how === 'sms' && !isPhone()) { await copyFor(how, all, 'PC에서는 문자를 바로 보낼 수 없어요. 휴대폰 문자나 카카오톡 PC에 붙여 넣어 보내 주세요.'); }
+    else if (how === 'sms') { location.href = `sms:?&body=${encodeURIComponent(all)}`; status('문자 앱을 열었어요. 받는 분을 골라 보내 주세요.'); }
+    // 이메일 — PC 에 메일 프로그램이 없으면 같은 「무엇으로 열까요?」 창이 뜰 수 있다. 그래서 PC 에서는 먼저 복사해 둔다
+    else if (how === 'mail') {
+      if (!isPhone()) await copyFor(how, all, '메일 앱이 열리지 않으면, 쓰시는 메일(네이버 · 지메일 등)에 붙여 넣어 보내 주세요.');
+      location.href = `mailto:?subject=${encodeURIComponent(current.title || '내말싸미')}&body=${encodeURIComponent(all)}`;
+      if (isPhone()) status('메일 앱을 열었어요. 받는 분 주소를 적어 보내 주세요.');
+    }
+    // 카카오톡은 휴대폰의 공유 창에만 있다. PC(윈도우 · 맥)의 공유 창에는 카카오톡 PC가 나오지 않아서,
+    // 창을 닫으면 아무것도 남지 않았다 (11-13 제보 「PC 에서만 카톡이 안 열린다」). PC 에서는 공유 창 대신 복사한다
+    else if (how === 'kakao' && !isPhone()) { await copyFor(how, all, '카카오톡 PC에서 보낼 대화방을 열고 붙여 넣기(Ctrl+V · ⌘V) 해 주세요.'); }
     else if (navigator.share) {
-      try { await navigator.share({title: current.title || '내말싸미', text: msg, url: link}); status(how === 'kakao' ? '공유 창에서 카카오톡을 골라 보내 주세요.' : '보냈어요.'); }
-      catch (err) { if (err && err.name === 'AbortError') { status(''); return; } status('공유 창을 열지 못했어요. 「링크 복사」로 보내 주세요.'); return; }
+      if (how === 'kakao') status('공유 창이 열리면 「카카오톡」을 골라 주세요.');
+      try { await navigator.share({title: current.title || '내말싸미', text: msg, url: link}); status(how === 'kakao' ? '카카오톡에서 보내기를 마쳐 주세요.' : '보냈어요.'); }
+      catch (err) {
+        if (err && err.name === 'AbortError') { status(how === 'kakao' ? '보내지 않았어요. 다시 누르거나 「링크 복사」로 보내 주세요.' : ''); return; }
+        await copyFor(how, all); return;
+      }
     } else {
-      try { await navigator.clipboard.writeText(all); status(`이 기기에서는 ${CH[how]}을(를) 바로 열 수 없어요. 글과 링크를 복사했으니 ${CH[how]}에 붙여 넣어 보내 주세요.`); }
-      catch { $d('#share-link').select(); status('자동 복사가 되지 않았어요. 선택된 링크를 직접 복사해 보내 주세요.'); }
+      await copyFor(how, all);
     }
     current.onSent?.(how);
   });

@@ -49,12 +49,12 @@ let toastTimer;
 function toast(message){clearTimeout(toastTimer);$('#toast').textContent=message;$('#toast').hidden=false;toastTimer=setTimeout(()=>{$('#toast').hidden=true;},3300);}
 function selectedStyle(){return styles.find((style)=>style.id===state.style);}
 function selectionRangeText(){return MEMOIR_POLICY.max===null?`${MEMOIR_POLICY.min}장 이상`:`${MEMOIR_POLICY.min}~${MEMOIR_POLICY.max}장`;}
-function navigate(screen){if(screen==='interview'&&window.RolePreview&&!window.RolePreview.canEnterInterview())screen='prepare';if(screen==='style'&&!memoirSelection.canGenerate(state.selected.size,MEMOIR_POLICY)){toast(`자서전으로 엮을 엽서를 ${selectionRangeText()} 골라주세요.`);screen='records';}if(location.hash===`#${screen}`)show(screen);else location.hash=screen;}
+function navigate(screen){if(screen==='interview'&&window.RolePreview&&!window.RolePreview.canEnterInterview())screen='start';if(screen==='style'&&!memoirSelection.canGenerate(state.selected.size,MEMOIR_POLICY)){toast(`자서전으로 엮을 엽서를 ${selectionRangeText()} 골라주세요.`);screen='records';}if(location.hash===`#${screen}`)show(screen);else location.hash=screen;}
 function show(screen) {
   if(window.RolePreview?.isInviteHash(`#${screen}`)){window.RolePreview.enterGuest(`#${screen}`);return;}
   const allowed = ['home','interview','records','library','style','draft','reader','prepare','invitations','invite','start','start-self','invite-setup'];
   if (!allowed.includes(screen)) screen = 'home';
-  if(screen==='interview'&&window.RolePreview&&!window.RolePreview.canEnterInterview())screen='prepare';
+  if(screen==='interview'&&window.RolePreview&&!window.RolePreview.canEnterInterview())screen='start';
   if(window.RolePreview?.isGuest()&&!['invite','interview'].includes(screen))screen='invite';
   if(['draft','reader'].includes(screen)&&state.draftElderId!==currentElderId()){screen=screen==='reader'?'library':'records';toast('선택한 이야기 주인공의 목록에서 다시 열어주세요.');}
   if (screen === 'style' && !memoirSelection.canGenerate(state.selected.size,MEMOIR_POLICY)) { navigate('records'); return; }

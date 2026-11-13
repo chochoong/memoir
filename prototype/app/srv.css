@@ -12,3 +12,33 @@
 #answer-panel [type="submit"].srv-send-wait { cursor: progress; opacity: .8; }
 .selection-footer .srv-pick-all { margin-left: auto; margin-right: 10px; }
 @media (max-width: 600px) { .selection-footer .srv-pick-all { margin: 0; } }
+/* 이야기 주인공 이름 고치기 · 지우기 */
+.role-manage-elders { margin-top: 14px; display: inline-flex; align-items: center; gap: 6px; font-size: 15px; }
+.elder-manage-dialog { width: min(560px, calc(100% - 32px)); }
+.elder-manage-dialog .em-lead { margin: -6px 0 16px; }
+.em-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 10px; max-height: min(50dvh, 420px); overflow: auto; }
+.em-row { display: flex; gap: 8px; align-items: center; padding: 10px; border: 1px solid var(--line); border-radius: 10px; background: #fffdf9; }
+.em-name { flex: 1; min-width: 0; }
+.em-name input { width: 100%; font: inherit; font-size: 17px; padding: 10px 12px; min-height: 46px; border: 1px solid #cbb29b; border-radius: 8px; background: #fff; color: var(--ink); }
+.em-name input:disabled { background: transparent; border-color: transparent; color: var(--ink); font-weight: 600; }
+.em-self { font-size: 13px; color: var(--muted, #7a6a5a); padding-right: 6px; white-space: nowrap; }
+.em-del { color: #9b352e; display: inline-flex; align-items: center; gap: 4px; white-space: nowrap; }
+.em-msg { min-height: 1.6em; margin: 14px 0 0; font-size: 14px; line-height: 1.6; color: var(--muted, #7a6a5a); }
+.em-msg.bad { color: #9b352e; }
+.visually-hidden { position: absolute !important; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+@media (max-width: 600px) { .em-row { flex-wrap: wrap; } .em-name { flex-basis: 100%; } }
+.elder-pick-dialog { width: min(480px, calc(100% - 32px)); }
+.ep-list { display: flex; flex-wrap: wrap; gap: 10px; margin: 4px 0 16px; }
+.ep-list [aria-pressed="true"] { background: var(--burgundy); color: #fffaf4; border-color: var(--burgundy); }
+.ep-manage, .sc-manage { display: inline-flex; align-items: center; gap: 6px; font-size: 15px; justify-self: start; }
+/* 지울 수 없을 때 안내 상자 */
+.em-blocked { list-style: none; margin: -2px 0 4px; padding: 16px 18px; border: 1px solid #e3c7a0; border-left: 4px solid #b9874a; border-radius: 10px; background: #fff6e6; color: #4a3a2c; }
+.em-blocked .emb-head { display: flex; align-items: center; gap: 8px; font-size: 16px; }
+.em-blocked .emb-head .icon { width: 20px; height: 20px; color: #9a6a2e; flex: none; }
+.em-blocked .emb-sub { margin: 8px 0 8px; font-size: 13px; color: #7a6650; }
+.em-blocked .emb-stats { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 8px; }
+.em-blocked .emb-stats li { display: flex; align-items: center; gap: 8px; padding: 8px 10px; border-radius: 8px; background: #fffdf8; border: 1px solid #ecdcc3; font-size: 14px; }
+.em-blocked .emb-stats li .icon { width: 16px; height: 16px; color: var(--burgundy); flex: none; }
+.em-blocked .emb-stats li b { margin-left: auto; font-size: 15px; color: var(--burgundy); }
+.em-blocked .emb-why { margin: 12px 0 0; font-size: 14px; line-height: 1.7; }
+.em-blocked .emb-actions { display: flex; align-items: center; gap: 12px; margin-top: 12px; }

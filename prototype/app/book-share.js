@@ -54,9 +54,9 @@
     const mine = who === '나';
     return {
       kind: 'book', eyebrow: '자서전 나누기', title: book.title,
-      card: {kicker: '내말싸미 · 자서전', title: `${mine ? '' : who + ' 님의 '}「${book.title}」`, sub: `이야기 ${book.body.length}편 · 링크를 누르면 바로 읽어요`, art: coverArt(id)},
+      card: {kicker: '내말싸미 · 자서전', title: `${mine ? '' : window.Srv.honor(who) + '의 '}「${book.title}」`, sub: `이야기 ${book.body.length}편 · 링크를 누르면 바로 읽어요`, art: coverArt(id)},
       message: mine ? `제 이야기를 엮은 자서전 「${book.title}」을 나눠요. 링크를 누르면 휴대폰이나 컴퓨터에서 바로 읽을 수 있어요.`
-        : `${who} 님의 이야기를 엮은 자서전 「${book.title}」을 나눠요. 링크를 누르면 휴대폰이나 컴퓨터에서 바로 읽을 수 있어요.`,
+        : `${window.Srv.honor(who)}의 이야기를 엮은 자서전 「${book.title}」을 나눠요. 링크를 누르면 휴대폰이나 컴퓨터에서 바로 읽을 수 있어요.`,
       link: s.link,
       status: '공유 중 · 읽기만 · 「공유 그만하기」를 누를 때까지 열려요',
       note: '책에는 가족 이야기와 이름이 담겨 있어요. 믿을 수 있는 분에게만 보내 주세요.',
@@ -185,7 +185,7 @@
     const s = shares.get(id);
     document.body.classList.add('share-guest-view');
     document.body.classList.toggle('share-guest-nopdf', false);
-    banner.querySelector('.sgb-who').textContent = elderName() === '나' ? '「나」님이' : `${elderName()} 님의 가족이`;
+    banner.querySelector('.sgb-who').textContent = elderName() === '나' ? '「나」님이' : `${window.Srv.honor(elderName())}의 가족이`;
     banner.hidden = false;
     if (location.hash === '#reader' && lib.findOpen() === id) return;
     lib.openBook(id);

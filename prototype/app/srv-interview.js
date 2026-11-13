@@ -202,7 +202,7 @@
       if (opts.link) { window.SrvLinks?.failed(e); return false; }
       toast(msg);
       window.RolePreview?.complete?.({id: 'failed'});
-      navigate('prepare');
+      navigate('start');
       return false;
     } finally { starting = false; }
   }

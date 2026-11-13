@@ -27,7 +27,17 @@ v0.60 부터 화면은 **팀 시안 2차 B안**(처음가기 · 라디오 스튜
 | `srv-memoir.js` | 자서전 만들기(작업) · 책장 · 고친 글 | `/api/memoirs` · `/api/memoirs/{job}` · `/api/memoirs/saved` |
 | `book-share.js` (고침) | 책 공유 링크 만들기 · 끄기 | `/api/shares` |
 | `srv-links.js` | 어르신이 `/i#토큰` 으로 들어온 화면 | `/api/i/*` |
+| `srv-elders.js` | 이야기 주인공 이름 고치기 · 지우기 창 | `PATCH` · `DELETE /api/elders/{id}` (서버에 요청 중) |
 | `srv-demo.js` | 예시 모드(`?demo=1`) — 서버 없이 화면 전체를 돌려 보는 가짜 서버 | (실제 서버를 부르지 않음) |
+
+## 서버에 요청한 API — 이야기 주인공 이름 바꾸기 · 지우기 (v0.68)
+
+화면(「이야기 준비」 → 「이름 고치기 · 지우기」)은 만들어 두었고, 서버에 아래 두 API 가 생기면 바로 동작합니다.
+그전에는 405/404 가 와서 「서버가 아직 이 기능을 지원하지 않아요」라고 안내합니다. 예시 모드에서는 지금 바로 동작합니다.
+
+- `PATCH /api/elders/{elder_id}` `{name}` → 200 `{elder_id, name}` — 엽서 · 자서전은 elder_id 에 묶여 있어 이름만 바뀐다
+- `DELETE /api/elders/{elder_id}` → 200 `{elder_id, deleted: true}` · **기록(회차 · 자서전 · 쓸 수 있는 링크)이 있으면 409 `{code: "has_records"}`**
+- 「나」는 바꾸거나 지울 수 없다 (화면에서 잠금). 진행 중인 인터뷰의 화자는 지우지 않는다.
 
 ## 서버 없이 화면 확인하기 — 예시 모드 (`?demo=1`)
 

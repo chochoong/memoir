@@ -74,10 +74,10 @@
       @page :first { @bottom-center { content: none; } }`;
     printRoot.className = `pb-${big ? 'a4' : 'a5'} ${large ? 'pb-large' : ''}`;
     const toc = opts.toc.checked ? `<section class="pb-toc"><h2>차례</h2><ol>${b.sections.map((s) => `<li><span>${String(s.number).padStart(2, '0')}</span>${escapeText(s.title)}</li>`).join('')}</ol></section>` : '';
-    printRoot.innerHTML = `<section class="pb-cover"><span class="pb-kicker">${escapeText(b.elder)}의 작은 자서전</span><h1>${escapeText(b.title)}</h1><span class="pb-rule"></span><p class="pb-by">이야기 · ${escapeText(b.elder)}　　엮음 · 내말싸미</p><p class="pb-date">${escapeText(b.date)}</p></section>
+    printRoot.innerHTML = `<section class="pb-cover"><span class="pb-kicker">${escapeText(window.Srv.honor(b.elder))}의 작은 자서전</span><h1>${escapeText(b.title)}</h1><span class="pb-rule"></span><p class="pb-by">이야기 · ${escapeText(b.elder)}　　엮음 · 내말싸미</p><p class="pb-date">${escapeText(b.date)}</p></section>
       ${toc}
       ${b.sections.map((s) => `<section class="pb-chapter"><span class="pb-num">${String(s.number).padStart(2, '0')}</span><h2>${escapeText(s.title)}</h2>${s.paras.map((p) => `<p>${escapeText(p)}</p>`).join('')}</section>`).join('')}
-      <section class="pb-end"><span>✧</span><p>당신의 이야기는 계속됩니다.</p><small>이 책은 ${escapeText(b.elder)} 님이 들려준 이야기를 바탕으로 내말싸미에서 엮었습니다.<br>${escapeText(b.date)}</small></section>`;
+      <section class="pb-end"><span>✧</span><p>당신의 이야기는 계속됩니다.</p><small>이 책은 ${escapeText(b.elder === '나' ? '제가' : window.Srv.honor(b.elder) + '이')} 들려준 이야기를 바탕으로 내말싸미에서 엮었습니다.<br>${escapeText(b.date)}</small></section>`;
   }
 
   opts.addEventListener('submit', (e) => {
@@ -86,7 +86,7 @@
     dialog.close();
     document.body.classList.add('printing-book');
     // 저장할 때 파일 이름이 책 제목으로 잡히도록
-    savedTitle = document.title; document.title = `${current.title} - ${current.elder}의 자서전`;
+    savedTitle = document.title; document.title = `${current.title} - ${window.Srv.honor(current.elder)}의 자서전`;
     // 창이 닫힌 뒤 인쇄 창을 띄운다
     requestAnimationFrame(() => setTimeout(() => { window.print(); }, 60));
   });

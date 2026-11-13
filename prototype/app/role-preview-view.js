@@ -24,7 +24,7 @@
   function snapshot(){return store.snapshot();}
   function elder(){const data=snapshot();return data.elders.find(item=>item.elder_id===data.selectedElderId)||null;}
   const changeIcon='<svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M20 7a8 8 0 0 0-13-3L4 7m0-5v5h5M4 17a8 8 0 0 0 13 3l3-3m0 5v-5h-5"/></svg>';
-  function changeMarkup(person){return `<button type="button" class="role-change" data-go="prepare" aria-label="${person?`이야기 주인공 변경, 현재 ${escapeText(person.name)}`:'이야기 주인공 이름 등록하기'}">${person?changeIcon:''}<span>${person?'변경':'이름 등록하기'}</span></button>`;}
+  function changeMarkup(person){return `<button type="button" class="role-change" data-role="pick-elder" aria-label="${person?`이야기 주인공 변경, 현재 ${escapeText(person.name)}`:'이야기 주인공 이름 등록하기'}">${person?changeIcon:''}<span>${person?'변경':'이름 등록하기'}</span></button>`;}
   function renderIdentity(){
     const person=elder();
     const identity=JSON.stringify([person?.elder_id,person?.name]);
@@ -49,11 +49,11 @@
   function validRun(){return !!run&&!run.completed&&(!run.invitationId||snapshot().invitations.some(inv=>inv.id===run.invitationId&&inv.status==='in_progress'));}
   function interruptRun(id){if(run?.invitationId!==id)return;const text=[...state.answers,$('#answer-text').value].filter(value=>value.trim()).join('\n\n');if(text)interrupted.push({elderId:run.elderId,text});state.answers=[];$('#answer-text').value='';state.interviewCompleted=true;run=null;setInterviewMode('paused');}
   function refreshOwnership(){state.selected.clear();state.pickRecords=false;state.filter='all';state.query='';$('#record-search').value='';renderRecent();renderRecords();window.MemoirLibrary?.render();window.SrvRecords?.reload();window.SrvLibrary?.reload();}
-  function headingCopy(){const person=elder();return person?`${escapeText(person.name)} 님의 이야기`:'이야기 주인공 등록';}
+  function headingCopy(){const person=elder();return person?`${escapeText(window.Srv.honor(person.name))}의 이야기`:'이야기 주인공 등록';}
   function renderPrepare(){
     const data=snapshot(),person=elder();
     const nameForm=`<form id="speaker-form" class="role-name-form"><label for="speaker-name">이야기 주인공 이름</label><div class="role-name-actions"><input id="speaker-name" name="name" maxlength="30" required autocomplete="off" placeholder="이름 하나만 적어주세요"><button type="submit" class="button outline">이름 등록</button></div><p class="role-error" id="speaker-error" role="status"></p></form>`;
-    prepare.querySelector('.role-content').innerHTML=`<p class="role-intro">계정은 이야기를 모으는 사람, 이야기 주인공은 삶을 들려주는 사람입니다.</p><div class="role-account-strip"><span>이야기를 모으는 계정 <strong>${data.user?escapeText(data.user.name||data.user.email||'로그인됨'):'로그인 전'}</strong></span><button type="button" class="text-button" data-login>${data.user?'계정 보기':'로그인'}</button></div><div class="panel role-preparation"><h2>${person?'이야기 주인공':'먼저, 이름을 알려주세요'}</h2>${data.elders.length?`<div class="role-speakers" role="group" aria-label="이야기 주인공 선택">${data.elders.map(item=>`<button type="button" class="button outline" data-speaker="${escapeText(item.elder_id)}" aria-pressed="${item.elder_id===data.selectedElderId}">${escapeText(item.name)}</button>`).join('')}</div><details class="role-add-speaker"><summary>다른 분 이름 추가</summary>${nameForm}</details>`:nameForm}${person?`<div class="role-topic"><label for="prepared-topic">이번에 나눌 주제</label><select id="prepared-topic">${topics.map(topic=>`<option${run?.topic===topic?' selected':''}>${topic}</option>`).join('')}</select></div><p class="role-subcopy">${headingCopy()}를 담습니다. 떠오르는 기억부터 편하게 들려주세요.</p><button type="button" class="button primary role-main-action" data-role="start-local">${run&&!run.completed&&run.elderId===person.elder_id?'이어서 이야기하기':'이 기기에서 시작하기'} ${icons('arrow')}</button><div class="role-secondary-actions"><button type="button" class="text-button" data-role="issue">초대 주소 준비하기</button><button type="button" class="text-button" data-go="invitations">준비한 초대 보기</button></div>`:''}</div>`;
+    prepare.querySelector('.role-content').innerHTML=`<p class="role-intro">계정은 이야기를 모으는 사람, 이야기 주인공은 삶을 들려주는 사람입니다.</p><div class="role-account-strip"><span>이야기를 모으는 계정 <strong>${data.user?escapeText(data.user.name||data.user.email||'로그인됨'):'로그인 전'}</strong></span><button type="button" class="text-button" data-login>${data.user?'계정 보기':'로그인'}</button></div><div class="panel role-preparation"><h2>${person?'이야기 주인공':'먼저, 이름을 알려주세요'}</h2>${data.elders.length?`<div class="role-speakers" role="group" aria-label="이야기 주인공 선택">${data.elders.map(item=>`<button type="button" class="button outline" data-speaker="${escapeText(item.elder_id)}" aria-pressed="${item.elder_id===data.selectedElderId}">${escapeText(item.name)}</button>`).join('')}</div><button type="button" class="text-button role-manage-elders" data-role="manage-elders">${icons('pen')}<span>이름 고치기 · 지우기</span></button><details class="role-add-speaker"><summary>다른 분 이름 추가</summary>${nameForm}</details>`:nameForm}${person?`<div class="role-topic"><label for="prepared-topic">이번에 나눌 주제</label><select id="prepared-topic">${topics.map(topic=>`<option${run?.topic===topic?' selected':''}>${topic}</option>`).join('')}</select></div><p class="role-subcopy">${headingCopy()}를 담습니다. 떠오르는 기억부터 편하게 들려주세요.</p><button type="button" class="button primary role-main-action" data-role="start-local">${run&&!run.completed&&run.elderId===person.elder_id?'이어서 이야기하기':'이 기기에서 시작하기'} ${icons('arrow')}</button><div class="role-secondary-actions"><button type="button" class="text-button" data-role="issue">초대 주소 준비하기</button><button type="button" class="text-button" data-go="invitations">준비한 초대 보기</button></div>`:''}</div>`;
   }
   function renderInterrupted(){
     const entries=interrupted.filter(item=>item.elderId===snapshot().selectedElderId);
@@ -130,7 +130,8 @@
   window.addEventListener('memoir:screen',event=>{
     if(event.detail.screen==='prepare'){renderPrepare();renderInterrupted();}
     if(event.detail.screen==='invitations'){renderInvitations();store.loadInvitations().then(r=>{if(location.hash==='#invitations'){renderInvitations();if(!r.ok)toast('보낸 초대 목록을 불러오지 못했어요.');}});}
-    context.hidden=guest||event.detail.screen!=='home';
+    // 처음가기에서는 주인공을 고르지 않는다 — 녹음할 사람은 「이야기 시작하기」에서, 초대할 사람은 「초대 주소 만들기」에서 정한다 (11-13)
+    context.hidden=true;
     renderContext();
   });
   function renderContext(){
@@ -138,6 +139,8 @@
     context.innerHTML=`<span class="role-context-label">이야기 주인공</span><span class="role-name-action"><strong class="role-context-name">${escapeText(person?.name||'아직 등록하지 않았어요')}</strong>${changeMarkup(person)}</span>`;
   }
   window.RolePreview={store,renderIdentity,
+    // 기록 · 자서전을 볼 주인공을 바꾼다 (「누구의 기록을 볼까요?」 창)
+    selectElder(id){if(hasDraft()&&run?.elderId!==id){toast('작성 중인 이야기를 먼저 마친 뒤 다른 분을 선택해주세요.');return false;}store.selectElder(id);refreshOwnership();renderIdentity();renderContext();return true;},
     async beginSelf(topic){if(!snapshot().user){window.MemoirLogin.open();toast('로그인하면 내 이야기를 녹음해 모아 둘 수 있어요.');return;}const before=snapshot().selectedElderId;const r=await store.ensureSelf();if(!r.ok){toast('지금은 시작하지 못했어요. 잠시 뒤 다시 눌러 주세요.');return;}store.selectElder(r.elder.elder_id);if(before!==r.elder.elder_id)refreshOwnership();begin(null,topic);},
     async issueFor(elderId,topic){store.selectElder(elderId);refreshOwnership();showIssued(await store.issueInvitation({elderId,topic}));},
     isLoggedIn:()=>!!snapshot().user,currentElderId:()=>run&&!run.completed&&location.hash==='#interview'?run.elderId:snapshot().selectedElderId,canEnterInterview:validRun,canFinish:()=>!run?.invitationId||validRun(),isGuest:()=>guest,isInviteHash:hash=>/^#invite-preview-/.test(hash),enterGuest,
@@ -150,5 +153,5 @@
   refreshOwnership();
   if(window.RolePreview.isInviteHash(location.hash))enterGuest(location.hash);
   else if(location.hash==='#invite')enterGuest('');
-  else show(location.hash==='#interview'?'prepare':location.hash.slice(1)||'home');
+  else show(location.hash==='#interview'?'start':location.hash.slice(1)||'home');
 }());
