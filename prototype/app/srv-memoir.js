@@ -67,13 +67,69 @@
   let job = null;          // {job_id, elderId, style, title}
   let seq = 0, stagePast = false;
 
+  /* ── 「자서전 만드는 중」 알림 — 창을 닫고 기다리는 동안 화면에 늘 떠 있다 (휴대폰은 위, PC 는 오른쪽 아래). 누르면 진행 창을 다시 연다 ── */
+  const pill = document.createElement('button');
+  pill.type = 'button'; pill.className = 'srv-gen-pill'; pill.hidden = true;
+  pill.setAttribute('aria-label', '자서전 만드는 중 — 진행 상황 보기');
+  pill.innerHTML = `<span class="sgp-spin" aria-hidden="true"></span><span class="sgp-text"><b>자서전 만드는 중</b><small class="sgp-stage">시작하고 있어요</small></span>`;
+  document.body.append(pill);
+  let lastStage = '시작하고 있어요';
+  function paintPill() {
+    const on = !!(job && state.generating) && !dialog.open && !document.body.classList.contains('ebook-mode') && location.hash !== '#interview' && location.hash !== '#library'; // 인터뷰 중에는 말씀에 집중하게, 책장은 「만드는 중」 책이 대신 보여 준다
+    pill.hidden = !on;
+    if (on) pill.querySelector('.sgp-stage').textContent = lastStage;
+    paintShelf();
+  }
+  pill.addEventListener('click', () => { if (job && state.generating && !dialog.open) dialog.showModal(); paintPill(); });
+  dialog.addEventListener('close', () => { busyNote.hidden = true; paintPill(); });
+  window.addEventListener('memoir:screen', paintPill);
+
+  /* ── 만드는 동안은 새 자서전을 시작하지 않는다 — 한 번에 한 권 (서버도 409 busy 로 막는다) ──
+       「자서전 만들기」 · 「자서전 만들기(문체 화면)」를 누르면 막는다는 말과 함께 지금 만드는 책의 진행 창을 연다. */
+  const busyNote = document.createElement('p');
+  busyNote.className = 'srv-gen-busy'; busyNote.hidden = true; busyNote.setAttribute('role', 'alert');
+  busyNote.innerHTML = '<b>지금 만들고 있는 자서전이 있어요.</b><br>한 번에 한 권씩 만들어요. 이 책이 다 만들어진 뒤에 새로 만들 수 있어요.';
+  dialog.querySelector('#generation-stage').before(busyNote);
+  const running = () => !!(job && state.generating);
+  function showBusy() { busyNote.hidden = false; if (!dialog.open) dialog.showModal(); paintPill(); }
+  document.addEventListener('click', (e) => {
+    if (!running() || !e.target.closest('#choose-style')) return;
+    e.preventDefault(); e.stopImmediatePropagation(); showBusy();
+  }, true);
+
+  /* ── 책장에 「만드는 중」인 책 한 권 — 반짝이며 기다린다. 누르면 진행 창 ── */
+  const shelfScreen = document.querySelector('[data-screen="library"]');
+  function paintShelf() {
+    if (!shelfScreen) return;
+    const want = running() && job.elderId === AUTH.elderId;
+    let li = shelfScreen.querySelector('.ml-making-item');
+    if (!want) { if (li) { const row = li.closest('.ml-shelf-row.ml-making-row'); (row || li).remove(); } return; }
+    const shelves = shelfScreen.querySelector('.ml-shelves');
+    if (!shelves) return;
+    if (!li) {
+      li = document.createElement('li'); li.className = 'ml-making-item';
+      li.innerHTML = `<button type="button" class="ml-book-card ml-making" data-gen-open aria-label="만들고 있는 자서전 — 진행 상황 보기">
+        <span class="ml-cover-bay" aria-hidden="true"><span class="ml-cover ml-cover-making"><span class="ml-cover-title">새 책을<br>엮는 중</span><span class="ml-cover-rule"></span><span class="mlm-spark s1">✦</span><span class="mlm-spark s2">✧</span><span class="mlm-spark s3">✦</span><span class="mlm-spark s4">✧</span><span class="mlm-shine"></span></span></span>
+        <span class="ml-book-copy"><span class="ml-volume-label">만드는 중</span><strong>${escapeText(job.title || '새 자서전')}</strong><span class="ml-book-meta mlm-stage"></span><span class="ml-read-label">진행 보기 <span aria-hidden="true">→</span></span></span></button>`;
+      const firstRow = shelves.querySelector('.ml-books');
+      if (firstRow) firstRow.prepend(li);
+      else { const row = document.createElement('div'); row.className = 'ml-shelf-row ml-making-row'; row.innerHTML = '<ul class="ml-books" aria-label="만들고 있는 책"></ul><span class="ml-shelf-plank" aria-hidden="true"></span>'; row.firstChild.append(li); shelves.prepend(row); }
+    }
+    li.querySelector('.mlm-stage').textContent = lastStage;
+  }
+  if (shelfScreen) new MutationObserver(() => { if (running() && !shelfScreen.querySelector('.ml-making-item')) paintShelf(); }).observe(shelfScreen, {childList: true, subtree: true});
+  document.addEventListener('click', (e) => { if (e.target.closest('[data-gen-open]')) { e.preventDefault(); if (running() && !dialog.open) dialog.showModal(); paintPill(); } });
+
   function paintStage(j) {
     if (j.stage && j.stage !== 'analysis') stagePast = true;
     const st = j.stage === 'chapter' && j.chapters ? `${j.chapters}장 중 ${j.chapter}장을 쓰고 있어요`
       : j.stage === 'analysis' && stagePast ? '이야기를 다시 정리하고 있어요'
       : STAGE[j.stage] || '자서전을 만들고 있어요';
     const sec = Number(j.elapsed) || 0;
-    dialog.querySelector('#generation-stage').textContent = `${st} · ${sec >= 60 ? `${Math.floor(sec / 60)}분 ${sec % 60}초` : `${sec}초`} 지났어요`;
+    const ago = sec >= 60 ? `${Math.floor(sec / 60)}분 ${sec % 60}초` : `${sec}초`;
+    dialog.querySelector('#generation-stage').textContent = `${st} · ${ago} 지났어요`;
+    lastStage = `${st} · ${ago}`;
+    paintPill();
   }
 
   async function generate() {
@@ -93,7 +149,7 @@
     } catch (e) {
       if (e.status === 409 && e.code === 'busy' && e.body && e.body.job_id) {
         first = {job_id: e.body.job_id, status: 'running'};
-        toast('이미 만들고 있는 자서전이 있어요. 그 자서전을 이어서 기다려요.');
+        busyNote.hidden = false; // 다른 기기 · 창에서 시작한 책 — 서버가 409 busy 로 알려 준다
       } else {
         state.generating = false; dialog.close();
         toast(why(e));
@@ -110,6 +166,8 @@
     const t0 = Date.now();
     let misses = 0;
     state.generating = true;
+    lastStage = '이어서 기다리고 있어요';
+    paintPill();
     for (;;) {
       if (my !== seq) return;
       let r;
@@ -153,13 +211,13 @@
       return;
     }
   }
-  function finish() { state.generating = false; job = null; jobKeep(null); if (dialog.open) dialog.close(); }
+  function finish() { state.generating = false; job = null; jobKeep(null); if (dialog.open) dialog.close(); paintPill(); }
   const sleepMs = (ms) => new Promise((r) => setTimeout(r, ms));
 
   dialog.addEventListener('click', async (e) => {
     const b = e.target.closest('[data-gen]');
     if (!b) return;
-    if (b.dataset.gen === 'hide') { dialog.close(); toast('다 만들어지면 알려 드릴게요. 다른 화면을 둘러보셔도 돼요.'); return; }
+    if (b.dataset.gen === 'hide') { dialog.close(); toast('다 만들어지면 알려 드릴게요. 「자서전 만드는 중」 알림을 누르면 진행 상황을 볼 수 있어요.'); return; }
     if (b.dataset.gen === 'stop' && job) {
       if (!window.confirm('자서전 만들기를 그만둘까요?')) return;
       const id = job.job_id;
@@ -172,7 +230,7 @@
   const gen = document.getElementById('generate-draft');
   const fresh = gen.cloneNode(true); gen.replaceWith(fresh);
   fresh.innerHTML = fresh.innerHTML.replace('초안 미리보기', '자서전 만들기');
-  fresh.addEventListener('click', () => { if (job && state.generating) { if (!dialog.open) dialog.showModal(); return; } void generate(); });
+  fresh.addEventListener('click', () => { if (running()) { showBusy(); return; } void generate(); });
 
   /* ── 자서전에 넣을 엽서 고르기: 처음엔 전체 선택 · 「전체 해제 / 전체 선택」 버튼 ── */
   const allBtn = document.createElement('button');
@@ -194,7 +252,7 @@
   };
   allBtn.addEventListener('click', () => { selectAll(!allPicked()); renderRecords(); });
   const startOriginal = window.startMemoirFromPostcards;
-  window.startMemoirFromPostcards = function () { startOriginal(); selectAll(true); renderRecords(); };
+  window.startMemoirFromPostcards = function () { if (running()) { showBusy(); return; } startOriginal(); selectAll(true); renderRecords(); };
   // 고르는 중에 엽서 목록이 늦게 도착하면 (로그인 · 화자 바꿈 직후) 그때 전체 선택
   window.addEventListener('memoir:records', () => { if (state.pickRecords && !state.selected.size) { selectAll(true); renderRecords(); } });
 

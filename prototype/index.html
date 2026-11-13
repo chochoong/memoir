@@ -3602,6 +3602,64 @@ body.ebook-paged #ebook-content, body.ebook-paged #ebook-right-content, body.ebo
 .em-blocked .emb-actions { display: flex; align-items: center; gap: 12px; margin-top: 12px; }
 .srv-go-home { margin-top: 18px; display: inline-flex; align-items: center; justify-content: center; gap: 8px; text-decoration: none; }
 
+/* 「자서전 만드는 중」 알림 — 진행 창을 닫아도 화면 아래에 남는다 (srv-memoir) */
+.srv-gen-pill {
+  position: fixed; z-index: 60; right: 24px; bottom: 24px;
+  display: inline-flex; align-items: center; gap: 10px;
+  max-width: calc(100% - 32px); min-height: 52px; padding: 8px 18px 8px 14px;
+  border: 1px solid #c9a99b; border-radius: 999px;
+  background: #fffaf0; color: #3b2a26; box-shadow: 0 8px 22px #4a2c2426;
+  font: inherit; text-align: left; cursor: pointer;
+}
+.srv-gen-pill[hidden] { display: none; }
+.srv-gen-pill:hover { border-color: #7a4a55; }
+.srv-gen-pill:focus-visible { outline: 3px solid #7a4a55; outline-offset: 2px; }
+.srv-gen-pill .sgp-text { display: flex; flex-direction: column; line-height: 1.3; min-width: 0; }
+.srv-gen-pill b { font-size: 15px; color: #6b3a48; }
+.srv-gen-pill small { font-size: 13px; color: #6d5b55; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.srv-gen-pill .sgp-spin {
+  flex: none; width: 20px; height: 20px; border-radius: 50%;
+  border: 3px solid #e7d5cc; border-top-color: #7a4a55; animation: sgp-spin 1s linear infinite;
+}
+@keyframes sgp-spin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) { .srv-gen-pill .sgp-spin { animation: none; border-top-color: #7a4a55; border-right-color: #7a4a55; } }
+@media (max-width: 760px) {
+  .srv-gen-pill { right: 16px; left: 16px; justify-content: flex-start; top: 72px; bottom: auto; min-height: 48px; }
+}
+
+/* 만드는 중에 새 자서전을 누르면 — 진행 창 위에 막는 이유 (srv-memoir) */
+.generation-dialog .srv-gen-busy, #generation-dialog .srv-gen-busy {
+  margin: 4px 0 12px; padding: 12px 14px; border: 1px solid #e0c7bc; border-radius: 10px;
+  background: #fbf0ea; color: #5b3a40; font-size: 15px; line-height: 1.6; text-align: center;
+}
+.srv-gen-busy[hidden] { display: none !important; }
+
+/* 책장의 「만드는 중」 책 — 빛이 지나가고 별이 반짝인다 */
+[data-screen="library"] .ml-making .ml-cover-making {
+  --ml-cover-color: #7a4a55; --ml-cover-ink: #fbe9c8; --ml-cover-spine: #57303a;
+  overflow: hidden; justify-content: center;
+}
+[data-screen="library"] .ml-making .ml-cover-title { font-size: 19px; }
+[data-screen="library"] .ml-making .ml-volume-label { color: #7a4a55; font-weight: 600; }
+.ml-cover-making .mlm-shine {
+  position: absolute; inset: -20% auto -20% -60%; width: 45%;
+  background: linear-gradient(100deg, transparent, #ffffff55 45%, #fff6dd88 50%, #ffffff55 55%, transparent);
+  transform: skewX(-12deg); animation: mlm-shine 2.6s ease-in-out infinite; pointer-events: none;
+}
+.ml-cover-making .mlm-spark { position: absolute; color: #ffe7a8; text-shadow: 0 0 8px #ffd77a; opacity: 0; animation: mlm-twinkle 2.2s ease-in-out infinite; pointer-events: none; }
+.ml-cover-making .s1 { top: 12%; left: 16%; font-size: 15px; }
+.ml-cover-making .s2 { top: 22%; right: 14%; font-size: 12px; animation-delay: .5s; }
+.ml-cover-making .s3 { bottom: 20%; right: 22%; font-size: 17px; animation-delay: 1s; }
+.ml-cover-making .s4 { bottom: 12%; left: 22%; font-size: 11px; animation-delay: 1.5s; }
+[data-screen="library"] .ml-making .ml-cover { box-shadow: -3px 1px 0 var(--ml-cover-spine), 0 0 0 2px #f3d79a, 0 0 22px #f0c86f88, 4px 5px 8px #3c261430; animation: mlm-glow 2.2s ease-in-out infinite; }
+@keyframes mlm-shine { 0% { left: -60%; } 60%, 100% { left: 130%; } }
+@keyframes mlm-twinkle { 0%, 100% { opacity: 0; transform: scale(.6) rotate(0); } 50% { opacity: 1; transform: scale(1.15) rotate(20deg); } }
+@keyframes mlm-glow { 0%, 100% { filter: brightness(1); } 50% { filter: brightness(1.12); } }
+@media (prefers-reduced-motion: reduce) {
+  .ml-cover-making .mlm-shine, [data-screen="library"] .ml-making .ml-cover { animation: none; }
+  .ml-cover-making .mlm-spark { animation: none; opacity: .9; }
+}
+
 </style>
 </head>
 <body>
@@ -6715,13 +6773,69 @@ renderRecent();renderQuestion();setInterviewMode('reading');show(location.hash.s
   let job = null;          // {job_id, elderId, style, title}
   let seq = 0, stagePast = false;
 
+  /* ── 「자서전 만드는 중」 알림 — 창을 닫고 기다리는 동안 화면에 늘 떠 있다 (휴대폰은 위, PC 는 오른쪽 아래). 누르면 진행 창을 다시 연다 ── */
+  const pill = document.createElement('button');
+  pill.type = 'button'; pill.className = 'srv-gen-pill'; pill.hidden = true;
+  pill.setAttribute('aria-label', '자서전 만드는 중 — 진행 상황 보기');
+  pill.innerHTML = `<span class="sgp-spin" aria-hidden="true"></span><span class="sgp-text"><b>자서전 만드는 중</b><small class="sgp-stage">시작하고 있어요</small></span>`;
+  document.body.append(pill);
+  let lastStage = '시작하고 있어요';
+  function paintPill() {
+    const on = !!(job && state.generating) && !dialog.open && !document.body.classList.contains('ebook-mode') && location.hash !== '#interview' && location.hash !== '#library'; // 인터뷰 중에는 말씀에 집중하게, 책장은 「만드는 중」 책이 대신 보여 준다
+    pill.hidden = !on;
+    if (on) pill.querySelector('.sgp-stage').textContent = lastStage;
+    paintShelf();
+  }
+  pill.addEventListener('click', () => { if (job && state.generating && !dialog.open) dialog.showModal(); paintPill(); });
+  dialog.addEventListener('close', () => { busyNote.hidden = true; paintPill(); });
+  window.addEventListener('memoir:screen', paintPill);
+
+  /* ── 만드는 동안은 새 자서전을 시작하지 않는다 — 한 번에 한 권 (서버도 409 busy 로 막는다) ──
+       「자서전 만들기」 · 「자서전 만들기(문체 화면)」를 누르면 막는다는 말과 함께 지금 만드는 책의 진행 창을 연다. */
+  const busyNote = document.createElement('p');
+  busyNote.className = 'srv-gen-busy'; busyNote.hidden = true; busyNote.setAttribute('role', 'alert');
+  busyNote.innerHTML = '<b>지금 만들고 있는 자서전이 있어요.</b><br>한 번에 한 권씩 만들어요. 이 책이 다 만들어진 뒤에 새로 만들 수 있어요.';
+  dialog.querySelector('#generation-stage').before(busyNote);
+  const running = () => !!(job && state.generating);
+  function showBusy() { busyNote.hidden = false; if (!dialog.open) dialog.showModal(); paintPill(); }
+  document.addEventListener('click', (e) => {
+    if (!running() || !e.target.closest('#choose-style')) return;
+    e.preventDefault(); e.stopImmediatePropagation(); showBusy();
+  }, true);
+
+  /* ── 책장에 「만드는 중」인 책 한 권 — 반짝이며 기다린다. 누르면 진행 창 ── */
+  const shelfScreen = document.querySelector('[data-screen="library"]');
+  function paintShelf() {
+    if (!shelfScreen) return;
+    const want = running() && job.elderId === AUTH.elderId;
+    let li = shelfScreen.querySelector('.ml-making-item');
+    if (!want) { if (li) { const row = li.closest('.ml-shelf-row.ml-making-row'); (row || li).remove(); } return; }
+    const shelves = shelfScreen.querySelector('.ml-shelves');
+    if (!shelves) return;
+    if (!li) {
+      li = document.createElement('li'); li.className = 'ml-making-item';
+      li.innerHTML = `<button type="button" class="ml-book-card ml-making" data-gen-open aria-label="만들고 있는 자서전 — 진행 상황 보기">
+        <span class="ml-cover-bay" aria-hidden="true"><span class="ml-cover ml-cover-making"><span class="ml-cover-title">새 책을<br>엮는 중</span><span class="ml-cover-rule"></span><span class="mlm-spark s1">✦</span><span class="mlm-spark s2">✧</span><span class="mlm-spark s3">✦</span><span class="mlm-spark s4">✧</span><span class="mlm-shine"></span></span></span>
+        <span class="ml-book-copy"><span class="ml-volume-label">만드는 중</span><strong>${escapeText(job.title || '새 자서전')}</strong><span class="ml-book-meta mlm-stage"></span><span class="ml-read-label">진행 보기 <span aria-hidden="true">→</span></span></span></button>`;
+      const firstRow = shelves.querySelector('.ml-books');
+      if (firstRow) firstRow.prepend(li);
+      else { const row = document.createElement('div'); row.className = 'ml-shelf-row ml-making-row'; row.innerHTML = '<ul class="ml-books" aria-label="만들고 있는 책"></ul><span class="ml-shelf-plank" aria-hidden="true"></span>'; row.firstChild.append(li); shelves.prepend(row); }
+    }
+    li.querySelector('.mlm-stage').textContent = lastStage;
+  }
+  if (shelfScreen) new MutationObserver(() => { if (running() && !shelfScreen.querySelector('.ml-making-item')) paintShelf(); }).observe(shelfScreen, {childList: true, subtree: true});
+  document.addEventListener('click', (e) => { if (e.target.closest('[data-gen-open]')) { e.preventDefault(); if (running() && !dialog.open) dialog.showModal(); paintPill(); } });
+
   function paintStage(j) {
     if (j.stage && j.stage !== 'analysis') stagePast = true;
     const st = j.stage === 'chapter' && j.chapters ? `${j.chapters}장 중 ${j.chapter}장을 쓰고 있어요`
       : j.stage === 'analysis' && stagePast ? '이야기를 다시 정리하고 있어요'
       : STAGE[j.stage] || '자서전을 만들고 있어요';
     const sec = Number(j.elapsed) || 0;
-    dialog.querySelector('#generation-stage').textContent = `${st} · ${sec >= 60 ? `${Math.floor(sec / 60)}분 ${sec % 60}초` : `${sec}초`} 지났어요`;
+    const ago = sec >= 60 ? `${Math.floor(sec / 60)}분 ${sec % 60}초` : `${sec}초`;
+    dialog.querySelector('#generation-stage').textContent = `${st} · ${ago} 지났어요`;
+    lastStage = `${st} · ${ago}`;
+    paintPill();
   }
 
   async function generate() {
@@ -6741,7 +6855,7 @@ renderRecent();renderQuestion();setInterviewMode('reading');show(location.hash.s
     } catch (e) {
       if (e.status === 409 && e.code === 'busy' && e.body && e.body.job_id) {
         first = {job_id: e.body.job_id, status: 'running'};
-        toast('이미 만들고 있는 자서전이 있어요. 그 자서전을 이어서 기다려요.');
+        busyNote.hidden = false; // 다른 기기 · 창에서 시작한 책 — 서버가 409 busy 로 알려 준다
       } else {
         state.generating = false; dialog.close();
         toast(why(e));
@@ -6758,6 +6872,8 @@ renderRecent();renderQuestion();setInterviewMode('reading');show(location.hash.s
     const t0 = Date.now();
     let misses = 0;
     state.generating = true;
+    lastStage = '이어서 기다리고 있어요';
+    paintPill();
     for (;;) {
       if (my !== seq) return;
       let r;
@@ -6801,13 +6917,13 @@ renderRecent();renderQuestion();setInterviewMode('reading');show(location.hash.s
       return;
     }
   }
-  function finish() { state.generating = false; job = null; jobKeep(null); if (dialog.open) dialog.close(); }
+  function finish() { state.generating = false; job = null; jobKeep(null); if (dialog.open) dialog.close(); paintPill(); }
   const sleepMs = (ms) => new Promise((r) => setTimeout(r, ms));
 
   dialog.addEventListener('click', async (e) => {
     const b = e.target.closest('[data-gen]');
     if (!b) return;
-    if (b.dataset.gen === 'hide') { dialog.close(); toast('다 만들어지면 알려 드릴게요. 다른 화면을 둘러보셔도 돼요.'); return; }
+    if (b.dataset.gen === 'hide') { dialog.close(); toast('다 만들어지면 알려 드릴게요. 「자서전 만드는 중」 알림을 누르면 진행 상황을 볼 수 있어요.'); return; }
     if (b.dataset.gen === 'stop' && job) {
       if (!window.confirm('자서전 만들기를 그만둘까요?')) return;
       const id = job.job_id;
@@ -6820,7 +6936,7 @@ renderRecent();renderQuestion();setInterviewMode('reading');show(location.hash.s
   const gen = document.getElementById('generate-draft');
   const fresh = gen.cloneNode(true); gen.replaceWith(fresh);
   fresh.innerHTML = fresh.innerHTML.replace('초안 미리보기', '자서전 만들기');
-  fresh.addEventListener('click', () => { if (job && state.generating) { if (!dialog.open) dialog.showModal(); return; } void generate(); });
+  fresh.addEventListener('click', () => { if (running()) { showBusy(); return; } void generate(); });
 
   /* ── 자서전에 넣을 엽서 고르기: 처음엔 전체 선택 · 「전체 해제 / 전체 선택」 버튼 ── */
   const allBtn = document.createElement('button');
@@ -6842,7 +6958,7 @@ renderRecent();renderQuestion();setInterviewMode('reading');show(location.hash.s
   };
   allBtn.addEventListener('click', () => { selectAll(!allPicked()); renderRecords(); });
   const startOriginal = window.startMemoirFromPostcards;
-  window.startMemoirFromPostcards = function () { startOriginal(); selectAll(true); renderRecords(); };
+  window.startMemoirFromPostcards = function () { if (running()) { showBusy(); return; } startOriginal(); selectAll(true); renderRecords(); };
   // 고르는 중에 엽서 목록이 늦게 도착하면 (로그인 · 화자 바꿈 직후) 그때 전체 선택
   window.addEventListener('memoir:records', () => { if (state.pickRecords && !state.selected.size) { selectAll(true); renderRecords(); } });
 
@@ -9333,7 +9449,7 @@ renderRecent();renderQuestion();setInterviewMode('reading');show(location.hash.s
 <script data-from="book-pdf.js">
 (function () {
   'use strict';
-  // 4. 자서전 PDF 저장 — 책장(책마다)과 읽기 화면(위쪽 막대)에서 연다.
+  // 4. 자서전 PDF 저장 — 읽기 화면(아래 독서 메뉴) · 초안 화면에서 연다.
   //    시안에서는 인쇄용 책 모양을 만들어 브라우저 인쇄 창을 띄우고, 거기서 「PDF로 저장」을 고르게 한다.
   //    실제 서비스에서는 서버가 같은 모양의 PDF 파일을 만들어 바로 내려받게 하는 것을 전제로 한다.
   const model = window.MemoirReaderState;
@@ -9426,23 +9542,7 @@ renderRecent();renderQuestion();setInterviewMode('reading');show(location.hash.s
   let savedTitle = null;
   window.addEventListener('afterprint', () => { document.body.classList.remove('printing-book'); if (savedTitle) { document.title = savedTitle; savedTitle = null; } });
 
-  // ── 책장: 책마다 「PDF로 저장」 ──
-  const shelf = document.querySelector('[data-screen="library"]');
-  function decorate() {
-    shelf?.querySelectorAll('.ml-books > li').forEach((li) => {
-      if (li.querySelector('.ml-pdf')) return;
-      const id = li.querySelector('[data-library-book]')?.dataset.libraryBook;
-      if (!id) return;
-      const btn = document.createElement('button');
-      btn.type = 'button'; btn.className = 'text-button ml-pdf'; btn.dataset.bookPdf = id;
-      btn.innerHTML = `${icons('download')}<span>PDF 저장</span>`;
-      btn.setAttribute('aria-label', `${li.querySelector('strong')?.textContent || '이 책'} PDF로 저장`);
-      let row = li.querySelector('.ml-actions');
-      if (!row) { row = document.createElement('div'); row.className = 'ml-actions'; li.append(row); }
-      row.prepend(btn);
-    });
-  }
-  if (shelf) new MutationObserver(decorate).observe(shelf, {childList: true, subtree: true});
+  // 책장 카드에는 버튼을 두지 않는다 — 책을 펼친 뒤 독서 메뉴의 「PDF 저장」에서 (책장이 너저분해서)
   document.addEventListener('click', (e) => {
     const btn = e.target.closest('[data-book-pdf]');
     if (!btn) return;
@@ -9458,6 +9558,16 @@ renderRecent();renderQuestion();setInterviewMode('reading');show(location.hash.s
     toolbar.append(btn);
     toolbar.classList.add('has-pdf');
     btn.addEventListener('click', () => open(bookFrom(state.title, state.document?.body || state.body, state.document?.sections)));
+  }
+
+  // ── 초안 화면: 「글 파일(.txt)로 내려받기」 대신 PDF — txt 는 휴대폰 · PC 에서 따로 열 앱이 있어야 편하게 읽힌다 ──
+  const dl = document.getElementById('download-draft');
+  if (dl) {
+    const pdfBtn = dl.cloneNode(false); // 시안의 txt 내려받기 연결을 떼어 낸다
+    pdfBtn.innerHTML = `${icons('download')}<span>PDF로 저장하기</span>`;
+    dl.replaceWith(pdfBtn);
+    // 고친 글(state.body)을 그대로 담는다 — 장 제목은 서버가 준 sections 를 쓴다
+    pdfBtn.addEventListener('click', () => open(bookFrom(state.title, state.body, state.document?.sections)));
   }
 
   window.MemoirPdf = {open, bookFrom};
@@ -9549,7 +9659,8 @@ renderRecent();renderQuestion();setInterviewMode('reading');show(location.hash.s
 (function () {
   'use strict';
   // 자서전(책장)에서도 엽서와 같은 규칙으로 지운다:
-  //  · 책마다 「책 지우기」  · 「여러 권 지우기」로 골라서 한 번에  · 늘 한 번 더 묻고, 지운 뒤 잠시 「되돌리기」
+  //  · 맨 위 「책 지우기」를 켰을 때만 책을 골라 지운다 (책마다 붙던 버튼은 너저분해서 뺐다)
+  //  · 늘 한 번 더 묻고, 지운 뒤 잠시 「되돌리기」
   //  책을 지워도 그 책을 만든 엽서는 그대로 남는다.
   const shelf = document.querySelector('[data-screen="library"]');
   if (!shelf) return;
@@ -9567,21 +9678,10 @@ renderRecent();renderQuestion();setInterviewMode('reading');show(location.hash.s
     if (heading && !heading.querySelector('.ml-select-toggle')) {
       const t = document.createElement('button');
       t.type = 'button'; t.className = 'button outline compact ml-select-toggle';
-      t.innerHTML = `${icons('check')}<span>여러 권 지우기</span>`;
+      t.innerHTML = `${icons('check')}<span>책 지우기</span>`;
       t.addEventListener('click', () => setSelecting(!selecting));
       heading.append(t);
     }
-    shelf.querySelectorAll('.ml-books > li').forEach((li) => {
-      const id = li.querySelector('[data-library-book]')?.dataset.libraryBook;
-      if (!id || li.querySelector('.ml-remove')) return;
-      let row = li.querySelector('.ml-actions');
-      if (!row) { row = document.createElement('div'); row.className = 'ml-actions'; li.append(row); }
-      const b = document.createElement('button');
-      b.type = 'button'; b.className = 'text-button ml-remove'; b.dataset.bookRemove = id;
-      b.innerHTML = `${icons('close')}<span>책 지우기</span>`;
-      b.setAttribute('aria-label', `「${titleOf(id)}」 책 지우기`);
-      row.append(b);
-    });
     sync();
   }
   new MutationObserver(decorate).observe(shelf, {childList: true, subtree: true});
@@ -9649,12 +9749,6 @@ renderRecent();renderQuestion();setInterviewMode('reading');show(location.hash.s
       toast(removed.length === 1 ? '책을 책장에 다시 꽂았어요.' : `책 ${removed.length}권을 책장에 다시 꽂았어요.`);
     }, commitServer);
   }
-  async function removeOne(id) {
-    const ok = await window.MemoirTrash.confirm({title: '이 책을 지울까요?', items: [titleOf(id)], desc: DESC, ok: '지우기'});
-    if (!ok) { shelf.querySelector(`[data-book-remove="${CSS.escape(id)}"]`)?.focus(); return; }
-    await liftOut([id]);
-    commit([id]);
-  }
   async function removePicked() {
     const ids = [...picked];
     if (!ids.length) return;
@@ -9669,8 +9763,6 @@ renderRecent();renderQuestion();setInterviewMode('reading');show(location.hash.s
 
   // 고르는 중에는 책을 눌러도 펼치지 않고 고른다(책 꺼내기 연출보다 먼저 받는다)
   document.addEventListener('click', (e) => {
-    const rm = e.target.closest('[data-book-remove]');
-    if (rm && shelf.contains(rm)) { e.preventDefault(); e.stopImmediatePropagation(); if (!selecting) removeOne(rm.dataset.bookRemove); return; }
     if (!selecting) return;
     const card = e.target.closest('[data-library-book]');
     if (!card || !shelf.contains(card)) return;
@@ -10069,30 +10161,44 @@ renderRecent();renderQuestion();setInterviewMode('reading');show(location.hash.s
       make.addEventListener('click', async () => {
         if (make.disabled) return;
         make.disabled = true; make.querySelector('span').textContent = '링크를 만드는 중…';
-        try {
-          const book = await window.SrvLibrary.ensure(id);
-          if (!book) throw new Error('no book');
-          const r = await call('/shares', {method: 'POST', body: JSON.stringify({book_id: id, book: bookBody(book)})});
-          urlKeep(r.share_id, r.url);
-          const s = shares.get(id) || {ids: [], link: ''};
-          s.ids.push(r.share_id); s.link = r.url;
-          shares.set(id, s);
-          mark();
-          share.refill(opts(id));
-          share.setStatus('공유 링크를 만들었어요. 아래에서 보낼 방법을 골라 주세요.');
-        } catch (e) {
-          make.disabled = false; make.querySelector('span').textContent = again ? '새 공유 링크 만들기' : '공유 링크 만들기';
-          share.setStatus(e && e.status === 400 ? '책이 너무 크거나 모양이 맞지 않아 공유하지 못했어요.' : '공유 링크를 만들지 못했어요. 잠시 뒤 다시 눌러 주세요.');
-        }
+        const err = await makeLink(id);
+        if (!err) { share.refill(opts(id)); share.setStatus('공유 링크를 만들었어요. 아래에서 보낼 방법을 골라 주세요.'); return; }
+        make.disabled = false; make.querySelector('span').textContent = again ? '새 공유 링크 만들기' : '공유 링크 만들기';
+        share.setStatus(err);
       });
       return box;
     };
   }
+  /** 공유 링크를 하나 만든다 — 성공하면 null, 못 하면 안내 문구 */
+  async function makeLink(id) {
+    try {
+      const book = await window.SrvLibrary.ensure(id);
+      if (!book) throw new Error('no book');
+      const r = await call('/shares', {method: 'POST', body: JSON.stringify({book_id: id, book: bookBody(book)})});
+      urlKeep(r.share_id, r.url);
+      const s = shares.get(id) || {ids: [], link: ''};
+      s.ids.push(r.share_id); s.link = r.url;
+      shares.set(id, s);
+      mark();
+      return null;
+    } catch (e) {
+      return e && e.status === 400 ? '책이 너무 크거나 모양이 맞지 않아 공유하지 못했어요.' : '공유 링크를 만들지 못했어요. 잠시 뒤 다시 눌러 주세요.';
+    }
+  }
   async function openFor(id) {
     const book = await window.SrvLibrary.ensure(id);
     if (!book) return;
-    if (shares.has(id) && shares.get(id).link) share.open(opts(id));
-    else share.open({kind: 'book', eyebrow: '자서전 나누기', title: book.title, card: {kicker: '', title: '', sub: ''}, message: '', setup: setupStep(id, shares.has(id))});
+    await loadShares(); // 다른 기기에서 켜거나 끈 공유도 바로 맞춘다
+    if (shares.has(id) && shares.get(id).link) { share.open(opts(id)); return; }
+    if (!shares.has(id)) { share.open({kind: 'book', eyebrow: '자서전 나누기', title: book.title, card: {kicker: '', title: '', sub: ''}, message: '', setup: setupStep(id, false)}); return; }
+    // 공유 중인데 이 기기에 링크 주소가 없다 (다른 기기 · 다른 브라우저에서 만들었다).
+    // 서버는 주소를 한 번만 알려 주므로 같은 주소는 못 보여 준다 → 새 링크를 하나 더 만들어 바로 보여 준다.
+    // 전에 보낸 링크는 끄지 않는다 — 받은 분은 계속 읽을 수 있다. 「공유 그만하기」는 둘 다 끈다.
+    toast('이 기기에서 쓸 공유 링크를 준비하고 있어요…');
+    const err = await makeLink(id);
+    if (err) { toast(err); return; }
+    share.open(opts(id));
+    share.setStatus('이 기기에서 쓸 링크를 새로 만들었어요. 전에 보낸 링크도 그대로 열려요.');
   }
   async function stop(id) {
     const title = lib.getBook(id)?.title || '';
@@ -10107,20 +10213,11 @@ renderRecent();renderQuestion();setInterviewMode('reading');show(location.hash.s
     toast('공유를 그만했어요. 보낸 링크는 이제 열리지 않아요.');
   }
 
-  // ── 책장: 책마다 「공유」 + 공유 중 표시 ──
+  // ── 책장: 「공유 중」 표시만 — 공유 버튼은 책을 펼친 뒤 독서 메뉴에 (책장이 너저분해서) ──
   function mark() {
     shelf.querySelectorAll('.ml-books > li').forEach((li) => {
       const id = li.querySelector('[data-library-book]')?.dataset.libraryBook;
       if (!id) return;
-      let row = li.querySelector('.ml-actions');
-      if (!row) { row = document.createElement('div'); row.className = 'ml-actions'; li.append(row); }
-      if (!row.querySelector('.ml-share')) {
-        const b = document.createElement('button');
-        b.type = 'button'; b.className = 'text-button ml-share'; b.dataset.bookShare = id;
-        b.innerHTML = `${icons('share')}<span>공유</span>`;
-        b.setAttribute('aria-label', `「${lib.getBook(id)?.title || ''}」 공유`);
-        row.prepend(b);
-      }
       const label = li.querySelector('.ml-volume-label');
       const chip = label?.querySelector('.ms-on');
       if (shares.has(id) && label && !chip) label.insertAdjacentHTML('beforeend', '<span class="ms-on">공유 중</span>');
@@ -10189,6 +10286,7 @@ renderRecent();renderQuestion();setInterviewMode('reading');show(location.hash.s
 
   mark();
   window.addEventListener('memoir:screen', (e) => { if (e.detail.screen === 'library') void loadShares(); });
+  window.addEventListener('memoir:preview-auth', (e) => { if (e.detail.authenticated) void loadShares(); });
   window.MemoirBookShare = {open: openFor, isShared: (id) => shares.has(id)};
 }());
 
