@@ -2186,6 +2186,10 @@ body.ebook-mode .ebook-page-controls:focus-within {
 [data-screen="library"] .ml-tone-0 .ml-cover { --ml-cover-color:#5f1d2c; --ml-cover-ink:#e6c58e; --ml-cover-spine:#3d1420; }
 [data-screen="library"] .ml-tone-1 .ml-cover { --ml-cover-color:#1c293b; --ml-cover-ink:#eee2cc; --ml-cover-spine:#111b29; }
 [data-screen="library"] .ml-tone-2 .ml-cover { --ml-cover-color:#1a3128; --ml-cover-ink:#e6c58e; --ml-cover-spine:#102018; }
+/* 같은 문체가 이어질 때 두 번째 책 — 조금 밝게 (library-view.js toneOf) */
+[data-screen="library"] .ml-tone-0b .ml-cover { --ml-cover-color:#76283b; --ml-cover-ink:#e9cb96; --ml-cover-spine:#4e1a28; }
+[data-screen="library"] .ml-tone-1b .ml-cover { --ml-cover-color:#2a3c56; --ml-cover-ink:#f1e6d2; --ml-cover-spine:#1a283c; }
+[data-screen="library"] .ml-tone-2b .ml-cover { --ml-cover-color:#26443a; --ml-cover-ink:#e9cb96; --ml-cover-spine:#163026; }
 [data-screen="library"] .ml-book-card:hover .ml-cover,[data-screen="library"] .ml-book-card:focus-visible .ml-cover { transform:translateY(-5px); }
 [data-screen="library"] .ml-shelf-plank { position:absolute; z-index:2; top:var(--ml-display-height); left:4px; right:4px; height:16px; border-radius:2px 2px 3px 3px; background:repeating-linear-gradient(90deg,#ffffff00 0 37px,#3c1e0a1f 37px 39px,#ffffff00 39px 71px),linear-gradient(#a2724c,#7d5437 40%,#5f3e28); box-shadow:0 14px 16px -8px #3c230f80,inset 0 1px 0 #ffebc859; pointer-events:none; }
 [data-screen="library"] .ml-book-copy { display:flex; flex-direction:column; align-self:stretch; padding:29px 1px 0; }
@@ -3014,6 +3018,10 @@ body.pre-login .side-nav [data-locked]::after {
 .lp-scope.ml-tone-0 .ml-cover { --ml-cover-color:#5f1d2c; --ml-cover-ink:#e6c58e; --ml-cover-spine:#3d1420; }
 .lp-scope.ml-tone-1 .ml-cover { --ml-cover-color:#1c293b; --ml-cover-ink:#eee2cc; --ml-cover-spine:#111b29; }
 .lp-scope.ml-tone-2 .ml-cover { --ml-cover-color:#1a3128; --ml-cover-ink:#e6c58e; --ml-cover-spine:#102018; }
+/* 같은 문체가 이어질 때 두 번째 책 — 조금 밝게 (library-view.js toneOf) */
+.lp-scope.ml-tone-0b .ml-cover { --ml-cover-color:#76283b; --ml-cover-ink:#e9cb96; --ml-cover-spine:#4e1a28; }
+.lp-scope.ml-tone-1b .ml-cover { --ml-cover-color:#2a3c56; --ml-cover-ink:#f1e6d2; --ml-cover-spine:#1a283c; }
+.lp-scope.ml-tone-2b .ml-cover { --ml-cover-color:#26443a; --ml-cover-ink:#e9cb96; --ml-cover-spine:#163026; }
 
 </style>
   <style data-from="start-choice.css">
@@ -6603,8 +6611,18 @@ renderRecent();renderQuestion();setInterviewMode('reading');show(location.hash.s
     }
   }
 
-  function bookMarkup(book, index) {
-    return `<li><button type="button" class="ml-book-card ml-tone-${index % 3}" data-library-book="${escapeText(book.id)}">
+  // 표지 색은 문체를 따른다 — 소설체 · 문학체 · 수필체가 늘 같은 색이라 책장만 봐도 어떤 책인지 안다.
+  // 같은 문체 책이 이어지면 두 번째마다 조금 밝은 색(…b)으로 — 같은 색이 나란히 붙어 단조롭지 않게.
+  // 색 자체는 library-view.css · library-pull.css 의 .ml-tone-* 에 있다.
+  const STYLE_TONE = {novel: 0, literary: 1, essay: 2};
+  function toneOf(book, index, list) {
+    const base = STYLE_TONE[book.style];
+    if (base === undefined) return String(index % 3); // 예전 문체(구어체 등) — 순서대로
+    const nth = list.slice(0, index).filter((b) => b.style === book.style).length;
+    return nth % 2 ? `${base}b` : String(base);
+  }
+  function bookMarkup(book, index, list) {
+    return `<li><button type="button" class="ml-book-card ml-tone-${toneOf(book, index, list)}" data-library-book="${escapeText(book.id)}">
       <span class="ml-cover-bay" aria-hidden="true"><span class="ml-cover"><span class="ml-cover-title">${escapeText(book.title)}</span><span class="ml-cover-rule"></span><span class="ml-cover-volume">${String(index + 1).padStart(2, '0')}</span></span></span>
       <span class="ml-book-copy"><span class="ml-volume-label">작은 책 ${String(index + 1).padStart(2, '0')}</span><strong>${escapeText(book.title)}</strong><span class="ml-book-meta">이야기 ${book.count || book.body.length}개 · ${escapeText(book.date)}</span><span class="ml-read-label">${readingLabel(book)} <span aria-hidden="true">→</span></span></span>
     </button></li>`;
@@ -6615,7 +6633,7 @@ renderRecent();renderQuestion();setInterviewMode('reading');show(location.hash.s
     const columns = shelfColumns();
     let rows = '';
     for (let start = 0; start < visibleBooks.length; start += columns) {
-      rows += `<div class="ml-shelf-row"><ul class="ml-books" aria-label="책장 ${Math.floor(start / columns) + 1}번째 칸">${visibleBooks.slice(start, start + columns).map((book, index) => bookMarkup(book, start + index)).join('')}</ul><span class="ml-shelf-plank" aria-hidden="true"></span></div>`;
+      rows += `<div class="ml-shelf-row"><ul class="ml-books" aria-label="책장 ${Math.floor(start / columns) + 1}번째 칸">${visibleBooks.slice(start, start + columns).map((book, index) => bookMarkup(book, start + index, visibleBooks)).join('')}</ul><span class="ml-shelf-plank" aria-hidden="true"></span></div>`;
     }
     return `<div class="ml-shelves ml-columns-${columns}" role="group" aria-label="나의 자서전 책장">${rows}</div>`;
   }
