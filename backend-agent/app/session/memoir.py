@@ -182,6 +182,9 @@ class Incomplete(MemoirError):
     """파이프라인의 일부 장이 실패했다 (partial). 503 incomplete — 만든 장도 내보내지 않는다."""
 
 
+STYLED = ("novel", "essay", "literary")      # 다섯 단계의 ③ 집필을 문체로 쓰는 값 — 구어체(spoken)는 예전 그대로
+
+
 def engine(user_id: str | None = None) -> str:
     """
     이 사람의 자서전을 무엇으로 쓰나. MEMOIR_ENGINE=pipeline 이고 MEMOIR_PIPELINE_USERS
@@ -620,14 +623,11 @@ async def generate(recs: list[dict], ids: list[str], user_id: str, style: str, p
 
     progress(stage, chapter, chapters) 는 다섯 단계가 한 단계를 마칠 때마다 불린다 (작업 화면용).
     """
-    if style == "novel":
-        # 소설체는 엔진과 상관없이 장(회차)마다 Claude 로 쓴다 (memoir_novel · 태헌 문체 전달 3판)
-        from . import memoir_novel
-        return await memoir_novel.run(recs, ids, style, progress)
-    if style in ("essay", "literary"):
-        # 수필체 · 문학체는 회차마다 분석 한 번 + 장마다 집필 한 번 (memoir_styled · 태헌 문체 전달 3판)
-        from . import memoir_styled
-        return await memoir_styled.run(recs, ids, style, progress)
+    if style in STYLED:
+        # 수필체 · 문학체 · 소설체도 다섯 단계를 거친다 — 분석 → 목차 → 집필(문체) → 편집 → 검증. 달라지는 것은 ③ 집필뿐이다
+        # (memoir_pipeline.run(style=…) · memoir_style_stage). 엔진 설정과 상관없이 문체를 고르면 늘 다섯 단계다.
+        # 예전의 문체별 전체 경로(memoir_novel.run · memoir_styled.run)는 여기서 부르지 않는다
+        return await _draft_pipeline(recs, ids, style, progress)
     if engine(user_id) == "pipeline":
         return await _draft_pipeline(recs, ids, style, progress)
     data, turn_map = merge(recs)
@@ -664,6 +664,10 @@ async def _draft_pipeline(recs: list[dict], ids: list[str], style: str, progress
     model, variant = cfg["MEMOIR_PIPE_TEXT_MODEL"], cfg["MEMOIR_PIPE_VARIANT"]
     if variant not in mp.VARIANTS:
         raise GenerationFailed(f"MEMOIR_PIPE_VARIANT={variant} 는 없는 지시문 묶음이다 {sorted(mp.VARIANTS)}")
+    styled = {"style": style} if style in STYLED else {}
+    if styled and variant != "v7":
+        log.info("자서전 %s — 문체 집필은 기본 지시문 묶음(v7)으로 쓴다 (MEMOIR_PIPE_VARIANT=%s 는 구어체에만)", style, variant)
+        variant = "v7"
     t0 = time.monotonic()
     log.info("자서전 다섯 단계 요청 — 회차 %d개 %s · 말씀 %d턴 · 모델 %s · 지시문 %s", len(ids),
              ",".join(s[:8] for s in ids), len(turn_map), model, variant)
@@ -673,7 +677,7 @@ async def _draft_pipeline(recs: list[dict], ids: list[str], style: str, progress
         rec = _progress_recorder(progress)            # folder 없음 — 메모리에만
         if attempt > 1 and progress is not None:
             progress("analysis", 0, 0)
-        res = await mp.run(data, turn_map, recorder=rec, variant=variant)
+        res = await mp.run(data, turn_map, recorder=rec, variant=variant, **styled)
         try:
             steps += json.loads(rec.files.get("run.json", "{}")).get("steps", [])
         except ValueError:
@@ -685,8 +689,8 @@ async def _draft_pipeline(recs: list[dict], ids: list[str], style: str, progress
         if not (attempt == 1 and fail.get("stage") == "analysis" and fail.get("kind") in RETRY_KINDS):
             break
         log.warning("자서전 분석 다시 부름 — %s %s", fail.get("kind"), str(fail.get("message", ""))[:160])
-    log.info("자서전 다섯 단계 응답 — %s · %.1f초 · 시도 %d · 호출 %d · 단계 %s · 검증 %s · 실패 %s",
-             res["generation_state"], time.monotonic() - t0, attempt, calls,
+    log.info("자서전 다섯 단계 응답 — 문체 %s · %s · %.1f초 · 시도 %d · 호출 %d · 단계 %s · 검증 %s · 실패 %s",
+             style, res["generation_state"], time.monotonic() - t0, attempt, calls,
              " ".join(f"{x['stage']}{'/' + x['chapter_key'] if x.get('chapter_key') else ''}"
                       f"={x['ms'] / 1000:.1f}s" for x in steps),
              (res.get("verification") or {}).get("state"),
@@ -808,8 +812,91 @@ def pipeline_result(res: dict, ids: list[str], style: str) -> dict:
     if not title or not chapters or not flat or not all(x["text"] for x in flat):
         raise GenerationFailed("파이프라인 결과에 제목 · 장 · 문장이 비었다")
     run["chapters_requested"] = len(chapters)
-    return {"status": READY, "style": style, "title": title, "chapters": chapters, "to_confirm": [],
+    verification, to_confirm = verification_view(res, chapters)
+    return {"status": READY, "style": style, "title": title, "chapters": chapters, "to_confirm": to_confirm,
             "body": "\n".join(x["text"] for x in flat),
             "sources": [{"sentence": i, "turns": x["turns"]} for i, x in enumerate(flat)],
-            "verification": {"state": (res.get("verification") or {}).get("state") or "not_run"},
+            "verification": verification,
             "run": run}
+
+
+# 검증 결과의 갈래 (verification.outcome) — state 는 검증 단계가 적은 값 그대로 둔다
+V_PASSED, V_ISSUES, V_CONFIRM = "passed", "issues_found", "needs_confirmation"
+V_FAILED, V_NOT_RUN, V_INCOMPLETE = "failed", "not_run", "incomplete"
+_ASK = ("ask_user", "provide_context")        # 사람의 확인 · 자료가 있어야 풀리는 항목 (memoir_pipeline.RESOLUTIONS)
+_LOC = re.compile(r"^ch-(\d+)(?:/p(\d+)(?:/s(\d+))?)?")
+
+
+def verification_view(res: dict, chapters: list[dict]) -> tuple[dict, list[dict]]:
+    """
+    다섯 단계의 ⑤ 검증 결과 → 응답의 (verification, to_confirm). 검증 모델이 원문 · 사실 원장 · 편집본을 대조해 낸 것을
+    옮길 뿐이다 — 여기서 판정을 만들지 않는다. **검증을 부르지 않았거나 실패했으면 그 상태 그대로다** (완료로 적지 않는다).
+
+        state     검증 단계가 적은 값 — completed · needs_context · not_applicable · failed · not_run
+        (state 가 completed 라는 것은 검증 단계가 끝까지 돌았다는 뜻일 뿐이다 — 문제가 없다는 뜻은 outcome=passed 하나다)
+        outcome   passed               검증을 끝냈고 사실 문제(blocker)가 없고 코드 판정도 막지 않았다
+                  issues_found         검증을 끝냈고 사실 문제가 있다 (AI 가 고칠 수 있다고 본 것)
+                  needs_confirmation   사람이 확인해야 풀리는 항목이 있다 (verdict ask_user · resolution ask_user · provide_context)
+                  incomplete           검증이 끝까지 보지 못했다 (needs_context · not_applicable)
+                  failed · not_run     검증 호출이 실패했다 / 부르지 않았다 — 검증되지 않은 초안이다
+        issues    [{location, chapter, sentence, category, code, severity, resolution, explanation, source_turns, needs_user}]
+                  sentence 는 그 위치의 본문 문장 (위치를 풀 수 있을 때). 모델의 고쳐 쓰기 지시(fix_instruction)는 싣지 않는다
+        code_gate · code   코드 판정 — pass · attention(참고 신호) · blocked(반드시 고칠 곳). code.blocks 에 막은 규칙과 위치
+        style     문체 집필일 때 — 편집 전후의 분량 · 겉모양 비교와 사람이 볼 신호 (memoir_style_stage.style_trace)
+
+    to_confirm 에는 **사람의 확인이 필요한 항목만** 싣는다 (issues 전부가 아니다) — {issue, turns}. 받아 적기가 틀린 듯해 뜻을
+    확정할 수 없는 원문 표현은 검증이 ask_user 로 남기고, 여기로 온다. turns 는 이 요청 안의 전역 턴이다.
+    """
+    ver = res.get("verification") or {}
+    state = ver.get("state") or V_NOT_RUN
+    issues = []
+    for x in ver.get("issues") or []:
+        if not isinstance(x, dict):
+            continue
+        loc = str(x.get("location") or "")
+        m = _LOC.match(loc)
+        no = int(m.group(1)) if m else None
+        sentence = ""
+        if m and m.group(3) is not None and no and no <= len(chapters):
+            try:
+                sentence = chapters[no - 1]["paragraphs"][int(m.group(2))]["sentences"][int(m.group(3))]["text"]
+            except (IndexError, KeyError, TypeError):
+                sentence = ""
+        issues.append({"location": loc, "chapter": no, "sentence": sentence,
+                       "category": x.get("category"), "code": x.get("code"), "severity": x.get("severity"),
+                       "resolution": x.get("resolution"), "explanation": str(x.get("explanation") or "")[:400],
+                       "source_turns": _ints(x.get("source_turns")) or [],
+                       "needs_user": x.get("resolution") in _ASK})
+    blockers = [i for i in issues if i["category"] == "fact" and i["severity"] == "blocker"]
+    asks = [i for i in issues if i["needs_user"]]
+    missing = [str(m_) for m_ in ver.get("missing_context") or [] if str(m_).strip()]
+    if state == "completed":
+        outcome = V_CONFIRM if (asks or ver.get("verdict") == "ask_user") else V_ISSUES if (
+            blockers or ver.get("verdict") == "revise") else V_PASSED
+    elif state in ("failed", V_NOT_RUN):
+        outcome = state
+    else:
+        outcome = V_INCOMPLETE
+    # 코드 판정(code_gate)은 검증 모델과 따로 선다 — blocked 는 정정 전 값 · 인터뷰를 멈추는 말 · 목차 메모가 본문에 남았다는 뜻이다.
+    # 검증 모델이 통과시켰어도 「문제 없음」 으로 내보내지 않는다. attention(fix)은 참고 신호라 outcome 을 바꾸지 않는다
+    gate = res.get("code_gate")
+    found = [f for f in res.get("code_findings") or [] if isinstance(f, dict)]
+    if outcome == V_PASSED and gate == "blocked":
+        outcome = V_ISSUES
+    out = {"state": state, "outcome": outcome, "verdict": ver.get("verdict"), "issues": issues,
+           "counts": {"issues": len(issues), "blockers": len(blockers), "needs_user": len(asks),
+                      "composition": sum(1 for i in issues if i["category"] == "composition")},
+           "code_gate": gate,
+           "code": {"state": gate,
+                    "counts": {s_: sum(1 for f in found if f.get("severity") == s_) for s_ in ("block", "fix", "info", "review")},
+                    "blocks": [{"rule": f.get("rule"), "location": f.get("location"), "detail": str(f.get("detail") or "")[:200]}
+                               for f in found if f.get("severity") == "block"][:20]}}
+    if state == "failed":
+        f = res.get("failure") or {}
+        out["failure"] = {"stage": f.get("stage"), "kind": f.get("kind")}
+    style = (res.get("metrics") or {}).get("style")
+    if isinstance(style, dict):
+        out["style"] = {k: style.get(k) for k in ("style", "draft", "final", "ratio", "warnings", "drafts", "adaptations")}
+    to_confirm = [{"issue": i["explanation"] or str(i["code"]), "turns": i["source_turns"]} for i in asks]
+    to_confirm += [{"issue": m_, "turns": []} for m_ in missing]
+    return out, to_confirm
