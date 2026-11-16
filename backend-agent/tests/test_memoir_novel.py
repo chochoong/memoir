@@ -112,12 +112,18 @@ def test_novel_is_open_for_memoir_only():
 
 
 def test_generate_routes_novel(monkeypatch):
+    # 소설체도 다섯 단계로 간다 (분석 → 목차 → 집필(소설체) → 편집 → 검증) — 예전의 전용 경로(mn.run)는 부르지 않는다.
+    # 다섯 단계가 실제로 도는지는 test_memoir_style_pipeline.py 가 본다
     got = {}
 
-    async def run(recs, ids, style, progress=None):
+    async def five(recs, ids, style, progress=None):
         got.update(ids=ids, style=style)
         return {"ok": True}
 
-    monkeypatch.setattr(mn, "run", run)
+    async def old(*a, **k):
+        raise AssertionError("예전의 소설체 전용 경로를 불렀다")
+
+    monkeypatch.setattr(memoir, "_draft_pipeline", five)
+    monkeypatch.setattr(mn, "run", old)
     assert asyncio.run(memoir.generate([], ["a"], "u", "novel")) == {"ok": True}
     assert got == {"ids": ["a"], "style": "novel"}

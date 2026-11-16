@@ -169,10 +169,15 @@ def test_open_for_memoir_only():
 def test_generate_routes(monkeypatch, style):
     got = {}
 
-    async def run(recs, ids, st, progress=None):
+    # 수필체 · 문학체도 다섯 단계로 간다 — 예전의 전용 경로(ms.run)는 부르지 않는다 (test_memoir_style_pipeline.py)
+    async def five(recs, ids, st, progress=None):
         got.update(style=st)
         return {"ok": True}
 
-    monkeypatch.setattr(ms, "run", run)
+    async def old(*a, **k):
+        raise AssertionError("예전의 문체 전용 경로를 불렀다")
+
+    monkeypatch.setattr(memoir, "_draft_pipeline", five)
+    monkeypatch.setattr(ms, "run", old)
     assert asyncio.run(memoir.generate([], ["a"], "u", style)) == {"ok": True}
     assert got == {"style": style}

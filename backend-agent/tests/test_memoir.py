@@ -727,7 +727,8 @@ def test_pipeline_engine():
             check("run — 실제로 쓴 회차 · 장 수", body["run"] == {"session_ids": three["session_ids"],
                                                          "chapters_requested": len(base["chapters"])})
             check("모델 쪽 메모 (facts · kind · diagnosis · 검증 이슈) 는 내보내지 않는다",
-                  "facts" not in r.text and "diagnosis" not in body and body["verification"] == {"state": "completed"})
+                  "facts" not in r.text and "diagnosis" not in body and body["verification"]["state"] == "completed" and body["verification"]["outcome"] == "passed"
+                  and body["verification"]["issues"] == [] and body["to_confirm"] == [])
             check("파이프라인 입력은 한 번 호출과 같은 merge (회차 3개 · 말씀 6개)",
                   len(calls[-1][0]["sessions"]) == 3 and len(calls[-1][0]["utterances"]) == 6)
             check("한 번 호출(write)은 부르지 않았다", fake.writes == 0, str(fake.writes))

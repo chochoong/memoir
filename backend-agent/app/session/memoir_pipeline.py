@@ -396,13 +396,25 @@ def excluded_turns(analysis: dict) -> set[int]:
     mode=partial 인 턴은 여기 없다. 한 말씀에 남길 내용과 뺄 내용이 섞이면 턴을
     통째로 지우지 않고 남긴 채 scope 로 알린다(exclusion_notices) — 그 부분을 실제로
     빼는 것은 모델이고, 다시 나왔는지는 검증 역할과 사람이 본다.
+
+    **요청을 말한 턴이 곧 partial 의 턴이면 (한 말씀 안에서 「그 이름은 쓰지 말아 달라」) 그 턴도 남긴다** —
+    요청 턴이라는 이유로 통째로 지우면 그 말씀의 다른 기억까지 잃는다. 뺄 것은 scope 의 내용과 빼 달라는 말
+    자체다(알림의 note). 같은 턴이 whole 에도 있으면 통째로 뺀다(check_analysis 는 그 모순을 받지 않는다).
     """
-    out: set[int] = set()
-    for x in analysis.get("exclusions") or []:
+    notes = analysis.get("exclusions") or []
+    partial = {t for x in notes if x.get("mode") == "partial" for t in (x.get("turns") or [])}
+    whole: set[int] = set()
+    asked: set[int] = set()
+    for x in notes:
         if x.get("mode") == "whole":
-            out |= set(x.get("turns") or [])
-        out |= set(x.get("requested_in") or [])
-    return out
+            whole |= set(x.get("turns") or [])
+        asked |= set(x.get("requested_in") or [])
+    return whole | (asked - partial)
+
+
+# 요청과 남길 내용이 한 말씀에 있을 때 뒤 단계에 주는 말 — 무엇을 빼고 무엇을 남기는지
+SAME_TURN_NOTE = ("빼 달라는 요청과 남길 내용이 같은 말씀에 있다 — scope 의 내용과 빼 달라는 말 자체는 쓰지 않고, "
+                  "그 말씀의 나머지 기억은 쓴다. scope 에 해당하는 이름 · 내용을 짐작해 지어 넣지 않는다.")
 
 
 def exclusion_notices(analysis: dict, turns: set[int] | None = None) -> list[dict]:
@@ -414,8 +426,11 @@ def exclusion_notices(analysis: dict, turns: set[int] | None = None) -> list[dic
     for x in analysis.get("exclusions") or []:
         ts = set(x.get("turns") or []) | set(x.get("requested_in") or [])
         if turns is None or ts & turns:
-            out.append({"mode": x.get("mode"), "turns": x.get("turns") or [],
-                        "requested_in": x.get("requested_in") or [], "scope": x.get("scope", "")})
+            row = {"mode": x.get("mode"), "turns": x.get("turns") or [],
+                   "requested_in": x.get("requested_in") or [], "scope": x.get("scope", "")}
+            if row["mode"] == "partial" and set(row["turns"]) & set(row["requested_in"]):
+                row["note"] = SAME_TURN_NOTE
+            out.append(row)
     return out
 
 
@@ -654,7 +669,9 @@ def analysis_diagnostics(out: dict, T: set[int], marks: list[dict] | None = None
             errors.append(f"{f['id']}.turns {bad} — 빼 달라고 한 턴을 사실 근거로 씀")
         covered |= set(f["turns"])
     left = {t for x in out["not_in_facts"] for t in x["turns"]}
-    missing = sorted(T - covered - left - gone)
+    # 일부만 빼 달라고 한 턴(partial)은 exclusions 에 적힌 것으로 센다 — 남길 사실이 없어도 「어디에도 없는 턴」 이 아니다
+    noted = {t for x in out["exclusions"] for t in (x.get("turns") or [])}
+    missing = sorted(T - covered - left - gone - noted)
     if missing:
         errors.append(f"턴 {missing} 이 사실 · not_in_facts · exclusions 어디에도 없다")
 
@@ -717,8 +734,10 @@ def analysis_diagnostics(out: dict, T: set[int], marks: list[dict] | None = None
         if f is None:
             errors.append(f"{at}.fact {fid!r} — 원장에 없는 사실")
             continue
-        if len(ts) < 2 or ts - set(f["turns"]):
-            errors.append(f"{at}.turns {sorted(ts)} — 정정 전 · 뒤 턴이 모두 사실 {fid} 의 turns 에 있어야 한다")
+        # 한 말씀 안에서 고쳐 말한 정정(「83년이라고 하려다가 … 84년이 맞아요」)은 턴이 하나다 — 그 턴이 사실의 turns 에 있으면 된다
+        if not ts or ts - set(f["turns"]):
+            errors.append(f"{at}.turns {sorted(ts)} — 정정 전 · 뒤 턴이 모두 사실 {fid} 의 turns 에 있어야 한다 "
+                          "(한 말씀 안의 정정이면 그 턴 하나)")
         before, after = x.get("before", "").strip(), x.get("after", "").strip()
         clear = bool(before and after and _norm(before) != _norm(after))
         if not clear:
@@ -731,6 +750,9 @@ def analysis_diagnostics(out: dict, T: set[int], marks: list[dict] | None = None
                 errors.append(f"{at} — 유효 사실 {fid} 에 정정 전 값({before})이 남아 있다")
             if a_years and not _year_forms(own) & a_years:
                 errors.append(f"{at} — 유효 사실 {fid} 에 정정 뒤 값({after})이 없다")
+            if not b_years and len(_norm(before)) >= 2 and _norm(before) in _norm(f["text"]):
+                # 연도가 아닌 정정 — 글자가 겹친다고 틀렸다고 단정하지 못한다(「아버지가 아니라 …」). 멈추지 않고 알린다
+                warnings.append(f"{at} — 유효 사실 {fid} 의 메모에 정정 전 값({before})의 글자가 있다 — 정정 뒤 값만 남았는지 본다")
         # 정정 턴에 시점을 가진 사실이 따로 있으면 — 정정 전 값이 별개 사실로 남았거나, 유효 사실이 둘로 나뉜 것
         for g in facts.values():
             if g["id"] == fid or not set(g["turns"]) & ts:
@@ -925,8 +947,11 @@ def check_analysis(out, T: set[int], marks: list[dict] | None = None,
             gone |= set(ts)
         gone |= set(c.turns(x.get("requested_in"), T, f"{at}.requested_in", nonempty=True))
     partial = {t for x in out["exclusions"] if x["mode"] == "partial" for t in x["turns"]}
-    if partial & gone:
-        raise c.fail("reference", f"턴 {sorted(partial & gone)} 이 partial 과 whole · 요청 턴에 함께 있다")
+    whole = {t for x in out["exclusions"] if x["mode"] == "whole" for t in x["turns"]}
+    if partial & whole:
+        raise c.fail("reference", f"턴 {sorted(partial & whole)} 이 partial 과 whole 에 함께 있다 — 통째로 빼는지 일부만 빼는지 알 수 없다")
+    # 요청을 말한 턴이 partial 의 턴이기도 하면 (한 말씀 안의 일부 제외 요청) 그 턴은 남긴다 — excluded_turns 와 같은 규칙
+    gone -= partial
     for i, x in enumerate(out["not_in_facts"]):
         if not isinstance(x, dict):
             raise c.fail("format", f"not_in_facts[{i}] 가 객체가 아니다")
@@ -3808,7 +3833,8 @@ async def run(data: dict, turn_map: list[dict], *, call: Call = call_model,
               draft_fixture: dict | None = None, review_notes: dict | None = None,
               edit_contract: str = "v5", variant: str = "v7", reuse: dict | None = None,
               stop_after: str | None = None, analysis_parts: list[list[int]] | None = None,
-              preserve_watch: list[dict] | None = None) -> dict:
+              preserve_watch: list[dict] | None = None,
+              style: str | None = None, style_call=None) -> dict:
     """
     다섯 단계를 차례로. 돌려주는 것은 result (result.json 과 같은 것).
 
@@ -3838,10 +3864,18 @@ async def run(data: dict, turn_map: list[dict], *, call: Call = call_model,
     analysis_source="reused_run" 으로 남는다. analysis_parts(턴 묶음 목록)를 주면 분석을 부분마다 차례로 부르고
     (앞 부분의 기억 단위 · 끈을 다음 부분에 넘긴다) 합쳐서 전체를 다시 검사한다 — 통합안에서만. stop_after("analysis" · "outline" · "chapter" · "edit")는 그 단계까지만
     부르고 STOPPED 로 끝낸다. 손실 추적(04_loss_trace.json)은 두 판 모두 남기고, 판정(code_gate)에는 넣지 않는다.
+
+    style("essay" · "literary" · "novel")을 주면 **③ 집필만** 그 문체로 쓴다 (memoir_style_stage) — 분석 · 목차 · 편집 ·
+    검증은 같은 지시문 · 같은 검사 · 같은 순서다. 장마다 그 장의 원문과 사실 원장으로 문체 프롬프트를 부르고(style_call —
+    기본은 Claude), 낸 글을 편집이 받는 초안 모양으로 옮긴다. 편집 · 검증의 시스템 프롬프트 끝에 문체 조건을 덧붙이고,
+    편집 전후의 분량 · 겉모양을 metrics.style 에 남긴다. style 이 없으면 (구어체) 예전과 글자까지 같다.
     """
     rec = recorder or Recorder()
     cfg = settings()
     edit_only = draft_fixture is not None
+    stage3 = None
+    if style is not None:
+        from . import memoir_style_stage as stage3
     if model:
         cfg["MEMOIR_PIPE_TEXT_MODEL"] = model
     for on, stage, (sec, tok) in ((chapter_only, "CHAPTER", CHAPTER_ONLY_LIMITS), (edit_only, "EDIT", EDIT_ONLY_LIMITS)):
@@ -3887,6 +3921,22 @@ async def run(data: dict, turn_map: list[dict], *, call: Call = call_model,
             raise PipelineError("input", "input", "통합안은 스냅샷 · 장 집필 비교 · 편집 단독 시험과 함께 쓰지 않는다 — reuse 를 쓴다")
         if stop_after not in (None, "analysis", "outline", "chapter", "edit"):
             raise PipelineError("input", "input", f"stop_after {stop_after!r}")
+        if style is not None:
+            if style not in stage3.STYLES:
+                raise PipelineError("input", "input", f"style {style!r} — {list(stage3.STYLES)} 중 하나")
+            if chapter_only or edit_only or v6 or by_chapter or reuse.get("drafts") is not None:
+                raise PipelineError("input", "input", "문체 집필은 기본 다섯 단계(v7 · 책 전체 편집)에서만 쓴다")
+            if style_call is None:
+                why = stage3.ready()
+                if why:                                   # 분석을 부르기 전에 멈춘다 — 앞 단계 비용을 쓰지 않는다
+                    raise PipelineError("input", "input", why)
+                style_call = stage3.Claude()
+            # 문체 집필은 장마다 길게 걸린다(소설체 300초 · 수필체 · 문학체 600초 상한) — 전체 시간 상한에 그만큼을 더한다.
+            # 편집은 문체 초안 전부를 문장 객체로 다시 내므로 편집 단독 시험의 상한까지 올린다. 구어체의 값은 그대로다
+            cfg["MEMOIR_PIPE_TOTAL_TIMEOUT"] += stage3.timeout(style)
+            cfg["MEMOIR_PIPE_EDIT_TIMEOUT"] = max(cfg["MEMOIR_PIPE_EDIT_TIMEOUT"], EDIT_ONLY_LIMITS[0])
+            cfg["MEMOIR_PIPE_EDIT_MAX_OUTPUT_TOKENS"] = max(cfg["MEMOIR_PIPE_EDIT_MAX_OUTPUT_TOKENS"], EDIT_ONLY_LIMITS[1])
+            cfg["style"] = style
         if (reuse.get("outline") is not None and reuse.get("analysis") is None) or (
                 reuse.get("drafts") is not None and reuse.get("outline") is None) or (
                 reuse.get("edits") and (reuse.get("drafts") is None or not by_chapter)):
@@ -4003,7 +4053,84 @@ async def run(data: dict, turn_map: list[dict], *, call: Call = call_model,
             warns = [w for d, c in zip(drafts, chapters_plan) for w in check_chapter(d, c, set(plan_facts(c)), memos)]
             expand_turns(drafts, book)
             rec.json("03_drafts_reused.json", {"from": reuse.get("from"), "warnings": warns, "drafts": drafts})
+        style_info: dict[str, dict] = {}
+        style_book = None
+        if style in ("essay", "literary"):
+            style_book = stage3.bundle_book(analysis, outline_out, {
+                c["chapter_key"]: stage3.stories(chapter_source(data, analysis, c)[0], analysis, c) for c in chapters_plan})
+            rec.json("03_style_bundle.json", {"missing_fields": list(stage3.MISSING_FIELDS), "book": style_book})
+
+        async def write_style_chapter(ch):
+            """③ 집필 — 문체. 그 장의 원문 · 사실 원장으로 문체 프롬프트를 한 번 부르고 초안 모양으로 옮긴다."""
+            key = ch["chapter_key"]
+            src, given = chapter_source(data, analysis, ch)
+            st_ = stage3.stories(src, analysis, ch)
+            step = {"stage": "chapter", "chapter_key": key, "ok": False, "ms": 0, "timeout": 0, "max_output_tokens": 0,
+                    "in_chars": 0, "out_chars": 0, "finish": None, "usage": None, "file": None, "raw_file": None,
+                    "warnings": [], "error": None, "style": style}
+            st.steps.append(step)
+            try:
+                if not st_:
+                    raise PipelineError("chapter", "input", "이 장에 줄 원문이 없다", key)
+                left = cfg["MEMOIR_PIPE_TOTAL_TIMEOUT"] - (time.monotonic() - st.started)
+                if left <= 0:
+                    raise PipelineError("chapter", "budget", "전체 시간 상한을 넘었다", key)
+                if st.calls >= st.max_calls:
+                    raise PipelineError("chapter", "budget", f"호출 수 상한 {st.max_calls}", key)
+                try:
+                    spec = stage3.call_spec(style, key, f"c{chapters_plan.index(ch) + 1}", st_, style_book)
+                except memoir.MemoirError as e:               # 프롬프트 파일이 전달본과 다르다 등
+                    raise PipelineError("chapter", "input", str(e)[:200], key) from e
+                wait = min(spec.timeout, left)
+                step.update(timeout=wait, max_output_tokens=spec.max_tokens, in_chars=len(spec.user), model=spec.model)
+                st.calls += 1
+                t0 = time.monotonic()
+                try:
+                    text, r = await asyncio.wait_for(style_call(spec), timeout=wait)
+                except asyncio.TimeoutError as e:
+                    raise PipelineError("chapter", "timeout" if wait == spec.timeout else "budget",
+                                        f"{wait:.0f}초 안에 오지 않았다", key) from e
+                except PipelineError:
+                    raise
+                except Exception as e:                           # noqa: BLE001
+                    raise PipelineError("chapter", "call", f"{type(e).__name__}: {str(e)[:200]}", key) from e
+                finally:
+                    step["ms"] = int((time.monotonic() - t0) * 1000)
+                step.update(out_chars=len(text), finish=r.get("stop"),
+                            usage={"prompt": r.get("input"), "output": r.get("output"), "thoughts": 0,
+                                   "total": (r.get("input") or 0) + (r.get("output") or 0)})
+                step["raw_file"] = rec.text(f"03_{key}.raw.txt", text)
+                if r.get("stop") == "max_tokens":
+                    raise PipelineError("chapter", "truncated", f"출력 토큰 상한 {spec.max_tokens} 에서 멈췄다", key)
+                if r.get("stop") != "end_turn" or not text.strip():
+                    raise PipelineError("chapter", "format", f"정상 완료가 아니다 ({r.get('stop')})", key)
+                out = text
+                if spec.schema is not None:
+                    try:
+                        out = json.loads(text)
+                    except ValueError as e:
+                        raise PipelineError("chapter", "format", f"JSON 이 아니다 ({len(text)}자)", key) from e
+                try:
+                    draft, info = stage3.to_draft(style, ch, out, set(plan_facts(ch)))
+                except ValueError as e:
+                    raise PipelineError("chapter", "format", str(e), key) from e
+                step["file"] = rec.json(f"03_{key}.json", draft)
+                step["warnings"] = check_chapter(draft, ch, set(plan_facts(ch)), memos)
+                if info["dropped_marks"]:
+                    step["warnings"].append(f"이 장에 주지 않은 사실 표시를 버렸다 {info['dropped_marks'][:8]}")
+                expand_turns([draft], book)
+                step["given_turns"] = given
+                step["metrics"] = {**text_metrics([draft], data), "marked": info["marked"], "unmarked": info["unmarked"]}
+                style_info[key] = info
+                step["ok"] = True
+            except PipelineError as e:
+                step["error"] = e.as_dict()
+                raise
+            return draft
+
         async def write_chapter(ch):
+            if style is not None:
+                return await write_style_chapter(ch)
             key = ch["chapter_key"]
             src, given = chapter_source(data, analysis, ch)
             try:
@@ -4024,7 +4151,8 @@ async def run(data: dict, turn_map: list[dict], *, call: Call = call_model,
         # 장끼리는 목차만 읽고 서로의 초안은 읽지 않는다 — 동시에 부른다 (MEMOIR_PIPE_PARALLEL)
         try:
             drafts += await _together([] if edit_only or reuse.get("drafts") is not None else chapters_plan,
-                                      write_chapter, cfg.get("MEMOIR_PIPE_PARALLEL", DEFAULT_PARALLEL))
+                                      write_chapter, stage3.parallel(style) if style is not None
+                                      else cfg.get("MEMOIR_PIPE_PARALLEL", DEFAULT_PARALLEL))
         except PipelineError as e:
             result = _result(PARTIAL, failure=e, calls=st.calls, focus=focus)
             return result
@@ -4032,6 +4160,9 @@ async def run(data: dict, turn_map: list[dict], *, call: Call = call_model,
         # 코드 판정 ① — 장 초안에서. 편집이 고칠 곳 · 나열 신호로 넘긴다
         outline_omit = {f: x["reason"] for x in outline_out.get("omit", []) for f in x["facts"]}
         draft_checks = all_findings(drafts, outline_out, data, analysis, outline_omit)
+        if style is not None:
+            # 문체 초안 — 구어체 책의 말끝 규칙을 대지 않고, 근거 표시가 없는 초안(소설체)에 「사실이 없다」 를 대지 않는다
+            draft_checks = stage3.draft_checks(draft_checks, any(i["marked"] for i in style_info.values()))
         if v6:
             draft_checks += v6_findings(drafts, data, analysis)
         draft_signals = listing_signals(drafts, data)
@@ -4104,7 +4235,9 @@ async def run(data: dict, turn_map: list[dict], *, call: Call = call_model,
             rec.json("04_edited.json", edited)
         else:
             edited, step = await st.ask("edit", edit_message(data, analysis, outline_out, drafts, draft_checks,
-                                                             draft_signals, focus, notes), "04_edited")
+                                                             draft_signals, focus, notes), "04_edited",
+                                        system=(prompt("edit", variant=variant) + stage3.edit_note(style))
+                                        if style is not None else None)
         step["ok"] = True
         try:
             if v6:
@@ -4131,6 +4264,8 @@ async def run(data: dict, turn_map: list[dict], *, call: Call = call_model,
         rec.json("04_omission_review.json", {"candidates": omission_review,
                                              "protected_omissions": protected_omissions(final_findings, analysis, data,
                                                                                         edited["chapters"])})
+        if style is not None:
+            final_findings = stage3.final_checks(final_findings)
         if v6:
             final_findings += (span_checks + v6_findings(edited["chapters"], data, analysis)
                                + composition_leaks(edited) + claim_findings(edited, trace)
@@ -4161,6 +4296,14 @@ async def run(data: dict, turn_map: list[dict], *, call: Call = call_model,
         metrics["adaptations"] = {"count": len(adapted), "in_quote": sum(1 for a in adapted if a["in_quote"]),
                                   "not_in_text": sum(1 for a in adapted if not a["in_text"])}
         step["metrics"] = {"edit_trace": trace["summary"]}
+        if style is not None:
+            # 편집 전(문체 초안) · 후의 분량과 겉모양 — 문체가 지워졌는지 사람이 볼 신호
+            metrics["style"] = stage3.style_trace(style, drafts, edited["chapters"])
+            metrics["style"]["adaptations"] = sum(len(i["adaptations"]) for i in style_info.values())
+            metrics["style"]["drafts"] = {"marked": sum(i["marked"] for i in style_info.values()),
+                                          "unmarked": sum(i["unmarked"] for i in style_info.values())}
+            rec.json("04_style_trace.json", {**metrics["style"], "adaptations_by_chapter": {
+                k: i["adaptations"] for k, i in style_info.items()}})
         if stop_after == "edit":
             result = _result(STOPPED, edited=edited, calls=st.calls, metrics=metrics, gate=gate, trace=trace,
                              focus=focus)
@@ -4188,7 +4331,8 @@ async def run(data: dict, turn_map: list[dict], *, call: Call = call_model,
                 plan["preserve_watch"] = watched
         try:
             verdict_out, step = await st.ask(
-                "verify", verify_message(data, analysis, edited, T, plan, exclusion_notices(analysis)), "05_verify")
+                "verify", verify_message(data, analysis, edited, T, plan, exclusion_notices(analysis)), "05_verify",
+                system=(prompt("verify", variant=variant) + stage3.verify_note(style)) if style is not None else None)
             step["warnings"] = check_verify(verdict_out, T, locs)
             step["ok"] = True
         except PipelineError as e:
@@ -4216,6 +4360,13 @@ async def run(data: dict, turn_map: list[dict], *, call: Call = call_model,
         return result
 
     finally:
+        if style_call is not None and hasattr(style_call, "close"):
+            try:
+                await style_call.close()
+            except Exception:                                # noqa: BLE001 — 닫기 실패가 결과를 바꾸지 않는다
+                pass
+        if style is not None:
+            result["style"] = style
         result.update({k: meta[k] for k in ("run_ref", "input_ref") if k in meta})
         result["analysis_source"] = REVIEWED_FIXTURE if analysis_fixture is not None else "model"
         result["outline_source"] = REVIEWED_FIXTURE if outline_fixture is not None else "model"
