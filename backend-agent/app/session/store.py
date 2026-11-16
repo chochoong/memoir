@@ -1087,6 +1087,7 @@ def _memoir_row(r: Any, with_result: bool = False) -> dict:
     d["session_ids"] = [str(x) for x in (r["session_ids"] or [])]
     if with_result:
         d["result"] = _jsonb(r["result"])
+        d["illustrations"] = _jsonb(r["illustrations"]) if "illustrations" in r.keys() else None
     return d
 
 
@@ -1125,12 +1126,21 @@ async def load_memoir(memoir_id: str, user_id: str) -> dict | None:
     async def run(con):
         return await con.fetchrow(
             f"""
-            SELECT {_MEMOIR_COLS}, result FROM memoir
+            SELECT {_MEMOIR_COLS}, result, illustrations FROM memoir
              WHERE memoir_id = $1 AND user_id = $2 AND deleted_at IS NULL
             """,
             memoir_id, user_id)
     row = await _auth_write("자서전 읽기", run)
     return _memoir_row(row, with_result=True) if row else None
+
+
+async def save_memoir_illustrations(memoir_id: str, user_id: str, doc: dict) -> None:
+    """삽화 처리 상태를 적는다 (017). 원고(result)는 건드리지 않는다. 지운 책에는 적지 않는다."""
+    async def run(con):
+        await con.execute(
+            "UPDATE memoir SET illustrations = $3::jsonb WHERE memoir_id = $1 AND user_id = $2 AND deleted_at IS NULL",
+            memoir_id, user_id, json.dumps(doc, ensure_ascii=False, default=str))
+    await _auth_write("자서전 삽화 상태 저장", run)
 
 
 async def delete_memoir(memoir_id: str, user_id: str) -> bool:

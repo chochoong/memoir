@@ -35,7 +35,8 @@ app/
     photo_analyze.py      사진 분석 (Gemini VLM) → 단서 JSON
     postcard.py           엽서 — 카드 작성 (엽서_v3.md) · 출처 검사 · Pillow 굽기. 닫혀도 자동으로 굽지 않는다
     memoir.py             자서전 초안 — 회차 합치기 (전역 턴) · 한 번 쓰기 · 구조 검사 (실험)
-    memoir_illust_book.py 목차별 자동 삽화 — 사진 없는 목차에 대표 그림 한 장 (독립 모듈 · 서비스 미연결 · docs/삽화_자동삽입_안내.md)
+    memoir_illust_service.py  자서전 삽화 서비스 연결 — 자서전 저장 뒤 사진 없는 장마다 그림 한 장 (017 · docs/삽화_자동삽입_안내.md 10절)
+    memoir_illust_book.py 목차별 자동 삽화 — 사진 상태 · 대표 그림 고르기 · 넣을 자리 (모델을 부르지 않는다)
     memoir_illust.py      삽화 후보 검사 · 그림 지시문 조립 (모델을 부르지 않는다)
     roledoc.py            엽서_v3.md · 자서전_v4.md 에서 실행할 절(§2 · §5 · 역할 · §7-4 · §8-2)만 잇는다
     store.py              저장 (asyncpg). DB 가 없어도 회차는 돈다

@@ -1,0 +1,13 @@
+/* book-figures — 책 · 초안 안의 사진 · 삽화 (book-figures.js)
+   그림 칸의 가로:세로(--mf-ratio)를 미리 잡아, 그림이 늦게 와도 쪽 나눔이 흔들리지 않게 한다. */
+.mf-figure { margin: .9em auto 1.1em; padding: 0; text-align: center; break-inside: avoid; }
+.mf-figure img {
+  display: block; width: 100%; max-width: 30em; height: auto; margin: 0 auto;
+  aspect-ratio: var(--mf-ratio, 5 / 4); max-height: min(44vh, 26em); object-fit: contain;
+  border-radius: 4px; background: rgba(120, 96, 64, .08);
+  -webkit-user-drag: none; user-select: none;
+}
+.mf-figure figcaption { margin-top: .45em; font-size: .62em; letter-spacing: .02em; opacity: .62; font-family: "Malgun Gothic", "Apple SD Gothic Neo", sans-serif; }
+.manuscript-body .mf-figure img { max-height: 22em; }
+.mf-note { margin: 0 0 1em; padding: .6em .8em; border-radius: 6px; font-size: .8em; line-height: 1.5;
+  background: rgba(120, 96, 64, .08); font-family: "Malgun Gothic", "Apple SD Gothic Neo", sans-serif; }

@@ -34,8 +34,8 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
 from app.session import controller as sc
-from app.session import (auth, limits, link, memoir, memoir_jobs, photo, photostore, postcard, prompt, share, store,
-                         stt, tts, words)
+from app.session import (auth, limits, link, memoir, memoir_illust_service, memoir_jobs, photo, photostore, postcard,
+                         prompt, share, store, stt, tts, words)
 from app.session import style as styles
 from app.session.conf import env_flag, env_int, env_str
 from app.session.machine import State, TransitionError
@@ -1132,11 +1132,50 @@ async def saved_memoirs(elder_id: str | None = None, limit: int = 50,
 
 @app.get("/api/memoirs/saved/{memoir_id}")
 async def saved_memoir(memoir_id: str, who: str = Depends(auth.current_user)):
-    """자서전 하나 — result 는 만들 때의 응답 그대로다. 없거나 남의 것이거나 지웠으면 404."""
+    """
+    자서전 하나 — result 는 만들 때의 응답 그대로다. 없거나 남의 것이거나 지웠으면 404.
+    illustrations 는 장별 사진 · 삽화 (memoir_illust_service.view — 저장 키 없이 이 서버의 주소만).
+    """
     rec = await _read(store.load_memoir(memoir_id[:64], who))
     if rec is None:
         return _memoir_gone()
-    return {k: v for k, v in rec.items() if k != "user_id"}
+    doc = rec.pop("illustrations", None)
+    memoir_illust_service.resume_if_stalled(rec["memoir_id"], who, doc)
+    return {**{k: v for k, v in rec.items() if k != "user_id"},
+            "illustrations": memoir_illust_service.view(rec["memoir_id"], doc)}
+
+
+@app.get("/api/memoirs/saved/{memoir_id}/illustrations")
+async def saved_memoir_illustrations(memoir_id: str, who: str = Depends(auth.current_user)):
+    """장별 사진 · 삽화만 — 화면이 삽화를 기다리는 동안 몇 초마다 부른다 (본문 없이 가볍게)."""
+    rec = await _read(store.load_memoir(memoir_id[:64], who))
+    if rec is None:
+        return _memoir_gone()
+    doc = rec.get("illustrations")
+    memoir_illust_service.resume_if_stalled(rec["memoir_id"], who, doc)
+    return memoir_illust_service.view(rec["memoir_id"], doc)
+
+
+@app.get("/api/memoirs/saved/{memoir_id}/illustrations/{chapter_no}")
+async def saved_memoir_illustration_image(memoir_id: str, chapter_no: int, request: Request,
+                                          who: str = Depends(auth.current_user)):
+    """삽화 한 장의 바이트. 책의 주인만 — 없거나 남의 것이면 404 (사진과 같은 까닭)."""
+    rec = await _read(store.load_memoir(memoir_id[:64], who))
+    img = memoir_illust_service.image_record(rec.get("illustrations") if rec else None, str(chapter_no))
+    if img is None:
+        raise HTTPException(404, "그림을 찾을 수 없습니다")
+    etag = f'"{img["sha256"][:32]}"'
+    if request.headers.get("if-none-match") == etag:
+        return Response(status_code=304, headers={"ETag": etag})
+    try:
+        data = await photostore.current().get(img["storage_key"])
+    except photostore.PhotoMissing as e:
+        log.error("삽화 바이트가 없다 %s %s장", memoir_id[:10], chapter_no)
+        raise HTTPException(404, "그림을 찾을 수 없습니다") from e
+    except photostore.PhotoStoreError as e:
+        raise HTTPException(503, "지금은 그림을 불러오지 못했습니다") from e
+    return Response(content=data, media_type=img.get("mime") or "image/jpeg",
+                    headers={"Cache-Control": f"private, max-age={photo.cache_seconds()}", "ETag": etag})
 
 
 @app.delete("/api/memoirs/saved/{memoir_id}")

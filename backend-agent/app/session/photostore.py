@@ -55,7 +55,9 @@ log = logging.getLogger("photo")
 # 바이트의 해시다 — 다시 구울 때마다 키가 바뀌어야 옛 엽서가 캐시에 남지 않는다.
 KEY_OK = re.compile(
     r"^(photos/\d{4}/\d{2}/[0-9a-f-]{36}/[a-z]+"
-    r"|postcards/\d{4}/\d{2}/[0-9a-f-]{36}/[0-9a-f]{16})\.(jpg|png|webp)$")
+    r"|postcards/\d{4}/\d{2}/[0-9a-f-]{36}/[0-9a-f]{16}"
+    # 자서전 삽화 (memoir_illust_service.py) — 책 · 장 번호 · 바이트 해시
+    r"|illusts/\d{4}/\d{2}/m_[0-9a-f]{32}/c\d{1,3}-[0-9a-f]{16})\.(jpg|png|webp)$")
 
 EXT = {"image/jpeg": "jpg", "image/png": "png", "image/webp": "webp"}
 

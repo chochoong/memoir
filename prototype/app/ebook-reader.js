@@ -109,7 +109,10 @@
   }
   function blockHTML(block){
     const heading=headingFor(block.section);
-    return `<section class="ebook-section" data-section-index="${block.section}">${block.start===0&&heading.show?`<span class="ebook-chapter-label">${String(heading.number).padStart(2,'0')}</span><h2>${escapeText(heading.title)}</h2>`:''}<p>${escapeText(block.text)}</p></section>`;
+    // 문단이 이 조각에서 끝나면 그 문단 뒤의 사진 · 삽화를 붙인다 (book-figures.js). 쪽 나눔이 그림 높이까지 잰다
+    const whole=block.end===undefined||block.end>=Array.from(sections[block.section]||'').length;
+    const figures=whole?(window.MemoirFigures?.html(state.savedMemoirId,state.document?.sections?.[block.section])||''):'';
+    return `<section class="ebook-section" data-section-index="${block.section}">${block.start===0&&heading.show?`<span class="ebook-chapter-label">${String(heading.number).padStart(2,'0')}</span><h2>${escapeText(heading.title)}</h2>`:''}<p>${escapeText(block.text)}</p>${figures}</section>`;
   }
   function coverHTML(){return `<div class="ebook-cover-page"><span class="ebook-eyebrow">나의 작은 자서전</span><h1 class="ebook-title" id="ebook-title" tabindex="-1">${escapeText(state.title)}</h1><span class="ebook-cover-rule" aria-hidden="true"></span><p class="ebook-byline">내말싸미에서 엮은 나의 이야기</p><p class="ebook-cover-caption">말로 남긴 기억이, 한 권의 책으로.</p></div>`;}
   function resetSwipe(spring=false){
@@ -245,6 +248,8 @@
   window.addEventListener('memoir:before-screen',event=>{if(active)saveProgress();if(event.detail.screen!=='reader')setMode(event.detail.screen);});
   window.addEventListener('memoir:screen',event=>{const screen=event.detail.screen;if(screen==='reader'&&previousScreen!=='reader')returnScreen=previousScreen;setMode(screen);previousScreen=screen;});
   window.addEventListener('pagehide',saveProgress);
+  // 서버가 삽화를 새로 넣었다 — 지금 읽던 자리를 지키며 다시 그린다
+  window.addEventListener('memoir:figures',()=>{if(!active)return;const location={...reading.location},atStart=reading.atStart;cancelAnimationFrame(layoutFrame);layoutFrame=requestAnimationFrame(()=>relayout(location,atStart));});
   window.addEventListener('resize',()=>{if(!active)return;const location={...reading.location},atStart=reading.atStart;cancelAnimationFrame(layoutFrame);layoutFrame=requestAnimationFrame(()=>relayout(location,atStart));});
   document.fonts?.ready.then(()=>{if(active)relayout({...reading.location},reading.atStart);});
   window.addEventListener('scroll',()=>{if(!active||paged||restoring)return;cancelAnimationFrame(scrollFrame);scrollFrame=requestAnimationFrame(updateProgress);clearTimeout(saveTimer);saveTimer=setTimeout(saveProgress,180);},{passive:true});

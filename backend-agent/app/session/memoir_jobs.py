@@ -15,6 +15,9 @@ MEMOIR_JOB_KEEP_SECONDS (기본 1800) 동안 둔다. **다 쓴 자서전은 따�
 keep()) — 작업 응답의 memoir_id 로 /api/memoirs/saved/{memoir_id} 에서 다시 읽는다. 저장에
 실패해도 작업은 done 이다 (memoir_id 가 null).
 
+**삽화는 저장 뒤에 따로 돈다.** keep() 이 ready 자서전을 저장하면 memoir_illust_service.schedule 을 건다 —
+사진이 없는 장마다 그림 한 장. 작업은 기다리지 않고 done 이고, 삽화 상태는 memoir.illustrations (017) 에만 적는다.
+
 **한 사람에 하나씩.** 만드는 중인 작업이 있으면 새로 시작하지 않고 409 busy 와 그 job_id 를
 준다 — 같은 버튼을 두 번 눌러 모델 호출이 두 배로 나가지 않게. 재시도는 하지 않는다 (8P 0회).
 
@@ -139,6 +142,10 @@ async def keep(result: dict, ids: list[str], user_id: str, style: str) -> str | 
         log.error("자서전 저장 실패 (%s: %s)", type(e).__name__, str(e)[:120])
         return None
     log.info("자서전 저장 %s — 회차 %d개", mid, len(ids))
+    if result.get("status") == memoir.READY:
+        # 사진 없는 장의 삽화 — 뒤에서 따로 돈다. 작업(done)과 본문은 기다리지 않는다 (memoir_illust_service.py 머리)
+        from . import memoir_illust_service
+        memoir_illust_service.schedule(mid, user_id)
     return mid
 
 

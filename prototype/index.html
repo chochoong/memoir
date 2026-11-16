@@ -3775,6 +3775,22 @@ dialog:focus, dialog:focus-visible { outline: none; }
 body.draft-dock-on .toast { bottom: var(--draft-dock-space, 180px); }
 
 </style>
+  <style data-from="book-figures.css">
+/* book-figures — 책 · 초안 안의 사진 · 삽화 (book-figures.js)
+   그림 칸의 가로:세로(--mf-ratio)를 미리 잡아, 그림이 늦게 와도 쪽 나눔이 흔들리지 않게 한다. */
+.mf-figure { margin: .9em auto 1.1em; padding: 0; text-align: center; break-inside: avoid; }
+.mf-figure img {
+  display: block; width: 100%; max-width: 30em; height: auto; margin: 0 auto;
+  aspect-ratio: var(--mf-ratio, 5 / 4); max-height: min(44vh, 26em); object-fit: contain;
+  border-radius: 4px; background: rgba(120, 96, 64, .08);
+  -webkit-user-drag: none; user-select: none;
+}
+.mf-figure figcaption { margin-top: .45em; font-size: .62em; letter-spacing: .02em; opacity: .62; font-family: "Malgun Gothic", "Apple SD Gothic Neo", sans-serif; }
+.manuscript-body .mf-figure img { max-height: 22em; }
+.mf-note { margin: 0 0 1em; padding: .6em .8em; border-radius: 6px; font-size: .8em; line-height: 1.5;
+  background: rgba(120, 96, 64, .08); font-family: "Malgun Gothic", "Apple SD Gothic Neo", sans-serif; }
+
+</style>
 </head>
 <body>
   <svg class="icon-defs" aria-hidden="true" xmlns="http://www.w3.org/2000/svg"><defs>
@@ -6504,7 +6520,10 @@ renderRecent();renderQuestion();setInterviewMode('reading');show(location.hash.s
   }
   function blockHTML(block){
     const heading=headingFor(block.section);
-    return `<section class="ebook-section" data-section-index="${block.section}">${block.start===0&&heading.show?`<span class="ebook-chapter-label">${String(heading.number).padStart(2,'0')}</span><h2>${escapeText(heading.title)}</h2>`:''}<p>${escapeText(block.text)}</p></section>`;
+    // 문단이 이 조각에서 끝나면 그 문단 뒤의 사진 · 삽화를 붙인다 (book-figures.js). 쪽 나눔이 그림 높이까지 잰다
+    const whole=block.end===undefined||block.end>=Array.from(sections[block.section]||'').length;
+    const figures=whole?(window.MemoirFigures?.html(state.savedMemoirId,state.document?.sections?.[block.section])||''):'';
+    return `<section class="ebook-section" data-section-index="${block.section}">${block.start===0&&heading.show?`<span class="ebook-chapter-label">${String(heading.number).padStart(2,'0')}</span><h2>${escapeText(heading.title)}</h2>`:''}<p>${escapeText(block.text)}</p>${figures}</section>`;
   }
   function coverHTML(){return `<div class="ebook-cover-page"><span class="ebook-eyebrow">나의 작은 자서전</span><h1 class="ebook-title" id="ebook-title" tabindex="-1">${escapeText(state.title)}</h1><span class="ebook-cover-rule" aria-hidden="true"></span><p class="ebook-byline">내말싸미에서 엮은 나의 이야기</p><p class="ebook-cover-caption">말로 남긴 기억이, 한 권의 책으로.</p></div>`;}
   function resetSwipe(spring=false){
@@ -6640,6 +6659,8 @@ renderRecent();renderQuestion();setInterviewMode('reading');show(location.hash.s
   window.addEventListener('memoir:before-screen',event=>{if(active)saveProgress();if(event.detail.screen!=='reader')setMode(event.detail.screen);});
   window.addEventListener('memoir:screen',event=>{const screen=event.detail.screen;if(screen==='reader'&&previousScreen!=='reader')returnScreen=previousScreen;setMode(screen);previousScreen=screen;});
   window.addEventListener('pagehide',saveProgress);
+  // 서버가 삽화를 새로 넣었다 — 지금 읽던 자리를 지키며 다시 그린다
+  window.addEventListener('memoir:figures',()=>{if(!active)return;const location={...reading.location},atStart=reading.atStart;cancelAnimationFrame(layoutFrame);layoutFrame=requestAnimationFrame(()=>relayout(location,atStart));});
   window.addEventListener('resize',()=>{if(!active)return;const location={...reading.location},atStart=reading.atStart;cancelAnimationFrame(layoutFrame);layoutFrame=requestAnimationFrame(()=>relayout(location,atStart));});
   document.fonts?.ready.then(()=>{if(active)relayout({...reading.location},reading.atStart);});
   window.addEventListener('scroll',()=>{if(!active||paged||restoring)return;cancelAnimationFrame(scrollFrame);scrollFrame=requestAnimationFrame(updateProgress);clearTimeout(saveTimer);saveTimer=setTimeout(saveProgress,180);},{passive:true});
@@ -7215,6 +7236,120 @@ renderRecent();renderQuestion();setInterviewMode('reading');show(location.hash.s
 
   window.SrvLibrary = {reload: reloadLibrary, ensure, removeSaved, styleTitle, readEdit, writeEdit};
   void ApiError;
+}());
+
+</script>
+<script data-from="book-figures.js">
+(function () {
+  'use strict';
+  /* ═══════════════════════════════════════════════════════════════
+     book-figures — 책 안의 사진 · 삽화 (자서전 화면 + 서버)
+       · 서버가 자서전을 저장하면 사진 없는 장마다 삽화를 저절로 만든다 (memoir_illust_service.py).
+         여기서는 그 결과를 받아 해당 장 · 문단 뒤에 그린다. 고르거나 승인하는 버튼은 없다.
+       · GET /api/memoirs/saved/{id}/illustrations → {status, chapters:[{no, state, figures:[{kind, url, after_paragraph, …}]}]}
+         status 가 running 이면 몇 초마다 다시 받아, 새 그림이 생기면 책 · 초안을 다시 그린다.
+       · 사진은 /api/photos/{id}, 삽화는 /api/memoirs/saved/{id}/illustrations/{장} — 둘 다 이 서버를 지나 로그인한 주인에게만.
+       · 자리는 장 번호 + 문단 번호다. 이 기기에서 글을 고친 책(문단이 장과 이어지지 않는다)에는 그리지 않는다.
+       · 그림은 미리 크기(가로:세로)를 잡아 둔다 — 그림이 늦게 와도 쪽 나눔이 흔들리지 않는다.
+     ═══════════════════════════════════════════════════════════════ */
+  const POLL_MS = 5000, POLL_MAX = 60;       // 5초마다 · 5분까지 (그 뒤에는 책을 다시 열 때 받는다)
+  const views = new Map();                    // memoir_id → 서버 응답
+  let polling = null;
+
+  const esc = (s) => String(s == null ? '' : s).replace(/[&<>"']/g, (c) => ({'&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'}[c]));
+  const base = () => (window.Srv && window.Srv.CONFIG && window.Srv.CONFIG.apiBase) || '';
+  const sig = (v) => JSON.stringify(v ? [v.status, (v.chapters || []).map((c) => [c.no, c.state, (c.figures || []).map((f) => f.url)])] : null);
+
+  /** 이 문단 뒤에 놓을 그림들 (section = service-contract 의 문단 정보 {chapterNo, paragraphIndex}) */
+  function figuresFor(memoirId, section) {
+    const v = memoirId && views.get(memoirId);
+    if (!v || !section || !Number.isInteger(section.chapterNo) || !Number.isInteger(section.paragraphIndex)) return [];
+    const ch = (v.chapters || []).find((c) => c.no === section.chapterNo);
+    return ch ? (ch.figures || []).filter((f) => f.after_paragraph === section.paragraphIndex) : [];
+  }
+
+  function figureHTML(f) {
+    const w = Number(f.width) > 0 ? Number(f.width) : 5, h = Number(f.height) > 0 ? Number(f.height) : 4;
+    const ai = f.kind === 'illustration';
+    const alt = ai ? `AI가 그린 그림${f.scene_title ? ` — ${f.scene_title}` : ''}` : '이 이야기의 사진';
+    return `<figure class="mf-figure ${ai ? 'mf-illustration' : 'mf-photo'}" style="--mf-ratio:${w} / ${h}">`
+      + `<img src="${esc(base() + f.url)}" alt="${esc(alt)}" width="${w}" height="${h}" decoding="async" draggable="false">`
+      + (ai ? `<figcaption>${esc(f.caption || 'AI가 그린 그림')}</figcaption>` : '') + '</figure>';
+  }
+
+  /** 문단 하나 뒤에 붙일 HTML. 그릴 것이 없으면 빈 글 */
+  function html(memoirId, section) {
+    return figuresFor(memoirId, section).map(figureHTML).join('');
+  }
+
+  async function load(memoirId) {
+    if (!memoirId || !window.Srv || !window.Srv.call) return null;
+    try {
+      const v = await window.Srv.call(`/memoirs/saved/${encodeURIComponent(memoirId)}/illustrations`);
+      const changed = sig(v) !== sig(views.get(memoirId));
+      views.set(memoirId, v);
+      if (changed) window.dispatchEvent(new CustomEvent('memoir:figures', {detail: {memoirId, status: v.status}}));
+      return v;
+    } catch (_) { return views.get(memoirId) || null; }   // 그림을 못 받아도 책은 그대로 읽힌다
+  }
+
+  function stop() { if (polling) { clearTimeout(polling.timer); polling = null; } }
+
+  /** 책 · 초안을 펼칠 때 부른다. 만드는 중이면 끝날 때까지(5분) 다시 받는다 */
+  async function watch(memoirId) {
+    if (!memoirId) { stop(); return; }
+    if (polling && polling.id === memoirId) return;
+    stop();
+    const me = polling = {id: memoirId, n: 0, timer: null};
+    const tick = async () => {
+      if (polling !== me) return;
+      const v = await load(memoirId);
+      if (polling !== me) return;
+      if (v && v.status === 'running' && ++me.n < POLL_MAX) me.timer = setTimeout(tick, POLL_MS);
+      else stop();
+    };
+    await tick();
+  }
+
+  /* ── 초안 화면 — 문단(<p>) 뒤에 그림을 붙이고, 그리는 중이면 한 줄 알린다 ── */
+  function decorateDraft() {
+    const body = document.getElementById('draft-body');
+    if (!body || typeof state === 'undefined') return;
+    const id = state.savedMemoirId, sections = state.document && state.document.sections;
+    [...body.children].filter((el) => el.tagName === 'P').forEach((p, i) => {
+      const extra = html(id, sections && sections[i]);
+      if (extra) p.insertAdjacentHTML('afterend', extra);
+    });
+    const v = id && views.get(id);
+    if (!v || (state.document && state.document.edited)) return;
+    if (v.status === 'running') {
+      body.insertAdjacentHTML('afterbegin', '<div class="mf-note" role="status">사진이 없는 장에 넣을 그림을 그리고 있어요. 다 그려지면 이 자리에 저절로 들어가요.</div>');
+      return;
+    }
+    // 그림을 넣지 못한 장은 숨기지 않고 알린다 — 본문은 그대로다
+    const why = {failed: '그림을 만들지 못했어요', held: '민감한 내용이 있어 그리지 않았어요', photo_unknown: '사진 정보를 확인하지 못했어요'};
+    const missed = (v.chapters || []).filter((c) => why[c.state]);
+    if (missed.length) {
+      body.insertAdjacentHTML('afterbegin', `<div class="mf-note mf-missed" role="status">그림을 넣지 못한 장이 있어요 — ${missed.map((c) => `${c.no}장(${why[c.state]})`).join(', ')}. 글은 그대로 읽을 수 있어요.</div>`);
+    }
+  }
+  if (typeof window.renderDraft === 'function') {
+    const renderDraftOriginal = window.renderDraft;
+    window.renderDraft = function () { renderDraftOriginal(); decorateDraft(); };
+  }
+  window.addEventListener('memoir:figures', () => {
+    const reading = document.getElementById('draft-reading');
+    if (location.hash === '#draft' && reading && !reading.hidden) window.renderDraft();
+  });
+
+  // 책 · 초안 화면에 들어오면 지금 책의 그림을 받는다. 다른 화면으로 가면 그만 받는다
+  window.addEventListener('memoir:screen', (e) => {
+    const screen = e.detail && e.detail.screen;
+    if ((screen === 'reader' || screen === 'draft') && typeof state !== 'undefined') void watch(state.savedMemoirId);
+    else stop();
+  });
+
+  window.MemoirFigures = {html, figuresFor, load, watch, stop, views};
 }());
 
 </script>
