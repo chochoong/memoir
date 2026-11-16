@@ -81,10 +81,12 @@
     if (L.audio < 16000 * 2 * 0.6) { L.audio = 0; L.snap.audio_bytes = 0; return; }
     commit(L, '(예시 화면) 마이크로 들려주신 말씀이에요. 예시 화면에서는 소리를 글로 옮기지 않아요.');
   }
-  function openSession({topic, elder_id, link}) {
+  // 서버와 같은 목소리 이름만 받는다 (default · young). 예시 모드에서는 소리가 없어 고른 값만 기억한다
+  const VOICE_OK = ['default', 'young'];
+  function openSession({topic, elder_id, link, voice}) {
     const sid = uid();
     const L = {topic, elder_id, link, audio: 0, lastAudio: 0, pending: '',
-      snap: {session_id: sid, state: 'SPEAKING', turn: 1, max_turn: 0, next_question: '', question_audio_stream: false, audio_bytes: 0, resumable: false,
+      snap: {session_id: sid, state: 'SPEAKING', turn: 1, max_turn: 0, next_question: '', question_audio_stream: false, audio_bytes: 0, resumable: false, voice: voice || 'default',
         fragments: [{idx: 0, question: null, answer: topic}]}};
     ask(L);
     live.set(sid, L);
@@ -144,7 +146,7 @@
       if (path === '/i/start') {
         if (k.state === 'ended') return err(409, '끝난 인터뷰예요', 'ended');
         let L = linkLive();
-        if (!L) { L = openSession({topic: k.topic, elder_id: k.elder_id, link: k.link_id}); k.session_id = L.snap.session_id; k.state = 'in_progress'; save(); }
+        if (!L) { L = openSession({topic: k.topic, elder_id: k.elder_id, link: k.link_id, voice: k.voice}); k.session_id = L.snap.session_id; k.state = 'in_progress'; save(); }
         return ok({...snapOf(L), ...linkView(k)});
       }
       if (path === '/i/transcript') {
@@ -181,7 +183,8 @@
     }
     if (path === '/sessions' && method === 'POST') {
       if (!db.elders.some((e) => e.elder_id === body.elder_id)) return err(400, '화자를 골라 주세요', 'elder_required');
-      return ok(snapOf(openSession({topic: body.topic || body.title || '나의 이야기', elder_id: body.elder_id})));
+      if (body.voice !== undefined && !VOICE_OK.includes(body.voice)) return err(422, '목소리를 확인해 주세요');
+      return ok(snapOf(openSession({topic: body.topic || body.title || '나의 이야기', elder_id: body.elder_id, voice: body.voice})));
     }
     if ((m = path.match(/^\/sessions\/([^/]+)(\/.*)?$/))) {
       const id = m[1], rest = m[2] || '';
@@ -247,12 +250,12 @@
     // 초대 링크
     const linkOut = (k) => { const {token, ...r} = k; return r; };
     const issue = (base) => {
-      const k = {link_id: 'demo-l' + (++db.seq), elder_id: base.elder_id, title: base.title || base.topic, theme: null, topic: base.topic, picked_topic: null,
+      const k = {link_id: 'demo-l' + (++db.seq), elder_id: base.elder_id, title: base.title || base.topic, theme: null, topic: base.topic, picked_topic: null, voice: base.voice || 'default',
         state: 'ready', session_id: null, created_at: now(), expires_at: new Date(Date.now() + 72 * 3600e3).toISOString(), token: tok()};
       db.links.unshift(k); save();
       return made({...linkOut(k), token: k.token, url: `${pageUrl()}?demo=elder#${k.token}`});
     };
-    if (path === '/links' && method === 'POST') return issue(body);
+    if (path === '/links' && method === 'POST') { if (body.voice !== undefined && !VOICE_OK.includes(body.voice)) return err(422, '목소리를 확인해 주세요'); return issue(body); }
     if (path === '/links') return ok({links: db.links.filter((k) => !q.get('elder_id') || k.elder_id === q.get('elder_id')).map(linkOut)});
     if ((m = path.match(/^\/links\/([^/]+)\/(revoke|reissue)$/))) {
       const k = db.links.find((x) => x.link_id === m[1]);

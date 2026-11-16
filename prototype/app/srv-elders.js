@@ -37,8 +37,8 @@
     list.innerHTML = data.elders.map((e) => {
       const self = e.name === SELF;
       return `<li class="em-row" data-elder="${escapeText(e.elder_id)}">
-        <label class="em-name"><span class="visually-hidden">${escapeText(e.name)} 이름</span>
-          <input value="${escapeText(e.name)}" maxlength="30" autocomplete="off" ${self ? 'disabled' : ''}></label>
+        ${self ? `<span class="em-name em-name-locked">${escapeText(e.name)}</span>` : `<label class="em-name"><span class="visually-hidden">${escapeText(e.name)} 이름</span>
+          <input value="${escapeText(e.name)}" maxlength="30" autocomplete="off"></label>`}
         ${self ? '<span class="em-self">내 이야기</span>' : `<button type="button" class="button outline compact" data-em="save">이름 저장</button>
         <button type="button" class="text-button em-del" data-em="del">${icons('close')}<span>지우기</span></button>`}
       </li>`;
@@ -54,7 +54,7 @@
     if (!store.snapshot().user) { window.MemoirLogin.open(); return; }
     render(); say('');
     if (!dialog.open) dialog.showModal();
-    list.querySelector('input:not([disabled])')?.focus();
+    list.querySelector('.em-name input')?.focus();
   }
 
   async function save(row) {

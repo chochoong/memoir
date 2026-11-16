@@ -38,6 +38,7 @@
   <link rel="stylesheet" href="reader-turn.css">
   <link rel="stylesheet" href="srv.css">
   <script src="srv-core.js" defer></script>
+  <script src="srv-voice.js" defer></script>
   <script src="srv-demo.js" defer></script>
   <script src="srv-store.js" defer></script>
   <script src="ebook-state.js" defer></script>
@@ -70,10 +71,12 @@
   <script src="library-delete.js" defer></script>
   <script src="library-arrive.js" defer></script>
   <script src="share-sheet.js" defer></script>
+  <script src="postcard-image.js" defer></script>
   <script src="book-share.js" defer></script>
   <script src="interview-share.js" defer></script>
   <script src="reader-book.js" defer></script>
   <script src="reader-arrows.js" defer></script>
+  <script src="answer-box.js" defer></script>
 </head>
 <body>
   <svg class="icon-defs" aria-hidden="true" xmlns="http://www.w3.org/2000/svg"><defs>
@@ -137,7 +140,7 @@
           </div>
           <p class="studio-status-line" id="studio-hint">질문을 확인한 뒤 시작해 주세요.</p>
           <div class="conversation-actions studio-actions"><button class="button primary" id="pause-interview"><svg class="icon"><use href="#i-mic"/></svg><span>말하기 시작</span></button><button class="button outline" id="toggle-answer" aria-expanded="false" aria-controls="answer-panel"><svg class="icon"><use href="#i-pen"/></svg>글로 쓰기</button><button type="button" class="text-button" id="finish-interview">마치기</button></div>
-          <form id="answer-panel" class="answer-panel" hidden><label for="answer-text">떠오르는 기억을 적어주세요</label><textarea id="answer-text" rows="4" placeholder="우리 동네에는 커다란 느티나무가 있었어요…" maxlength="2000"></textarea><button class="button primary" type="submit">이야기 남기기 <svg class="icon"><use href="#i-arrow"/></svg></button></form>
+          <form id="answer-panel" class="answer-panel" hidden><label for="answer-text">떠오르는 기억을 적어주세요</label><textarea id="answer-text" rows="4" placeholder="우리 동네에는 커다란 느티나무가 있었어요…" maxlength="10000"></textarea><button class="button primary" type="submit">이야기 남기기 <svg class="icon"><use href="#i-arrow"/></svg></button></form>
           <details class="preview-hint" hidden><summary>UI 미리보기 · 실제 녹음 없음</summary><p>라디오 조명과 화면 전환을 살펴보는 시안입니다. 실제 낭독과 음성 수집은 연결하지 않았습니다.</p><button class="text-button" id="next-question">다음 예시 질문 <svg class="icon"><use href="#i-arrow"/></svg></button></details>
         </div>
       </section>

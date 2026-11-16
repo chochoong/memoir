@@ -27,17 +27,19 @@ v0.60 부터 화면은 **팀 시안 2차 B안**(처음가기 · 라디오 스튜
 | `srv-memoir.js` | 자서전 만들기(작업) · 책장 · 고친 글 | `/api/memoirs` · `/api/memoirs/{job}` · `/api/memoirs/saved` |
 | `book-share.js` (고침) | 책 공유 링크 만들기 · 끄기 | `/api/shares` |
 | `srv-links.js` | 어르신이 `/i#토큰` 으로 들어온 화면 | `/api/i/*` |
-| `srv-elders.js` | 이야기 주인공 이름 고치기 · 지우기 창 | `PATCH` · `DELETE /api/elders/{id}` (서버에 요청 중) |
+| `srv-elders.js` | 이야기 주인공 이름 고치기 · 지우기 창 | `PATCH` · `DELETE /api/elders/{id}` |
+| `srv-voice.js` | 질문을 읽어 줄 목소리 고르기 (차분한 · 밝고 젊은) | `voice` — `POST /api/sessions` · `POST /api/links` |
+| `answer-box.js` | 인터뷰 「글로 쓰기」 칸 — 한 번에 1만 자, 길면 칸 안에서 스크롤, 글자 수 표시 | `POST /api/sessions/{id}/speech` (서버 글자 수 상한 없음) |
 | `srv-demo.js` | 예시 모드(`?demo=1`) — 서버 없이 화면 전체를 돌려 보는 가짜 서버 | (실제 서버를 부르지 않음) |
 
-## 서버에 요청한 API — 이야기 주인공 이름 바꾸기 · 지우기 (v0.68)
+## 서버 API 반영 — 이야기 주인공 이름 바꾸기 · 지우기 · 질문 목소리
 
-화면(「이야기 준비」 → 「이름 고치기 · 지우기」)은 만들어 두었고, 서버에 아래 두 API 가 생기면 바로 동작합니다.
-그전에는 405/404 가 와서 「서버가 아직 이 기능을 지원하지 않아요」라고 안내합니다. 예시 모드에서는 지금 바로 동작합니다.
-
-- `PATCH /api/elders/{elder_id}` `{name}` → 200 `{elder_id, name}` — 엽서 · 자서전은 elder_id 에 묶여 있어 이름만 바뀐다
-- `DELETE /api/elders/{elder_id}` → 200 `{elder_id, deleted: true}` · **기록(회차 · 자서전 · 쓸 수 있는 링크)이 있으면 409 `{code: "has_records"}`**
-- 「나」는 바꾸거나 지울 수 없다 (화면에서 잠금). 진행 중인 인터뷰의 화자는 지우지 않는다.
+- **이름 바꾸기 · 지우기** (develop `4b25d7b`, 반영 완료): `PATCH /api/elders/{elder_id}` `{name}` → 200 `{elder_id, name}` ·
+  `DELETE /api/elders/{elder_id}` → 200 `{elder_id, deleted: true}`, 기록(회차 · 자서전 · 쓸 수 있는 링크)이 있으면 409 `has_records`.
+  화면: 「초대 주소 만들기」 · 엽서보기/자서전 보기 「변경」 → 「이름 고치기 · 지우기」. 서버가 이 API 를 모르면(405 · `code` 없는 404) 「서버 준비 중」으로 안내한다.
+- **질문을 읽어 줄 목소리** (develop `11dcd93`): `POST /api/sessions` · `POST /api/links` 에 `voice` = `"default"`(차분한 목소리 · Gemini Kore) | `"young"`(밝고 젊은 목소리 · Gemini Leda).
+  화면: 「내 이야기」 · 「초대 주소 만들기」에서 고른다(`srv-voice.js`). 고른 값은 이 기기에 기억하고, 보낸 초대 목록에 표시한다. 미리 듣기는 없다.
+  **서버가 Gemini 로 읽을 때(`TTS_PROVIDER=gemini`)만 목소리가 달라진다** — Azure 로 읽으면 어느 쪽이든 같은 목소리.
 
 ## 서버 없이 화면 확인하기 — 예시 모드 (`?demo=1`)
 

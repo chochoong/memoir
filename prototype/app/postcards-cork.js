@@ -144,20 +144,31 @@
 
   // 엽서 공유 — 엽서 글을 그대로 보낸다 (카카오톡 · 문자 · 이메일 · 복사). 엽서만 따로 여는 공유 주소는 아직 서버에 없어서,
   // 링크 칸에는 내말싸미 첫 화면을 둔다
+  /** 엽서 나누기 — 엽서를 그림 한 장으로 그려 보낸다 (postcard-image.js). 받는 분은 보드 위 엽서 모습 그대로 받는다 */
   function sharePostcard(record) {
     const elders = window.Srv?.AUTH?.elders || [], me = elders.find((e) => e.elder_id === record.elder_id);
     const who = me && me.name !== '나' ? window.Srv.honor(me.name) : '';
     const text = postcardBody(record).replace(/\n\s*\n/g, '\n\n').trim();
-    const home = window.Srv?.DEMO ? `${location.href.split('#')[0].split('?')[0]}?demo=1` : `${location.origin}/`;
-    window.MemoirShare.open({
+    const idx = recordData.filter((r) => r.elder_id === record.elder_id).findIndex((r) => r.id === record.id);
+    const o = {
       kind: 'postcard', eyebrow: '엽서 나누기', title: record.title,
-      card: {kicker: '내말싸미 · 엽서', title: `「${record.title}」`, sub: `${who ? `${who}의 이야기 · ` : ''}${record.date}`, art: `<span class="share-mini-mic">${icons(record.icon || 'letter')}</span>`},
-      message: `「${record.title}」\n\n${text}\n\n— ${who ? `${who}의 이야기 · ` : ''}내말싸미에서 남긴 엽서`,
-      link: home,
+      card: {kicker: '', title: '', sub: ''},
+      message: `${who ? `${who}의 이야기` : '제 이야기'}를 엽서로 나눠요. 「${record.title}」\n— 내말싸미에서 남긴 엽서`,
+      link: '',
       status: '',
-      note: '엽서 글이 그대로 보내져요. 가족 이야기가 담겨 있으니 믿을 수 있는 분에게만 보내 주세요. 링크는 내말싸미 첫 화면이에요.',
+      note: '엽서가 그림 한 장으로 보내져요. 가족 이야기가 담겨 있으니 믿을 수 있는 분에게만 보내 주세요.',
       extras: [],
-    });
+      image: {
+        name: window.MemoirPostcardImage.fileName(record.title),
+        make: async () => {
+          const r = await window.MemoirPostcardImage.render({title: record.title, body: text, date: record.date, category: (typeof categories !== 'undefined' && categories[record.category]) || '', icon: record.icon, who, yellow: idx % 4 === 3});
+          // 그림에 다 담지 못한 긴 엽서는 함께 보내는 글에 전체를 붙인다
+          if (r.clipped) { const box = document.getElementById('share-msg'); if (box && box.value === o.message) box.value = o.message = `${o.message}\n\n「${record.title}」\n${text}`; }
+          return r;
+        },
+      },
+    };
+    window.MemoirShare.open(o);
   }
 
   // 6. 엽서 지우기 — 손에 든 엽서 · 보드 위 × · 여러 장 골라 지우기. 늘 한 번 더 묻고, 지운 뒤 잠시 「되돌리기」를 둔다.

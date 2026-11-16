@@ -310,6 +310,8 @@
   };
 
   const QS = new URLSearchParams(location.search);
+  // 체험판 파일(build.py --demo)은 주소에 ?demo=1 이 없어도 예시 모드로 연다 — 파일을 두 번 눌러 열기만 하면 되게
+  if (window.MEMOIR_FORCE_DEMO && !QS.has('demo')) QS.set('demo', '1');
   const AUTH = {
     mode: 'session',
     mock: QS.get('authMock') ?? CONFIG.auth.mock,
