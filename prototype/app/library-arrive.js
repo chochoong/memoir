@@ -16,7 +16,10 @@
   lib.saveDraft = function () {
     const before = new Set(lib.bookIds());
     const result = original.apply(this, arguments);
-    const added = lib.bookIds().find((id) => !before.has(id));
+    // 새로 꽂힌 책 — 또는 방금 만든 초안(서버가 이미 보관해 책장에 먼저 들어가 있는 책)을 처음 보관할 때
+    const fresh = state.freshMemoirId && state.freshMemoirId === state.savedMemoirId ? state.freshMemoirId : null;
+    state.freshMemoirId = null;
+    const added = lib.bookIds().find((id) => !before.has(id)) || fresh;
     if (added) {
       pending = added;
       if (location.hash === '#library') nextFrame().then(run);

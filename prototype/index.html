@@ -3747,6 +3747,33 @@ dialog:focus, dialog:focus-visible { outline: none; }
 .answer-count { margin: 6px 2px 10px; font-size: 15px; color: var(--muted, #7d6e66); text-align: right; }
 .answer-count.near { color: var(--burgundy, #7a2e3e); font-weight: 600; }
 
+/* 모바일 인터뷰 — 연노랑 큰 판의 모서리가 각져 보이던 것: PC 처럼 둥글게, 글이 모서리에 붙지 않게 안쪽 여백 */
+@media (max-width: 760px) {
+  .screen .interview-studio.panel { border-radius: 20px; padding: 14px 14px 18px; border: 1px solid var(--line); }
+}
+@media (max-width: 360px) {
+  .screen .interview-studio.panel { border-radius: 16px; padding: 12px 10px 14px; }
+}
+
+/* 자서전 초안 — 버튼이 스크롤을 따라온다 (draft-dock.js) */
+@media (min-width: 1021px) {
+  .draft-follow { position: sticky; top: var(--draft-follow-top, 96px); z-index: 2; }
+}
+.draft-dock {
+  position: fixed; left: 50%; transform: translateX(-50%); z-index: 60;
+  width: min(560px, calc(100% - 24px)); display: grid; grid-template-columns: 1fr 1.35fr; gap: 8px;
+  padding: 8px; border: 1px solid var(--line); border-radius: 16px;
+  background: color-mix(in srgb, var(--paper, #fffaeb) 94%, transparent); backdrop-filter: blur(6px);
+  box-shadow: 0 10px 28px rgba(73, 45, 53, .18); animation: draft-dock-in .22s ease-out;
+}
+.draft-dock .button { min-height: 52px; padding: 8px 10px; font-size: 15px; gap: 6px; }
+.draft-dock .icon { width: 19px; height: 19px; }
+@keyframes draft-dock-in { from { opacity: 0; transform: translate(-50%, 12px); } }
+@media (prefers-reduced-motion: reduce) { .draft-dock { animation: none; } }
+@media (max-width: 360px) { .draft-dock .button { font-size: 13.5px; padding: 6px; } }
+/* 버튼 줄이 떠 있는 동안 안내(토스트)는 그 위로 (글 맨 끝에서는 줄이 숨으므로 글은 가리지 않는다) */
+body.draft-dock-on .toast { bottom: var(--draft-dock-space, 180px); }
+
 </style>
 </head>
 <body>
@@ -7052,6 +7079,8 @@ renderRecent();renderQuestion();setInterviewMode('reading');show(location.hash.s
       state.draftElderId = j.elderId; state.spread = 0; state.pendingMemoirTitle = null;
       state.savedMemoirId = r.memoir_id || (r.result && r.result.memoir_id) || null;
       state.draftKept = !(['#style', '#records', '#draft'].includes(location.hash) && !window.SrvInterview?.busy());
+      // 서버는 이미 보관했다 → 책장에도 바로 꽂혀 있다. 「작은 책으로 보관하기」를 누르면 이 책을 꽂는 연출만 한다 (library-arrive)
+      state.freshMemoirId = state.draftKept ? null : state.savedMemoirId;
       state.selected.clear(); state.pickRecords = false;
       // 자서전을 고르던 화면에 있을 때만 초안으로 옮긴다 — 인터뷰 · 다른 화면을 보고 있으면 알리기만 한다
       const here = ['#style', '#records', '#draft'].includes(location.hash) && !window.SrvInterview?.busy();
@@ -7117,16 +7146,21 @@ renderRecent();renderQuestion();setInterviewMode('reading');show(location.hash.s
     try {
       const r = await window.Srv.call(`/memoirs/saved?elder_id=${encodeURIComponent(AUTH.elderId)}&limit=50`);
       if (my !== libSeq) return;
-      const hide = location.hash === '#draft' || location.hash === '#reader' ? (state.draftKept ? null : state.savedMemoirId) : null;
-      const rows = ((r && r.memoirs) || []).filter((m) => m.memoir_id !== hide && (!m.status || m.status === 'ready'));
+      // 예전에는 초안 화면에 있는 동안 「보관하기 전」 책을 책장에서 빼 두었다 → 보관하기를 누르지 않고 다른 화면으로 가면
+      // 새로고침 전까지 자서전이 사라진 것처럼 보였다(제보 11-16). 서버가 만든 즉시 보관하므로 늘 그대로 보여 준다.
+      const rows = ((r && r.memoirs) || []).filter((m) => !m.status || m.status === 'ready');
+      // 바뀐 게 없으면 다시 그리지 않는다 — 책 꽂는 연출 · 펼치는 중인 책이 끊기지 않게
+      const sig = (list) => list.map((b) => `${b.id}|${b.title}`).join('\n');
+      const now = lib.bookIds().map((id) => lib.getBook(id)).filter(Boolean);
       // 오래된 책이 01 — 서버는 최근 순으로 준다
-      lib.setBooks(rows.reverse().map((m) => {
+      const next = rows.reverse().map((m) => {
         const old = lib.getBook(m.memoir_id), edit = readEdit(m.memoir_id);
         return old && old.document ? old : {
           id: m.memoir_id, elder_id: m.elder_id || AUTH.elderId, title: (edit && edit.title) || m.title || '제목 없는 자서전',
           date: fmtDate(m.created_at), style: m.style || 'spoken', count: (m.session_ids || []).length, body: [], document: null, server: true,
         };
-      }));
+      });
+      if (sig(next) !== sig(now)) lib.setBooks(next);
     } catch (e) {
       if (my !== libSeq) return;
       if (e.status !== 401 && location.hash === '#library') toast('책장을 불러오지 못했어요. 잠시 뒤 다시 열어 주세요.');
@@ -7175,6 +7209,9 @@ renderRecent();renderQuestion();setInterviewMode('reading');show(location.hash.s
     const left = jobLeft();
     if (left && !job) { job = left; void wait(left, false); }
   });
+
+  // 「자서전 보기」에 들어올 때마다 서버 책장을 다시 본다 — 다른 기기 · 창에서 만든 책도 바로 보이게
+  window.addEventListener('memoir:screen', (e) => { if (e.detail.screen === 'library' && AUTH.user) void reloadLibrary(); });
 
   window.SrvLibrary = {reload: reloadLibrary, ensure, removeSaved, styleTitle, readEdit, writeEdit};
   void ApiError;
@@ -10011,7 +10048,10 @@ renderRecent();renderQuestion();setInterviewMode('reading');show(location.hash.s
   lib.saveDraft = function () {
     const before = new Set(lib.bookIds());
     const result = original.apply(this, arguments);
-    const added = lib.bookIds().find((id) => !before.has(id));
+    // 새로 꽂힌 책 — 또는 방금 만든 초안(서버가 이미 보관해 책장에 먼저 들어가 있는 책)을 처음 보관할 때
+    const fresh = state.freshMemoirId && state.freshMemoirId === state.savedMemoirId ? state.freshMemoirId : null;
+    state.freshMemoirId = null;
+    const added = lib.bookIds().find((id) => !before.has(id)) || fresh;
     if (added) {
       pending = added;
       if (location.hash === '#library') nextFrame().then(run);
@@ -10973,6 +11013,89 @@ renderRecent();renderQuestion();setInterviewMode('reading');show(location.hash.s
   document.addEventListener('click', (e) => { if (e.target.closest?.('#toggle-answer')) requestAnimationFrame(update); });
   window.addEventListener('resize', () => requestAnimationFrame(update));
   update();
+}());
+
+</script>
+<script data-from="draft-dock.js">
+(function () {
+  'use strict';
+  /* ═══════════════════════════════════════════════════════════════
+     draft-dock — 자서전 초안을 읽어 내려가는 동안 「작은 책으로 보관하기」 · 「책으로 미리 읽기」가 따라온다
+       · 넓은 화면(글 옆에 버튼 칸): 버튼 묶음이 화면 위쪽에 붙어 함께 내려온다 (CSS sticky)
+       · 좁은 화면(버튼이 글 맨 아래): 버튼이 화면에 안 보이는 동안 아래 메뉴 바로 위에 작은 버튼 줄을 띄운다
+         원래 버튼이 화면에 들어오면 줄은 숨는다. 글을 고치는 중에는 띄우지 않는다(고친 글을 적용하기 전에 보관되지 않게).
+     ═══════════════════════════════════════════════════════════════ */
+  const screen = document.querySelector('[data-screen="draft"]');
+  const aside = screen?.querySelector('.draft-aside');
+  const actions = aside?.querySelector('.draft-actions');
+  if (!actions) return;
+
+  // 넓은 화면: 버튼 묶음과 아래 안내 글을 한 덩어리로 묶어 함께 따라오게
+  const follow = document.createElement('div');
+  follow.className = 'draft-follow';
+  actions.before(follow);
+  follow.append(actions);
+  const note = aside.querySelector(':scope > .small-copy');
+  if (note) follow.append(note);
+
+  // 좁은 화면: 아래에 뜨는 버튼 줄
+  const dock = document.createElement('div');
+  dock.className = 'draft-dock'; dock.hidden = true;
+  dock.setAttribute('role', 'group'); dock.setAttribute('aria-label', '초안 바로 가기');
+  dock.innerHTML = `<button type="button" class="button outline" data-dock="read">책으로 미리 읽기</button>
+    <button type="button" class="button primary" data-dock="keep"><svg class="icon" aria-hidden="true"><use href="#i-book"/></svg>작은 책으로 보관하기</button>`;
+  document.body.append(dock);
+  dock.addEventListener('click', (e) => {
+    const b = e.target.closest('[data-dock]'); if (!b) return;
+    const real = b.dataset.dock === 'keep' ? document.getElementById('save-volume') : actions.querySelector('[data-go="reader"]');
+    real?.click();
+  });
+
+  const wide = matchMedia('(min-width: 1021px)');
+  let seen = true;
+  new IntersectionObserver((es) => { seen = es[es.length - 1].isIntersecting; paint(); }, {threshold: 0.15}).observe(actions);
+
+  /** 화면 위에 고정된 머리(PC 메뉴)의 아래 끝 — 화면 맨 위 가운데에 있는 고정 요소를 찾는다 */
+  function fixedTop() {
+    let el = document.elementFromPoint(innerWidth / 2, 2), bottom = 0;
+    for (; el && el !== document.body; el = el.parentElement) {
+      if (getComputedStyle(el).position === 'fixed') bottom = Math.max(bottom, el.getBoundingClientRect().bottom);
+    }
+    return bottom;
+  }
+  /** 화면 아래에 고정된 것(휴대폰 아래 메뉴 · 예시 화면 띠) 중 가장 위 */
+  function fixedBottom() {
+    let top = innerHeight;
+    document.querySelectorAll('.mobile-nav, .demo-badge').forEach((el) => {
+      const cs = getComputedStyle(el);
+      if (cs.display === 'none' || el.hidden || cs.position !== 'fixed') return;
+      const r = el.getBoundingClientRect();
+      if (r.height && r.top > innerHeight / 2) top = Math.min(top, r.top);
+    });
+    return innerHeight - top;
+  }
+  function place() {
+    document.documentElement.style.setProperty('--draft-follow-top', `${Math.max(16, Math.round(fixedTop()) + 18)}px`);
+    const up = Math.round(fixedBottom());
+    dock.style.bottom = up ? `${up + 8}px` : 'calc(10px + env(safe-area-inset-bottom))';
+    // 안내(토스트)는 버튼 줄 위로
+    document.documentElement.style.setProperty('--draft-dock-space', `${(up || 10) + 8 + (dock.offsetHeight || 70) + 10}px`);
+  }
+  function paint() {
+    const editing = !document.getElementById('draft-editor')?.hidden;
+    const on = !screen.hidden && !wide.matches && !seen && !editing && !document.body.classList.contains('ebook-mode');
+    dock.hidden = !on;
+    if (on) place();
+    document.body.classList.toggle('draft-dock-on', on);
+  }
+  window.addEventListener('memoir:screen', () => requestAnimationFrame(paint));
+  window.addEventListener('hashchange', () => requestAnimationFrame(paint));
+  window.addEventListener('resize', () => { place(); paint(); });
+  wide.addEventListener('change', paint);
+  // 「글 수정하기」를 열고 닫을 때
+  new MutationObserver(paint).observe(document.getElementById('draft-editor'), {attributes: true, attributeFilter: ['hidden']});
+  place(); paint();
+  window.addEventListener('memoir:screen', () => requestAnimationFrame(place));
 }());
 
 </script>
