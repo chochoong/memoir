@@ -1,0 +1,68 @@
+{
+ "mock": true,
+ "note": "illust_seed_A.json 에 대한 모의 후보 — 모델이 낸 것이 아니라 손으로 쓴 것이다 (2026-11-11). 판정 규칙을 고루 밟도록 일부러 잘못된 후보(지어낸 인용 · 부정 · 전언 · 겹침 · 민감)를 섞었다.",
+ "candidates": [
+  {"chapter_no": 1, "scene_title": "사과 궤짝을 싣고 장터로", "importance": "main",
+   "scene_summary": "가을에 형과 둘이서 사과 궤짝을 리어카에 싣고 장터까지 끌고 갔다. 형이 앞에서 끌고 화자는 뒤에서 밀었다.",
+   "reason": "1장의 중심 사건이고 행동 · 사물 · 장소가 원문에 구체적으로 나온다.",
+   "elements": [
+    {"kind": "action", "text": "사과 궤짝을 리어카에 싣고 장터까지 끌고 간다", "turn": 2, "quote": "형이랑 둘이서 사과 궤짝을 리어카에 싣고 장터까지 끌고 갔어요"},
+    {"kind": "action", "text": "형이 앞에서 끌고 나는 뒤에서 민다", "turn": 3, "quote": "형이 앞에서 끌고 나는 뒤에서 밀었지요"},
+    {"kind": "person", "text": "형", "turn": 2, "quote": "형이랑 둘이서"},
+    {"kind": "person", "text": "나", "turn": 3, "quote": "나는 뒤에서 밀었지요"},
+    {"kind": "object", "text": "사과 궤짝", "turn": 2, "quote": "사과 궤짝을 리어카에 싣고"},
+    {"kind": "object", "text": "리어카", "turn": 2, "quote": "사과 궤짝을 리어카에 싣고"},
+    {"kind": "place", "text": "장터", "turn": 2, "quote": "장터까지 끌고 갔어요"},
+    {"kind": "time", "text": "열 살쯤", "turn": 2, "quote": "내가 열 살쯤이었나"}]},
+  {"chapter_no": 1, "scene_title": "기우는 리어카", "importance": "minor",
+   "scene_summary": "궤짝이 무거워 리어카가 기울었고 형과 화자가 앞뒤에서 끌고 밀었다.",
+   "reason": "노동의 무게가 드러난다.",
+   "elements": [
+    {"kind": "action", "text": "형이 앞에서 끌고 나는 뒤에서 민다", "turn": 3, "quote": "형이 앞에서 끌고 나는 뒤에서 밀었지요"},
+    {"kind": "object", "text": "리어카", "turn": 2, "quote": "사과 궤짝을 리어카에 싣고"}]},
+  {"chapter_no": 1, "scene_title": "장화와 고무신", "importance": "minor",
+   "scene_summary": "어린 시절의 신발.",
+   "reason": "그 시절의 살림이 드러나는 사물이다.",
+   "elements": [
+    {"kind": "object", "text": "장화", "turn": 4, "quote": "장화는 없었어요"},
+    {"kind": "object", "text": "고무신", "turn": 4, "quote": "고무신 신고 다녔지요"}]},
+  {"chapter_no": 1, "scene_title": "서러웠던 마음", "importance": "minor",
+   "scene_summary": "그때는 참 서러웠다고 하셨다.",
+   "reason": "감정이 강하게 드러난다.",
+   "elements": [
+    {"kind": "emotion", "text": "서러웠다", "turn": 5, "quote": "그때는 참 서러웠어요"}]},
+  {"chapter_no": 1, "scene_title": "소를 팔던 장터", "importance": "minor",
+   "scene_summary": "예전 장터에서는 소도 팔았다.",
+   "reason": "장터의 옛 모습이 그려진다.",
+   "elements": [
+    {"kind": "place", "text": "장터", "turn": 6, "quote": "장터 얘기는 형한테 들었는데"},
+    {"kind": "object", "text": "소", "turn": 6, "quote": "예전엔 소도 팔았대요"}]},
+  {"chapter_no": 2, "scene_title": "찬장 위의 놋숟가락", "importance": "main",
+   "scene_summary": "할머니가 쓰시던 놋숟가락을 지금도 찬장 맨 위 칸에 둔다.",
+   "reason": "2장의 중심 사물이고 사람 없이 그릴 수 있다.",
+   "elements": [
+    {"kind": "object", "text": "놋숟가락", "turn": 7, "quote": "할머니가 쓰시던 놋숟가락이 아직 있어요"},
+    {"kind": "place", "text": "찬장 맨 위 칸", "turn": 7, "quote": "찬장 맨 위 칸에 둬요"}]},
+  {"chapter_no": 2, "scene_title": "졸업식 날 교문 앞", "importance": "main",
+   "scene_summary": "국민학교 졸업식 날 교문 앞에서 어머니와 사진을 찍었다.",
+   "reason": "어머니와 함께한 날이다.",
+   "elements": [
+    {"kind": "action", "text": "어머니랑 사진을 찍었다", "turn": 9, "quote": "교문 앞에서 어머니랑 사진을 찍었어요"},
+    {"kind": "place", "text": "교문 앞", "turn": 9, "quote": "졸업식 날 교문 앞에서"},
+    {"kind": "person", "text": "어머니", "turn": 9, "quote": "어머니랑 사진을 찍었어요"}]},
+  {"chapter_no": 3, "scene_title": "서울로 가던 날", "importance": "main",
+   "scene_summary": "눈 내리는 날 어머니의 배웅을 받으며 기차를 타고 서울로 올라갔다.",
+   "reason": "인생의 전환점이다.",
+   "elements": [
+    {"kind": "action", "text": "기차를 타고 서울로 올라간다", "turn": 11, "quote": "스무 살에 기차 타고 서울로 올라갔어요"},
+    {"kind": "object", "text": "기차", "turn": 11, "quote": "기차 타고 서울로"},
+    {"kind": "place", "text": "눈 내리는 서울역", "turn": 12, "quote": "눈 내리는 서울역에 내렸어요"},
+    {"kind": "person", "text": "어머니", "turn": 12, "quote": "어머니가 손을 흔들어 주셨어요"}]},
+  {"chapter_no": 3, "scene_title": "아버지의 병실", "importance": "main",
+   "scene_summary": "아버지는 병원에 오래 계셨다.",
+   "reason": "가족사의 큰 사건이다.",
+   "elements": [
+    {"kind": "place", "text": "병원", "turn": 13, "quote": "병원에 오래 계셨어요"},
+    {"kind": "person", "text": "아버지", "turn": 13, "quote": "아버지는 내가 서른 되던 해에"}]}
+ ]
+}

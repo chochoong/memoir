@@ -1,0 +1,72 @@
+{
+ "schema_version": "illust-input-v1",
+ "set_id": "illust-A",
+ "synthetic": true,
+ "note": "완전히 가상의 화자. 삽화 장면 선정(memoir_illust) 시험 전용 합성 자료 (AI 작성, 2026-11-11). 실제 인터뷰가 아니다. 자서전 본문도 모델이 쓴 것이 아니라 손으로 엮은 시험용이다.",
+ "memoir": {
+  "memoir_id": null,
+  "style": "essay",
+  "title": "사과밭 뒤의 집",
+  "chapters": [
+   {"no": 1, "title": "사과 궤짝", "status": "ready", "paragraphs": [
+    {"sentences": [
+     {"text": "나는 충북 산골에서 컸다.", "turns": [1]},
+     {"text": "집 뒤가 바로 사과밭이었다.", "turns": [1]}]},
+    {"sentences": [
+     {"text": "가을이면 형과 둘이서 사과 궤짝을 리어카에 싣고 장터까지 끌고 갔다.", "turns": [2]},
+     {"text": "형이 앞에서 끌고 나는 뒤에서 밀었다.", "turns": [3]},
+     {"text": "장화가 없어 고무신을 신고 다녔다.", "turns": [4]}]},
+    {"sentences": [
+     {"text": "그때는 참 서러웠다.", "turns": [5]},
+     {"text": "장터에서는 예전에 소도 팔았다고 들었다.", "turns": [6]}]}]},
+   {"no": 2, "title": "놋숟가락", "status": "ready", "paragraphs": [
+    {"sentences": [
+     {"text": "할머니가 쓰시던 놋숟가락이 아직 있다.", "turns": [7]},
+     {"text": "찬장 맨 위 칸에 둔다.", "turns": [7]},
+     {"text": "할머니는 말수가 적은 분이었다.", "turns": [8]}]},
+    {"sentences": [
+     {"text": "국민학교 졸업식 날 교문 앞에서 어머니와 사진을 찍었다.", "turns": [9]},
+     {"text": "꽃다발은 받지 못했지만 어머니가 와 주셔서 좋았다.", "turns": [10]}]}]},
+   {"no": 3, "title": "서울로", "status": "ready", "paragraphs": [
+    {"sentences": [
+     {"text": "스무 살에 기차를 타고 서울로 올라갔다.", "turns": [11]},
+     {"text": "떠나던 날은 별로 기억나는 것이 없다.", "turns": [12]}]},
+    {"sentences": [
+     {"text": "아버지는 내가 서른 되던 해에 병으로 돌아가셨다.", "turns": [13]},
+     {"text": "지금도 사과 궤짝만 보면 형 생각이 난다.", "turns": [14]}]}]}
+  ]
+ },
+ "source": {
+  "utterances": [
+   {"turn": 1, "session_id": "s-a", "asked": "어릴 때 어디서 자라셨어요?", "elder": "충북 산골에서 컸어요. 집 뒤가 바로 사과밭이었어요."},
+   {"turn": 2, "session_id": "s-a", "asked": "사과밭 일도 도우셨어요?", "elder": "그럼요. 가을이면 형이랑 둘이서 사과 궤짝을 리어카에 싣고 장터까지 끌고 갔어요. 내가 열 살쯤이었나."},
+   {"turn": 3, "session_id": "s-a", "asked": "힘들지 않으셨어요?", "elder": "궤짝이 무거워서 리어카가 자꾸 기울었어요. 형이 앞에서 끌고 나는 뒤에서 밀었지요."},
+   {"turn": 4, "session_id": "s-a", "asked": "신발은 뭘 신으셨어요?", "elder": "장화는 없었어요. 고무신 신고 다녔지요."},
+   {"turn": 5, "session_id": "s-a", "asked": "그때 마음이 어떠셨어요?", "elder": "그때는 참 서러웠어요. 지금 생각하면 그래도 좋았지 싶고."},
+   {"turn": 6, "session_id": "s-a", "asked": "장터는 어땠나요?", "elder": "장터 얘기는 형한테 들었는데, 예전엔 소도 팔았대요."},
+   {"turn": 7, "session_id": "s-b", "asked": "할머니 기억이 있으세요?", "elder": "할머니가 쓰시던 놋숟가락이 아직 있어요. 찬장 맨 위 칸에 둬요."},
+   {"turn": 8, "session_id": "s-b", "asked": "할머니는 어떤 분이셨어요?", "elder": "말수가 적은 분이었어요."},
+   {"turn": 9, "session_id": "s-b", "asked": "학교 다닐 때 기억은요?", "elder": "국민학교 졸업식 날 교문 앞에서 어머니랑 사진을 찍었어요. 그 사진이 지금도 있어요."},
+   {"turn": 10, "session_id": "s-b", "asked": "졸업식 날 또 기억나는 게 있으세요?", "elder": "꽃다발은 못 받았어요. 그래도 어머니가 와 주셔서 좋았어요."},
+   {"turn": 11, "session_id": "s-c", "asked": "고향을 떠나신 건 언제예요?", "elder": "스무 살에 기차 타고 서울로 올라갔어요."},
+   {"turn": 12, "session_id": "s-c", "asked": "떠나던 날은 어땠어요?", "elder": "별로 기억나는 게 없어요. 그냥 갔지 뭐."},
+   {"turn": 13, "session_id": "s-c", "asked": "아버지 이야기도 들려주세요.", "elder": "아버지는 내가 서른 되던 해에 병으로 돌아가셨어요. 병원에 오래 계셨어요."},
+   {"turn": 14, "session_id": "s-c", "asked": "지금 사과를 보면 어떠세요?", "elder": "지금도 사과 궤짝만 보면 형 생각이 나요."}
+  ],
+  "turn_map": [
+   {"global_turn": 1, "session_id": "s-a", "turn": 1}, {"global_turn": 2, "session_id": "s-a", "turn": 2},
+   {"global_turn": 3, "session_id": "s-a", "turn": 3}, {"global_turn": 4, "session_id": "s-a", "turn": 4},
+   {"global_turn": 5, "session_id": "s-a", "turn": 5}, {"global_turn": 6, "session_id": "s-a", "turn": 6},
+   {"global_turn": 7, "session_id": "s-b", "turn": 1}, {"global_turn": 8, "session_id": "s-b", "turn": 2},
+   {"global_turn": 9, "session_id": "s-b", "turn": 3}, {"global_turn": 10, "session_id": "s-b", "turn": 4},
+   {"global_turn": 11, "session_id": "s-c", "turn": 1}, {"global_turn": 12, "session_id": "s-c", "turn": 2},
+   {"global_turn": 13, "session_id": "s-c", "turn": 3}, {"global_turn": 14, "session_id": "s-c", "turn": 4}
+  ]
+ },
+ "photos": [
+  {"photo_id": "ph-1", "session_id": "s-b", "turns": [9],
+   "clues": {"scene": "건물 입구 앞 마당", "objects": ["교문", "한복"], "people": "두 사람이 나란히 서 있음", "text_in_photo": [], "uncertain": [], "questions": []}},
+  {"photo_id": "ph-2", "session_id": "s-c", "turns": [],
+   "clues": {"scene": "선로 옆 승강장", "objects": ["기차", "가방"], "people": "사람이 보이지 않음", "text_in_photo": [], "uncertain": ["흐림"], "questions": []}}
+ ]
+}

@@ -1,0 +1,495 @@
+{
+ "schema_version": "illust-input-v1",
+ "set_id": "illust-book-B",
+ "synthetic": true,
+ "note": "완전히 가상의 화자. 목차별 자동 삽화(memoir_illust_book) 시험 전용 합성 자료 (AI 작성, 2026-11-15). 실제 인터뷰가 아니다. 목차 10개 — 사진이 놓인 항목 4개(그 가운데 하나는 3장), 사진이 없는 항목 6개. 사진 파일(illust_book_photos_B/)은 「TEST PHOTO」 라고 적힌 시험용 그림이다 — 실제 사진이 아니다.",
+ "memoir": {
+  "memoir_id": null,
+  "style": "essay",
+  "title": "우물가에서 텃밭까지",
+  "chapters": [
+   {
+    "no": 1,
+    "chapter_key": "c01",
+    "title": "우물가",
+    "status": "ready",
+    "paragraphs": [
+     {
+      "sentences": [
+       {
+        "text": "마을 한가운데에는 우물이 있었다.",
+        "turns": [
+         1
+        ]
+       }
+      ]
+     },
+     {
+      "sentences": [
+       {
+        "text": "아침마다 물동이를 이고 물을 길어 왔다.",
+        "turns": [
+         1
+        ]
+       }
+      ]
+     }
+    ],
+    "photos": [
+     {
+      "photo_id": "ph-01",
+      "after_paragraph": 0,
+      "path": "illust_book_photos_B/ph-01.jpg"
+     }
+    ]
+   },
+   {
+    "no": 2,
+    "chapter_key": "c02",
+    "title": "장독대",
+    "status": "ready",
+    "paragraphs": [
+     {
+      "sentences": [
+       {
+        "text": "뒤꼍에는 장독대가 있었다.",
+        "turns": [
+         2
+        ]
+       }
+      ]
+     },
+     {
+      "sentences": [
+       {
+        "text": "큰 장독이 여섯 개 나란히 놓여 있었다.",
+        "turns": [
+         2
+        ]
+       }
+      ]
+     }
+    ],
+    "photos": []
+   },
+   {
+    "no": 3,
+    "chapter_key": "c03",
+    "title": "모내기",
+    "status": "ready",
+    "paragraphs": [
+     {
+      "sentences": [
+       {
+        "text": "봄이면 온 식구가 논에 나갔다.",
+        "turns": [
+         3
+        ]
+       }
+      ]
+     },
+     {
+      "sentences": [
+       {
+        "text": "나는 아버지와 둘이서 모를 논에 심었다.",
+        "turns": [
+         3
+        ]
+       }
+      ]
+     }
+    ],
+    "photos": []
+   },
+   {
+    "no": 4,
+    "chapter_key": "c04",
+    "title": "졸업 사진",
+    "status": "ready",
+    "paragraphs": [
+     {
+      "sentences": [
+       {
+        "text": "국민학교 졸업식 날이었다.",
+        "turns": [
+         4
+        ]
+       }
+      ]
+     },
+     {
+      "sentences": [
+       {
+        "text": "운동장에서 반 친구들과 사진을 찍었다.",
+        "turns": [
+         4
+        ]
+       }
+      ]
+     }
+    ],
+    "photos": [
+     {
+      "photo_id": "ph-04a",
+      "after_paragraph": 0,
+      "path": "illust_book_photos_B/ph-04a.jpg"
+     },
+     {
+      "photo_id": "ph-04b",
+      "after_paragraph": 1,
+      "path": "illust_book_photos_B/ph-04b.jpg"
+     },
+     {
+      "photo_id": "ph-04c",
+      "after_paragraph": 1,
+      "path": "illust_book_photos_B/ph-04c.jpg"
+     }
+    ]
+   },
+   {
+    "no": 5,
+    "chapter_key": "c05",
+    "title": "연탄",
+    "status": "ready",
+    "paragraphs": [
+     {
+      "sentences": [
+       {
+        "text": "겨울에는 부엌에 연탄을 쌓아 두었다.",
+        "turns": [
+         5
+        ]
+       }
+      ]
+     },
+     {
+      "sentences": [
+       {
+        "text": "연탄집게로 연탄을 갈았다.",
+        "turns": [
+         5
+        ]
+       }
+      ]
+     }
+    ],
+    "photos": []
+   },
+   {
+    "no": 6,
+    "chapter_key": "c06",
+    "title": "버스 정류장",
+    "status": "ready",
+    "paragraphs": [
+     {
+      "sentences": [
+       {
+        "text": "읍내 가는 버스는 하루에 두 번 왔다.",
+        "turns": [
+         6
+        ]
+       }
+      ]
+     },
+     {
+      "sentences": [
+       {
+        "text": "정류장에서 오래 기다렸다.",
+        "turns": [
+         6
+        ]
+       }
+      ]
+     }
+    ],
+    "photos": [
+     {
+      "photo_id": "ph-06",
+      "after_paragraph": 0,
+      "path": "illust_book_photos_B/ph-06.jpg"
+     }
+    ]
+   },
+   {
+    "no": 7,
+    "chapter_key": "c07",
+    "title": "재봉틀",
+    "status": "ready",
+    "paragraphs": [
+     {
+      "sentences": [
+       {
+        "text": "마루에는 재봉틀이 놓여 있었다.",
+        "turns": [
+         7
+        ]
+       }
+      ]
+     },
+     {
+      "sentences": [
+       {
+        "text": "어머니가 재봉틀로 우리 옷을 지어 주셨다.",
+        "turns": [
+         7
+        ]
+       }
+      ]
+     }
+    ],
+    "photos": []
+   },
+   {
+    "no": 8,
+    "chapter_key": "c08",
+    "title": "라디오",
+    "status": "ready",
+    "paragraphs": [
+     {
+      "sentences": [
+       {
+        "text": "저녁이면 안방에서 라디오를 틀었다.",
+        "turns": [
+         8
+        ]
+       }
+      ]
+     },
+     {
+      "sentences": [
+       {
+        "text": "라디오에서 연속극이 나왔다.",
+        "turns": [
+         8
+        ]
+       }
+      ]
+     }
+    ],
+    "photos": []
+   },
+   {
+    "no": 9,
+    "chapter_key": "c09",
+    "title": "결혼식",
+    "status": "ready",
+    "paragraphs": [
+     {
+      "sentences": [
+       {
+        "text": "스물다섯에 결혼식을 올렸다.",
+        "turns": [
+         9
+        ]
+       }
+      ]
+     },
+     {
+      "sentences": [
+       {
+        "text": "읍내 예식장이었다.",
+        "turns": [
+         9
+        ]
+       }
+      ]
+     }
+    ]
+   },
+   {
+    "no": 10,
+    "chapter_key": "c10",
+    "title": "텃밭",
+    "status": "ready",
+    "paragraphs": [
+     {
+      "sentences": [
+       {
+        "text": "집 뒤 텃밭에 상추를 심었다.",
+        "turns": [
+         10
+        ]
+       }
+      ]
+     },
+     {
+      "sentences": [
+       {
+        "text": "호미로 풀을 매 주었다.",
+        "turns": [
+         10
+        ]
+       }
+      ]
+     }
+    ],
+    "photos": []
+   }
+  ]
+ },
+ "source": {
+  "utterances": [
+   {
+    "turn": 1,
+    "session_id": "s-01",
+    "asked": "그때 이야기를 들려주세요.",
+    "elder": "마을 한가운데에 우물이 있었어요. 아침마다 물동이를 이고 물을 길어 왔어요."
+   },
+   {
+    "turn": 2,
+    "session_id": "s-02",
+    "asked": "그때 이야기를 들려주세요.",
+    "elder": "뒤꼍에 장독대가 있었어요. 큰 장독이 여섯 개 나란히 놓여 있었어요."
+   },
+   {
+    "turn": 3,
+    "session_id": "s-03",
+    "asked": "그때 이야기를 들려주세요.",
+    "elder": "봄이면 온 식구가 논에 나갔어요. 제가 아버지랑 둘이서 모를 논에 심었어요."
+   },
+   {
+    "turn": 4,
+    "session_id": "s-04",
+    "asked": "그때 이야기를 들려주세요.",
+    "elder": "국민학교 졸업식 날 운동장에서 반 친구들과 사진을 찍었어요."
+   },
+   {
+    "turn": 5,
+    "session_id": "s-05",
+    "asked": "그때 이야기를 들려주세요.",
+    "elder": "겨울에는 부엌에 연탄을 쌓아 두었어요. 연탄집게로 연탄을 갈았어요."
+   },
+   {
+    "turn": 6,
+    "session_id": "s-06",
+    "asked": "그때 이야기를 들려주세요.",
+    "elder": "읍내 가는 버스는 하루에 두 번 왔어요. 정류장에서 오래 기다렸어요."
+   },
+   {
+    "turn": 7,
+    "session_id": "s-07",
+    "asked": "그때 이야기를 들려주세요.",
+    "elder": "마루에 재봉틀이 놓여 있었어요. 어머니가 재봉틀로 우리 옷을 지어 주셨어요."
+   },
+   {
+    "turn": 8,
+    "session_id": "s-08",
+    "asked": "그때 이야기를 들려주세요.",
+    "elder": "저녁이면 안방에서 라디오를 틀었어요. 라디오에서 연속극이 나왔어요."
+   },
+   {
+    "turn": 9,
+    "session_id": "s-09",
+    "asked": "그때 이야기를 들려주세요.",
+    "elder": "스물다섯에 읍내 예식장에서 결혼식을 올렸어요."
+   },
+   {
+    "turn": 10,
+    "session_id": "s-10",
+    "asked": "그때 이야기를 들려주세요.",
+    "elder": "집 뒤 텃밭에 상추를 심었어요. 호미로 풀을 매 주었어요."
+   }
+  ],
+  "turn_map": [
+   {
+    "global_turn": 1,
+    "session_id": "s-01",
+    "turn": 1
+   },
+   {
+    "global_turn": 2,
+    "session_id": "s-02",
+    "turn": 1
+   },
+   {
+    "global_turn": 3,
+    "session_id": "s-03",
+    "turn": 1
+   },
+   {
+    "global_turn": 4,
+    "session_id": "s-04",
+    "turn": 1
+   },
+   {
+    "global_turn": 5,
+    "session_id": "s-05",
+    "turn": 1
+   },
+   {
+    "global_turn": 6,
+    "session_id": "s-06",
+    "turn": 1
+   },
+   {
+    "global_turn": 7,
+    "session_id": "s-07",
+    "turn": 1
+   },
+   {
+    "global_turn": 8,
+    "session_id": "s-08",
+    "turn": 1
+   },
+   {
+    "global_turn": 9,
+    "session_id": "s-09",
+    "turn": 1
+   },
+   {
+    "global_turn": 10,
+    "session_id": "s-10",
+    "turn": 1
+   }
+  ]
+ },
+ "photos": [
+  {
+   "photo_id": "ph-01",
+   "session_id": "s-01",
+   "turns": [],
+   "clues": null
+  },
+  {
+   "photo_id": "ph-04a",
+   "session_id": "s-04",
+   "turns": [],
+   "clues": null
+  },
+  {
+   "photo_id": "ph-04b",
+   "session_id": "s-04",
+   "turns": [],
+   "clues": null
+  },
+  {
+   "photo_id": "ph-04c",
+   "session_id": "s-04",
+   "turns": [],
+   "clues": null
+  },
+  {
+   "photo_id": "ph-06",
+   "session_id": "s-06",
+   "turns": [],
+   "clues": null
+  },
+  {
+   "photo_id": "ph-09",
+   "session_id": "s-09",
+   "turns": [],
+   "clues": null,
+   "chapter_keys": [
+    "c09"
+   ],
+   "after_paragraph": 1,
+   "path": "illust_book_photos_B/ph-09.jpg"
+  },
+  {
+   "photo_id": "ph-08x",
+   "session_id": "s-08",
+   "turns": [],
+   "clues": null
+  }
+ ]
+}
