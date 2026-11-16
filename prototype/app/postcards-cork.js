@@ -38,8 +38,8 @@
       <div class="pc-confirm" role="alertdialog" aria-labelledby="pc-confirm-title" aria-describedby="pc-confirm-desc" hidden>
         <strong id="pc-confirm-title">이 엽서를 지울까요?</strong>
         <p id="pc-confirm-desc">지운 엽서는 보드에서 사라지고, 앞으로 만드는 자서전에도 들어가지 않아요. 이미 만든 책은 그대로예요.</p>
-        <div><button type="button" class="button outline compact" data-pc-keep>그대로 두기</button><button type="button" class="button compact pc-confirm-delete" data-pc-confirm>지우기</button></div></div>
-      <div class="pc-actions"><button type="button" class="text-button pc-trash" data-pc-delete>${icons('close')}<span>엽서 지우기</span></button><button type="button" class="button outline compact" data-pc-close>${kind === 'pin' ? '보드에 다시 꽂기' : '보드에 다시 붙이기'}</button></div></article>`;
+        <div><button type="button" class="button outline compact pc-confirm-delete" data-pc-confirm>지우기</button><button type="button" class="button primary compact" data-pc-keep>그대로 두기</button></div></div>
+      <div class="pc-actions"><button type="button" class="text-button pc-trash" data-pc-delete>${icons('close')}<span>엽서 지우기</span></button><span class="pc-actions-right"><button type="button" class="button outline compact pc-share" data-pc-share>${icons('share')}<span>엽서 공유</span></button><button type="button" class="button outline compact" data-pc-close>${kind === 'pin' ? '보드에 다시 꽂기' : '보드에 다시 붙이기'}</button></span></div></article>`;
     document.body.append(hold);
     const held = hold.querySelector('.pc-held');
     holding = {card, hold, held, kind, tilt, opener: card};
@@ -47,7 +47,7 @@
     if (!reduce.matches) {
       // 1) 핀을 뽑는다 / 테이프를 뗀다
       const fly = card.cloneNode(true);
-      fly.className = 'postcard-card pc-fly';
+      fly.className = `postcard-card pc-fly${kind === 'postit' ? ' pc-fly-postit' : ''}`;
       fly.removeAttribute('data-postcard');
       Object.assign(fly.style, {left: r.left + 'px', top: r.top + 'px', width: r.width + 'px', height: r.height + 'px', transform: `rotate(${tilt})`});
       fly.style.setProperty('--tilt', tilt);
@@ -92,6 +92,7 @@
     }
     held.focus({preventScroll: true});
     hold.querySelector('[data-pc-close]').addEventListener('click', putBack);
+    hold.querySelector('[data-pc-share]').addEventListener('click', () => sharePostcard(record));
     hold.querySelector('[data-pc-delete]').addEventListener('click', () => askDelete(true));
     hold.querySelector('[data-pc-keep]').addEventListener('click', () => askDelete(false));
     hold.querySelector('[data-pc-confirm]').addEventListener('click', () => removeHeld(id));
@@ -139,6 +140,35 @@
     hold.remove();
     card.focus({preventScroll: true});
     holding = null;
+  }
+
+  // 엽서 공유 — 엽서 글을 그대로 보낸다 (카카오톡 · 문자 · 이메일 · 복사). 엽서만 따로 여는 공유 주소는 아직 서버에 없어서,
+  // 링크 칸에는 내말싸미 첫 화면을 둔다
+  /** 엽서 나누기 — 엽서를 그림 한 장으로 그려 보낸다 (postcard-image.js). 받는 분은 보드 위 엽서 모습 그대로 받는다 */
+  function sharePostcard(record) {
+    const elders = window.Srv?.AUTH?.elders || [], me = elders.find((e) => e.elder_id === record.elder_id);
+    const who = me && me.name !== '나' ? window.Srv.honor(me.name) : '';
+    const text = postcardBody(record).replace(/\n\s*\n/g, '\n\n').trim();
+    const idx = recordData.filter((r) => r.elder_id === record.elder_id).findIndex((r) => r.id === record.id);
+    const o = {
+      kind: 'postcard', eyebrow: '엽서 나누기', title: record.title,
+      card: {kicker: '', title: '', sub: ''},
+      message: `${who ? `${who}의 이야기` : '제 이야기'}를 엽서로 나눠요. 「${record.title}」\n— 내말싸미에서 남긴 엽서`,
+      link: '',
+      status: '',
+      note: '엽서가 그림 한 장으로 보내져요. 가족 이야기가 담겨 있으니 믿을 수 있는 분에게만 보내 주세요.',
+      extras: [],
+      image: {
+        name: window.MemoirPostcardImage.fileName(record.title),
+        make: async () => {
+          const r = await window.MemoirPostcardImage.render({title: record.title, body: text, date: record.date, category: (typeof categories !== 'undefined' && categories[record.category]) || '', icon: record.icon, who, yellow: idx % 4 === 3});
+          // 그림에 다 담지 못한 긴 엽서는 함께 보내는 글에 전체를 붙인다
+          if (r.clipped) { const box = document.getElementById('share-msg'); if (box && box.value === o.message) box.value = o.message = `${o.message}\n\n「${record.title}」\n${text}`; }
+          return r;
+        },
+      },
+    };
+    window.MemoirShare.open(o);
   }
 
   // 6. 엽서 지우기 — 손에 든 엽서 · 보드 위 × · 여러 장 골라 지우기. 늘 한 번 더 묻고, 지운 뒤 잠시 「되돌리기」를 둔다.
@@ -209,7 +239,7 @@
     ], {duration: 520, delay: i * 80, easing: 'cubic-bezier(.5,0,.8,.4)'})));
   }
 
-  // ── 보드 위 엽서마다 「지우기」(×) ──
+  // ── 보드 위 엽서를 칸(slot)으로 감싼다 — 고르기 표시 · 떼어 내는 연출의 자리. (엽서마다 붙던 × 는 너저분해서 뺐다)
   function wrap() {
     const cards = [...list.children].filter((el) => el.classList.contains('postcard-card'));
     if (!cards.length) { syncSelectUi(); return; }
@@ -218,8 +248,6 @@
       slot.className = 'pc-slot';
       card.replaceWith(slot);
       slot.append(card);
-      const title = card.querySelector('strong')?.textContent || '엽서';
-      slot.insertAdjacentHTML('beforeend', `<button type="button" class="pc-x" data-pc-remove="${escapeText(card.dataset.postcard)}" aria-label="「${escapeText(title)}」 엽서 지우기" title="엽서 지우기">${icons('close')}</button>`);
     });
     syncSelectUi();
   }
@@ -234,14 +262,16 @@
     commitDelete([id]);
   }
 
-  // ── 여러 장 골라 한 번에 지우기 ──
+  // ── 엽서 골라 지우기 (한 장도 여러 장도) ──
   let selecting = false;
   const picked = new Set();
   const toolbar = document.querySelector('[data-screen="records"] .records-toolbar');
   const toggle = document.createElement('button');
-  toggle.type = 'button'; toggle.className = 'button outline compact pc-select-toggle';
-  toggle.innerHTML = `${icons('check')}<span>여러 장 지우기</span>`;
-  toolbar?.append(toggle);
+  // 「엽서 N장 | 엽서 지우기」 — 개수 옆의 작은 버튼. 켰을 때만 엽서를 골라 지운다 (책장의 「N권 | 책 지우기」와 같은 모양)
+  toggle.type = 'button'; toggle.className = 'srv-mini-btn pc-select-toggle';
+  toggle.innerHTML = `${icons('check')}<span>엽서 지우기</span>`;
+  document.getElementById('selection-count')?.after(toggle);
+  void toolbar;
   const visibleIds = () => [...list.querySelectorAll('.pc-slot > .postcard-card')].map((c) => Number(c.dataset.postcard));
   let selectBar = null;
   function ensureBar() {
@@ -262,7 +292,10 @@
   }
   function syncSelectUi() {
     const hasBoard = !!list.querySelector('.pc-slot');
-    toggle.hidden = !hasBoard && !selecting;
+    // 검색 · 분류로 보이는 엽서가 없을 때는 자리만 남기고 숨긴다 — 버튼이 빠지면 검색칸이 옆으로 밀려 다닌다
+    const hasAny = (window.currentRecords ? currentRecords().length : 0) > 0 || !!(state.query || state.filter !== 'all');
+    toggle.hidden = !hasBoard && !selecting && !hasAny;
+    toggle.classList.toggle('pc-toggle-ghost', !hasBoard && !selecting && hasAny);
     if (selecting && !hasBoard && !state.query && state.filter === 'all') { setSelecting(false); return; }
     list.querySelectorAll('.pc-slot').forEach((slot) => {
       const card = slot.querySelector('.postcard-card');
@@ -299,4 +332,19 @@
     pull(card);
   }, true);
   wrap();
+
+  /* ── 검색하며 글자를 칠 때 검색칸이 위아래로 튀지 않게 ──
+       결과가 줄면 보드가 짧아져 페이지 끝이 올라오고, 브라우저가 스크롤을 끌어올려 검색칸이 움직인다.
+       그때 모자라는 만큼만 보드 높이를 붙잡고 스크롤을 제자리로 돌린다. 검색어를 지우면 놓는다. */
+  let keepY = null;
+  document.addEventListener('input', (e) => { if (e.target.id === 'record-search') keepY = scrollY; }, true);
+  document.addEventListener('input', (e) => {
+    if (e.target.id !== 'record-search' || keepY === null) return;
+    const y = keepY; keepY = null;
+    if (!e.target.value.trim()) { list.style.minHeight = ''; return; }
+    const lack = y + innerHeight - document.documentElement.scrollHeight;
+    if (lack > 0) list.style.minHeight = `${list.offsetHeight + lack}px`;
+    if (Math.abs(scrollY - y) > 1) scrollTo({top: y, behavior: 'instant'});
+  });
+  window.addEventListener('memoir:screen', (e) => { if (e.detail.screen !== 'records') list.style.minHeight = ''; });
 }());

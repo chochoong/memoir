@@ -37,22 +37,22 @@
 }
 #record-list > .pc-slot > .postcard-card:focus-visible { outline: 3px solid var(--burgundy); outline-offset: 4px; }
 /* 엽서 줄 · 우표 */
-#record-list > .pc-slot > .postcard-card .record-copy { order: 2; }
-#record-list > .pc-slot > .postcard-card .record-copy strong { display: block; font-family: var(--serif); font-size: 18px; line-height: 1.5; margin: 4px 0 6px; padding-right: 54px; }
-#record-list > .pc-slot > .postcard-card .record-copy p {
+#record-list > .pc-slot > .postcard-card .record-copy, .postcard-card.pc-fly .record-copy { order: 2; }
+#record-list > .pc-slot > .postcard-card .record-copy strong, .postcard-card.pc-fly .record-copy strong { display: block; font-family: var(--serif); font-size: 18px; line-height: 1.5; margin: 4px 0 6px; padding-right: 54px; }
+#record-list > .pc-slot > .postcard-card .record-copy p, .postcard-card.pc-fly .record-copy p {
   font-size: 14px; line-height: 26px; color: #5d5243; margin: 0;
   background: repeating-linear-gradient(transparent 0 25px, #d9c9a6 25px 26px);
   display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 3; line-clamp: 3; overflow: hidden;
 }
-#record-list > .pc-slot > .postcard-card .record-meta { font-size: 12px; color: #8a7a62; }
-#record-list > .pc-slot > .postcard-card .memory-thumbnail {
+#record-list > .pc-slot > .postcard-card .record-meta, .postcard-card.pc-fly .record-meta { font-size: 12px; color: #8a7a62; }
+#record-list > .pc-slot > .postcard-card .memory-thumbnail, .postcard-card.pc-fly .memory-thumbnail {
   position: absolute; top: 18px; right: 14px; width: 46px; height: 54px; border-radius: 2px;
   background: #fff8e6; color: var(--burgundy);
   box-shadow: 0 0 0 3px #fffdf6, 0 0 0 4px #c9b48f; outline: 2px dotted #c9b48f; outline-offset: 2px;
   transform: rotate(3deg);
 }
-#record-list > .pc-slot > .postcard-card .memory-thumbnail .icon { width: 22px; height: 22px; }
-#record-list > .pc-slot > .postcard-card > .icon:last-child { display: none; }
+#record-list > .pc-slot > .postcard-card .memory-thumbnail .icon, .postcard-card.pc-fly .memory-thumbnail .icon { width: 22px; height: 22px; }
+#record-list > .pc-slot > .postcard-card > .icon:last-child, .postcard-card.pc-fly > .icon:last-child { display: none; }
 /* 붙이는 방법: 압정 · 종이테이프 · 포스트잇 */
 #record-list > .pc-slot > .postcard-card::before {
   content: ""; position: absolute; left: 50%; top: -9px; width: 20px; height: 20px; margin-left: -10px; border-radius: 50%;
@@ -102,6 +102,12 @@
 .pc-pin { position: fixed; z-index: 90; width: 20px; height: 20px; border-radius: 50%; pointer-events: none;
   background: radial-gradient(circle at 35% 30%, #ffd9cf 0 2px, #c4483e 3px, #8e2a24 10px); box-shadow: 0 4px 3px -1px #2a120c80; }
 .pc-fly { position: fixed; z-index: 85; margin: 0; pointer-events: none; transform-origin: 50% 12px; }
+/* 떼어 내는 동안의 엽서 — 보드 밖(body)에 붙어 위 보드 규칙이 닿지 않으므로 같은 모양을 여기서 준다.
+   글자는 엽서 안에서만 보이게 자른다 (커지고 기울어도 밖으로 새지 않게) */
+.postcard-card.pc-fly { box-sizing: border-box; overflow: hidden; border: 0; color: #3a3126; text-align: left; align-items: stretch; }
+.postcard-card.pc-fly .record-copy { min-width: 0; overflow-wrap: anywhere; }
+.pc-fly-postit .record-copy p { background: none; }
+.pc-fly-postit .memory-thumbnail { background: #fdf1c6; }
 @media (max-width: 760px) {
   #record-list:has(> .pc-slot) { grid-template-columns: 1fr; padding: 32px 18px 34px; border-width: 9px; gap: 34px; }
   .pc-held { padding: 38px 24px 24px; }

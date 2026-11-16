@@ -32,6 +32,10 @@
 [data-screen="library"] .ml-tone-0 .ml-cover { --ml-cover-color:#5f1d2c; --ml-cover-ink:#e6c58e; --ml-cover-spine:#3d1420; }
 [data-screen="library"] .ml-tone-1 .ml-cover { --ml-cover-color:#1c293b; --ml-cover-ink:#eee2cc; --ml-cover-spine:#111b29; }
 [data-screen="library"] .ml-tone-2 .ml-cover { --ml-cover-color:#1a3128; --ml-cover-ink:#e6c58e; --ml-cover-spine:#102018; }
+/* 같은 문체가 이어질 때 두 번째 책 — 조금 밝게 (library-view.js toneOf) */
+[data-screen="library"] .ml-tone-0b .ml-cover { --ml-cover-color:#76283b; --ml-cover-ink:#e9cb96; --ml-cover-spine:#4e1a28; }
+[data-screen="library"] .ml-tone-1b .ml-cover { --ml-cover-color:#2a3c56; --ml-cover-ink:#f1e6d2; --ml-cover-spine:#1a283c; }
+[data-screen="library"] .ml-tone-2b .ml-cover { --ml-cover-color:#26443a; --ml-cover-ink:#e9cb96; --ml-cover-spine:#163026; }
 [data-screen="library"] .ml-book-card:hover .ml-cover,[data-screen="library"] .ml-book-card:focus-visible .ml-cover { transform:translateY(-5px); }
 [data-screen="library"] .ml-shelf-plank { position:absolute; z-index:2; top:var(--ml-display-height); left:4px; right:4px; height:16px; border-radius:2px 2px 3px 3px; background:repeating-linear-gradient(90deg,#ffffff00 0 37px,#3c1e0a1f 37px 39px,#ffffff00 39px 71px),linear-gradient(#a2724c,#7d5437 40%,#5f3e28); box-shadow:0 14px 16px -8px #3c230f80,inset 0 1px 0 #ffebc859; pointer-events:none; }
 [data-screen="library"] .ml-book-copy { display:flex; flex-direction:column; align-self:stretch; padding:29px 1px 0; }

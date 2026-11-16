@@ -1,6 +1,7 @@
 """prototype/app/ (화면 원본) → prototype/index.html (서버가 내보내는 파일 하나).
 
     python prototype/build.py
+    python prototype/build.py --demo 체험판.html   # 서버 없이 바로 써 보는 예시 모드 파일 (나눠 주기용)
 
 CSS · JS · 그림 · 글꼴을 모두 index.html 안에 넣는다. app/ 의 원본은 바꾸지 않는다.
 화면을 고칠 때는 app/ 를 고치고 이 스크립트를 다시 돌린 뒤 index.html 을 함께 커밋한다.
@@ -9,7 +10,9 @@ import base64, os, re, sys
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 SRC = os.path.join(HERE, 'app')
-OUT = sys.argv[1] if len(sys.argv) > 1 else os.path.join(HERE, 'index.html')
+DEMO = '--demo' in sys.argv
+ARGS = [a for a in sys.argv[1:] if a != '--demo']
+OUT = ARGS[0] if ARGS else os.path.join(HERE, 'index.html')
 
 
 def read(p):
@@ -49,6 +52,10 @@ js = '\n'.join(f'<script data-from="{s}">\n' + read(s).replace('"book-illustrati
 html = html.replace('"book-illustration.svg"', f'"{SVG}"')
 assert html.count('</body>') == 1
 html = html.replace('</body>', js + '\n</body>')
+if DEMO:
+    # 체험판 — 늘 예시 모드(가짜 서버 · 이 브라우저에만 저장)로 연다
+    html = html.replace('<head>', '<head>\n<script>window.MEMOIR_FORCE_DEMO = true;</script>', 1)
+    html = re.sub(r'<title>([^<]*)</title>', r'<title>\1 · 체험판</title>', html, count=1)
 with open(OUT, 'w', encoding='utf-8', newline='\n') as f:
     f.write(html)
 print(f'scripts {len(scripts)} · {len(html) / 1024:.0f} KB → {os.path.relpath(OUT)}')

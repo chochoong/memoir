@@ -30,8 +30,18 @@
     }
   }
 
-  function bookMarkup(book, index) {
-    return `<li><button type="button" class="ml-book-card ml-tone-${index % 3}" data-library-book="${escapeText(book.id)}">
+  // 표지 색은 문체를 따른다 — 소설체 · 문학체 · 수필체가 늘 같은 색이라 책장만 봐도 어떤 책인지 안다.
+  // 같은 문체 책이 이어지면 두 번째마다 조금 밝은 색(…b)으로 — 같은 색이 나란히 붙어 단조롭지 않게.
+  // 색 자체는 library-view.css · library-pull.css 의 .ml-tone-* 에 있다.
+  const STYLE_TONE = {novel: 0, literary: 1, essay: 2};
+  function toneOf(book, index, list) {
+    const base = STYLE_TONE[book.style];
+    if (base === undefined) return String(index % 3); // 예전 문체(구어체 등) — 순서대로
+    const nth = list.slice(0, index).filter((b) => b.style === book.style).length;
+    return nth % 2 ? `${base}b` : String(base);
+  }
+  function bookMarkup(book, index, list) {
+    return `<li><button type="button" class="ml-book-card ml-tone-${toneOf(book, index, list)}" data-library-book="${escapeText(book.id)}">
       <span class="ml-cover-bay" aria-hidden="true"><span class="ml-cover"><span class="ml-cover-title">${escapeText(book.title)}</span><span class="ml-cover-rule"></span><span class="ml-cover-volume">${String(index + 1).padStart(2, '0')}</span></span></span>
       <span class="ml-book-copy"><span class="ml-volume-label">작은 책 ${String(index + 1).padStart(2, '0')}</span><strong>${escapeText(book.title)}</strong><span class="ml-book-meta">이야기 ${book.count || book.body.length}개 · ${escapeText(book.date)}</span><span class="ml-read-label">${readingLabel(book)} <span aria-hidden="true">→</span></span></span>
     </button></li>`;
@@ -42,7 +52,7 @@
     const columns = shelfColumns();
     let rows = '';
     for (let start = 0; start < visibleBooks.length; start += columns) {
-      rows += `<div class="ml-shelf-row"><ul class="ml-books" aria-label="책장 ${Math.floor(start / columns) + 1}번째 칸">${visibleBooks.slice(start, start + columns).map((book, index) => bookMarkup(book, start + index)).join('')}</ul><span class="ml-shelf-plank" aria-hidden="true"></span></div>`;
+      rows += `<div class="ml-shelf-row"><ul class="ml-books" aria-label="책장 ${Math.floor(start / columns) + 1}번째 칸">${visibleBooks.slice(start, start + columns).map((book, index) => bookMarkup(book, start + index, visibleBooks)).join('')}</ul><span class="ml-shelf-plank" aria-hidden="true"></span></div>`;
     }
     return `<div class="ml-shelves ml-columns-${columns}" role="group" aria-label="나의 자서전 책장">${rows}</div>`;
   }

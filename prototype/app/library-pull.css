@@ -24,3 +24,7 @@
 .lp-scope.ml-tone-0 .ml-cover { --ml-cover-color:#5f1d2c; --ml-cover-ink:#e6c58e; --ml-cover-spine:#3d1420; }
 .lp-scope.ml-tone-1 .ml-cover { --ml-cover-color:#1c293b; --ml-cover-ink:#eee2cc; --ml-cover-spine:#111b29; }
 .lp-scope.ml-tone-2 .ml-cover { --ml-cover-color:#1a3128; --ml-cover-ink:#e6c58e; --ml-cover-spine:#102018; }
+/* 같은 문체가 이어질 때 두 번째 책 — 조금 밝게 (library-view.js toneOf) */
+.lp-scope.ml-tone-0b .ml-cover { --ml-cover-color:#76283b; --ml-cover-ink:#e9cb96; --ml-cover-spine:#4e1a28; }
+.lp-scope.ml-tone-1b .ml-cover { --ml-cover-color:#2a3c56; --ml-cover-ink:#f1e6d2; --ml-cover-spine:#1a283c; }
+.lp-scope.ml-tone-2b .ml-cover { --ml-cover-color:#26443a; --ml-cover-ink:#e9cb96; --ml-cover-spine:#163026; }

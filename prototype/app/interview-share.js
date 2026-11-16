@@ -31,12 +31,13 @@
   function open() {
     const address = document.getElementById('issued-address')?.value;
     const found = invitationOf(address);
-    const name = found?.person?.name || '이야기 주인공';
+    const name = found?.person?.name || '';
+    const honor = window.Srv.honor(name);
     const topic = found?.inv?.topic || '살아온 이야기';
     share.open({
-      kind: 'invite', eyebrow: '인터뷰 초대 보내기', title: `${name} 님에게 초대 보내기`,
-      card: {kicker: '내말싸미 · 이야기 초대', title: `${name} 님, 이야기를 들려주세요`, sub: `주제 「${topic}」 · 누르면 휴대폰에서 바로 시작해요`, art: `<span class="share-mini-mic">${icons('mic')}</span>`},
-      message: `${name}, 안녕하세요. ${name}의 「${topic}」 이야기를 듣고 싶어서 초대 링크를 보내요.\n링크를 누르면 휴대폰에서 바로 시작할 수 있어요. 질문에 답하듯 편하게 말씀해 주시면 돼요.`,
+      kind: 'invite', eyebrow: '인터뷰 초대 보내기', title: `${honor}에게 초대 보내기`,
+      card: {kicker: '내말싸미 · 이야기 초대', title: `${honor}, 이야기를 들려주세요`, sub: `주제 「${topic}」 · 누르면 휴대폰에서 바로 시작해요`, art: `<span class="share-mini-mic">${icons('mic')}</span>`},
+      message: `${honor}, 안녕하세요. ${honor}의 「${topic}」 이야기를 듣고 싶어서 초대 링크를 보내요.\n링크를 누르면 휴대폰에서 바로 시작할 수 있어요. 질문에 답하듯 편하게 말씀해 주시면 돼요.`,
       link: address,
       status: '',
       note: '이 링크는 받는 분 한 분만 쓰도록 만든 초대예요. 다른 사람에게 전달되지 않게 해 주세요. 보낸 뒤에도 「초대 취소」로 막을 수 있어요.',

@@ -1,5 +1,5 @@
 /* 서버 연결로 새로 생긴 작은 조각들 — 시안 색 · 글꼴을 그대로 쓴다 */
-.srv-rv-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 14px; max-height: min(52vh, 460px); overflow: auto; }
+.srv-rv-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 14px; }
 .srv-rv-list li { padding: 0 0 14px; border-bottom: 1px dashed rgba(90, 70, 50, .2); }
 .srv-rv-list li:last-child { border-bottom: 0; }
 .srv-rv-q { margin: 0 0 6px; font-size: .92em; color: var(--muted, #7a6a5a); }
@@ -8,3 +8,204 @@
 .srv-rv-wait { color: var(--muted, #7a6a5a); }
 .pending-story-row small { font-weight: 400; color: var(--muted, #7a6a5a); }
 .mlg-gsi { min-height: 44px; display: flex; align-items: center; }
+/* 「이야기 남기기」 — 보내는 중 · 보낼 차례를 기다리는 중 (금지 표시 대신) */
+#answer-panel [type="submit"].srv-send-wait { cursor: progress; opacity: .8; }
+.selection-footer .srv-pick-all { margin-left: auto; margin-right: 10px; }
+@media (max-width: 600px) { .selection-footer .srv-pick-all { margin: 0; } }
+/* 이야기 주인공 이름 고치기 · 지우기 */
+.role-manage-elders { margin-top: 14px; display: inline-flex; align-items: center; gap: 6px; font-size: 15px; }
+.elder-manage-dialog { width: min(560px, calc(100% - 32px)); }
+.elder-manage-dialog .em-lead { margin: -6px 0 16px; }
+.em-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 10px; max-height: min(50dvh, 420px); overflow: auto; }
+.em-row { display: flex; gap: 8px; align-items: center; padding: 10px; border: 1px solid var(--line); border-radius: 10px; background: #fffdf9; }
+.em-name { flex: 1; min-width: 0; }
+.em-name input { width: 100%; font: inherit; font-size: 17px; padding: 10px 12px; min-height: 46px; border: 1px solid #cbb29b; border-radius: 8px; background: #fff; color: var(--ink); }
+.em-name input:disabled { background: transparent; border-color: transparent; color: var(--ink); font-weight: 600; }
+.em-self { font-size: 13px; color: var(--muted, #7a6a5a); padding-right: 6px; white-space: nowrap; }
+.em-del { color: #9b352e; display: inline-flex; align-items: center; gap: 4px; white-space: nowrap; }
+.em-msg { min-height: 1.6em; margin: 14px 0 0; font-size: 14px; line-height: 1.6; color: var(--muted, #7a6a5a); }
+.em-msg.bad { color: #9b352e; }
+.visually-hidden { position: absolute !important; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+@media (max-width: 600px) { .em-row { flex-wrap: wrap; } .em-name { flex-basis: 100%; } }
+.elder-pick-dialog { width: min(480px, calc(100% - 32px)); }
+.ep-list { display: flex; flex-wrap: wrap; gap: 10px; margin: 4px 0 16px; }
+.ep-list [aria-pressed="true"] { background: var(--burgundy); color: #fffaf4; border-color: var(--burgundy); }
+.ep-manage, .sc-manage { display: inline-flex; align-items: center; gap: 6px; font-size: 15px; justify-self: start; }
+/* 지울 수 없을 때 안내 상자 */
+.em-blocked { list-style: none; margin: -2px 0 4px; padding: 16px 18px; border: 1px solid #e3c7a0; border-left: 4px solid #b9874a; border-radius: 10px; background: #fff6e6; color: #4a3a2c; }
+.em-blocked .emb-head { display: flex; align-items: center; gap: 8px; font-size: 16px; }
+.em-blocked .emb-head .icon { width: 20px; height: 20px; color: #9a6a2e; flex: none; }
+.em-blocked .emb-sub { margin: 8px 0 8px; font-size: 13px; color: #7a6650; }
+.em-blocked .emb-stats { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 8px; }
+.em-blocked .emb-stats li { display: flex; align-items: center; gap: 8px; padding: 8px 10px; border-radius: 8px; background: #fffdf8; border: 1px solid #ecdcc3; font-size: 14px; }
+.em-blocked .emb-stats li .icon { width: 16px; height: 16px; color: var(--burgundy); flex: none; }
+.em-blocked .emb-stats li b { margin-left: auto; font-size: 15px; color: var(--burgundy); }
+.em-blocked .emb-why { margin: 12px 0 0; font-size: 14px; line-height: 1.7; }
+.em-blocked .emb-actions { display: flex; align-items: center; gap: 12px; margin-top: 12px; }
+.srv-go-home { margin-top: 18px; display: inline-flex; align-items: center; justify-content: center; gap: 8px; text-decoration: none; }
+
+/* 「자서전 만드는 중」 알림 — 진행 창을 닫아도 화면 아래에 남는다 (srv-memoir) */
+.srv-gen-pill {
+  position: fixed; z-index: 60; right: 24px; bottom: 24px;
+  display: inline-flex; align-items: center; gap: 10px;
+  max-width: calc(100% - 32px); min-height: 52px; padding: 8px 18px 8px 14px;
+  border: 1px solid #c9a99b; border-radius: 999px;
+  background: #fffaf0; color: #3b2a26; box-shadow: 0 8px 22px #4a2c2426;
+  font: inherit; text-align: left; cursor: pointer;
+}
+.srv-gen-pill[hidden] { display: none; }
+.srv-gen-pill:hover { border-color: #7a4a55; }
+.srv-gen-pill:focus-visible { outline: 3px solid #7a4a55; outline-offset: 2px; }
+.srv-gen-pill .sgp-text { display: flex; flex-direction: column; line-height: 1.3; min-width: 0; }
+.srv-gen-pill b { font-size: 15px; color: #6b3a48; }
+.srv-gen-pill small { font-size: 13px; color: #6d5b55; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.srv-gen-pill .sgp-spin {
+  flex: none; width: 20px; height: 20px; border-radius: 50%;
+  border: 3px solid #e7d5cc; border-top-color: #7a4a55; animation: sgp-spin 1s linear infinite;
+}
+@keyframes sgp-spin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) { .srv-gen-pill .sgp-spin { animation: none; border-top-color: #7a4a55; border-right-color: #7a4a55; } }
+@media (max-width: 760px) {
+  .srv-gen-pill { right: 16px; left: 16px; justify-content: flex-start; top: 72px; bottom: auto; min-height: 48px; }
+}
+
+/* 만드는 중에 새 자서전을 누르면 — 진행 창 위에 막는 이유 (srv-memoir) */
+.generation-dialog .srv-gen-busy, #generation-dialog .srv-gen-busy {
+  margin: 4px 0 12px; padding: 12px 14px; border: 1px solid #e0c7bc; border-radius: 10px;
+  background: #fbf0ea; color: #5b3a40; font-size: 15px; line-height: 1.6; text-align: center;
+}
+.srv-gen-busy[hidden] { display: none !important; }
+
+/* 책장의 「만드는 중」 책 — 빛이 지나가고 별이 반짝인다 */
+[data-screen="library"] .ml-making .ml-cover-making {
+  --ml-cover-color: #7a4a55; --ml-cover-ink: #fbe9c8; --ml-cover-spine: #57303a;
+  overflow: hidden; justify-content: center;
+}
+[data-screen="library"] .ml-making .ml-cover-title { font-size: 19px; }
+[data-screen="library"] .ml-making .ml-volume-label { color: #7a4a55; font-weight: 600; }
+.ml-cover-making .mlm-shine {
+  position: absolute; inset: -20% auto -20% -60%; width: 45%;
+  background: linear-gradient(100deg, transparent, #ffffff55 45%, #fff6dd88 50%, #ffffff55 55%, transparent);
+  transform: skewX(-12deg); animation: mlm-shine 2.6s ease-in-out infinite; pointer-events: none;
+}
+.ml-cover-making .mlm-spark { position: absolute; color: #ffe7a8; text-shadow: 0 0 8px #ffd77a; opacity: 0; animation: mlm-twinkle 2.2s ease-in-out infinite; pointer-events: none; }
+.ml-cover-making .s1 { top: 12%; left: 16%; font-size: 15px; }
+.ml-cover-making .s2 { top: 22%; right: 14%; font-size: 12px; animation-delay: .5s; }
+.ml-cover-making .s3 { bottom: 20%; right: 22%; font-size: 17px; animation-delay: 1s; }
+.ml-cover-making .s4 { bottom: 12%; left: 22%; font-size: 11px; animation-delay: 1.5s; }
+[data-screen="library"] .ml-making .ml-cover { box-shadow: -3px 1px 0 var(--ml-cover-spine), 0 0 0 2px #f3d79a, 0 0 22px #f0c86f88, 4px 5px 8px #3c261430; animation: mlm-glow 2.2s ease-in-out infinite; }
+@keyframes mlm-shine { 0% { left: -60%; } 60%, 100% { left: 130%; } }
+@keyframes mlm-twinkle { 0%, 100% { opacity: 0; transform: scale(.6) rotate(0); } 50% { opacity: 1; transform: scale(1.15) rotate(20deg); } }
+@keyframes mlm-glow { 0%, 100% { filter: brightness(1); } 50% { filter: brightness(1.12); } }
+@media (prefers-reduced-motion: reduce) {
+  .ml-cover-making .mlm-shine, [data-screen="library"] .ml-making .ml-cover { animation: none; }
+  .ml-cover-making .mlm-spark { animation: none; opacity: .9; }
+}
+
+/* 검색칸 — 글 입력 칸만 다른 색으로 떠 보이지 않게, 바깥 테두리 상자와 같은 바탕 */
+body:not(.ebook-mode) .search-field input { background: transparent; }
+
+/* 개수 옆 작은 버튼 — 「엽서 4장 | 엽서 지우기」 · 「모아둔 작은 책 3권 | 책 지우기」
+   눈에 덜 띄되 버튼이라는 건 알 수 있게: 얇은 테두리 · 둥근 모서리 · 아이콘 */
+.srv-mini-btn {
+  display: inline-flex; align-items: center; gap: 6px; vertical-align: middle;
+  min-height: 36px; margin-left: 12px; padding: 4px 13px 4px 11px;
+  border: 1px solid #d6c2b5; border-radius: 999px; background: #fffaf0;
+  color: #6b4a52; font: inherit; font-size: 14px; font-weight: 500; line-height: 1.2; letter-spacing: -.01em;
+  cursor: pointer; transition: border-color .15s, background .15s, color .15s;
+}
+.srv-mini-btn .icon { width: 15px; height: 15px; flex: none; }
+.srv-mini-btn:hover { border-color: var(--burgundy, #8a465e); color: var(--burgundy, #8a465e); background: #fff4ee; }
+.srv-mini-btn:focus-visible { outline: 3px solid var(--burgundy, #8a465e); outline-offset: 2px; }
+.srv-mini-btn[aria-pressed="true"] { background: var(--blush, #f3dfe0); border-color: var(--burgundy, #8a465e); color: var(--burgundy, #8a465e); }
+.srv-mini-btn[hidden] { display: none; }
+.selection-footer #selection-count { display: inline; vertical-align: middle; }
+.selection-footer .srv-mini-btn + span, .selection-footer #selection-note { display: block; }
+@media (pointer: coarse) { .srv-mini-btn { min-height: 40px; } }
+/* 「엽서 N장」 줄의 span 규칙(작은 회색 글씨)이 버튼 글자에 번지지 않게 */
+.selection-footer .srv-mini-btn span { display: inline; margin: 0; font-size: inherit; color: inherit; }
+/* 자서전에 넣을 엽서를 고르는 중에는 「엽서 지우기」를 감춘다 (고르기와 지우기가 섞이지 않게) */
+[data-screen="records"].records-picking .pc-select-toggle { display: none; }
+
+/* 엽서 나누기 — 보낼 엽서 그림 미리보기 (share-sheet 그림 모드) */
+.share-dialog .share-image { margin: 4px 0 14px; text-align: center; }
+.share-dialog .share-image img { display: block; width: min(100%, 300px); aspect-ratio: 4 / 5; margin: 0 auto; border-radius: 10px; box-shadow: 0 8px 22px #3b220e33; background: #c99e70; object-fit: cover; }
+.share-dialog .share-image.loading img { visibility: hidden; }
+.share-dialog .share-image.loading { min-height: 200px; background: linear-gradient(90deg, #f3e9da, #fbf4ea, #f3e9da); background-size: 200% 100%; animation: si-wait 1.2s linear infinite; border-radius: 10px; }
+@keyframes si-wait { to { background-position: -200% 0; } }
+.share-dialog .share-image figcaption { margin-top: 8px; font-size: 13px; color: var(--muted, #796e68); }
+.share-dialog .share-imgbar { display: flex; gap: 8px; margin: 10px 0 12px; }
+.share-dialog .share-imgbar .button { flex: 1; justify-content: center; }
+.share-dialog .share-imgbar[hidden], .share-dialog .share-link[hidden], .share-dialog .share-card[hidden] { display: none; }
+@media (max-width: 600px) { .share-dialog .share-image img { width: min(78%, 260px); } }
+
+/* 읽기 화면 「보기 설정」 안 「이 책 관리」 — 책 지우기 (앞으로 제목 · 글 고치기도 여기에) */
+.ebook-manage { border-top: 1px solid var(--line, #e9ded7); padding-top: 18px; }
+.ebook-manage[hidden] { display: none; }
+.ebook-manage .ebook-manage-btn {
+  display: inline-flex; align-items: center; gap: 8px; min-height: 44px; padding: 8px 16px;
+  border: 1px solid #d9b2a8; border-radius: 999px; background: transparent; color: #a2463a;
+  font: inherit; font-size: 15px; cursor: pointer;
+}
+.ebook-manage .ebook-manage-btn .icon { width: 16px; height: 16px; }
+.ebook-manage .ebook-manage-btn:hover { background: #fbeeea; border-color: #a2463a; }
+.ebook-manage .ebook-manage-btn:focus-visible { outline: 3px solid var(--burgundy, #743b49); outline-offset: 2px; }
+.ebook-manage-note { margin: 8px 0 0; font-size: 13px; color: var(--muted, #796e68); }
+body.ebook-mode[data-reader-theme="night"] .ebook-manage .ebook-manage-btn { color: #e59a8e; border-color: #8a5a52; }
+
+/* PC 이면서 화면 높이가 낮을 때(노트북 등) 독서 메뉴가 오른쪽 한 줄로 바뀐다 —
+   칸 폭을 똑같이 나누면 「보기 설정」 · 「PDF 저장」 글자가 옆 칸과 겹친다. 글자 길이만큼 칸을 준다 */
+@media (min-width: 761px) and (max-height: 740px) {
+  body.ebook-paged .ebook-toolbar, body.ebook-paged .ebook-toolbar.has-pdf {
+    width: auto; grid-auto-columns: auto; gap: 2px; justify-content: end;
+  }
+  body.ebook-paged .ebook-toolbar button { padding: 8px 10px; }
+}
+
+/* 창(dialog) 자체에는 초점 테두리를 그리지 않는다 — 창 안 빈 곳이나 「나」 줄을 누르면 초점이 창으로 가고,
+   윈도우 크롬은 그때 창 안쪽에 큰 네모 테두리를 그려 상자가 튀어나온 것처럼 보였다 (11-13 제보) */
+dialog:focus, dialog:focus-visible { outline: none; }
+.em-name-locked { padding: 10px 12px; font-size: 17px; font-weight: 600; color: var(--ink); }
+
+/* 질문을 읽어 줄 목소리 (srv-voice) */
+.sc-voice .sc-chip small { font-size: .85em; color: var(--muted, #796e68); font-weight: 400; }
+.sc-voice-note { margin: 8px 0 0; font-size: 13.5px; line-height: 1.6; color: var(--muted, #796e68); }
+.role-invitation .role-inv-voice { margin: 4px 0 0; font-size: 13px; color: var(--muted, #796e68); }
+
+/* 인터뷰 「글로 쓰기」 — 1만 자 · 길면 칸 안에서 스크롤 (answer-box.js) */
+.interview-studio .answer-panel textarea#answer-text {
+  max-height: min(48vh, 440px); overflow-y: auto; resize: none;
+  overscroll-behavior: contain; scrollbar-width: thin; scrollbar-color: #c9b3a3 transparent;
+}
+#answer-text::-webkit-scrollbar { width: 10px; }
+#answer-text::-webkit-scrollbar-thumb { background: #c9b3a3; border-radius: 10px; border: 2px solid transparent; background-clip: padding-box; }
+#answer-text.answer-scrolls { padding-right: 10px; }
+.answer-count { margin: 6px 2px 10px; font-size: 15px; color: var(--muted, #7d6e66); text-align: right; }
+.answer-count.near { color: var(--burgundy, #7a2e3e); font-weight: 600; }
+
+/* 모바일 인터뷰 — 연노랑 큰 판의 모서리가 각져 보이던 것: PC 처럼 둥글게, 글이 모서리에 붙지 않게 안쪽 여백 */
+@media (max-width: 760px) {
+  .screen .interview-studio.panel { border-radius: 20px; padding: 14px 14px 18px; border: 1px solid var(--line); }
+}
+@media (max-width: 360px) {
+  .screen .interview-studio.panel { border-radius: 16px; padding: 12px 10px 14px; }
+}
+
+/* 자서전 초안 — 버튼이 스크롤을 따라온다 (draft-dock.js) */
+@media (min-width: 1021px) {
+  .draft-follow { position: sticky; top: var(--draft-follow-top, 96px); z-index: 2; }
+}
+.draft-dock {
+  position: fixed; left: 50%; transform: translateX(-50%); z-index: 60;
+  width: min(560px, calc(100% - 24px)); display: grid; grid-template-columns: 1fr 1.35fr; gap: 8px;
+  padding: 8px; border: 1px solid var(--line); border-radius: 16px;
+  background: color-mix(in srgb, var(--paper, #fffaeb) 94%, transparent); backdrop-filter: blur(6px);
+  box-shadow: 0 10px 28px rgba(73, 45, 53, .18); animation: draft-dock-in .22s ease-out;
+}
+.draft-dock .button { min-height: 52px; padding: 8px 10px; font-size: 15px; gap: 6px; }
+.draft-dock .icon { width: 19px; height: 19px; }
+@keyframes draft-dock-in { from { opacity: 0; transform: translate(-50%, 12px); } }
+@media (prefers-reduced-motion: reduce) { .draft-dock { animation: none; } }
+@media (max-width: 360px) { .draft-dock .button { font-size: 13.5px; padding: 6px; } }
+/* 버튼 줄이 떠 있는 동안 안내(토스트)는 그 위로 (글 맨 끝에서는 줄이 숨으므로 글은 가리지 않는다) */
+body.draft-dock-on .toast { bottom: var(--draft-dock-space, 180px); }

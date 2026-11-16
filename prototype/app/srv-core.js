@@ -9,7 +9,7 @@
     const CONFIG = {
     // 화면 아래와 개발용 패널에 그대로 찍힌다. 「고친 게 반영이 안 된 것 같다」는
     // 대부분 예전 파일이 열려 있는 경우라서, 눈으로 확인할 자리를 만들어 둔다.
-    version: 'v0.60 · 2026-11-11 (시안 2차 B안 화면으로 교체 — 1단계: 로그인 · 화자 · 처음가기 · 엽서 목록 서버 연결)',
+    version: 'v0.60 · 2026-11-12 (시안 2차 B안 화면으로 교체 — 로그인 · 화자 · 인터뷰 · 엽서 · 자서전 · 책장 · 공유 · 초대 링크 서버 연결)',
 
     // 이 화면을 백엔드가 직접 서빙하면(web/ 폴더) 빈 문자열 그대로 둔다.
     // 다른 포트에서 열어 시험할 때만 'http://127.0.0.1:8010' 처럼 채운다.
@@ -310,6 +310,8 @@
   };
 
   const QS = new URLSearchParams(location.search);
+  // 체험판 파일(build.py --demo)은 주소에 ?demo=1 이 없어도 예시 모드로 연다 — 파일을 두 번 눌러 열기만 하면 되게
+  if (window.MEMOIR_FORCE_DEMO && !QS.has('demo')) QS.set('demo', '1');
   const AUTH = {
     mode: 'session',
     mock: QS.get('authMock') ?? CONFIG.auth.mock,
@@ -594,6 +596,14 @@
   }
 
   const curElder = () => AUTH.elders.find(e => e.elder_id === AUTH.elderId) || null;
-  window.Srv = { CONFIG, QS, AUTH, LINK, api, call, ApiError, sleep, log, sp, idHeaders, curElder,
+  /** 이야기 주인공 이름 + 「님」 — 화면 · 보내는 글에서 이름을 부를 때 모두 이것을 쓴다 (11-13 통일).
+      「나」(내 이야기)는 붙이지 않고, 이미 「님」으로 끝나면 두 번 붙이지 않는다 */
+  const honor = (name) => {
+    const n = String(name || '').trim();
+    if (!n) return '이야기 주인공';
+    if (n === '나' || /님$/.test(n)) return n;
+    return `${n} 님`;
+  };
+  window.Srv = { CONFIG, QS, AUTH, LINK, api, call, ApiError, sleep, log, sp, idHeaders, curElder, honor,
     AUTH_SAYS, LINK_SAYS, THEME_LABEL, linkStateOf, authLost };
 }());

@@ -49,9 +49,9 @@
   function setNote(text) { note = text || ''; const m = dialog.querySelector('.mlg-msg'); if (m) m.textContent = note; }
 
   function gsiInit() {
-    if (AUTH.mock) {
+    if (AUTH.mock || window.Srv.DEMO) {
       if (!gsiBox.querySelector('button')) {
-        gsiBox.innerHTML = '<button type="button" class="button primary mlg-primary" data-login-google>Google로 로그인 (모의)</button>';
+        gsiBox.innerHTML = `<button type="button" class="button primary mlg-primary" data-login-google>Google로 로그인 (${window.Srv.DEMO ? '예시' : '모의'})</button>`;
       }
       return;
     }

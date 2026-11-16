@@ -7,16 +7,17 @@
   dialog.className = 'review-dialog trash-dialog';
   dialog.setAttribute('aria-labelledby', 'trash-title');
   dialog.innerHTML = `<h2 id="trash-title"></h2><ul class="trash-items"></ul><p class="trash-desc"></p>
-    <div class="dialog-actions"><button type="button" class="button outline" data-trash-keep>그대로 두기</button><button type="button" class="button trash-ok" data-trash-ok></button></div>`;
+    <div class="dialog-actions"><button type="button" class="button outline trash-ok" data-trash-ok></button><button type="button" class="button primary" data-trash-keep>그대로 두기</button></div>`;
   document.body.append(dialog);
   let settle = null;
-  function confirm({title, items = [], desc, ok}) {
+  function confirm({title, items = [], desc, ok, keep = '그대로 두기'}) {
     dialog.querySelector('#trash-title').textContent = title;
     const shown = items.slice(0, 5);
     dialog.querySelector('.trash-items').innerHTML = shown.map((t) => `<li>${escapeText(t)}</li>`).join('') + (items.length > shown.length ? `<li class="trash-more">그 밖에 ${items.length - shown.length}개</li>` : '');
     dialog.querySelector('.trash-items').hidden = !items.length;
     dialog.querySelector('.trash-desc').textContent = desc;
     dialog.querySelector('[data-trash-ok]').textContent = ok;
+    dialog.querySelector('[data-trash-keep]').textContent = keep;
     dialog.showModal();
     dialog.querySelector('[data-trash-keep]').focus();
     return new Promise((resolve) => { settle = resolve; });
