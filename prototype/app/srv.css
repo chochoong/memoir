@@ -161,3 +161,24 @@ body.ebook-mode[data-reader-theme="night"] .ebook-manage .ebook-manage-btn { col
   }
   body.ebook-paged .ebook-toolbar button { padding: 8px 10px; }
 }
+
+/* 창(dialog) 자체에는 초점 테두리를 그리지 않는다 — 창 안 빈 곳이나 「나」 줄을 누르면 초점이 창으로 가고,
+   윈도우 크롬은 그때 창 안쪽에 큰 네모 테두리를 그려 상자가 튀어나온 것처럼 보였다 (11-13 제보) */
+dialog:focus, dialog:focus-visible { outline: none; }
+.em-name-locked { padding: 10px 12px; font-size: 17px; font-weight: 600; color: var(--ink); }
+
+/* 질문을 읽어 줄 목소리 (srv-voice) */
+.sc-voice .sc-chip small { font-size: .85em; color: var(--muted, #796e68); font-weight: 400; }
+.sc-voice-note { margin: 8px 0 0; font-size: 13.5px; line-height: 1.6; color: var(--muted, #796e68); }
+.role-invitation .role-inv-voice { margin: 4px 0 0; font-size: 13px; color: var(--muted, #796e68); }
+
+/* 인터뷰 「글로 쓰기」 — 1만 자 · 길면 칸 안에서 스크롤 (answer-box.js) */
+.interview-studio .answer-panel textarea#answer-text {
+  max-height: min(48vh, 440px); overflow-y: auto; resize: none;
+  overscroll-behavior: contain; scrollbar-width: thin; scrollbar-color: #c9b3a3 transparent;
+}
+#answer-text::-webkit-scrollbar { width: 10px; }
+#answer-text::-webkit-scrollbar-thumb { background: #c9b3a3; border-radius: 10px; border: 2px solid transparent; background-clip: padding-box; }
+#answer-text.answer-scrolls { padding-right: 10px; }
+.answer-count { margin: 6px 2px 10px; font-size: 15px; color: var(--muted, #7d6e66); text-align: right; }
+.answer-count.near { color: var(--burgundy, #7a2e3e); font-weight: 600; }

@@ -3726,6 +3726,27 @@ body.ebook-mode[data-reader-theme="night"] .ebook-manage .ebook-manage-btn { col
   body.ebook-paged .ebook-toolbar button { padding: 8px 10px; }
 }
 
+/* 창(dialog) 자체에는 초점 테두리를 그리지 않는다 — 창 안 빈 곳이나 「나」 줄을 누르면 초점이 창으로 가고,
+   윈도우 크롬은 그때 창 안쪽에 큰 네모 테두리를 그려 상자가 튀어나온 것처럼 보였다 (11-13 제보) */
+dialog:focus, dialog:focus-visible { outline: none; }
+.em-name-locked { padding: 10px 12px; font-size: 17px; font-weight: 600; color: var(--ink); }
+
+/* 질문을 읽어 줄 목소리 (srv-voice) */
+.sc-voice .sc-chip small { font-size: .85em; color: var(--muted, #796e68); font-weight: 400; }
+.sc-voice-note { margin: 8px 0 0; font-size: 13.5px; line-height: 1.6; color: var(--muted, #796e68); }
+.role-invitation .role-inv-voice { margin: 4px 0 0; font-size: 13px; color: var(--muted, #796e68); }
+
+/* 인터뷰 「글로 쓰기」 — 1만 자 · 길면 칸 안에서 스크롤 (answer-box.js) */
+.interview-studio .answer-panel textarea#answer-text {
+  max-height: min(48vh, 440px); overflow-y: auto; resize: none;
+  overscroll-behavior: contain; scrollbar-width: thin; scrollbar-color: #c9b3a3 transparent;
+}
+#answer-text::-webkit-scrollbar { width: 10px; }
+#answer-text::-webkit-scrollbar-thumb { background: #c9b3a3; border-radius: 10px; border: 2px solid transparent; background-clip: padding-box; }
+#answer-text.answer-scrolls { padding-right: 10px; }
+.answer-count { margin: 6px 2px 10px; font-size: 15px; color: var(--muted, #7d6e66); text-align: right; }
+.answer-count.near { color: var(--burgundy, #7a2e3e); font-weight: 600; }
+
 </style>
 </head>
 <body>
@@ -3790,7 +3811,7 @@ body.ebook-mode[data-reader-theme="night"] .ebook-manage .ebook-manage-btn { col
           </div>
           <p class="studio-status-line" id="studio-hint">질문을 확인한 뒤 시작해 주세요.</p>
           <div class="conversation-actions studio-actions"><button class="button primary" id="pause-interview"><svg class="icon"><use href="#i-mic"/></svg><span>말하기 시작</span></button><button class="button outline" id="toggle-answer" aria-expanded="false" aria-controls="answer-panel"><svg class="icon"><use href="#i-pen"/></svg>글로 쓰기</button><button type="button" class="text-button" id="finish-interview">마치기</button></div>
-          <form id="answer-panel" class="answer-panel" hidden><label for="answer-text">떠오르는 기억을 적어주세요</label><textarea id="answer-text" rows="4" placeholder="우리 동네에는 커다란 느티나무가 있었어요…" maxlength="2000"></textarea><button class="button primary" type="submit">이야기 남기기 <svg class="icon"><use href="#i-arrow"/></svg></button></form>
+          <form id="answer-panel" class="answer-panel" hidden><label for="answer-text">떠오르는 기억을 적어주세요</label><textarea id="answer-text" rows="4" placeholder="우리 동네에는 커다란 느티나무가 있었어요…" maxlength="10000"></textarea><button class="button primary" type="submit">이야기 남기기 <svg class="icon"><use href="#i-arrow"/></svg></button></form>
           <details class="preview-hint" hidden><summary>UI 미리보기 · 실제 녹음 없음</summary><p>라디오 조명과 화면 전환을 살펴보는 시안입니다. 실제 낭독과 음성 수집은 연결하지 않았습니다.</p><button class="text-button" id="next-question">다음 예시 질문 <svg class="icon"><use href="#i-arrow"/></svg></button></details>
         </div>
       </section>
@@ -4173,6 +4194,8 @@ body.ebook-mode[data-reader-theme="night"] .ebook-manage .ebook-manage-btn { col
   };
 
   const QS = new URLSearchParams(location.search);
+  // 체험판 파일(build.py --demo)은 주소에 ?demo=1 이 없어도 예시 모드로 연다 — 파일을 두 번 눌러 열기만 하면 되게
+  if (window.MEMOIR_FORCE_DEMO && !QS.has('demo')) QS.set('demo', '1');
   const AUTH = {
     mode: 'session',
     mock: QS.get('authMock') ?? CONFIG.auth.mock,
@@ -4470,6 +4493,47 @@ body.ebook-mode[data-reader-theme="night"] .ebook-manage .ebook-manage-btn { col
 }());
 
 </script>
+<script data-from="srv-voice.js">
+(function () {
+  'use strict';
+  /* ═══════════════════════════════════════════════════════════════
+     srv-voice — 질문을 읽어 주는 목소리 고르기
+       · 서버(develop 11dcd93): POST /api/sessions · POST /api/links 에 voice = "default" | "young"
+         default = 지금 목소리(Gemini Kore) · young = 젊고 밝은 여성 목소리(Gemini Leda). 그 밖의 값은 422.
+       · 「내 이야기」 · 「초대 주소 만들기」 화면에서 고른다. 고른 값은 이 기기에 기억해 다음에도 그대로.
+       · 미리 듣기는 없다 (서버에 샘플 API 가 없고, 들을 때마다 유료 낭독이 든다).
+       · 서버가 Gemini 로 읽을 때만 목소리가 달라진다(TTS_PROVIDER=gemini). Azure 로 읽으면 늘 같은 목소리.
+     ═══════════════════════════════════════════════════════════════ */
+  const VOICES = [
+    {key: 'default', label: '차분한 목소리', sub: '기본'},
+    {key: 'young', label: '밝고 젊은 목소리', sub: ''},
+  ];
+  const KEY = 'memoir.voice';
+  const valid = (k) => VOICES.some((v) => v.key === k);
+  function get() { try { const k = localStorage.getItem(KEY); return valid(k) ? k : 'default'; } catch (_) { return 'default'; } }
+  function set(k) { if (!valid(k)) return; try { localStorage.setItem(KEY, k); } catch (_) {} }
+  const label = (k) => (VOICES.find((v) => v.key === k) || VOICES[0]).label;
+
+  /** 고르는 칸 — 주제 고르기와 같은 동그란 칩 모양 (start-choice 의 .sc-chips) */
+  function fieldset(step) {
+    const now = get();
+    return `<fieldset class="sc-voice"><legend>${step ? `<span class="sc-step">${step}</span>` : ''}질문을 읽어 줄 목소리</legend>
+      <div class="sc-chips" role="group" aria-label="목소리">${VOICES.map((v) => `<label class="sc-chip"><input type="radio" name="voice" value="${v.key}" ${v.key === now ? 'checked' : ''}><span>${v.label}${v.sub ? `&nbsp;<small>· ${v.sub}</small>` : ''}</span></label>`).join('')}</div>
+      <p class="sc-voice-note">말씀을 들려주실 분이 편하게 들으실 목소리를 골라 주세요.</p></fieldset>`;
+  }
+  /** 폼에서 고른 값을 읽고 기억한다 */
+  function fromForm(form) {
+    const k = form?.querySelector('input[name="voice"]:checked')?.value;
+    if (valid(k)) set(k);
+    return get();
+  }
+  // 칩을 누르는 순간 기억 — 다른 화면(옛 「이 기기에서 시작하기」)에서 시작해도 같은 목소리
+  document.addEventListener('change', (e) => { if (e.target.matches?.('input[name="voice"]')) set(e.target.value); });
+
+  window.MemoirVoice = {VOICES, get, set, label, fieldset, fromForm};
+}());
+
+</script>
 <script data-from="srv-demo.js">
 (function () {
   'use strict';
@@ -4554,10 +4618,12 @@ body.ebook-mode[data-reader-theme="night"] .ebook-manage .ebook-manage-btn { col
     if (L.audio < 16000 * 2 * 0.6) { L.audio = 0; L.snap.audio_bytes = 0; return; }
     commit(L, '(예시 화면) 마이크로 들려주신 말씀이에요. 예시 화면에서는 소리를 글로 옮기지 않아요.');
   }
-  function openSession({topic, elder_id, link}) {
+  // 서버와 같은 목소리 이름만 받는다 (default · young). 예시 모드에서는 소리가 없어 고른 값만 기억한다
+  const VOICE_OK = ['default', 'young'];
+  function openSession({topic, elder_id, link, voice}) {
     const sid = uid();
     const L = {topic, elder_id, link, audio: 0, lastAudio: 0, pending: '',
-      snap: {session_id: sid, state: 'SPEAKING', turn: 1, max_turn: 0, next_question: '', question_audio_stream: false, audio_bytes: 0, resumable: false,
+      snap: {session_id: sid, state: 'SPEAKING', turn: 1, max_turn: 0, next_question: '', question_audio_stream: false, audio_bytes: 0, resumable: false, voice: voice || 'default',
         fragments: [{idx: 0, question: null, answer: topic}]}};
     ask(L);
     live.set(sid, L);
@@ -4617,7 +4683,7 @@ body.ebook-mode[data-reader-theme="night"] .ebook-manage .ebook-manage-btn { col
       if (path === '/i/start') {
         if (k.state === 'ended') return err(409, '끝난 인터뷰예요', 'ended');
         let L = linkLive();
-        if (!L) { L = openSession({topic: k.topic, elder_id: k.elder_id, link: k.link_id}); k.session_id = L.snap.session_id; k.state = 'in_progress'; save(); }
+        if (!L) { L = openSession({topic: k.topic, elder_id: k.elder_id, link: k.link_id, voice: k.voice}); k.session_id = L.snap.session_id; k.state = 'in_progress'; save(); }
         return ok({...snapOf(L), ...linkView(k)});
       }
       if (path === '/i/transcript') {
@@ -4654,7 +4720,8 @@ body.ebook-mode[data-reader-theme="night"] .ebook-manage .ebook-manage-btn { col
     }
     if (path === '/sessions' && method === 'POST') {
       if (!db.elders.some((e) => e.elder_id === body.elder_id)) return err(400, '화자를 골라 주세요', 'elder_required');
-      return ok(snapOf(openSession({topic: body.topic || body.title || '나의 이야기', elder_id: body.elder_id})));
+      if (body.voice !== undefined && !VOICE_OK.includes(body.voice)) return err(422, '목소리를 확인해 주세요');
+      return ok(snapOf(openSession({topic: body.topic || body.title || '나의 이야기', elder_id: body.elder_id, voice: body.voice})));
     }
     if ((m = path.match(/^\/sessions\/([^/]+)(\/.*)?$/))) {
       const id = m[1], rest = m[2] || '';
@@ -4720,12 +4787,12 @@ body.ebook-mode[data-reader-theme="night"] .ebook-manage .ebook-manage-btn { col
     // 초대 링크
     const linkOut = (k) => { const {token, ...r} = k; return r; };
     const issue = (base) => {
-      const k = {link_id: 'demo-l' + (++db.seq), elder_id: base.elder_id, title: base.title || base.topic, theme: null, topic: base.topic, picked_topic: null,
+      const k = {link_id: 'demo-l' + (++db.seq), elder_id: base.elder_id, title: base.title || base.topic, theme: null, topic: base.topic, picked_topic: null, voice: base.voice || 'default',
         state: 'ready', session_id: null, created_at: now(), expires_at: new Date(Date.now() + 72 * 3600e3).toISOString(), token: tok()};
       db.links.unshift(k); save();
       return made({...linkOut(k), token: k.token, url: `${pageUrl()}?demo=elder#${k.token}`});
     };
-    if (path === '/links' && method === 'POST') return issue(body);
+    if (path === '/links' && method === 'POST') { if (body.voice !== undefined && !VOICE_OK.includes(body.voice)) return err(422, '목소리를 확인해 주세요'); return issue(body); }
     if (path === '/links') return ok({links: db.links.filter((k) => !q.get('elder_id') || k.elder_id === q.get('elder_id')).map(linkOut)});
     if ((m = path.match(/^\/links\/([^/]+)\/(revoke|reissue)$/))) {
       const k = db.links.find((x) => x.link_id === m[1]);
@@ -4947,7 +5014,8 @@ body.ebook-mode[data-reader-theme="night"] .ebook-manage .ebook-manage-btn { col
   const STATE = {ready: 'ready', in_progress: 'in_progress', ended: 'completed', interrupted: 'interrupted', expired: 'expired', revoked: 'revoked'};
   const absUrl = (u) => { try { return new URL(u, location.origin).href; } catch (_) { return String(u || ''); } };
   const fromLink = (l) => ({id: l.link_id, elder_id: l.elder_id, topic: String(l.picked_topic || l.topic || l.title || '').trim() || '살아온 이야기',
-    status: STATE[l.state] || l.state, session_id: l.session_id || null, created_at: l.created_at, expires_at: l.expires_at});
+    status: STATE[l.state] || l.state, session_id: l.session_id || null, created_at: l.created_at, expires_at: l.expires_at,
+    voice: l.voice || 'default'});
   const canRevoke = (inv) => !!inv && ['ready', 'in_progress'].includes(inv.status);
   const canReissue = (inv) => !!inv && !inv.session_id && ['ready', 'expired', 'revoked'].includes(inv.status);
   function upsert(inv) { const i = invitations.findIndex((x) => x.id === inv.id); if (i >= 0) invitations[i] = inv; else invitations.unshift(inv); return inv; }
@@ -4965,7 +5033,8 @@ body.ebook-mode[data-reader-theme="night"] .ebook-manage .ebook-manage-btn { col
     if (!AUTH.elders.some((e) => e.elder_id === elderId)) return failure('elder_not_found');
     if (typeof topic !== 'string' || !topic.trim()) return failure('topic_required');
     const t = topic.trim().slice(0, 60);
-    try { return issued(await api.linkCreate({elder_id: elderId, title: t, seed: t, topic: t})); }
+    const voice = window.MemoirVoice ? window.MemoirVoice.get() : 'default'; // 링크에 저장 → 어르신이 시작할 때 이 목소리
+    try { return issued(await api.linkCreate({elder_id: elderId, title: t, seed: t, topic: t, voice})); }
     catch (e) { return failure(e.status === 404 ? 'elder_not_found' : 'server'); }
   }
   async function revoke(id) {
@@ -7661,7 +7730,7 @@ renderRecent();renderQuestion();setInterviewMode('reading');show(location.hash.s
   }
   function renderInvitations(){
     const data=snapshot();
-    invitations.querySelector('.role-content').innerHTML=`<p class="role-intro">초대 주소는 준비한 직후 한 번만 보여드립니다. 주소를 복사해도 전달이 끝난 것은 아닙니다.</p>${issued?`<div class="panel role-issued" role="region" aria-labelledby="issued-heading"><h2 id="issued-heading">초대 주소가 준비됐어요</h2><p>지금 주소를 복사해 따로 전해주세요. 이 화면을 떠나면 다시 표시하지 않습니다.</p><label for="issued-address">이번에 준비한 주소</label><input id="issued-address" readonly value="${escapeText(issued.address)}"><div class="role-issued-actions"><button type="button" class="button primary" data-role="copy-address">주소 복사</button></div><p id="copy-result" role="status">받는 분 한 분만 쓰는 주소예요. 이 화면을 떠나면 다시 보여 드릴 수 없어요.</p></div>`:''}<div class="role-invitation-list">${data.invitations.length?data.invitations.map(inv=>{const person=data.elders.find(item=>item.elder_id===inv.elder_id);return `<article class="panel role-invitation"><div><span class="pill">${labels[inv.status]||'확인 필요'}</span><h2>${escapeText(person?.name||'이야기 주인공')} · ${escapeText(inv.topic)}</h2><p>${statusCopy(inv)}</p></div><div class="role-invite-actions">${store.canRevoke(inv)?`<button type="button" class="button outline" data-revoke="${inv.id}">초대 취소</button>`:''}${store.canReissue(inv)?`<button type="button" class="text-button" data-reissue="${inv.id}">주소 다시 준비</button>`:''}</div></article>`;}).join(''):'<div class="panel role-empty"><h2>아직 준비한 초대가 없어요</h2><p>이야기 주인공과 주제를 정한 뒤 초대를 준비해주세요.</p></div>'}</div><button type="button" class="button outline" data-go="invite-setup">새 초대 만들기</button>`;
+    invitations.querySelector('.role-content').innerHTML=`<p class="role-intro">초대 주소는 준비한 직후 한 번만 보여드립니다. 주소를 복사해도 전달이 끝난 것은 아닙니다.</p>${issued?`<div class="panel role-issued" role="region" aria-labelledby="issued-heading"><h2 id="issued-heading">초대 주소가 준비됐어요</h2><p>지금 주소를 복사해 따로 전해주세요. 이 화면을 떠나면 다시 표시하지 않습니다.</p><label for="issued-address">이번에 준비한 주소</label><input id="issued-address" readonly value="${escapeText(issued.address)}"><div class="role-issued-actions"><button type="button" class="button primary" data-role="copy-address">주소 복사</button></div><p id="copy-result" role="status">받는 분 한 분만 쓰는 주소예요. 이 화면을 떠나면 다시 보여 드릴 수 없어요.</p></div>`:''}<div class="role-invitation-list">${data.invitations.length?data.invitations.map(inv=>{const person=data.elders.find(item=>item.elder_id===inv.elder_id);return `<article class="panel role-invitation"><div><span class="pill">${labels[inv.status]||'확인 필요'}</span><h2>${escapeText(person?.name||'이야기 주인공')} · ${escapeText(inv.topic)}</h2><p>${statusCopy(inv)}</p>${window.MemoirVoice?`<p class="role-inv-voice">질문 목소리 · ${escapeText(window.MemoirVoice.label(inv.voice))}</p>`:''}</div><div class="role-invite-actions">${store.canRevoke(inv)?`<button type="button" class="button outline" data-revoke="${inv.id}">초대 취소</button>`:''}${store.canReissue(inv)?`<button type="button" class="text-button" data-reissue="${inv.id}">주소 다시 준비</button>`:''}</div></article>`;}).join(''):'<div class="panel role-empty"><h2>아직 준비한 초대가 없어요</h2><p>이야기 주인공과 주제를 정한 뒤 초대를 준비해주세요.</p></div>'}</div><button type="button" class="button outline" data-go="invite-setup">새 초대 만들기</button>`;
   }
   function enterGuest(reference){issued=null;guestReference=reference;guest=true;document.body.classList.add('role-guest');const result=store.invitationByReference(reference);show('invite');renderEntry(result);}
   function renderEntry(result=store.invitationByReference(guestReference)){
@@ -7794,8 +7863,8 @@ renderRecent();renderQuestion();setInterviewMode('reading');show(location.hash.s
     list.innerHTML = data.elders.map((e) => {
       const self = e.name === SELF;
       return `<li class="em-row" data-elder="${escapeText(e.elder_id)}">
-        <label class="em-name"><span class="visually-hidden">${escapeText(e.name)} 이름</span>
-          <input value="${escapeText(e.name)}" maxlength="30" autocomplete="off" ${self ? 'disabled' : ''}></label>
+        ${self ? `<span class="em-name em-name-locked">${escapeText(e.name)}</span>` : `<label class="em-name"><span class="visually-hidden">${escapeText(e.name)} 이름</span>
+          <input value="${escapeText(e.name)}" maxlength="30" autocomplete="off"></label>`}
         ${self ? '<span class="em-self">내 이야기</span>' : `<button type="button" class="button outline compact" data-em="save">이름 저장</button>
         <button type="button" class="text-button em-del" data-em="del">${icons('close')}<span>지우기</span></button>`}
       </li>`;
@@ -7811,7 +7880,7 @@ renderRecent();renderQuestion();setInterviewMode('reading');show(location.hash.s
     if (!store.snapshot().user) { window.MemoirLogin.open(); return; }
     render(); say('');
     if (!dialog.open) dialog.showModal();
-    list.querySelector('input:not([disabled])')?.focus();
+    list.querySelector('.em-name input')?.focus();
   }
 
   async function save(row) {
@@ -8096,6 +8165,7 @@ renderRecent();renderQuestion();setInterviewMode('reading');show(location.hash.s
         title: topic || `${new Date().toISOString().slice(0, 10)} 기록`,
         seed: topic, pace: CONFIG.session.pace, max_turn: CONFIG.session.max_turn,
         topic, elder_id: elderId,
+        voice: window.MemoirVoice ? window.MemoirVoice.get() : 'default', // 질문을 읽는 목소리 (srv-voice)
       };
       const closedLeft = await closeLeftover();
       const s = await api.start(body);
@@ -9466,6 +9536,7 @@ renderRecent();renderQuestion();setInterviewMode('reading');show(location.hash.s
       <form class="panel sc-invite-form sc-self-form" novalidate>
         <fieldset><legend>이야기 주제</legend>
           <div class="sc-chips" role="group" aria-label="주제">${topics.map((t) => `<label class="sc-chip"><input type="radio" name="topic" value="${t}" ${t === selfTopic ? 'checked' : ''}><span>${t}</span></label>`).join('')}</div></fieldset>
+        ${window.MemoirVoice ? window.MemoirVoice.fieldset() : ''}
         <button type="submit" class="button primary sc-make">${icons('mic')}<span>녹음 시작하기</span></button>
         <p class="sc-fine">${window.MemoirGate?.isLoggedIn() ? '버튼을 누르면 마이크를 써도 되는지 여쭤봐요.' : '녹음은 로그인한 뒤에 할 수 있어요. 버튼을 누르면 로그인 창이 먼저 열려요.'}</p>
       </form>
@@ -9475,6 +9546,7 @@ renderRecent();renderQuestion();setInterviewMode('reading');show(location.hash.s
     form.addEventListener('submit', (e) => {
       e.preventDefault();
       selfTopic = form.querySelector('input[name="topic"]:checked')?.value || topics[0];
+      window.MemoirVoice?.fromForm(form); // 고른 목소리는 SrvInterview.start 가 POST /api/sessions 에 싣는다
       window.RolePreview.beginSelf(selfTopic);
     });
   }
@@ -9491,6 +9563,7 @@ renderRecent();renderQuestion();setInterviewMode('reading');show(location.hash.s
           <p class="sc-error" role="status"></p></fieldset>
         <fieldset><legend><span class="sc-step">2</span>어떤 이야기를 여쭤볼까요?</legend>
           <div class="sc-chips" role="group" aria-label="주제">${topics.map((t, i) => `<label class="sc-chip"><input type="radio" name="topic" value="${t}" ${i === 0 ? 'checked' : ''}><span>${t}</span></label>`).join('')}</div></fieldset>
+        ${window.MemoirVoice ? window.MemoirVoice.fieldset(3) : ''}
         <button type="submit" class="button primary sc-make">${icons('letter')}<span>초대 주소 만들기</span></button>
         <p class="sc-fine">${window.MemoirGate?.isLoggedIn() ? '' : '초대 주소는 로그인한 뒤에 만들 수 있어요. 버튼을 누르면 로그인 창이 먼저 열려요.'}</p>
       </form>
@@ -9509,6 +9582,7 @@ renderRecent();renderQuestion();setInterviewMode('reading');show(location.hash.s
     const err = form.querySelector('.sc-error');
     const who = form.querySelector('input[name="who"]:checked')?.value || form.querySelector('input[name="who"]')?.value;
     const topic = form.querySelector('input[name="topic"]:checked')?.value || topics[0];
+    window.MemoirVoice?.fromForm(form); // 링크에 저장되어, 어르신이 시작할 때 그 목소리로 읽는다
     let elderId = who;
     if (who === '__new') {
       const name = form.querySelector('input[name="name"]').value.trim();
@@ -10756,6 +10830,61 @@ renderRecent();renderQuestion();setInterviewMode('reading');show(location.hash.s
   new MutationObserver(update).observe(document.body, {attributes: true, attributeFilter: ['class']});
   window.addEventListener('resize', () => requestAnimationFrame(update));
   window.addEventListener('memoir:screen', () => requestAnimationFrame(() => requestAnimationFrame(update)));
+  update();
+}());
+
+</script>
+<script data-from="answer-box.js">
+(function () {
+  'use strict';
+  /* ═══════════════════════════════════════════════════════════════
+     answer-box — 인터뷰 「글로 쓰기」 칸
+       · 한 번에 1만 자까지(index.html maxlength="10000"). 서버(/speech)에는 글자 수 상한이 없다.
+       · 글이 길어지면 칸이 조금씩 커지다가, 일정 높이부터는 칸 안에서 스크롤해 앞에 쓴 글(오타)을 다시 볼 수 있다.
+       · 칸 아래에 「지금 글자 수 / 10,000자」를 보여 준다. 다 차면 더 쓸 수 없다고 알려 준다.
+     ═══════════════════════════════════════════════════════════════ */
+  const box = () => document.getElementById('answer-text');
+  const fmt = (n) => n.toLocaleString('ko-KR');
+
+  function counter(ta) {
+    let c = document.getElementById('answer-count');
+    if (!c) {
+      c = document.createElement('p');
+      c.id = 'answer-count'; c.className = 'answer-count'; c.setAttribute('aria-live', 'polite');
+      ta.insertAdjacentElement('afterend', c);
+    }
+    return c;
+  }
+  /** 칸 높이를 글에 맞춘다 — CSS max-height 를 넘으면 그 높이에 멈추고 칸 안에서 스크롤 */
+  function fit(ta) {
+    const max = parseFloat(getComputedStyle(ta).maxHeight) || Infinity;
+    const atEnd = ta.selectionEnd === ta.value.length;
+    ta.style.height = 'auto';
+    const want = ta.scrollHeight + (ta.offsetHeight - ta.clientHeight);
+    ta.style.height = `${Math.min(want, max)}px`;
+    ta.classList.toggle('answer-scrolls', want > max);
+    if (atEnd && document.activeElement === ta) ta.scrollTop = ta.scrollHeight;   // 끝에서 쓰는 중이면 끝이 보이게
+  }
+  function update() {
+    const ta = box(); if (!ta) return;
+    const max = Number(ta.getAttribute('maxlength')) || 10000, n = ta.value.length;
+    const c = counter(ta);
+    c.hidden = n === 0;
+    c.classList.toggle('near', n >= max * 0.95);
+    c.textContent = n >= max ? `${fmt(max)}자까지 적을 수 있어요. 나머지는 보낸 뒤 이어서 적어 주세요.` : `${fmt(n)} / ${fmt(max)}자`;
+    fit(ta);
+  }
+
+  document.addEventListener('input', (e) => { if (e.target.id === 'answer-text') update(); });
+  // 보낸 뒤 칸을 비우는 곳(srv-interview · app.js)이 여러 곳이라, 값을 바꾸는 순간을 한곳에서 잡는다
+  const desc = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value');
+  Object.defineProperty(HTMLTextAreaElement.prototype, 'value', {
+    configurable: true, enumerable: desc.enumerable, get: desc.get,
+    set(v) { desc.set.call(this, v); if (this.id === 'answer-text') queueMicrotask(update); },
+  });
+  // 「글로 쓰기」로 바꿀 때 · 창 크기가 바뀔 때 높이를 다시 잰다
+  document.addEventListener('click', (e) => { if (e.target.closest?.('#toggle-answer')) requestAnimationFrame(update); });
+  window.addEventListener('resize', () => requestAnimationFrame(update));
   update();
 }());
 

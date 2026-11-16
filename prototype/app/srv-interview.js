@@ -180,6 +180,7 @@
         title: topic || `${new Date().toISOString().slice(0, 10)} 기록`,
         seed: topic, pace: CONFIG.session.pace, max_turn: CONFIG.session.max_turn,
         topic, elder_id: elderId,
+        voice: window.MemoirVoice ? window.MemoirVoice.get() : 'default', // 질문을 읽는 목소리 (srv-voice)
       };
       const closedLeft = await closeLeftover();
       const s = await api.start(body);
