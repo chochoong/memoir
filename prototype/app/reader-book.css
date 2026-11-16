@@ -1,0 +1,95 @@
+/* 펼친 책처럼 보이는 이북 — 책상 · 표지 판 · 책장 더미 · 종이 · 책등 그늘 · 머리글 · 쪽 번호
+   글자 칸 크기와 여백은 그대로(쪽 나눔 유지). */
+body.ebook-mode {
+  --book-cover: #5f1d2c;
+  --desk: radial-gradient(ellipse 70% 62% at 50% 44%, #f3e3c4 0%, #d9bf96 46%, #b8936a 78%, #9c7650 100%);
+  --desk-grain: repeating-linear-gradient(92deg, #7a55320d 0 2px, transparent 2px 9px, #ffffff0a 9px 10px, transparent 10px 23px);
+  --page-grain: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.85' numOctaves='3' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 .45 0 0 0 0 .35 0 0 0 0 .2 2 0 0 0 -.85'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='.35'/%3E%3C/svg%3E");
+  --page-edge: #efe6d2;
+  --page-edge-line: #d6c7a8;
+  --bar-bg: color-mix(in srgb, var(--ebook-bg) 88%, transparent);
+}
+body.ebook-mode[data-reader-theme="white"], body.ebook-mode:not([data-reader-theme]) { --ebook-bg: #fffcf4; --ebook-rule: #ebe3d3; }
+body.ebook-mode[data-reader-theme="night"] {
+  --desk: radial-gradient(ellipse 70% 62% at 50% 44%, #4a3a2c 0%, #2f241b 55%, #1d1611 100%);
+  --desk-grain: repeating-linear-gradient(92deg, #0000001a 0 2px, transparent 2px 9px, #ffffff06 9px 10px, transparent 10px 23px);
+  --page-grain: none;
+  --page-edge: #34373a;
+  --page-edge-line: #1c1e20;
+}
+/* 책상 */
+html body.ebook-mode, html body.ebook-mode .ebook-reader { background: var(--desk-grain), var(--desk); background-attachment: fixed; }
+
+/* 위 · 아래 막대: 책상이 살짝 비치는 반투명 */
+body.ebook-mode .ebook-topbar, body.ebook-mode .ebook-bottom-bar {
+  background: var(--bar-bg); -webkit-backdrop-filter: blur(10px) saturate(1.1); backdrop-filter: blur(10px) saturate(1.1);
+  border-color: color-mix(in srgb, var(--ebook-rule) 70%, transparent);
+}
+
+/* 한 쪽 보기(휴대폰 · 좁은 화면): 왼쪽 책등 + 오른쪽 · 아래 책장 더미 + 표지 판 */
+body.ebook-paged .ebook-stage {
+  border-color: var(--page-edge-line);
+  border-radius: 1px 4px 4px 1px;
+  box-shadow:
+    2px 1px 0 var(--page-edge), 3px 2px 0 var(--page-edge-line), 4px 3px 0 var(--page-edge), 5px 4px 0 var(--page-edge-line), 6px 5px 0 var(--page-edge),
+    -7px 0 0 var(--book-cover), 0 0 0 7px var(--book-cover), 1px 2px 0 8px color-mix(in srgb, var(--book-cover) 70%, #000),
+    0 24px 40px -12px #1e120880, 0 6px 14px #1e120840;
+}
+body.ebook-paged .ebook-stage::before { width: 26px; background: linear-gradient(90deg, #3a26180f, #3a261805 50%, transparent); }
+
+/* 종이 결 · 둥근 그늘 */
+body.ebook-paged #ebook-content, body.ebook-paged #ebook-right-content {
+  background-image: var(--page-grain), linear-gradient(90deg, #6b4a2a14, transparent 7%, transparent 93%, #6b4a2a0d);
+}
+
+/* 두 쪽 펼침(PC): 표지 판 · 책장 더미 · 책등 그늘 */
+@media (min-width: 1100px) {
+  body.ebook-spread.ebook-paged .ebook-stage {
+    border-color: var(--page-edge-line);
+    border-radius: 3px;
+    box-shadow:
+      0 2px 0 var(--page-edge), 0 3px 0 var(--page-edge-line), 0 4px 0 var(--page-edge), 0 5px 0 var(--page-edge-line), 0 6px 0 var(--page-edge),
+      -3px 3px 0 var(--page-edge), -4px 4px 0 var(--page-edge-line), 3px 3px 0 var(--page-edge), 4px 4px 0 var(--page-edge-line),
+      0 6px 0 13px var(--book-cover), 0 7px 0 14px color-mix(in srgb, var(--book-cover) 65%, #000),
+      0 40px 60px -18px #1e1208a6, 0 10px 24px #1e120840;
+  }
+  body.ebook-spread.ebook-paged .ebook-stage::before { display: none; }
+  body.ebook-spread.ebook-paged #ebook-content.left-pane {
+    background:
+      var(--page-grain),
+      linear-gradient(to right, #6b4a2a12, transparent 8%, transparent 78%, #4a301a1c 93%, #3a231238),
+      var(--ebook-bg);
+  }
+  body.ebook-spread.ebook-paged #ebook-right-content.right-pane {
+    background:
+      var(--page-grain),
+      linear-gradient(to right, #3a231238, #4a301a1c 7%, transparent 22%, transparent 92%, #6b4a2a12),
+      var(--ebook-bg);
+  }
+  body.ebook-spread.ebook-paged #ebook-viewport::after { width: 56px; background: linear-gradient(to right, transparent, #ffffff1f 22%, #2a180c30 47%, #2a180c40 50%, #2a180c30 53%, #ffffff1f 78%, transparent); }
+}
+
+/* 머리글(책 제목) · 쪽 번호 — 위아래 여백 안에만 */
+body.ebook-paged #ebook-content::before, body.ebook-paged #ebook-right-content::before,
+body.ebook-paged #ebook-content::after, body.ebook-paged #ebook-right-content::after {
+  position: absolute; z-index: 2; font-family: "Malgun Gothic", "Apple SD Gothic Neo", sans-serif; font-size: 11px; line-height: 1;
+  letter-spacing: .08em; color: var(--ebook-muted); pointer-events: none; opacity: .85;
+}
+body.ebook-paged #ebook-content::before, body.ebook-paged #ebook-right-content::before {
+  content: var(--book-running, ""); top: 13px; left: 0; right: 0; text-align: center; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; padding: 0 56px;
+}
+body.ebook-paged #ebook-content::after { content: attr(data-folio); bottom: 13px; left: 24px; font-variant-numeric: tabular-nums; letter-spacing: .04em; }
+body.ebook-paged #ebook-right-content::after { content: attr(data-folio); bottom: 13px; right: 24px; font-variant-numeric: tabular-nums; letter-spacing: .04em; }
+body.ebook-paged:not(.ebook-spread) #ebook-content::after { left: auto; right: 20px; }
+body.ebook-paged #ebook-content.rb-cover-page::before, body.ebook-paged #ebook-content.rb-cover-page::after { content: none; }
+@media (max-width: 760px) {
+  body.ebook-paged #ebook-content::before { top: 8px; font-size: 10px; padding: 0 30px; }
+  body.ebook-paged #ebook-content::after { bottom: 8px; font-size: 10px; }
+}
+/* 세로 스크롤로 읽을 때: 책상 위 긴 종이 한 장 */
+body.ebook-mode:not(.ebook-paged) #ebook-content {
+  background: var(--page-grain), var(--ebook-bg);
+  box-shadow: 0 0 0 1px var(--page-edge-line), 0 24px 50px -20px #1e120880;
+}
+
+body.ebook-paged #ebook-content { position: relative; }

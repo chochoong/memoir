@@ -354,7 +354,7 @@ async def list_sessions(user_id: str, limit: int = 20, has_postcard: bool = Fals
                        p.title AS postcard_title
                   FROM session s
                   LEFT JOIN postcard p ON p.session_id = s.session_id
-                 WHERE s.user_id = $1 {only}
+                 WHERE s.user_id = $1 {only} AND s.deleted_at IS NULL
                    AND ($3::text IS NULL OR s.elder_id = $3)
                  ORDER BY s.created_at DESC
                  LIMIT $2
@@ -389,7 +389,7 @@ async def memoir_sessions(user_id: str, elder_id: str) -> list[str]:
             rows = await con.fetch(
                 f"""
                 SELECT s.session_id FROM session s
-                 WHERE s.user_id = $1 AND s.elder_id = $2
+                 WHERE s.user_id = $1 AND s.elder_id = $2 AND s.deleted_at IS NULL
                    AND s.closed_at IS NOT NULL AND {_SAID}
                  ORDER BY s.created_at
                 """,
@@ -400,9 +400,10 @@ async def memoir_sessions(user_id: str, elder_id: str) -> list[str]:
     return [str(r["session_id"]) for r in rows]
 
 
-async def load_session(session_id: str) -> dict | None:
+async def load_session(session_id: str, hidden: bool = False) -> dict | None:
     """
     회차 하나를 조각까지 통째로. 없으면 None — 그건 오류가 아니다.
+    자녀가 지운(숨긴 · 015) 회차도 None 이다. hidden=True 면 숨긴 것도 준다 (인터뷰 링크의 받은 사람).
 
     조각은 idx 순으로 준다. **idx 가 곧 서사의 시간 순서다** (FR-AD-401).
     created_at 으로 정렬하지 않는다 — 0번 조각(씨앗)과 1번이 같은 초에 들어가면
@@ -416,7 +417,8 @@ async def load_session(session_id: str) -> dict | None:
     try:
         async with pool.acquire() as con:
             srow = await con.fetchrow(
-                "SELECT * FROM session WHERE session_id = $1", sid)
+                "SELECT * FROM session WHERE session_id = $1 AND ($2 OR deleted_at IS NULL)",
+                sid, hidden)
             if srow is None:
                 return None
             trows = await con.fetch(
@@ -797,7 +799,7 @@ async def create_elder(user_id: str, display_name: str) -> dict:
 # 표는 010 이 만들었다. 권한을 정하는 함수라 계정 함수와 같이 실패를 삼키지 않는다.
 
 # token_hash 는 읽지 않는다. device_hash 는 「시작한 기기인가」를 대조하는 데만 쓰고 내보내지 않는다.
-_LINK_COLS = """link_id, user_id, elder_id, title, seed, theme, topic, picked_topic, photo_id, session_id,
+_LINK_COLS = """link_id, user_id, elder_id, title, seed, theme, topic, picked_topic, photo_id, voice, session_id,
                 device_hash, created_at, expires_at, revoked_at, started_at, ended_at"""
 
 
@@ -825,7 +827,8 @@ async def assign_elder(session_id: str, user_id: str, elder_id: str) -> str:
         async with pool.acquire() as con:
             async with con.transaction():
                 cur = await con.fetchrow(
-                    "SELECT elder_id FROM session WHERE session_id = $1 AND user_id = $2 FOR UPDATE",
+                    "SELECT elder_id FROM session WHERE session_id = $1 AND user_id = $2"
+                    " AND deleted_at IS NULL FOR UPDATE",
                     sid, user_id)
                 if cur is None:
                     return "no_session"
@@ -843,6 +846,72 @@ async def assign_elder(session_id: str, user_id: str, elder_id: str) -> str:
         raise StoreUnavailable("화자를 저장하지 못했습니다") from e
 
 
+async def rename_elder(user_id: str, elder_id: str, display_name: str) -> bool:
+    """
+    화자 이름을 바꾼다. 이 계정이 관리하는 화자가 아니면 False.
+
+    elder.display_name 한 칸만 바꾼다 — 기록은 이름이 아니라 elder_id 에 묶여 있다.
+    같은 화자를 관리하는 다른 자녀에게도 새 이름이 보인다 (같은 분이다).
+    """
+    async def run(con):
+        return await con.fetchval(
+            """
+            UPDATE elder e SET display_name = $3
+              FROM user_elder ue
+             WHERE ue.user_id = $1 AND ue.elder_id = $2 AND e.elder_id = ue.elder_id
+            RETURNING e.elder_id
+            """,
+            user_id, elder_id, display_name)
+    return bool(await _auth_write("화자 이름 바꾸기", run))
+
+
+# 「아직 쓸 수 있는 링크」 — 거두지도 끝나지도 않았고, 시작했거나 기한이 남은 것.
+_LINK_USABLE = ("revoked_at IS NULL AND ended_at IS NULL"
+                " AND (session_id IS NOT NULL OR expires_at > now())")
+
+
+async def unlink_elder(user_id: str, elder_id: str, live: int = 0) -> dict | None:
+    """
+    이 계정과 화자의 연결(user_elder 한 줄)을 끊는다.
+
+    None = 이 계정의 화자가 아니다. 돌려준 dict 의 "deleted" 가 False 면 **기록이 남아
+    끊지 않았다** — "records" 에 남은 수가 있다 (이 계정 것만 센다).
+
+    elder 줄은 남긴다. 다른 자녀가 같은 분을 관리할 수 있고, 예전 기록이 그 줄을 가리킨다.
+    끊긴 뒤에는 owns_elder 가 False 라 그 화자로 회차 · 링크 · 자서전을 새로 만들 수 없다.
+
+    live 는 부르는 쪽이 메모리에서 센 진행 중 회차 수다. DB 의 회차 수와 겹칠 수 있어
+    더하지 않고 큰 쪽을 쓴다.
+
+    세기와 지우기를 한 트랜잭션에서 하고, 처음에 user_elder 줄을 잠근다 — 그사이 다른
+    기기에서 이 화자로 회차를 여는 것(owns_elder 확인)과 엇갈리지 않게.
+    """
+    async def run(con):
+        async with con.transaction():
+            if not await con.fetchval(
+                    "SELECT 1 FROM user_elder WHERE user_id = $1 AND elder_id = $2 FOR UPDATE",
+                    user_id, elder_id):
+                return None
+            row = await con.fetchrow(
+                f"""
+                SELECT (SELECT count(*) FROM session
+                         WHERE user_id = $1 AND elder_id = $2 AND deleted_at IS NULL) AS sessions,
+                       (SELECT count(*) FROM memoir
+                         WHERE user_id = $1 AND elder_id = $2 AND deleted_at IS NULL) AS memoirs,
+                       (SELECT count(*) FROM interview_link
+                         WHERE user_id = $1 AND elder_id = $2 AND {_LINK_USABLE}) AS links
+                """,
+                user_id, elder_id)
+            records = {k: int(row[k]) for k in ("sessions", "memoirs", "links")}
+            records["sessions"] = max(records["sessions"], live)
+            if any(records.values()):
+                return {"deleted": False, "records": records}
+            await con.execute("DELETE FROM user_elder WHERE user_id = $1 AND elder_id = $2",
+                              user_id, elder_id)
+            return {"deleted": True, "records": records}
+    return await _auth_write("화자 지우기", run)
+
+
 async def owns_elder(user_id: str, elder_id: str) -> bool:
     async def run(con):
         return await con.fetchval(
@@ -855,11 +924,12 @@ async def create_link(rec: dict) -> None:
         await con.execute(
             """
             INSERT INTO interview_link (link_id, token_hash, user_id, elder_id, title, seed,
-                                        theme, topic, photo_id, expires_at)
-            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+                                        theme, topic, photo_id, expires_at, voice)
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
             """,
             rec["link_id"], rec["token_hash"], rec["user_id"], rec["elder_id"], rec["title"],
-            rec["seed"], rec["theme"], rec["topic"], _pid(rec["photo_id"]), rec["expires_at"])
+            rec["seed"], rec["theme"], rec["topic"], _pid(rec["photo_id"]), rec["expires_at"],
+            rec.get("voice") or "default")
     await _auth_write("링크 기록", run)
 
 
@@ -931,3 +1001,169 @@ async def revoke_link(link_id: str) -> None:
             "UPDATE interview_link SET revoked_at = now() WHERE link_id = $1 AND revoked_at IS NULL",
             link_id)
     await _auth_write("링크 회수 기록", run)
+
+
+# ---------------------------------------------------------------- 자서전 공유 (014)
+#
+# 자녀가 「링크로 공유」 를 누른 책 한 권. 링크 표와 같이 실패를 삼키지 않는다 —
+# 공유를 기록하지 못했으면 링크를 내주지 않는다.
+
+_SHARE_COLS = "share_id, user_id, book_id, title, book, created_at, revoked_at"
+
+
+def _share_row(r: Any) -> dict:
+    d = dict(r)
+    if isinstance(d.get("book"), str):
+        d["book"] = json.loads(d["book"])
+    return d
+
+
+async def create_share(rec: dict) -> None:
+    async def run(con):
+        await con.execute(
+            """
+            INSERT INTO memoir_share (share_id, token_hash, user_id, book_id, title, book)
+            VALUES ($1, $2, $3, $4, $5, $6::jsonb)
+            """,
+            rec["share_id"], rec["token_hash"], rec["user_id"], rec["book_id"], rec["title"],
+            json.dumps(rec["book"], ensure_ascii=False))
+    await _auth_write("공유 기록", run)
+
+
+async def load_share_by_token(token_hash: str) -> dict | None:
+    async def run(con):
+        return await con.fetchrow(
+            f"SELECT {_SHARE_COLS} FROM memoir_share WHERE token_hash = $1", token_hash)
+    row = await _auth_write("공유 읽기", run)
+    return _share_row(row) if row else None
+
+
+async def list_shares(user_id: str, limit: int) -> list[dict]:
+    async def run(con):
+        return await con.fetch(
+            f"""
+            SELECT {_SHARE_COLS} FROM memoir_share
+             WHERE user_id = $1 ORDER BY created_at DESC LIMIT $2
+            """,
+            user_id, limit)
+    return [_share_row(r) for r in await _auth_write("공유 목록 읽기", run)]
+
+
+async def count_live_shares(user_id: str) -> int:
+    async def run(con):
+        return await con.fetchval(
+            "SELECT count(*) FROM memoir_share WHERE user_id = $1 AND revoked_at IS NULL", user_id)
+    return int(await _auth_write("공유 세기", run) or 0)
+
+
+async def revoke_share(share_id: str, user_id: str) -> dict | None:
+    """내 공유를 끈다. 이미 끈 것도 그대로 돌려준다. 없거나 남의 것이면 None."""
+    async def run(con):
+        await con.execute(
+            """
+            UPDATE memoir_share SET revoked_at = now()
+             WHERE share_id = $1 AND user_id = $2 AND revoked_at IS NULL
+            """,
+            share_id, user_id)
+        return await con.fetchrow(
+            f"SELECT {_SHARE_COLS} FROM memoir_share WHERE share_id = $1 AND user_id = $2",
+            share_id, user_id)
+    row = await _auth_write("공유 끄기", run)
+    return _share_row(row) if row else None
+
+
+# ---------------------------------------------------------------- 만든 자서전 (013)
+#
+# 다 쓴 자서전을 남긴다 (memoir_jobs · /api/memoirs/preview 가 부른다). 읽기 함수는
+# 실패를 삼키지 않는다. 쓰기(save_memoir)는 부르는 쪽이 실패를 삼킨다 — 저장에
+# 실패했다고 다 쓴 자서전을 화면에서 빼앗지 않는다.
+
+_MEMOIR_COLS = "memoir_id, user_id, elder_id, session_ids, style, engine, status, title, created_at"
+
+
+def _memoir_row(r: Any, with_result: bool = False) -> dict:
+    d = {k: r[k] for k in ("memoir_id", "user_id", "elder_id", "style", "engine", "status",
+                           "title", "created_at")}
+    d["session_ids"] = [str(x) for x in (r["session_ids"] or [])]
+    if with_result:
+        d["result"] = _jsonb(r["result"])
+    return d
+
+
+async def save_memoir(rec: dict) -> None:
+    """화자는 회차에서 읽는다 — 화면이 보낸 값을 믿지 않는다. 회차마다 다르면 NULL."""
+    async def run(con):
+        ids = [uuid.UUID(s) for s in rec["session_ids"]]
+        await con.execute(
+            """
+            INSERT INTO memoir (memoir_id, user_id, elder_id, session_ids, style, engine,
+                                status, title, result)
+            VALUES ($1, $2,
+                    (SELECT CASE WHEN count(DISTINCT elder_id) = 1 AND count(*) = count(elder_id)
+                                 THEN min(elder_id) END
+                       FROM session WHERE session_id = ANY($3::uuid[]) AND user_id = $2),
+                    $3::uuid[], $4, $5, $6, $7, $8::jsonb)
+            """,
+            rec["memoir_id"], rec["user_id"], ids, rec["style"], rec["engine"], rec["status"],
+            rec["title"], json.dumps(rec["result"], ensure_ascii=False, default=str))
+    await _auth_write("자서전 저장", run)
+
+
+async def list_memoirs(user_id: str, elder_id: str | None, limit: int) -> list[dict]:
+    async def run(con):
+        return await con.fetch(
+            f"""
+            SELECT {_MEMOIR_COLS} FROM memoir
+             WHERE user_id = $1 AND deleted_at IS NULL AND ($2::text IS NULL OR elder_id = $2)
+             ORDER BY created_at DESC LIMIT $3
+            """,
+            user_id, elder_id, limit)
+    return [_memoir_row(r) for r in await _auth_write("자서전 목록 읽기", run)]
+
+
+async def load_memoir(memoir_id: str, user_id: str) -> dict | None:
+    async def run(con):
+        return await con.fetchrow(
+            f"""
+            SELECT {_MEMOIR_COLS}, result FROM memoir
+             WHERE memoir_id = $1 AND user_id = $2 AND deleted_at IS NULL
+            """,
+            memoir_id, user_id)
+    row = await _auth_write("자서전 읽기", run)
+    return _memoir_row(row, with_result=True) if row else None
+
+
+async def delete_memoir(memoir_id: str, user_id: str) -> bool:
+    async def run(con):
+        return await con.fetchval(
+            """
+            UPDATE memoir SET deleted_at = now()
+             WHERE memoir_id = $1 AND user_id = $2 AND deleted_at IS NULL
+            RETURNING memoir_id
+            """,
+            memoir_id, user_id)
+    return bool(await _auth_write("자서전 지우기", run))
+
+# ---------------------------------------------------------------- 회차 숨기기 (015)
+
+
+async def hide_session(session_id: str, user_id: str) -> bool:
+    """
+    자녀가 엽서를 지운다 — 회차를 통째로 숨긴다 (deleted_at). 조각 · 사진 · 엽서는 그대로 둔다.
+    없거나 · 남의 것이거나 · 이미 숨겼으면 False.
+    """
+    pool = _need_pool()
+    try:
+        sid = uuid.UUID(session_id)
+    except ValueError:
+        return False
+    try:
+        async with pool.acquire() as con:
+            got = await con.fetchval(
+                "UPDATE session SET deleted_at = now()"
+                " WHERE session_id = $1 AND user_id = $2 AND deleted_at IS NULL RETURNING 1",
+                sid, user_id)
+    except Exception as e:                                   # noqa: BLE001
+        log.error("회차 숨기기 실패 %s (%s: %s)", session_id, type(e).__name__, str(e)[:120])
+        raise StoreUnavailable("회차를 지우지 못했습니다") from e
+    return bool(got)

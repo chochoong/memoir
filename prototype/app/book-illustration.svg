@@ -1,0 +1,170 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="640" height="480" viewBox="0 0 640 480" fill="none" role="img" aria-labelledby="book-title book-description">
+  <title id="book-title">사진과 이야기가 담긴 자서전</title>
+  <desc id="book-description">펼쳐진 크림색 책 위로 시골집 사진과 가족의 빛바랜 사진 두 장이 포개져 있습니다.</desc>
+  <defs>
+    <linearGradient id="landscape-wash" x1="337" y1="110" x2="325" y2="407" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#F5E4DA" stop-opacity=".7"/>
+      <stop offset="1" stop-color="#F5E4DA" stop-opacity=".12"/>
+    </linearGradient>
+    <linearGradient id="left-paper" x1="148" y1="225" x2="338" y2="365" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#FFFAF3"/>
+      <stop offset=".67" stop-color="#F9F0E4"/>
+      <stop offset="1" stop-color="#E5D6C1"/>
+    </linearGradient>
+    <linearGradient id="right-paper" x1="337" y1="317" x2="568" y2="282" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#DECEB9"/>
+      <stop offset=".14" stop-color="#F8EEDF"/>
+      <stop offset=".55" stop-color="#FFFAF3"/>
+      <stop offset="1" stop-color="#F7ECDC"/>
+    </linearGradient>
+    <linearGradient id="page-edge" x1="320" y1="330" x2="325" y2="400" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#E9DDCC"/>
+      <stop offset="1" stop-color="#D1BDA6"/>
+    </linearGradient>
+    <linearGradient id="photo-paper" x1="3" y1="0" x2="160" y2="205" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#FFFAF3"/>
+      <stop offset="1" stop-color="#F0E4D3"/>
+    </linearGradient>
+    <linearGradient id="house-sky" x1="85" y1="18" x2="85" y2="153" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#D8CCB7"/>
+      <stop offset="1" stop-color="#BCAE91"/>
+    </linearGradient>
+    <linearGradient id="portrait-wall" x1="71" y1="17" x2="71" y2="147" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#C2B295"/>
+      <stop offset="1" stop-color="#A89578"/>
+    </linearGradient>
+    <radialGradient id="photo-vignette" cx=".5" cy=".38" r=".75">
+      <stop offset=".35" stop-color="#796552" stop-opacity="0"/>
+      <stop offset="1" stop-color="#514235" stop-opacity=".26"/>
+    </radialGradient>
+    <filter id="ground-shadow" x="-20%" y="-150%" width="140%" height="400%">
+      <feGaussianBlur stdDeviation="13"/>
+    </filter>
+    <filter id="photo-shadow" x="-25%" y="-20%" width="160%" height="160%" color-interpolation-filters="sRGB">
+      <feDropShadow dx="2" dy="9" stdDeviation="10" flood-color="#796552" flood-opacity=".17"/>
+    </filter>
+    <filter id="book-shadow" x="-10%" y="-15%" width="130%" height="150%" color-interpolation-filters="sRGB">
+      <feDropShadow dx="0" dy="10" stdDeviation="9" flood-color="#796552" flood-opacity=".15"/>
+    </filter>
+    <filter id="paper-grain" x="0" y="0" width="100%" height="100%" color-interpolation-filters="sRGB">
+      <feTurbulence type="fractalNoise" baseFrequency=".75" numOctaves="2" seed="17" result="grain"/>
+      <feColorMatrix in="grain" type="matrix" values="0 0 0 0 .47  0 0 0 0 .39  0 0 0 0 .31  0 0 0 .07 0" result="tinted-grain"/>
+      <feComposite in="tinted-grain" in2="SourceAlpha" operator="in" result="masked-grain"/>
+      <feBlend in="SourceGraphic" in2="masked-grain" mode="multiply"/>
+    </filter>
+    <clipPath id="house-window"><rect x="12" y="13" width="162" height="143" rx="1"/></clipPath>
+    <clipPath id="portrait-window"><rect x="12" y="13" width="129" height="144" rx="1"/></clipPath>
+    <clipPath id="left-page-clip"><path d="M77 246C149 219 227 210 291 221C308 224 322 234 332 248L338 380C321 365 304 357 286 355C218 349 156 351 94 335L77 246Z"/></clipPath>
+    <clipPath id="right-page-clip"><path d="M332 248C347 230 363 220 385 219C439 216 500 229 551 248L574 333C507 345 433 355 366 367C354 369 346 374 338 380L332 248Z"/></clipPath>
+  </defs>
+
+  <!-- A soft landscape sits inside the otherwise transparent canvas. -->
+  <path d="M87 270C56 218 89 160 159 147C213 136 225 88 288 92C343 96 369 132 426 121C488 108 553 156 558 215C563 269 600 292 567 337C529 390 446 391 355 405C263 419 177 408 120 370C83 345 103 299 87 270Z" fill="url(#landscape-wash)"/>
+  <path d="M76 268L151 199C161 190 170 191 180 201L232 251L288 190C301 176 311 178 325 190L410 264L463 222C472 214 481 214 491 223L568 287L76 302V268Z" fill="#DCCBB9" opacity=".4"/>
+  <path d="M83 298C142 267 182 273 238 285C301 298 326 244 390 259C442 271 494 253 563 288L573 336L90 352L83 298Z" fill="#D0BBA6" opacity=".25"/>
+  <path d="M112 188C127 183 138 182 154 186M469 164C483 160 497 162 508 168" stroke="#B59D87" stroke-opacity=".35" stroke-width="1.5" stroke-linecap="round"/>
+  <circle cx="487" cy="112" r="23" fill="#E5C7B5" opacity=".45"/>
+  <ellipse cx="330" cy="403" rx="224" ry="14" fill="#796552" opacity=".14" filter="url(#ground-shadow)"/>
+
+  <!-- Vintage rural photograph. -->
+  <g transform="translate(132 78) rotate(-12 93 103)" filter="url(#photo-shadow)">
+    <rect width="186" height="203" rx="3" fill="url(#photo-paper)"/>
+    <rect x=".5" y=".5" width="185" height="202" rx="2.5" stroke="#D8C7B0" stroke-opacity=".6"/>
+    <g clip-path="url(#house-window)" filter="url(#paper-grain)">
+      <rect x="12" y="13" width="162" height="143" fill="url(#house-sky)"/>
+      <circle cx="139" cy="44" r="16" fill="#E5DAC1"/>
+      <path d="M6 96L51 52L89 88L122 59L182 100V156H6V96Z" fill="#AAA489"/>
+      <path d="M3 115C44 91 66 95 103 105C131 112 149 93 180 98V158H3V115Z" fill="#8E9175"/>
+      <path d="M12 133C57 113 107 114 174 131V156H12V133Z" fill="#B9AA87"/>
+      <path d="M89 116C92 129 106 136 134 156H102C87 143 79 130 81 119L89 116Z" fill="#D7C6A4"/>
+      <path d="M49 91L93 75L132 93V122L49 119V91Z" fill="#D9C8A5"/>
+      <path d="M42 93L88 67L139 91L135 97L88 80L46 98L42 93Z" fill="#796552"/>
+      <path d="M49 97L88 82L88 120L49 119V97Z" fill="#C8B590"/>
+      <path d="M88 82L132 97V122L88 120V82Z" fill="#E2D2B1"/>
+      <path d="M57 101L72 97V110L57 113V101ZM99 99L112 103V113L99 111V99Z" fill="#85755A"/>
+      <path d="M78 101L86 98V120L78 120V101Z" fill="#6E604C"/>
+      <path d="M61 100V112M105 101V112" stroke="#C5B795" stroke-width="1.2"/>
+      <path d="M144 111V76M35 119V87" stroke="#796552" stroke-width="2.5" stroke-linecap="round"/>
+      <path d="M142 64C134 70 133 80 140 85C132 89 137 100 145 98C155 101 161 91 154 85C161 77 154 65 148 69C147 64 145 62 142 64Z" fill="#777D65"/>
+      <path d="M34 76C27 77 26 84 29 88C22 92 28 100 35 99C44 103 50 93 44 88C48 82 41 75 38 79C38 77 36 76 34 76Z" fill="#85866A"/>
+      <path d="M19 134L44 128M149 132L170 136M24 144L59 138M137 146L161 151" stroke="#8D896D" stroke-opacity=".7" stroke-width="1.5" stroke-linecap="round"/>
+      <rect x="12" y="13" width="162" height="143" fill="url(#photo-vignette)"/>
+      <path d="M21 24L163 21M17 147L36 150" stroke="#FFFAF3" stroke-opacity=".15" stroke-width="1.2"/>
+    </g>
+    <path d="M57 178C77 180 104 179 129 176" stroke="#BAA68C" stroke-opacity=".4" stroke-width="1.5" stroke-linecap="round"/>
+  </g>
+
+  <!-- Family silhouettes keep the memory personal without depicting a real person. -->
+  <g transform="translate(357 83) rotate(11 76.5 98)" filter="url(#photo-shadow)">
+    <rect width="153" height="193" rx="3" fill="url(#photo-paper)"/>
+    <rect x=".5" y=".5" width="152" height="192" rx="2.5" stroke="#D8C7B0" stroke-opacity=".65"/>
+    <g clip-path="url(#portrait-window)" filter="url(#paper-grain)">
+      <rect x="12" y="13" width="129" height="144" fill="url(#portrait-wall)"/>
+      <path d="M20 13V157M128 13V157" stroke="#E3D5BC" stroke-opacity=".3" stroke-width="7"/>
+      <path d="M30 18C47 38 48 61 36 87M119 18C102 38 105 60 119 86" stroke="#9B896E" stroke-opacity=".35" stroke-width="1.2"/>
+      <path d="M20 158L23 111C24 96 33 88 49 86C66 86 78 98 79 114L79 158H20Z" fill="#746552"/>
+      <path d="M33 92L48 107L62 91L56 86H39L33 92Z" fill="#E0CFAD"/>
+      <path d="M46 105L50 105L54 137L48 143L43 135L46 105Z" fill="#544A3D"/>
+      <path d="M32 94L39 117L46 108M64 94L58 117L50 108" stroke="#9B886D" stroke-width="1.3" stroke-linecap="round"/>
+      <path d="M33 62C33 49 39 41 50 41C62 41 68 49 67 63L65 77C63 87 56 92 49 90C41 89 35 83 34 73L33 62Z" fill="#D1B995"/>
+      <path d="M33 65C28 46 39 35 51 36C65 37 72 47 67 66L63 53C54 54 46 51 42 49C40 54 37 57 34 58L33 65Z" fill="#655643"/>
+      <path d="M90 86C106 85 119 95 122 111L128 157H69L74 111C75 97 79 90 90 86Z" fill="#9A8064"/>
+      <path d="M90 87L99 100L109 88" fill="#DBC8A7"/>
+      <path d="M79 61C79 48 85 39 97 39C111 38 118 49 118 66L119 86C110 91 88 92 78 85L79 61Z" fill="#675843"/>
+      <path d="M85 59C85 52 90 47 98 47C107 47 111 55 111 65L110 75C109 85 103 91 97 90C89 89 85 82 84 74L85 59Z" fill="#DBC3A1"/>
+      <path d="M83 66C82 52 87 43 98 43C108 43 114 51 112 65C106 62 100 55 99 52C95 58 89 60 83 61V66Z" fill="#6F5E48"/>
+      <path d="M86 101C92 111 104 112 111 101" stroke="#C8AF8B" stroke-width="1.5"/>
+      <path d="M49 158L52 132C53 121 61 115 74 115C88 115 95 123 98 136L101 158H49Z" fill="#D6C09B"/>
+      <path d="M66 119L74 130L82 119" fill="#F0DFC1"/>
+      <path d="M61 102C61 92 67 86 75 86C85 86 90 94 89 104L88 112C86 120 81 124 75 123C68 122 63 117 62 110L61 102Z" fill="#DCC4A1"/>
+      <path d="M61 105C57 95 63 83 75 83C87 83 93 93 89 105L86 97C80 99 75 96 71 93C69 98 65 100 62 99L61 105Z" fill="#77634C"/>
+      <path d="M35 119C40 131 46 136 57 136M115 120C108 134 101 137 92 135" stroke="#B9A17F" stroke-width="8" stroke-linecap="round"/>
+      <path d="M69 137V157M80 137V157" stroke="#BDA37E" stroke-width="1.2"/>
+      <circle cx="75" cy="139" r="1.3" fill="#9D8566"/>
+      <circle cx="75" cy="149" r="1.3" fill="#9D8566"/>
+      <rect x="12" y="13" width="129" height="144" fill="url(#photo-vignette)"/>
+      <path d="M17 25L134 21M131 29L133 55" stroke="#FFFAF3" stroke-opacity=".17"/>
+    </g>
+    <path d="M53 176C68 174 84 174 101 176" stroke="#BAA68C" stroke-opacity=".4" stroke-width="1.5" stroke-linecap="round"/>
+  </g>
+
+  <!-- Bound cover, individual page edges, and the curved open spread. -->
+  <g filter="url(#book-shadow)">
+    <path d="M66 258L285 224C307 224 324 239 334 253C348 235 368 225 388 227L559 258L590 350C592 356 589 363 582 365L356 407C348 409 340 407 333 402C324 404 316 404 307 401L80 365C74 364 70 361 69 355L56 280C54 268 56 261 66 258Z" fill="#743B49"/>
+    <path d="M71 345L306 384C318 386 327 390 336 396C343 390 351 385 365 383L583 344" stroke="#AF7B82" stroke-width="2" stroke-linecap="round"/>
+    <path d="M76 252L291 225C307 227 322 239 332 253C347 234 367 225 388 225L556 253L581 342L365 383C353 385 345 389 337 395C327 387 317 382 304 381L84 351L76 252Z" fill="url(#page-edge)"/>
+    <path d="M84 340C158 356 224 357 291 366C311 369 323 375 337 387C350 378 360 374 374 372L576 335M86 346C161 360 226 363 294 372C313 375 324 380 337 390C350 382 360 379 374 377L578 340" stroke="#B8A58D" stroke-opacity=".58" stroke-width="1.2"/>
+    <path d="M80 249C151 222 226 214 291 224C308 227 321 237 332 251L338 385C320 370 304 362 286 360C216 354 155 357 89 340L80 249Z" fill="#F8EDDD"/>
+    <path d="M332 251C347 233 364 224 385 223C439 220 503 233 554 252L577 338C508 350 434 360 366 372C354 374 345 379 338 385L332 251Z" fill="#EFE1CD"/>
+    <path d="M77 246C149 219 227 210 291 221C308 224 322 234 332 248L338 380C321 365 304 357 286 355C218 349 156 351 94 335L77 246Z" fill="url(#left-paper)"/>
+    <path d="M332 248C347 230 363 220 385 219C439 216 500 229 551 248L574 333C507 345 433 355 366 367C354 369 346 374 338 380L332 248Z" fill="url(#right-paper)"/>
+    <path d="M77 246C149 219 227 210 291 221C308 224 322 234 332 248C347 230 363 220 385 219C439 216 500 229 551 248" stroke="#FFFAF3" stroke-width="2"/>
+    <g clip-path="url(#left-page-clip)" stroke="#BBA88E" stroke-linecap="round">
+      <path d="M118 268C171 252 220 250 269 256" stroke-width="2" opacity=".7"/>
+      <path d="M120 279C173 265 225 264 285 273M122 290C178 278 231 279 287 287M125 301C181 292 235 291 289 301M127 312C179 305 224 306 269 313" opacity=".46" stroke-width="1.3"/>
+      <path d="M133 328C156 326 176 326 198 328" opacity=".38" stroke-width="1.2"/>
+    </g>
+    <g clip-path="url(#right-page-clip)" stroke="#BBA88E" stroke-linecap="round">
+      <path d="M379 259C422 251 469 256 514 268" stroke-width="2" opacity=".7"/>
+      <path d="M376 273C422 266 470 270 522 282M377 285C425 279 474 282 525 295M378 297C426 291 478 293 530 306M380 309C420 305 464 306 501 313" opacity=".46" stroke-width="1.3"/>
+      <path d="M386 334L447 328" opacity=".38" stroke-width="1.2"/>
+    </g>
+    <path d="M332 248C334 286 336 333 338 380" stroke="#A78E71" stroke-opacity=".45" stroke-width="1.4"/>
+    <path d="M336 248C340 279 342 322 342 370" stroke="#FFFAF3" stroke-opacity=".7" stroke-width="1.2"/>
+    <path d="M453 351L467 348L476 398L468 394L460 402L453 351Z" fill="#743B49"/>
+    <path d="M458 352L466 391" stroke="#A56F79" stroke-width="1"/>
+  </g>
+
+  <!-- Small botanical marks soften the composition without obscuring the book. -->
+  <g stroke="#A89078" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M83 380C73 369 65 355 63 340" stroke-width="1.5"/>
+    <path d="M69 359C57 359 49 351 49 343C61 343 69 350 69 359Z" fill="#C9B39B" stroke="none"/>
+    <path d="M75 369C74 356 79 347 86 343C92 354 86 364 75 369Z" fill="#D9C6AF" stroke="none"/>
+    <path d="M558 393C571 383 581 368 584 353" stroke-width="1.5"/>
+    <path d="M573 379C574 367 568 361 561 359C557 369 562 377 573 379Z" fill="#D9C6AF" stroke="none"/>
+    <path d="M579 368C590 370 598 362 600 355C589 353 582 359 579 368Z" fill="#C9B39B" stroke="none"/>
+  </g>
+  <path d="M108 128V140M102 134H114M552 191V201M547 196H557" stroke="#B68D82" stroke-width="1.5" stroke-linecap="round" opacity=".65"/>
+  <circle cx="96" cy="309" r="2" fill="#B68D82" opacity=".55"/>
+  <circle cx="541" cy="129" r="2.5" fill="#C6A28E" opacity=".65"/>
+</svg>

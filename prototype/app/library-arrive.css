@@ -1,0 +1,15 @@
+/* 새 자서전을 책장에 꽂는 연출 */
+.la-host { position: fixed; inset: 0; z-index: 90; perspective: 1200px; cursor: pointer; }
+.la-dim { position: absolute; inset: 0; background: radial-gradient(ellipse at 50% 42%, #2b1d0f55, #2b1d0fb3 70%); backdrop-filter: blur(2px); opacity: 0; }
+.la-fly { position: fixed; transform-style: preserve-3d; transform-origin: 50% 50%; border-radius: 2px 4px 4px 2px; box-shadow: 0 34px 60px -20px #1b0f05b3, 0 6px 14px #1b0f0540; overflow: hidden; }
+.la-book { width: 100%; height: 100%; }
+.la-book .ml-cover { width: 100% !important; height: 100% !important; min-height: 0 !important; aspect-ratio: auto !important; margin: 0; transition: none; }
+.la-shine { position: absolute; inset: -10% auto -10% 0; width: 45%; background: linear-gradient(90deg, transparent, #fff6dd99 45%, #ffffffcc 50%, #fff6dd99 55%, transparent); mix-blend-mode: soft-light; opacity: 0; pointer-events: none; }
+.la-caption { position: absolute; left: 50%; transform: translateX(-50%); width: min(520px, calc(100% - 40px)); margin: 0; text-align: center; color: #fff8ec; opacity: 0; }
+.la-caption span { display: block; font-size: 15px; letter-spacing: .12em; color: #f1d7a8; }
+.la-caption strong { display: block; margin-top: 6px; font-family: var(--serif); font-size: 24px; line-height: 1.5; font-weight: 600; text-shadow: 0 2px 10px #0006; }
+.la-caption small { display: block; margin-top: 10px; font-size: 13px; color: #e8dccb; opacity: .8; }
+.la-sparkles { position: fixed; inset: 0; z-index: 91; pointer-events: none; }
+.la-sparkles span { position: fixed; color: #e9b85b; text-shadow: 0 0 6px #fff3c4; line-height: 1; }
+.la-new { display: inline-flex; align-items: center; margin-right: 6px; padding: 1px 8px; border-radius: 999px; background: var(--burgundy); color: #fff; font-size: 11px; font-weight: 700; letter-spacing: .02em; vertical-align: 1px; }
+@media (max-width: 760px) { .la-caption strong { font-size: 20px; } }

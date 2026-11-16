@@ -34,8 +34,8 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
 from app.session import controller as sc
-from app.session import (auth, limits, link, memoir, memoir_jobs, photo, photostore, postcard, prompt, store, stt,
-                         tts, words)
+from app.session import (auth, limits, link, memoir, memoir_jobs, photo, photostore, postcard, prompt, share, store,
+                         stt, tts, words)
 from app.session import style as styles
 from app.session.conf import env_flag, env_int, env_str
 from app.session.machine import State, TransitionError
@@ -137,7 +137,9 @@ async def lifespan(app: FastAPI):
 #
 # 프로덕션에서 화면은 이 서버가 web/ 에서 직접 낸다. **같은 출처라 CORS 가 아예
 # 필요 없다** — 허용 목록이 비어 있는 것이 정상이다.
-PUBLIC_ORIGIN = env_str("PUBLIC_ORIGIN")
+# 끝의 / 는 뗀다 — 남으면 초대 · 공유 주소가 …com//i#… 가 되어 화면이 링크로 알아보지 못하고,
+# 브라우저가 보내는 Origin(끝에 / 없음)과도 글자가 달라진다.
+PUBLIC_ORIGIN = env_str("PUBLIC_ORIGIN").rstrip("/")
 _public = bool(PUBLIC_ORIGIN)
 _docs = "/docs" if (not _public or env_flag("DOCS")) else None
 
@@ -208,6 +210,9 @@ async def _auth_error(request: Request, e: auth.AuthError):
 
 # ---------------------------------------------------------------- 모델
 
+VoiceKey = Literal["default", "young"]
+
+
 class StartReq(BaseModel):
     title: str
     # 가족이 적은 설명. **어르신의 말씀이 아니다** — 0번 조각에 남지만 대화 기록에
@@ -226,6 +231,9 @@ class StartReq(BaseModel):
     # 누구의 이야기인가 (「누구의 이야기를 남길까요?」 에서 고른 화자). 이 자녀의 화자여야 한다.
     # 지금은 없어도 연다 — 화면이 보내기 전까지. 없으면 화자 미지정 회차가 된다.
     elder_id: str | None = Field(None, max_length=64)
+    # 질문을 읽는 목소리. default = 지금 목소리(Kore) · young = 젊고 밝은 목소리(Leda).
+    # 이름 목록은 tts.VOICES 와 같아야 한다 (tests/test_voice.py 가 본다). 모르는 이름은 422.
+    voice: VoiceKey = "default"
 
 
 class ElderAssignReq(BaseModel):
@@ -260,6 +268,7 @@ class LinkReq(BaseModel):
     theme: Literal["family", "self", "hobby"] | None = None
     topic: str = Field("", max_length=100)
     photo_id: str | None = Field(None, max_length=64)
+    voice: VoiceKey = "default"
 
 
 # ---------------------------------------------------------------- API
@@ -381,6 +390,49 @@ async def create_elder(req: ElderReq, who: str = Depends(auth.current_user)):
     return {"elder_id": e["elder_id"], "name": e["display_name"]}
 
 
+def _no_elder() -> JSONResponse:
+    # 없는 화자 · 남의 화자 · 이미 지운 화자를 가리지 않는다 — 남의 화자가 있는지 알려 주지 않는다.
+    return JSONResponse({"detail": "화자를 찾을 수 없어요", "code": "elder_not_found"},
+                        status_code=404)
+
+
+@app.patch("/api/elders/{elder_id}")
+async def rename_elder(elder_id: str, req: ElderReq, who: str = Depends(auth.current_user)):
+    """
+    화자 이름을 바꾼다. 기록은 이름이 아니라 elder_id 에 묶여 있어 그대로 따라온다.
+    같은 이름 막기는 하지 않는다 — 만들 때(POST)와 같다.
+    """
+    name = req.name.strip()
+    if not name:
+        raise HTTPException(422, "이름을 적어 주세요")
+    if not await _read(store.rename_elder(who, elder_id, name)):
+        return _no_elder()
+    log.info("화자 이름 바꿈 %s", elder_id)
+    return {"elder_id": elder_id, "name": name}
+
+
+@app.delete("/api/elders/{elder_id}")
+async def delete_elder(elder_id: str, who: str = Depends(auth.current_user)):
+    """
+    이 계정의 화자 목록에서 뺀다 (user_elder 한 줄). elder 줄 · 예전 기록은 남는다.
+
+    **기록이 하나라도 있으면 지우지 않는다 (409 has_records)** — 숨기지 않은 회차 ·
+    지우지 않은 자서전 · 아직 쓸 수 있는 링크. 실수로 엽서 · 자서전을 잃지 않게.
+
+    진행 중인 회차도 센다. 회차는 열 때 DB 에 적지만 그 쓰기는 실패를 삼키므로,
+    메모리에 떠 있는 회차를 DB 만 보고 놓칠 수 있다.
+    """
+    live = sum(1 for c in sc.live_sessions() if c.user_id == who and c.elder_id == elder_id)
+    got = await _read(store.unlink_elder(who, elder_id, live))
+    if got is None:
+        return _no_elder()
+    if not got["deleted"]:
+        return JSONResponse({"detail": "이 분의 이야기 기록이 남아 있어 지울 수 없어요",
+                             "code": "has_records", "records": got["records"]}, status_code=409)
+    log.info("화자 지움 %s", elder_id)
+    return {"elder_id": elder_id, "deleted": True}
+
+
 @app.post("/api/sessions")
 async def create_session(req: StartReq, request: Request,
                          who: str = Depends(auth.current_user)):
@@ -416,7 +468,7 @@ async def create_session(req: StartReq, request: Request,
     ctl = sc.put(sc.SessionController(
         user_id=who, title=req.title, pace=req.pace, max_turn=req.max_turn,
         photo_id=req.photo_id, theme=req.theme, topic=req.topic.strip(),
-        elder_id=req.elder_id,
+        elder_id=req.elder_id, voice=req.voice,
         question_fn=gemini_question, closed_fn=postcard.on_closed))
     await ctl.start(req.seed)
     if not req.elder_id:
@@ -666,6 +718,23 @@ async def list_sessions(limit: int = 20, has_postcard: bool = False,
         return {"sessions": rows}
     return {"sessions": rows, "memoir_total": len(await _read(store.memoir_sessions(who, elder_id))),
             **memoir.limits(who)}
+
+
+@app.delete("/api/sessions/{session_id}")
+async def hide_session(session_id: str, who: str = Depends(auth.current_user)):
+    """
+    엽서 지우기 — 회차를 통째로 숨긴다 (015). 목록 · 자서전 고르기 · 엽서 · 기록 보기에서 빠진다.
+    DB 에서 지우지는 않는다 (deleted_at 을 비우면 돌아온다).
+    진행 중인 회차는 409 session_open. 없거나 · 남의 것이거나 · 이미 지웠으면 404.
+    책장의 책에 든 엽서인지는 서버가 모른다 (책은 화면에 있다) — 화면이 먼저 막는다.
+    """
+    ctl = sc.get(session_id)
+    if ctl is not None and ctl.user_id == who and ctl.machine.state is not State.CLOSED:
+        return JSONResponse({"detail": "아직 이야기 중인 회차예요", "code": "session_open"}, status_code=409)
+    if not await _read(store.hide_session(session_id, who)):
+        raise HTTPException(404, "회차를 찾을 수 없습니다")
+    log.info("회차 숨김 %s", session_id)
+    return {"session_id": session_id, "deleted": True}
 
 
 @app.put("/api/sessions/{session_id}/elder")
@@ -974,16 +1043,19 @@ async def memoir_preview(request: Request, who: str = Depends(auth.current_user)
         return JSONResponse({"detail": detail, "code": code}, status_code=status)
     body = await _memoir_body(request)
     try:
-        chosen = styles.pick(body.get("style"))
+        chosen = styles.pick(body.get("style"), styles.MEMOIR)
     except styles.UnsupportedStyle:
         return _unsupported_style()
     try:
         if "exclude_session_ids" in body:
-            return await memoir.preview_all(body.get("elder_id"), body["exclude_session_ids"], who, chosen)
-        return await memoir.preview(body.get("session_ids"), who, chosen)
+            out = await memoir.preview_all(body.get("elder_id"), body["exclude_session_ids"], who, chosen)
+        else:
+            out = await memoir.preview(body.get("session_ids"), who, chosen)
     except memoir.MemoirError as e:
         status, code, detail = _memoir_failure(e)
         return JSONResponse({"detail": detail, "code": code}, status_code=status)
+    ids = ((out.get("run") or {}).get("session_ids")) or []
+    return {**out, "memoir_id": await memoir_jobs.keep(out, ids, who, chosen)}
 
 
 async def _memoir_body(request: Request) -> dict:
@@ -1024,7 +1096,7 @@ async def memoir_start(request: Request, who: str = Depends(auth.current_user)):
         return JSONResponse({"detail": detail, "code": code}, status_code=status)
     body = await _memoir_body(request)
     try:
-        chosen = styles.pick(body.get("style"))
+        chosen = styles.pick(body.get("style"), styles.MEMOIR)
     except styles.UnsupportedStyle:
         return _unsupported_style()
     busy = memoir_jobs.running(who)
@@ -1039,6 +1111,40 @@ async def memoir_start(request: Request, who: str = Depends(auth.current_user)):
         return JSONResponse({"detail": detail, "code": code}, status_code=status)
     job = await memoir_jobs.start(recs, ids, who, chosen)
     return JSONResponse(_memoir_job_view(job), status_code=202)
+
+
+# ---------------------------------------------------------------- 만든 자서전 (013)
+#
+# 다 쓴 자서전은 DB 에 남는다 (memoir_jobs.keep). 작업 · preview 응답의 memoir_id 로 찾는다.
+# **/api/memoirs/{job_id} 보다 먼저 둔다** — 뒤에 두면 「saved」 가 작업 번호로 읽힌다.
+
+def _memoir_gone() -> JSONResponse:
+    return JSONResponse({"detail": "자서전을 찾을 수 없어요", "code": "memoir_not_found"}, status_code=404)
+
+
+@app.get("/api/memoirs/saved")
+async def saved_memoirs(elder_id: str | None = None, limit: int = 50,
+                        who: str = Depends(auth.current_user)):
+    """내가 만든 자서전. 최근 순. 본문(result)은 싣지 않는다 — 하나씩 읽는다."""
+    rows = await _read(store.list_memoirs(who, elder_id, _limit(limit)))
+    return {"memoirs": [{k: v for k, v in r.items() if k != "user_id"} for r in rows]}
+
+
+@app.get("/api/memoirs/saved/{memoir_id}")
+async def saved_memoir(memoir_id: str, who: str = Depends(auth.current_user)):
+    """자서전 하나 — result 는 만들 때의 응답 그대로다. 없거나 남의 것이거나 지웠으면 404."""
+    rec = await _read(store.load_memoir(memoir_id[:64], who))
+    if rec is None:
+        return _memoir_gone()
+    return {k: v for k, v in rec.items() if k != "user_id"}
+
+
+@app.delete("/api/memoirs/saved/{memoir_id}")
+async def delete_saved_memoir(memoir_id: str, who: str = Depends(auth.current_user)):
+    """지운다 (목록 · 읽기에서 빠진다). 없거나 남의 것이거나 이미 지웠으면 404."""
+    if not await _read(store.delete_memoir(memoir_id[:64], who)):
+        return _memoir_gone()
+    return {"memoir_id": memoir_id, "deleted": True}
 
 
 @app.get("/api/memoirs/latest")
@@ -1096,6 +1202,7 @@ def _memoir_job_view(job: memoir_jobs.Job) -> dict:
         out.update(stage=job.stage, chapter=job.chapter, chapters=job.chapters)
     elif job.status == memoir_jobs.DONE:
         out["result"] = job.result
+        out["memoir_id"] = job.memoir_id
     elif isinstance(job.error, memoir_jobs.Cancelled):
         out.update(code="cancelled", detail="자서전 만들기를 그만두었어요.")
     else:
@@ -1141,7 +1248,8 @@ async def create_link(req: LinkReq, who: str = Depends(auth.current_user)):
     topic = req.topic.strip()
     rec, raw = await link.issue(who, {
         "elder_id": req.elder_id, "title": req.title.strip() or topic or "인터뷰",
-        "seed": req.seed, "theme": req.theme, "topic": topic, "photo_id": req.photo_id})
+        "seed": req.seed, "theme": req.theme, "topic": topic, "photo_id": req.photo_id,
+        "voice": req.voice})
     return _issued(rec, raw)
 
 
@@ -1186,6 +1294,76 @@ async def reissue_link(link_id: str, who: str = Depends(auth.current_user)):
     await link.read(store.revoke_link(link_id))
     rec, raw = await link.issue(who, old)
     return _issued(rec, raw)
+
+
+# ---------------------------------------------------------------- 자서전 공유 링크 (014)
+#
+# 자녀가 책 한 권을 링크로 낸다. 받은 사람은 로그인 없이 읽기만 한다 (/b#<토큰>).
+# 무엇을 왜 이렇게 하는지는 share.py 머리에 있다.
+
+SHARE_BODY_MAX = 1_500_000          # 바이트. share.MAX_CHARS(30만 자) 의 한글 + 모양 여유
+_SHARE_PAGE = Path(__file__).resolve().parent / "share_page.html"
+_NO_STORE = {"Cache-Control": "no-store", "X-Robots-Tag": "noindex, nofollow"}
+
+
+@app.post("/api/shares", status_code=201)
+async def create_share(request: Request, who: str = Depends(auth.current_user)):
+    """
+    본문 `{book_id?, book: {title, subtitle?, draft?, made?, chapters: [{title, paras, draft?}]}}`
+    → 201 `{share_id, token, url, ...}`. **토큰은 여기서 한 번만 나간다** — 표에는 해시만 있다.
+    같은 책을 다시 공유하면 새 링크다 (앞 링크는 그대로 — 끄는 것은 자녀가 고른다).
+    """
+    raw = await request.body()
+    if len(raw) > SHARE_BODY_MAX:
+        raise share.bad("책이 너무 커요")
+    try:
+        body = json.loads(raw or b"{}")
+    except ValueError:
+        raise share.bad("책을 읽지 못했어요") from None
+    if not isinstance(body, dict):
+        raise share.bad("책이 없어요")
+    book_id = body.get("book_id") or ""
+    if not isinstance(book_id, str) or len(book_id) > 100:
+        raise share.bad("책 id 가 틀려요")
+    book = share.clean_book(body.get("book"))
+    rec, token = await share.issue(who, book_id, book)
+    return {**share.summary({**rec, "created_at": None, "revoked_at": None}),
+            "token": token, "url": f"{PUBLIC_ORIGIN}{share.PATH}#{token}"}
+
+
+@app.get("/api/shares")
+async def list_shares(limit: int = 50, who: str = Depends(auth.current_user)):
+    """내가 낸 공유. 최근 순. 토큰은 싣지 않는다 (다시 보여 줄 수 없다 — 잃으면 새로 낸다)."""
+    rows = await share.read(store.list_shares(who, _limit(limit)))
+    return {"shares": [share.summary(r) for r in rows]}
+
+
+@app.post("/api/shares/{share_id}/revoke")
+async def revoke_share(share_id: str, who: str = Depends(auth.current_user)):
+    """공유를 끈다. 그 뒤로 링크는 410. 이미 끈 것도 200 이다. 없거나 남의 것이면 404."""
+    rec = await share.read(store.revoke_share(share_id[:64], who))
+    if rec is None:
+        raise HTTPException(404, "공유를 찾을 수 없어요")
+    log.info("자서전 공유 끔 %s", rec["share_id"])
+    return share.summary(rec)
+
+
+@app.get("/api/b")
+async def shared_book(request: Request):
+    """
+    받은 사람. **msid 를 읽지 않는다** — X-Share-Token 헤더만 본다. 몇 번 열어도 아무것도
+    바꾸지 않는다. 모르는 토큰 404 invalid_share, 끈 공유 410 share_revoked (책을 싣지 않는다).
+    """
+    rec = await share.by_token(request.headers.get(share.HEADER))
+    return JSONResponse(jsonable_encoder({"book": rec["book"], "shared_at": rec["created_at"]}),
+                        headers=_NO_STORE)
+
+
+@app.get(share.PATH, include_in_schema=False)
+async def shared_book_page():
+    """받은 사람이 여는 읽기 화면. 책 화면(index.html)과 따로 둔다 — 로그인 · 녹음 없이 읽기만."""
+    return FileResponse(_SHARE_PAGE, media_type="text/html; charset=utf-8",
+                        headers={**_NO_STORE, "Referrer-Policy": "no-referrer"})
 
 
 # ---------------------------------------------------------------- 인터뷰 링크 (받은 사람)
@@ -1257,7 +1435,8 @@ async def link_start(request: Request, body: LinkStartReq | None = None):
         ctl = sc.put(sc.SessionController(
             user_id=rec["user_id"], title=rec["title"], session_id=session_id,
             photo_id=rec["photo_id"], theme=rec["theme"], topic=picked or rec["topic"],
-            elder_id=rec["elder_id"], question_fn=gemini_question, closed_fn=link.on_closed, via_link=True))
+            elder_id=rec["elder_id"], voice=rec.get("voice") or "default",
+            question_fn=gemini_question, closed_fn=link.on_closed, via_link=True))
         # 다른 낱말을 고르셨으면 자녀의 시작 자료(seed)는 쓰지 않는다 — 다른 주제의 자료가
         # 0번 조각으로 들어가 질문을 그쪽으로 끌고 간다
         await ctl.start(picked if picked else rec["seed"])
@@ -1359,7 +1538,7 @@ async def link_transcript(request: Request):
     link.gone(state)
     if state != "ended":
         raise link.stuck("not_ended")
-    saved = await _read(store.load_session(rec["session_id"]))
+    saved = await _read(store.load_session(rec["session_id"], hidden=True))   # 자녀가 지웠어도 어르신은 다시 본다
     turns = [{"question": f["question"] or "", "answer": f["answer"]}
              for f in (saved["fragments"] if saved else []) if f["idx"] > 0]
     return {"theme": rec["theme"], "topic": rec["topic"], "turns": turns}

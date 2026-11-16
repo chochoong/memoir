@@ -1,0 +1,86 @@
+{
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "essay_id",
+    "title",
+    "paragraphs",
+    "facts",
+    "quotes_kept",
+    "fiction",
+    "notes"
+  ],
+  "properties": {
+    "essay_id": {
+      "type": "string"
+    },
+    "title": {
+      "type": "string"
+    },
+    "notes": {
+      "type": "string"
+    },
+    "paragraphs": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "quotes_kept": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "facts": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "id",
+          "where"
+        ],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "where": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "fiction": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "text",
+          "type",
+          "basis",
+          "risk",
+          "human_check"
+        ],
+        "properties": {
+          "text": {
+            "type": "string"
+          },
+          "type": {
+            "type": "string"
+          },
+          "basis": {
+            "type": "string"
+          },
+          "risk": {
+            "type": "string"
+          },
+          "human_check": {
+            "type": "boolean"
+          }
+        }
+      }
+    }
+  }
+}

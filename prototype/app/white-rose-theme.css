@@ -1,0 +1,248 @@
+/* Approved 2026-11-10: white surfaces, charcoal copy, restrained rose actions.
+   Color-only layer. Keep reader themes, artwork, covers and status signals local. */
+body:not(.ebook-mode) {
+  --canvas: #fff;
+  --paper: #fff;
+  --ink: #292628;
+  --muted: #696568;
+  --burgundy: #8a465e;
+  --burgundy-dark: #71384d;
+  --blush: #f7eaf0;
+  --line: #e3e3e3;
+  --soft: #f2f2f2;
+  --shadow: 0 5px 24px #29262807;
+  --theme-control-rule: #8a868c;
+  background: var(--canvas);
+  color: var(--ink);
+}
+
+/* Large surfaces are white; material color stays inside the illustrations. */
+body:not(.ebook-mode) :is(.sidebar, .topbar, .mobile-nav, .hero,
+  .shortcut, .prompt-panel, .conversation-aside, .style-preview,
+  .manuscript, .draft-note, .personal-header, .postcard-dialog,
+  .story-review-body) {
+  background: var(--paper);
+}
+body:not(.ebook-mode) .hero::after { border-color: var(--line); }
+body:not(.ebook-mode) .art-halo { background: none; box-shadow: none; }
+body:not(.ebook-mode) .topbar { border-color: var(--line); }
+body:not(.ebook-mode) .personal-header {
+  --personal-accent: var(--ink);
+  color: var(--ink);
+}
+
+/* Neutral typography and everyday actions; SVG icons inherit their context. */
+body:not(.ebook-mode) :is(.brand, .brand-mark, .mobile-brand,
+  .hero h1 em, .prompt-panel h2, .prompt-panel .text-button,
+  .text-button, .outline, .shortcut-icon, .shortcut > .icon,
+  .personal-heading > h1, .personal-name, .role-context-name,
+  .role-change, .personal-heading .role-change,
+  .selection-footer strong, .ml-shelf-heading h2 > span,
+  .ml-read-label, .pending-stories > summary,
+  .mlg-brand, .mlg-speaker-summary strong, .role-add-speaker,
+  .role-current-speaker, .role-issued, .style-icon,
+  .postcard-card > .icon) {
+  color: var(--ink);
+}
+body:not(.ebook-mode) :is(.brand small, .nav-label, .sidebar-note,
+  .sidebar-note small, .sidebar-foot, .tiny-star, .help-button,
+  .topbar-caption, .review-notice, .notice-divider, .eyebrow,
+  .hero-description, .gentle-note, .art-caption, .shortcut small,
+  .recent-copy small, .recent-chevron, .recent-row > .text-button,
+  .quote-mark, .prompt-panel p, .page-footnote, .interview-counter,
+  .question-hint, .preview-hint, .answer-panel label,
+  .draft-editor label, .conversation-aside, .record-meta,
+  .category-label, .record-copy p, .record-card > .icon,
+  .selection-footer span, .empty-state .icon, .empty-state p,
+  .stepper li, .stepper .done, .style-card small, .sample-credit,
+  .small-copy, .build-footer > span, .manuscript-meta,
+  .manuscript-ending, .draft-note, .draft-note > .icon,
+  .dialog-close,
+  .role-intro, .role-subcopy, .role-preview-note, .role-review-tools,
+  .role-invitation p, .role-context, .personal-header .eyebrow,
+  .personal-header .ml-intro,
+  .personal-owner-note, .ml-volume-label, .ml-sample-label,
+  .ml-collection-note, .ml-memory-note, .studio-topline .pill,
+  .studio-status, .studio-kicker, .studio-status-line,
+  .interview-studio .question-hint, .interview-studio .preview-hint small) {
+  color: var(--muted);
+}
+body:not(.ebook-mode) .personal-header #records-description,
+body:not(.ebook-mode) .studio-actions #finish-interview,
+body:not(.ebook-mode) :is(.review-dialog, .generation-dialog) > p {
+  color: var(--muted);
+}
+body:not(.ebook-mode) .role-change > span { text-decoration-color: currentColor; }
+body:not(.ebook-mode) .brand-mark { border-color: var(--muted); }
+body:not(.ebook-mode) .help-symbol { border-color: var(--theme-control-rule); }
+body:not(.ebook-mode) .little-rule { background: var(--line); }
+body:not(.ebook-mode) .review-notice .status-dot { background: var(--muted); }
+body:not(.ebook-mode) #postcard-body,
+body:not(.ebook-mode) #postcard-body p,
+body:not(.ebook-mode) .story-review-body p { color: var(--ink); }
+
+/* Selected navigation has both hue and an underline, on PC and mobile. */
+body:not(.ebook-mode) :is(.side-nav a, .mobile-nav a) { color: var(--ink); }
+body:not(.ebook-mode) .side-nav a:hover { background: var(--soft); }
+body:not(.ebook-mode) :is(.side-nav a, .mobile-nav a)[aria-current="page"] {
+  color: var(--burgundy);
+  background: var(--blush);
+  text-decoration-line: underline;
+  text-decoration-thickness: 3px;
+  text-underline-offset: 7px;
+}
+body:not(.ebook-mode) :is(.nav-count, .avatar, .shortcut-icon, .pill,
+  .preview-label, .style-icon, .memory-thumbnail,
+  .memory-thumbnail.family, .memory-thumbnail.life) {
+  background: var(--soft);
+  color: var(--ink);
+}
+body:not(.ebook-mode) .memory-thumbnail { border-color: var(--line); }
+body:not(.ebook-mode) .memory-thumbnail::before { background: none; }
+body:not(.ebook-mode) .avatar { border-color: var(--paper); }
+
+/* Main actions retain a single solid brand color. */
+body:not(.ebook-mode) .primary {
+  background: var(--burgundy);
+  color: #fff;
+  box-shadow: 0 4px 10px #29262812;
+}
+body:not(.ebook-mode) .primary:hover {
+  background: var(--burgundy-dark);
+  box-shadow: 0 4px 16px #29262820;
+}
+body:not(.ebook-mode) .primary:disabled { background: var(--burgundy); }
+body:not(.ebook-mode) .outline {
+  background: var(--paper);
+  border-color: var(--theme-control-rule);
+}
+body:not(.ebook-mode) :is(.outline:hover, .shortcut:hover,
+  .postcard-card:hover, .recent-row:hover) {
+  background: var(--soft);
+  border-color: var(--theme-control-rule);
+}
+body:not(.ebook-mode) .recent-row:active { background: #e9e9e9; }
+body:not(.ebook-mode) .recent-row { -webkit-tap-highlight-color: #29262818; }
+body:not(.ebook-mode) :is(.recent-row, .preview-hint, .record-card,
+  .interview-studio .preview-hint, .ml-sample-label, .ml-collection-note,
+  .role-issued) {
+  border-color: var(--line);
+}
+
+/* Form boundaries and keyboard focus remain distinguishable on white. */
+body:not(.ebook-mode) :is(.answer-panel textarea,
+  .draft-editor textarea, .draft-editor input, .search-field,
+  .role-name-form input, .role-topic select, .role-issued input) {
+  background: var(--paper);
+  color: var(--ink);
+  border-color: var(--theme-control-rule);
+}
+body:not(.ebook-mode) .search-field input { color: var(--ink); }
+body:not(.ebook-mode) .search-field .icon { color: var(--muted); }
+body:not(.ebook-mode) :is(input, textarea)::placeholder { color: var(--muted); }
+body:not(.ebook-mode) :is(input[type="checkbox"], input[type="radio"]) {
+  accent-color: var(--burgundy);
+}
+body:not(.ebook-mode) :is(button, a, input, textarea, select, summary):focus-visible {
+  outline-color: var(--burgundy);
+}
+body:not(.ebook-mode) .search-field:focus-within { outline-color: var(--burgundy); }
+
+/* Choice states keep their existing checks, strokes and status semantics. */
+body:not(.ebook-mode) .filter-group button { color: var(--ink); }
+body:not(.ebook-mode) .filter-group button[aria-pressed="true"] {
+  background: var(--blush);
+  color: var(--burgundy);
+  text-decoration: underline;
+  text-underline-offset: 4px;
+}
+body:not(.ebook-mode) .record-card.selected { background: var(--blush); }
+body:not(.ebook-mode) .style-card[aria-pressed="true"] {
+  border-color: var(--burgundy);
+  background: var(--blush);
+  box-shadow: 0 0 0 3px #8a465e0a;
+}
+body:not(.ebook-mode) .style-card[aria-pressed="true"] .style-icon {
+  background: var(--paper);
+  color: var(--burgundy);
+}
+body:not(.ebook-mode) .style-check { border-color: var(--theme-control-rule); }
+body:not(.ebook-mode) .style-card[aria-pressed="true"] .style-check {
+  background: var(--burgundy);
+  border-color: var(--burgundy);
+  box-shadow: inset 0 0 0 4px #fff;
+}
+body:not(.ebook-mode) .stepper li > span { border-color: var(--theme-control-rule); }
+body:not(.ebook-mode) .stepper .done > span {
+  background: var(--soft);
+  border-color: var(--theme-control-rule);
+}
+body:not(.ebook-mode) .stepper li[aria-current] { color: var(--burgundy); }
+body:not(.ebook-mode) .stepper [aria-current] > span {
+  background: var(--burgundy);
+  color: #fff;
+  border-color: var(--burgundy);
+}
+body:not(.ebook-mode) .question-progress { background: var(--soft); }
+body:not(.ebook-mode) .question-progress > span { background: var(--burgundy); }
+body:not(.ebook-mode) .role-speakers [aria-pressed="true"] {
+  background: var(--burgundy);
+  color: #fff;
+  border-color: var(--burgundy);
+}
+body:not(.ebook-mode) #cancel-postcard-pick {
+  color: var(--ink);
+  border-color: var(--theme-control-rule);
+}
+body:not(.ebook-mode) #cancel-postcard-pick:hover { background: var(--soft); }
+body:not(.ebook-mode) .studio-actions #toggle-answer:hover { background: var(--soft); }
+
+/* Dialogs share the page palette; destructive/error and radio states stay local. */
+body:not(.ebook-mode) :is(.review-dialog, .generation-dialog, .memoir-login-dialog) {
+  box-shadow: 0 20px 90px #29262830;
+}
+body:not(.ebook-mode) :is(.review-dialog, .generation-dialog,
+  .memoir-login-dialog)::backdrop { background: #29262866; }
+body:not(.ebook-mode) .loading-book {
+  background: var(--soft);
+  color: var(--muted);
+  border-color: var(--line);
+}
+body:not(.ebook-mode) .toast {
+  background: var(--ink);
+  color: #fff;
+  box-shadow: 0 5px 20px #29262820;
+}
+body:not(.ebook-mode) .memoir-login-dialog :is(.mlg-visual, .mlg-speaker-choice) {
+  background: var(--paper);
+  border-color: var(--line);
+}
+body:not(.ebook-mode) .memoir-login-dialog :is(.mlg-preview-label,
+  .mlg-welcome-note, .mlg-speaker-initial, .mlg-account-avatar) {
+  background: var(--soft);
+  color: var(--ink);
+  border-color: var(--line);
+}
+body:not(.ebook-mode) .memoir-login-dialog :is(.mlg-close,
+  .mlg-secondary, .mlg-visual p, .mlg-fixture-note,
+  .mlg-speaker-choice small, .mlg-account small, .mlg-speaker-summary span) {
+  color: var(--muted);
+}
+body:not(.ebook-mode) .memoir-login-dialog .mlg-visual-rule { background: var(--line); }
+body:not(.ebook-mode) .memoir-login-dialog .mlg-close:hover { background: var(--soft); }
+body:not(.ebook-mode) .memoir-login-dialog .mlg-account-avatar {
+  box-shadow: 0 0 0 1px var(--line);
+}
+body:not(.ebook-mode) .memoir-login-dialog .mlg-choice-check {
+  border-color: var(--theme-control-rule);
+}
+body:not(.ebook-mode) .memoir-login-dialog .mlg-speaker-choice[aria-pressed="true"] {
+  background: var(--blush);
+  border-color: var(--burgundy);
+  box-shadow: inset 0 0 0 1px var(--burgundy);
+}
+body:not(.ebook-mode) .memoir-login-dialog [aria-pressed="true"] .mlg-choice-check {
+  background: var(--burgundy);
+  border-color: var(--burgundy);
+  color: #fff;
+}

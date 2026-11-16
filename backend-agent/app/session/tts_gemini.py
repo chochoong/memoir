@@ -63,14 +63,15 @@ def available() -> bool:
     return _client() is not None and time.monotonic() >= _cool_until
 
 
-def _config():
+def _config(voice: str | None = None):
+    """voice 가 없으면 GEMINI_TTS_VOICE (기본 Kore). 회차가 고른 목소리는 tts.VOICES 가 정한다."""
     from google.genai import types
     return types.GenerateContentConfig(
         response_modalities=["AUDIO"],
         speech_config=types.SpeechConfig(
             voice_config=types.VoiceConfig(
                 prebuilt_voice_config=types.PrebuiltVoiceConfig(
-                    voice_name=env_str("GEMINI_TTS_VOICE", DEFAULT_VOICE)))))
+                    voice_name=voice or env_str("GEMINI_TTS_VOICE", DEFAULT_VOICE)))))
 
 
 def _model() -> str:
@@ -93,7 +94,7 @@ def _rate(mime: str | None) -> int:
     return int(m.group(1)) if m else PCM_RATE
 
 
-async def synth(text: str) -> tuple[bytes, int]:
+async def synth(text: str, voice: str | None = None) -> tuple[bytes, int]:
     """
     한 번에 받는다. (PCM, rate). **이 모델들은 wav 로 준다** (fmt · data ·
     C2PA 출처 덩어리) — 머리를 벗겨 PCM 만 돌려준다. 날 PCM 이면 그대로.
@@ -102,7 +103,7 @@ async def synth(text: str) -> tuple[bytes, int]:
     if client is None:
         raise RuntimeError("GEMINI_API_KEY 가 없다")
     res = await client.aio.models.generate_content(
-        model=_model(), contents=text, config=_config())
+        model=_model(), contents=text, config=_config(voice))
     for part in res.candidates[0].content.parts:
         blob = getattr(part, "inline_data", None)
         if blob and blob.data:
@@ -113,7 +114,7 @@ async def synth(text: str) -> tuple[bytes, int]:
     raise RuntimeError("Gemini 응답에 오디오가 없다")
 
 
-async def stream(text: str) -> AsyncIterator[tuple[bytes, int]]:
+async def stream(text: str, voice: str | None = None) -> AsyncIterator[tuple[bytes, int]]:
     """
     조각마다 (PCM, rate). 조각은 audio/l16 날 PCM 이고 40ms 남짓이다.
 
@@ -124,7 +125,7 @@ async def stream(text: str) -> AsyncIterator[tuple[bytes, int]]:
     if client is None:
         raise RuntimeError("GEMINI_API_KEY 가 없다")
     async for ch in await client.aio.models.generate_content_stream(
-            model=_model(), contents=text, config=_config()):
+            model=_model(), contents=text, config=_config(voice)):
         cand = ch.candidates[0] if ch.candidates else None
         for part in (cand.content.parts or []) if cand and cand.content else []:
             blob = getattr(part, "inline_data", None)

@@ -1,0 +1,109 @@
+{
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "essay_id",
+    "title",
+    "paragraphs",
+    "facts",
+    "quotes_kept",
+    "fiction",
+    "notes"
+  ],
+  "properties": {
+    "essay_id": {
+      "type": "string"
+    },
+    "title": {
+      "type": "string"
+    },
+    "notes": {
+      "type": "string"
+    },
+    "paragraphs": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "quotes_kept": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "facts": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "id",
+          "where"
+        ],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "where": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "fiction": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "text",
+          "type",
+          "basis",
+          "risk",
+          "conflict",
+          "human_check",
+          "note"
+        ],
+        "properties": {
+          "text": {
+            "type": "string"
+          },
+          "type": {
+            "type": "string",
+            "enum": [
+              "감각·분위기 창작",
+              "사소한 행동 창작",
+              "화자 내적 독백",
+              "가상 대화",
+              "다른 인물의 내면 추론",
+              "장면 순서 재배치",
+              "상징·비유",
+              "사실 기반 재구성"
+            ]
+          },
+          "basis": {
+            "type": "string"
+          },
+          "risk": {
+            "type": "string",
+            "enum": [
+              "낮음",
+              "중간",
+              "높음"
+            ]
+          },
+          "conflict": {
+            "type": "boolean"
+          },
+          "human_check": {
+            "type": "boolean"
+          },
+          "note": {
+            "type": "string"
+          }
+        }
+      }
+    }
+  }
+}

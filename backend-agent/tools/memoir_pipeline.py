@@ -114,7 +114,7 @@ def session_range() -> tuple[int, int]:
     lo = getattr(memoir, "MIN_SESSIONS", None)
     if not isinstance(lo, int) or not isinstance(top, int):
         raise InputRejected("memoir 모듈에서 회차 수 범위(MIN_SESSIONS · max_sessions/MAX_SESSIONS)를 찾지 못했다")
-    return lo, top
+    return lo, top if top > 0 else 10**6                 # 0 이하 = 상한 없음
 
 
 def records_from_seed(doc: dict, aliases: list[str]) -> list[dict]:

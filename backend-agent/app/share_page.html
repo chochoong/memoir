@@ -1,0 +1,129 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex, nofollow">
+<meta name="referrer" content="no-referrer">
+<title>나의 자서전 — 내말쌈</title>
+<!--
+  자서전 공유 링크로 여는 읽기 화면 (/b#<토큰> · share.py).
+  로그인 · 녹음 없이 읽기만 한다. 토큰은 # 뒤라 서버로 가지 않는다 — 읽어서 헤더로만 보내고
+  주소창에서 지운다. **글은 textContent 로만 넣는다** (자녀가 보낸 글이라 HTML 로 읽지 않는다).
+-->
+<style>
+  :root {
+    --paper: #fbf7ef; --ink: #2f2a24; --soft: #7a6f62; --line: #e4d9c3; --accent: #8a5a3c;
+    --bg: #efe7d8;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root { --paper: #24211d; --ink: #ece4d6; --soft: #b3a796; --line: #3d3730; --accent: #d9a77c; --bg: #1a1815; }
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--bg); color: var(--ink);
+    font-family: "Noto Serif KR", "Nanum Myeongjo", "Apple SD Gothic Neo", serif;
+    line-height: 1.9; -webkit-text-size-adjust: 100%;
+  }
+  main { max-width: 720px; margin: 0 auto; padding: 32px 16px 80px; }
+  .book { background: var(--paper); border: 1px solid var(--line); border-radius: 6px; padding: 40px 28px; }
+  @media (min-width: 640px) { .book { padding: 56px 64px; } }
+  .kicker { margin: 0; color: var(--soft); font-size: 15px; letter-spacing: .08em; }
+  h1 { margin: 6px 0 4px; font-size: 30px; line-height: 1.4; word-break: keep-all; }
+  .sub { margin: 0; color: var(--soft); font-size: 18px; }
+  .rule { display: block; width: 48px; height: 2px; background: var(--accent); margin: 24px 0; }
+  .note { margin: 0 0 6px; color: var(--soft); font-size: 15px; }
+  nav { margin: 28px 0 8px; padding: 16px 0; border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); }
+  nav ol { margin: 0; padding-left: 22px; font-size: 17px; }
+  nav a { color: inherit; text-decoration: none; }
+  nav a:hover { text-decoration: underline; }
+  section { margin-top: 48px; }
+  h2 { font-size: 23px; line-height: 1.5; margin: 0 0 18px; word-break: keep-all; }
+  h2 small { display: block; color: var(--soft); font-size: 15px; font-weight: normal; }
+  .chdraft { color: var(--soft); font-size: 14px; margin: -10px 0 16px; }
+  p.para { font-size: 19px; margin: 0 0 1.1em; word-break: keep-all; overflow-wrap: anywhere; }
+  .msg { text-align: center; padding: 80px 16px; font-size: 19px; color: var(--soft); }
+  .msg strong { display: block; color: var(--ink); font-size: 22px; margin-bottom: 8px; }
+  footer { text-align: center; color: var(--soft); font-size: 14px; margin-top: 28px; }
+  .tools { display: flex; justify-content: flex-end; gap: 8px; margin-bottom: 12px; }
+  .tools button {
+    font: inherit; font-size: 15px; color: var(--ink); background: var(--paper);
+    border: 1px solid var(--line); border-radius: 999px; padding: 6px 14px; cursor: pointer;
+  }
+  @media print {
+    body { background: #fff; } .tools, footer { display: none; } .book { border: 0; padding: 0; }
+  }
+</style>
+</head>
+<body>
+<main>
+  <div class="tools" id="tools" hidden>
+    <button id="smaller" aria-label="글씨 작게">가-</button>
+    <button id="bigger" aria-label="글씨 크게">가+</button>
+  </div>
+  <div id="root"><p class="msg">자서전을 펴는 중이에요…</p></div>
+  <footer>내말쌈 · 목소리로 남긴 이야기</footer>
+</main>
+<script>
+(() => {
+  const root = document.getElementById('root');
+  const token = location.hash.replace(/^#/, '');
+  // 주소창의 # 를 지운다 — 화면 공유 · 캡처로 토큰이 새지 않게. 새로고침하면 다시 못 여니 sessionStorage 에 둔다
+  let tok = token;
+  try {
+    if (token) { sessionStorage.setItem('shareToken', token); history.replaceState(null, '', location.pathname); }
+    else tok = sessionStorage.getItem('shareToken') || '';
+  } catch (_) {}
+
+  const el = (tag, cls, text) => { const e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; };
+  const msg = (head, body) => { const m = el('div', 'msg'); m.append(el('strong', '', head), document.createTextNode(body)); root.replaceChildren(m); };
+  const longDate = s => { const d = new Date(s); return isNaN(d) ? '' : `${d.getFullYear()}년 ${d.getMonth() + 1}월 ${d.getDate()}일`; };
+
+  function render(book, sharedAt) {
+    document.title = `${book.title} — 나의 자서전`;
+    const b = el('article', 'book');
+    b.append(el('p', 'kicker', '나의 자서전'), el('h1', '', book.title));
+    if (book.subtitle) b.append(el('p', 'sub', book.subtitle));
+    b.append(el('span', 'rule'));
+    if (book.draft) b.append(el('p', 'note', book.draft));
+    const when = longDate(book.made || sharedAt);
+    if (when) b.append(el('p', 'note', `${when}에 엮었어요`));
+    const chs = book.chapters || [];
+    if (chs.length > 1) {
+      const nav = el('nav'), ol = el('ol');
+      chs.forEach((c, i) => { const li = el('li'), a = el('a', '', c.title || `${i + 1}장`); a.href = `#ch-${i + 1}`; a.addEventListener('click', e => { e.preventDefault(); document.getElementById(`ch-${i + 1}`).scrollIntoView({ behavior: 'smooth' }); }); li.append(a); ol.append(li); });
+      nav.append(ol); b.append(nav);
+    }
+    chs.forEach((c, i) => {
+      const s = el('section'); s.id = `ch-${i + 1}`;
+      const h = el('h2'); h.append(el('small', '', `${i + 1}장`), document.createTextNode(c.title || ''));
+      s.append(h);
+      if (c.draft) s.append(el('p', 'chdraft', '아직 다듬기 전의 초고예요'));
+      (c.paras || []).forEach(p => s.append(el('p', 'para', (Array.isArray(p) ? p : [p]).join(' '))));
+      b.append(s);
+    });
+    root.replaceChildren(b);
+    document.getElementById('tools').hidden = false;
+  }
+
+  let fs = 1;
+  try { fs = +localStorage.getItem('share.fs') || 1; } catch (_) {}
+  const applyFs = () => { document.documentElement.style.fontSize = ''; document.querySelectorAll('p.para').forEach(p => { p.style.fontSize = `${19 * fs}px`; }); try { localStorage.setItem('share.fs', fs); } catch (_) {} };
+  document.getElementById('bigger').onclick = () => { fs = Math.min(1.6, +(fs + .15).toFixed(2)); applyFs(); };
+  document.getElementById('smaller').onclick = () => { fs = Math.max(.85, +(fs - .15).toFixed(2)); applyFs(); };
+
+  if (!tok) { msg('열 수 없는 링크예요', '보내 준 분께 링크를 다시 받아 주세요.'); return; }
+  fetch('/api/b', { headers: { 'X-Share-Token': tok }, credentials: 'omit', cache: 'no-store' })
+    .then(async r => {
+      if (r.status === 410) return msg('공유가 꺼진 자서전이에요', '보내 준 분이 공유를 껐어요.');
+      if (r.status === 404) return msg('열 수 없는 링크예요', '보내 준 분께 링크를 다시 받아 주세요.');
+      if (!r.ok) return msg('지금은 열 수 없어요', '잠시 뒤에 다시 열어 주세요.');
+      const d = await r.json();
+      render(d.book || {}, d.shared_at);
+      applyFs();
+    })
+    .catch(() => msg('지금은 열 수 없어요', '인터넷 연결을 확인하고 다시 열어 주세요.'));
+})();
+</script>
+</body>
+</html>

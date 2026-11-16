@@ -1,0 +1,87 @@
+/* Original colors and styling: chochoong/memoir prototype/book.html,
+ * lines 1188–1258, commit 088b23f40efce837909cdc54faa388fa2c2016fb.
+ * Host contract: .radio-scene[data-radio-state="reading|listening|processing|paused|idle"].
+ * Public --radio-* properties can be inherited from the host or its ancestors.
+ * Private --_radio-* properties provide quiet, state-based defaults.
+ * Meter and microphone waves never animate without real input from the host.
+ */
+.radio-scene .radio-illustration {
+  display: block;
+  width: 100%;
+  height: auto;
+  overflow: visible;
+}
+.radio-scene .shadow { fill: rgba(60, 38, 20, .14); }
+.radio-scene .rd-hang { stroke: #9c845f; stroke-width: 2; }
+.radio-scene .rd-sign-box { fill: #3d2e22; }
+.radio-scene .rd-sign-lamp {
+  fill: var(--radio-sign-fill, var(--_radio-sign-fill, #5a4a3e));
+  transition: fill .3s;
+}
+.radio-scene .rd-sign-t {
+  fill: var(--radio-sign-text-fill, var(--_radio-sign-text-fill, #8f7d6a));
+  font: 800 17px Pretendard, sans-serif;
+  letter-spacing: .14em;
+  transition: fill .3s;
+}
+.radio-scene .rd-sign {
+  filter: var(--radio-sign-glow, var(--_radio-sign-glow, none));
+  transition: filter .3s;
+}
+.radio-scene .rd-desk { fill: #8a5c3b; }
+.radio-scene .rd-desk-lit { fill: #b48a62; }
+.radio-scene .rd-band { fill: none; stroke: #3d2e22; stroke-width: 6; stroke-linecap: round; }
+.radio-scene .rd-cup { fill: #3d2e22; }
+.radio-scene .rd-phones {
+  filter: var(--radio-headphone-glow, var(--_radio-headphone-glow, none));
+  transition: filter .3s;
+}
+.radio-scene .rd-pwaves path,
+.radio-scene .rd-mwaves path { stroke-width: 3.2; }
+.radio-scene .rd-pwaves path { stroke: #c49a4c; }
+.radio-scene .rd-pwaves .w1 { opacity: var(--radio-headphone-wave-1-opacity, var(--_radio-headphone-wave-1-opacity, 0)); }
+.radio-scene .rd-pwaves .w2 { opacity: var(--radio-headphone-wave-2-opacity, var(--_radio-headphone-wave-2-opacity, 0)); }
+.radio-scene .rd-mwaves path { stroke: #d96f4e; }
+.radio-scene .rd-mwaves .m1 { opacity: var(--radio-mic-wave-1-opacity, 0); }
+.radio-scene .rd-mwaves .m2 { opacity: var(--radio-mic-wave-2-opacity, 0); }
+.radio-scene .rd-console-box { fill: #3d2e22; }
+.radio-scene .rd-led { fill: #a3b26f; transition: opacity .1s; }
+.radio-scene .rd-led.hot { fill: #d96f4e; }
+.radio-scene .rd-led.l1 { opacity: var(--radio-meter-1-opacity, .18); }
+.radio-scene .rd-led.l2 { opacity: var(--radio-meter-2-opacity, .18); }
+.radio-scene .rd-led.l3 { opacity: var(--radio-meter-3-opacity, .18); }
+.radio-scene .rd-led.l4 { opacity: var(--radio-meter-4-opacity, .18); }
+.radio-scene .rd-led.l5 { opacity: var(--radio-meter-5-opacity, .18); }
+.radio-scene .rd-cue {
+  fill: var(--radio-cue-fill, var(--_radio-cue-fill, #5a4a3e));
+  transition: fill .3s;
+}
+.radio-scene .rd-clamp { fill: #3d2e22; }
+.radio-scene .rd-pole { stroke: #4a3a2e; stroke-width: 6; stroke-linecap: round; }
+.radio-scene .rd-spring { fill: none; stroke: #9c845f; stroke-width: 1.6; stroke-linejoin: round; }
+.radio-scene .rd-joint { fill: #2b2420; }
+.radio-scene .rd-mount { fill: none; stroke: #4a3a2e; stroke-width: 4; stroke-linecap: round; }
+.radio-scene .rd-mic-body { fill: #8c8580; stroke: #5d5853; stroke-width: 1.5; }
+.radio-scene .rd-mic-line { stroke: #5d5853; stroke-width: 1.5; }
+.radio-scene .rd-foam-b { fill: #2b2420; }
+.radio-scene .rd-foam-dot { fill: #45392f; }
+
+.radio-scene[data-radio-state="listening"] {
+  --_radio-sign-fill: #d94b38;
+  --_radio-sign-text-fill: #fff;
+  --_radio-sign-glow: drop-shadow(0 0 8px rgba(217, 75, 56, .55));
+}
+.radio-scene[data-radio-state="reading"] {
+  --_radio-headphone-glow: drop-shadow(0 0 4px rgba(196, 154, 76, .24));
+  --_radio-headphone-wave-1-opacity: .48;
+  --_radio-headphone-wave-2-opacity: .24;
+  --_radio-cue-fill: #e0a640;
+}
+@media (prefers-reduced-motion: reduce) {
+  .radio-scene .rd-sign,
+  .radio-scene .rd-sign-lamp,
+  .radio-scene .rd-sign-t,
+  .radio-scene .rd-phones,
+  .radio-scene .rd-led,
+  .radio-scene .rd-cue { transition: none; }
+}

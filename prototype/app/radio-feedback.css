@@ -1,0 +1,84 @@
+/* Scoped review controls and reactions for the original radio-art SVG. */
+.radio-feedback-controls {
+  margin: 18px 0 0;
+  padding: 16px;
+  border: 1px solid var(--line, #e1d1c7);
+  border-radius: 10px;
+  text-align: left;
+}
+.radio-feedback-controls legend {
+  padding: 0 7px;
+  font-size: 14px;
+  font-weight: 700;
+}
+.radio-feedback-controls label {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 16px;
+  font-size: 14px;
+}
+.radio-feedback-value {
+  font-variant-numeric: tabular-nums;
+  min-width: 4ch;
+  text-align: right;
+}
+.radio-feedback-controls input[type="range"] {
+  display: block;
+  width: 100%;
+  min-height: 44px;
+  margin: 4px 0;
+  accent-color: var(--wine, #743b49);
+  cursor: pointer;
+}
+.radio-feedback-controls input[type="range"]:disabled {
+  opacity: .5;
+  cursor: default;
+}
+.radio-feedback-silent {
+  min-height: 44px;
+  padding: 8px 0;
+  font-size: 14px;
+}
+.radio-feedback-silent:disabled {
+  opacity: .5;
+  cursor: default;
+}
+.radio-feedback-controls input:focus-visible,
+.radio-feedback-controls button:focus-visible {
+  outline: 3px solid var(--wine, #743b49);
+  outline-offset: 3px;
+}
+.radio-feedback-controls .radio-feedback-description,
+.radio-feedback-controls .radio-feedback-note {
+  margin: 7px 0 0;
+  font-size: 13px;
+  line-height: 1.7;
+}
+.radio-feedback-controls .radio-feedback-note {
+  color: var(--muted, #796e68);
+}
+.radio-scene[data-feedback-ready="true"] .rd-mwaves path {
+  transform-box: fill-box;
+  transform-origin: center;
+  transform: scale(var(--radio-input-wave-scale, 1));
+  transition: opacity .12s ease, transform .12s ease;
+}
+.radio-scene[data-feedback-ready="true"][data-radio-state="reading"] .rd-pwaves .w1 {
+  animation: radio-feedback-question-wave 2.1s ease-in-out infinite;
+}
+.radio-scene[data-feedback-ready="true"][data-radio-state="reading"] .rd-pwaves .w2 {
+  animation: radio-feedback-question-wave 2.1s .3s ease-in-out infinite;
+}
+@keyframes radio-feedback-question-wave {
+  0%, 100% { opacity: .28; }
+  50% { opacity: .72; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .radio-scene[data-feedback-ready="true"] .rd-mwaves path {
+    transition: none;
+  }
+  .radio-scene[data-feedback-ready="true"][data-radio-state="reading"] .rd-pwaves path {
+    animation: none;
+  }
+}

@@ -1,0 +1,275 @@
+{
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "book_title",
+    "stories",
+    "chapters"
+  ],
+  "properties": {
+    "book_title": {
+      "type": "string"
+    },
+    "stories": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "turn",
+          "title_hint",
+          "people",
+          "time",
+          "places",
+          "events",
+          "objects",
+          "emotions_then",
+          "reflections_now",
+          "quotes",
+          "heard",
+          "must_keep",
+          "emotion_notes",
+          "facts"
+        ],
+        "properties": {
+          "turn": {
+            "type": "integer"
+          },
+          "title_hint": {
+            "type": "string"
+          },
+          "people": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "time": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "places": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "events": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "objects": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "emotions_then": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "reflections_now": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "quotes": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "heard": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "must_keep": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "emotion_notes": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "who",
+                "kind",
+                "target",
+                "intensity",
+                "when",
+                "explicit",
+                "evidence"
+              ],
+              "properties": {
+                "who": {
+                  "type": "string"
+                },
+                "kind": {
+                  "type": "string"
+                },
+                "target": {
+                  "type": "string"
+                },
+                "intensity": {
+                  "type": "string"
+                },
+                "when": {
+                  "type": "string"
+                },
+                "explicit": {
+                  "type": "boolean"
+                },
+                "evidence": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "facts": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "id",
+                "text",
+                "source",
+                "certainty"
+              ],
+              "properties": {
+                "id": {
+                  "type": "string"
+                },
+                "text": {
+                  "type": "string"
+                },
+                "source": {
+                  "type": "string",
+                  "enum": [
+                    "self",
+                    "heard",
+                    "view"
+                  ]
+                },
+                "certainty": {
+                  "type": "string",
+                  "enum": [
+                    "stated",
+                    "approx",
+                    "uncertain"
+                  ]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "chapters": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "id",
+          "title_basis",
+          "stories",
+          "fact_ids",
+          "center_scene",
+          "emotion",
+          "direction",
+          "fiction_notes",
+          "avoid_overlap"
+        ],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "title_basis": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "core_change",
+              "candidates"
+            ],
+            "properties": {
+              "core_change": {
+                "type": "string"
+              },
+              "candidates": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "title",
+                    "type",
+                    "basis"
+                  ],
+                  "properties": {
+                    "title": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string",
+                      "enum": [
+                        "사건 중심형",
+                        "삶의 변화형",
+                        "장면 중심형",
+                        "감정·갈등형",
+                        "문학적 절제형",
+                        "대중적 자연형"
+                      ]
+                    },
+                    "basis": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "stories": {
+            "type": "array",
+            "items": {
+              "type": "integer"
+            }
+          },
+          "fact_ids": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "center_scene": {
+            "type": "string"
+          },
+          "emotion": {
+            "type": "string"
+          },
+          "direction": {
+            "type": "string"
+          },
+          "fiction_notes": {
+            "type": "string"
+          },
+          "avoid_overlap": {
+            "type": "string"
+          }
+        }
+      }
+    }
+  }
+}

@@ -24,7 +24,7 @@ from __future__ import annotations
 import os
 import socket
 
-KEY_NAMES = ("GEMINI_API_KEY", "GOOGLE_API_KEY", "AZURE_SPEECH_KEY")
+KEY_NAMES = ("GEMINI_API_KEY", "GOOGLE_API_KEY", "AZURE_SPEECH_KEY", "OPENAI_API_KEY", "ANTHROPIC_API_KEY")
 LOCAL_HOSTS = ("127.0.0.1", "::1", "localhost")
 ALLOW_NETWORK = os.environ.get("MEMOIR_TEST_ALLOW_NETWORK") == "1"
 
@@ -51,6 +51,25 @@ def _local(address) -> bool:
     host = str(host)
     return host in LOCAL_HOSTS or host.startswith("127.")
 
+
+# 모델 · 엔진 설정도 .env 에서 들이지 않는다. 운영 .env 가 모델을 바꾸면(gpt- · claude-)
+# 시험이 가짜로 바꿔 둔 Gemini 자리를 지나쳐 다른 길로 가고, 시험 결과가 .env 에 따라
+# 달라진다. 시험은 코드의 기본값으로 돈다 — 값이 필요한 시험은 제 안에서 넣는다.
+SETTING_PREFIXES = ("MEMOIR_", "POSTCARD_", "GEMINI_", "TTS_", "OPENAI_", "ANTHROPIC_")
+
+
+def _dotenv_settings() -> list[str]:
+    path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), ".env")
+    try:
+        lines = open(path, encoding="utf-8").read().splitlines()
+    except OSError:
+        return []
+    names = (ln.split("=", 1)[0].strip() for ln in lines if "=" in ln and not ln.lstrip().startswith("#"))
+    return [n for n in names if n.startswith(SETTING_PREFIXES) and n != "MEMOIR_TEST_ALLOW_NETWORK"]
+
+
+for _name in _dotenv_settings():
+    os.environ.setdefault(_name, "")
 
 if not ALLOW_NETWORK:
     for _name in KEY_NAMES:

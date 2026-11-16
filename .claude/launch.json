@@ -1,0 +1,11 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "prototype-static",
+      "runtimeExecutable": "python",
+      "runtimeArgs": ["-m", "http.server", "8020", "--bind", "127.0.0.1", "--directory", "prototype"],
+      "port": 8020
+    }
+  ]
+}
