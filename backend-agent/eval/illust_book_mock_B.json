@@ -1,0 +1,279 @@
+{
+ "mock": true,
+ "note": "illust_book_seed_B.json 에 대한 모의 후보 — 모델이 낸 것이 아니라 손으로 쓴 것이다 (2026-11-15). 사진이 없는 여섯 항목의 것만 있다. 자동 검사의 여러 길(사람이 든 장면 통과 · 사람을 뺀 그림으로 바꿈 · 사물 그림)을 밟는다.",
+ "by_chapter": {
+  "c02": {
+   "candidates": [
+    {
+     "chapter_no": 2,
+     "scene_title": "뒤꼍의 장독대",
+     "scene_summary": "뒤꼍 장독대에 큰 장독이 나란히 놓여 있었다.",
+     "importance": "main",
+     "reason": "이 항목의 내용을 대표한다.",
+     "elements": [
+      {
+       "key": "o1",
+       "kind": "object",
+       "text": "장독",
+       "turn": 2,
+       "quote": "큰 장독이 여섯 개 나란히 놓여 있었어요"
+      },
+      {
+       "key": "o2",
+       "kind": "object",
+       "text": "장독대",
+       "turn": 2,
+       "quote": "뒤꼍에 장독대가 있었어요"
+      },
+      {
+       "key": "s1",
+       "kind": "place",
+       "text": "뒤꼍",
+       "turn": 2,
+       "quote": "뒤꼍에 장독대가 있었어요",
+       "role": "setting"
+      }
+     ]
+    }
+   ]
+  },
+  "c03": {
+   "candidates": [
+    {
+     "chapter_no": 3,
+     "scene_title": "아버지와 둘이서 모를 심다",
+     "scene_summary": "아버지와 둘이서 모를 논에 심었다.",
+     "importance": "main",
+     "reason": "이 항목의 내용을 대표한다.",
+     "elements": [
+      {
+       "key": "a1",
+       "kind": "action",
+       "text": "모를 논에 심었다",
+       "turn": 3,
+       "quote": "제가 아버지랑 둘이서 모를 논에 심었어요"
+      },
+      {
+       "key": "p1",
+       "kind": "person",
+       "text": "제가",
+       "turn": 3,
+       "quote": "제가 아버지랑 둘이서",
+       "relation": {
+        "action": "a1",
+        "role": "actor",
+        "evidence": [
+         {
+          "turn": 3,
+          "quote": "제가 아버지랑 둘이서 모를 논에 심었어요"
+         }
+        ]
+       }
+      },
+      {
+       "key": "p2",
+       "kind": "person",
+       "text": "아버지",
+       "turn": 3,
+       "quote": "아버지랑 둘이서",
+       "relation": {
+        "action": "a1",
+        "role": "co_actor",
+        "evidence": [
+         {
+          "turn": 3,
+          "quote": "제가 아버지랑 둘이서 모를 논에 심었어요"
+         }
+        ]
+       }
+      },
+      {
+       "key": "o1",
+       "kind": "object",
+       "text": "모",
+       "turn": 3,
+       "quote": "모를 논에 심었어요",
+       "relation": {
+        "action": "a1",
+        "role": "acted_on",
+        "evidence": [
+         {
+          "turn": 3,
+          "quote": "모를 논에 심었어요"
+         }
+        ]
+       }
+      },
+      {
+       "key": "s1",
+       "kind": "place",
+       "text": "논",
+       "turn": 3,
+       "quote": "모를 논에 심었어요",
+       "role": "setting"
+      }
+     ],
+     "central_action": "a1"
+    },
+    {
+     "chapter_no": 3,
+     "scene_title": "봄의 논",
+     "scene_summary": "봄이면 식구들이 나가던 논.",
+     "importance": "main",
+     "reason": "이 항목의 내용을 대표한다.",
+     "elements": [
+      {
+       "key": "s1",
+       "kind": "place",
+       "text": "논",
+       "turn": 3,
+       "quote": "온 식구가 논에 나갔어요",
+       "role": "setting"
+      }
+     ]
+    }
+   ]
+  },
+  "c05": {
+   "candidates": [
+    {
+     "chapter_no": 5,
+     "scene_title": "부엌의 연탄",
+     "scene_summary": "겨울 부엌에 연탄을 쌓아 두었다.",
+     "importance": "main",
+     "reason": "이 항목의 내용을 대표한다.",
+     "elements": [
+      {
+       "key": "o1",
+       "kind": "object",
+       "text": "연탄",
+       "turn": 5,
+       "quote": "부엌에 연탄을 쌓아 두었어요"
+      },
+      {
+       "key": "o2",
+       "kind": "object",
+       "text": "연탄집게",
+       "turn": 5,
+       "quote": "연탄집게로 연탄을 갈았어요"
+      },
+      {
+       "key": "s1",
+       "kind": "place",
+       "text": "부엌",
+       "turn": 5,
+       "quote": "부엌에 연탄을 쌓아 두었어요",
+       "role": "setting"
+      }
+     ]
+    }
+   ]
+  },
+  "c07": {
+   "candidates": [
+    {
+     "chapter_no": 7,
+     "scene_title": "재봉틀 앞의 어머니",
+     "scene_summary": "어머니가 재봉틀로 옷을 지어 주셨다.",
+     "importance": "main",
+     "reason": "이 항목의 내용을 대표한다.",
+     "elements": [
+      {
+       "key": "a1",
+       "kind": "action",
+       "text": "재봉틀로 우리 옷을 지어 주셨다",
+       "turn": 7,
+       "quote": "어머니가 재봉틀로 우리 옷을 지어 주셨어요"
+      },
+      {
+       "key": "p1",
+       "kind": "person",
+       "text": "어머니",
+       "turn": 7,
+       "quote": "어머니가 재봉틀로"
+      },
+      {
+       "key": "o1",
+       "kind": "object",
+       "text": "재봉틀",
+       "turn": 7,
+       "quote": "마루에 재봉틀이 놓여 있었어요"
+      },
+      {
+       "key": "s1",
+       "kind": "place",
+       "text": "마루",
+       "turn": 7,
+       "quote": "마루에 재봉틀이 놓여 있었어요",
+       "role": "setting"
+      }
+     ],
+     "central_action": "a1"
+    }
+   ]
+  },
+  "c08": {
+   "candidates": [
+    {
+     "chapter_no": 8,
+     "scene_title": "안방의 라디오",
+     "scene_summary": "저녁이면 안방에서 라디오를 틀었다.",
+     "importance": "main",
+     "reason": "이 항목의 내용을 대표한다.",
+     "elements": [
+      {
+       "key": "o1",
+       "kind": "object",
+       "text": "라디오",
+       "turn": 8,
+       "quote": "안방에서 라디오를 틀었어요"
+      },
+      {
+       "key": "s1",
+       "kind": "place",
+       "text": "안방",
+       "turn": 8,
+       "quote": "안방에서 라디오를 틀었어요",
+       "role": "setting"
+      }
+     ]
+    }
+   ]
+  },
+  "c10": {
+   "candidates": [
+    {
+     "chapter_no": 10,
+     "scene_title": "텃밭의 호미",
+     "scene_summary": "집 뒤 텃밭에 상추를 심고 호미로 풀을 맸다.",
+     "importance": "main",
+     "reason": "이 항목의 내용을 대표한다.",
+     "elements": [
+      {
+       "key": "o1",
+       "kind": "object",
+       "text": "호미",
+       "turn": 10,
+       "quote": "호미로 풀을 매 주었어요"
+      },
+      {
+       "key": "o2",
+       "kind": "object",
+       "text": "상추",
+       "turn": 10,
+       "quote": "텃밭에 상추를 심었어요"
+      },
+      {
+       "key": "s1",
+       "kind": "place",
+       "text": "텃밭",
+       "turn": 10,
+       "quote": "집 뒤 텃밭에 상추를 심었어요",
+       "role": "setting"
+      }
+     ]
+    }
+   ]
+  }
+ }
+}

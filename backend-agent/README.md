@@ -35,6 +35,8 @@ app/
     photo_analyze.py      사진 분석 (Gemini VLM) → 단서 JSON
     postcard.py           엽서 — 카드 작성 (엽서_v3.md) · 출처 검사 · Pillow 굽기. 닫혀도 자동으로 굽지 않는다
     memoir.py             자서전 초안 — 회차 합치기 (전역 턴) · 한 번 쓰기 · 구조 검사 (실험)
+    memoir_illust_book.py 목차별 자동 삽화 — 사진 없는 목차에 대표 그림 한 장 (독립 모듈 · 서비스 미연결 · docs/삽화_자동삽입_안내.md)
+    memoir_illust.py      삽화 후보 검사 · 그림 지시문 조립 (모델을 부르지 않는다)
     roledoc.py            엽서_v3.md · 자서전_v4.md 에서 실행할 절(§2 · §5 · 역할 · §7-4 · §8-2)만 잇는다
     store.py              저장 (asyncpg). DB 가 없어도 회차는 돈다
     migrate.py            마이그레이션 적용 · 체크섬 · advisory lock
@@ -49,6 +51,7 @@ tools/bench_audio.py      같은 녹음으로 전사·질문 경로(Azure+Gemini
 tools/try_photo.py        사진 한 장을 실제 Gemini 로 분석해 본다 (DB·서버 없이)
 tools/seed_sessions.py    자서전 시험 회차를 DB 에 넣고 엽서를 굽는다 (합성 자료 전용)
 tools/memoir_input.py     자서전 합치기 함수의 출력(모델 입력 · turn_map)을 파일로 뽑는다
+tools/memoir_illust_book.py   목차별 자동 삽화 실행기 — dry-run · 모의(비용 없음) · 승인 값이 있어야 도는 실제 호출
 eval/                     자서전 시험용 합성 seed A · B. manifest(*.ids.json)는 git 에 안 올린다
 web/                      프론트 빌드본 (있으면 서빙. git 에는 올리지 않는다)
 run.ps1                   기동 — 배포용(터널 뒤)과 -Dev 두 가지
@@ -56,6 +59,7 @@ deploy/                   cloudflared 설정 본
 docs/배포.md              도메인 · 터널 · 재부팅 생존 · 확인 목록
 docs/사진이사.md          pg → Blob 로 옮기는 절차 (코드는 아직 없다)
 docs/인터뷰 에이전트_프롬프트.md   예전 프롬프트 원문 (코드는 더 이상 읽지 않는다)
+docs/삽화_자동삽입_안내.md   목차별 자동 삽화 — 동작 · 모의 실행 · 입력 · 출력 · 다시 돌리기 · 알려진 제한
 ```
 
 `machine.py`가 FastAPI도 asyncio도 import하지 않는 게 중요하다. 순수 파이썬이라야 전이를 전부 단위 테스트로 돌려볼 수 있고, 실시간 계층을 바꿔도 살아남는다.

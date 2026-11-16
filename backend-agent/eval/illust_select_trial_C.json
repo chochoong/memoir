@@ -1,0 +1,61 @@
+{
+ "trial_id": "illust-select-trial-C-v1",
+ "synthetic": true,
+ "written_by": "Claude (AI)",
+ "written_at": "2026-11-16",
+ "note": "장면 선정만 실제 모델로 부르는 시험의 대상 · 평가 기준 · 기대값. 실제 호출 전에 AI 가 적었다 — 사람이 확인한 정답이 아니다. 평가 규칙은 모의 응답(사례 파일의 후보)으로 실행기를 시연한 뒤, 실제 호출 전에 확정했다(주변 인물이 제 할 일을 하는 장면을 「주인공으로 그림」 으로 세지 않게 · 「김장하기」 같은 행동 이름을 열쇠말로 잇게). 결과를 본 뒤 이 파일이나 판정 코드를 고쳐 같은 시험의 성공으로 세지 않는다 (이 파일 · 지시문 v5 · 판정 코드 · 자료의 해시가 실행 기록에 남고, 하나라도 바뀌면 같은 폴더에 다시 판정하지 않는다). 사람의 확인이나 사용자의 선택은 이 시험의 필수 단계가 아니다.",
+ "input": {"path": "eval/illust_types_C.json", "set_id": "illust-types-C", "sha256": "dbe983841d4ea7c1a49e0bbe111b19af0a732d393ad755cf0e7b98ad5680eb48"},
+ "cases": {"path": "eval/illust_types_C_cases.json", "sha256": "e0a42d6ce5525a7bfa48f2a3c43a0b6d079773635a1b2c0aa3c0615e19c10817",
+           "uses": "center_elements(중심 요소와 원문 인용) · peripheral(주변 요소) · cases[].expect 와 limit 을 그대로 쓴다 — 식별자 · 원문 · 기대값을 바꾸지 않는다"},
+ "targets": ["c01", "c04", "c05", "c07", "c08"],
+ "max_select_calls": 5,
+ "image_calls": 0,
+ "rules": {
+  "quote_in_source": "요소의 인용(quote)이 그 턴의 말씀에 공백을 빼고 그대로 들어 있어야 한다(4글자 이상). 아니면 그 요소는 원문에 없는 것으로 친다 — 모델 쪽 문제다.",
+  "center_match": "원문에 있는 요소 가운데 — 사물 · 장소 · 행동이 중심 요소(cases 의 center_elements + 아래 also_center)와 맞으면 중심을 담은 후보다. 사물 · 장소 중심 요소는 그 이름이 요소 이름에 들어 있으면 맞다(행동 요소 안에 들어 있어도). 행동 중심 요소는 행동 요소끼리 두 글자 조각이 짧은 쪽의 절반 이상 겹치거나, 행동 요소에 center_action_keywords 가 들어 있으면 맞다. 사람은 사람끼리 이름이 같을 때만 맞고, 사람만 맞는 후보는 중심을 담은 것으로 치지 않는다.",
+  "participants": "공동 작업 항목(joint_action 이 있는 c01 · c08)에서 그 후보의 중심 행동이 이 목차의 중심 행동인 사람 장면(SCENE)은 participants 를 모두 담고, 각자 relation.role 이 actor 또는 co_actor 이며 relation.action 이 그 후보의 중심 행동이어야 한다. 각자의 근거 인용은 원문에 있어야 하고, 근거 인용이 중심 행동을 절반 이상 담거나(코드와 같은 잣대), 그 사람이 나오는 원문 문장이 중심 행동을 담아야 한다. non_participants(c07 은 non_participants_of_center)를 중심 행동의 actor · co_actor 로 그리면 안 된다. 주변 인물이 제 할 일(구경 · 신문 · 차 따르기)을 하는 장면은 이 규칙이 아니라 center_match 로 걸러진다. SELF 는 화자(나 · 저 · 제가 …)다.",
+  "person_tier_vs_participation": "사람의 대표성 등급(core · linked · supporting · narrator)과 행동 참여 여부를 따로 적는다. 한 번만 나와 등급이 낮아도 공동 행동에 필요한 사람은 SCENE 에 남아야 한다 — 등급 때문에 사람 장면이 빠지면 코드 쪽 문제로 적는다.",
+  "appropriate_candidate": "적절한 후보 = 중심을 담았고(center_match) · 그 요소의 인용이 원문에 있고 · 사람을 그리면 participants 규칙을 지키고 · 주변 인물을 중심 행동의 주인공으로 그리지 않은 후보. 사람을 뺀 그림(derived_symbolic)은 원래 후보의 사물 · 장소가 중심을 담으면 적절하다.",
+  "classification": "모델 쪽 문제(중심 제안 · 중심 후보 생성 · 참여자와 근거)와 코드 쪽 문제(적절한 후보를 탈락 · 주변 후보를 통과 · 사람 장면을 대표성 등급 때문에 뺌)를 따로 센다. 적절한 후보가 하나도 없어서 코드가 실패한 것은 코드의 잘못이 아니다. 다른 적절한 후보가 골라져 결과에 영향이 없는 탈락은 참고로만 적는다. 알려진 한계(known_limit)에 해당하는 탈락은 그 한계 번호를 붙여 적는다 — 새 문제로 세지 않는다. 호출 오류 · 응답 없음은 모델 문제도 코드 문제도 아닌 실행 문제로 적는다."
+ },
+ "items": {
+  "c01": {
+   "expect": {"status": "selected", "preferred_mode": "SCENE",
+              "why": "아버지와 둘이 이엉을 얹는 장면이 중심이다 (cases c01-1). 아버지가 빠진 사람 장면이면 사람을 뺀 이엉 그림 (c01-3)."},
+   "also_center": [],
+   "center_action_keywords": ["이엉"],
+   "joint_action": {"participants": ["아버지", "SELF"], "non_participants": ["옆집 할머니"]},
+   "known_limit": null
+  },
+  "c04": {
+   "expect": {"status": "selected", "preferred_mode": "SYMBOLIC", "why": "본문 세 문장이 모두 집 앞 바다다 (cases c04-1)."},
+   "also_center": [],
+   "joint_action": null,
+   "known_limit": {"case": "c04-2", "when": "focus_core_missing",
+                   "text": "제목이 비유라 제목 근거가 없고, 모델 focus 에 바다가 중심으로 없으면 신호가 본문 비율 하나뿐이다 — 장소에는 신호 둘을 요구한다"}
+  },
+  "c05": {
+   "expect": {"status": "selected", "preferred_mode": "SYMBOLIC", "why": "세 문장 모두 바닷가 풍경이다 — 바다 · 물결 · 수평선으로 이름만 다르다 (cases c05-1)."},
+   "also_center": [{"kind": "place", "text": "물결", "from": "cases c05 center — 바다 · 물결 · 수평선은 같은 풍경"}],
+   "joint_action": null,
+   "known_limit": {"case": "c05-1", "when": "always",
+                   "text": "장소 이름이 한 번씩만 나와 본문 비율이 낮고(1/3) 제목도 비유다 — 코드는 다른 말이 같은 풍경이라는 것을 모른다. 모델 focus 가 맞아도 코드는 실패할 것으로 본다"}
+  },
+  "c07": {
+   "expect": {"status": "selected", "preferred_mode": null, "why": "트럭과 이삿짐이 이사를 나타낸다 (cases c07-1). 찻잔 · 주인 할머니 · 서울 하늘만 담은 그림은 대표가 아니다."},
+   "also_center": [],
+   "center_action_keywords": ["이사"],
+   "joint_action": null,
+   "non_participants_of_center": ["주인 할머니"],
+   "known_limit": null
+  },
+  "c08": {
+   "expect": {"status": "selected", "preferred_mode": "SCENE", "why": "어머니와 둘이 김장하는 장면 (cases c08-1). 마당에 묻은 김장독도 김장의 결과로 대표할 수 있다 (cases c08-3)."},
+   "also_center": [{"kind": "object", "text": "김장독", "from": "cases c08-3 기대값 — 김장의 결과"}],
+   "center_action_keywords": ["김장"],
+   "joint_action": {"participants": ["어머니", "SELF"], "non_participants": ["삼촌"]},
+   "known_limit": {"case": "c08-3", "when": "only_also_center",
+                   "text": "제목의 말(김장)이 요소 이름(김장독)의 일부로만 겹친다 — 김장독만 담은 후보밖에 없으면 코드는 실패할 것으로 본다"}
+  }
+ }
+}

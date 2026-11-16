@@ -145,7 +145,8 @@
   const STATE = {ready: 'ready', in_progress: 'in_progress', ended: 'completed', interrupted: 'interrupted', expired: 'expired', revoked: 'revoked'};
   const absUrl = (u) => { try { return new URL(u, location.origin).href; } catch (_) { return String(u || ''); } };
   const fromLink = (l) => ({id: l.link_id, elder_id: l.elder_id, topic: String(l.picked_topic || l.topic || l.title || '').trim() || '살아온 이야기',
-    status: STATE[l.state] || l.state, session_id: l.session_id || null, created_at: l.created_at, expires_at: l.expires_at});
+    status: STATE[l.state] || l.state, session_id: l.session_id || null, created_at: l.created_at, expires_at: l.expires_at,
+    voice: l.voice || 'default'});
   const canRevoke = (inv) => !!inv && ['ready', 'in_progress'].includes(inv.status);
   const canReissue = (inv) => !!inv && !inv.session_id && ['ready', 'expired', 'revoked'].includes(inv.status);
   function upsert(inv) { const i = invitations.findIndex((x) => x.id === inv.id); if (i >= 0) invitations[i] = inv; else invitations.unshift(inv); return inv; }
@@ -163,7 +164,8 @@
     if (!AUTH.elders.some((e) => e.elder_id === elderId)) return failure('elder_not_found');
     if (typeof topic !== 'string' || !topic.trim()) return failure('topic_required');
     const t = topic.trim().slice(0, 60);
-    try { return issued(await api.linkCreate({elder_id: elderId, title: t, seed: t, topic: t})); }
+    const voice = window.MemoirVoice ? window.MemoirVoice.get() : 'default'; // 링크에 저장 → 어르신이 시작할 때 이 목소리
+    try { return issued(await api.linkCreate({elder_id: elderId, title: t, seed: t, topic: t, voice})); }
     catch (e) { return failure(e.status === 404 ? 'elder_not_found' : 'server'); }
   }
   async function revoke(id) {

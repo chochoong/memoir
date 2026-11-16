@@ -42,6 +42,7 @@
       <form class="panel sc-invite-form sc-self-form" novalidate>
         <fieldset><legend>이야기 주제</legend>
           <div class="sc-chips" role="group" aria-label="주제">${topics.map((t) => `<label class="sc-chip"><input type="radio" name="topic" value="${t}" ${t === selfTopic ? 'checked' : ''}><span>${t}</span></label>`).join('')}</div></fieldset>
+        ${window.MemoirVoice ? window.MemoirVoice.fieldset() : ''}
         <button type="submit" class="button primary sc-make">${icons('mic')}<span>녹음 시작하기</span></button>
         <p class="sc-fine">${window.MemoirGate?.isLoggedIn() ? '버튼을 누르면 마이크를 써도 되는지 여쭤봐요.' : '녹음은 로그인한 뒤에 할 수 있어요. 버튼을 누르면 로그인 창이 먼저 열려요.'}</p>
       </form>
@@ -51,6 +52,7 @@
     form.addEventListener('submit', (e) => {
       e.preventDefault();
       selfTopic = form.querySelector('input[name="topic"]:checked')?.value || topics[0];
+      window.MemoirVoice?.fromForm(form); // 고른 목소리는 SrvInterview.start 가 POST /api/sessions 에 싣는다
       window.RolePreview.beginSelf(selfTopic);
     });
   }
@@ -67,6 +69,7 @@
           <p class="sc-error" role="status"></p></fieldset>
         <fieldset><legend><span class="sc-step">2</span>어떤 이야기를 여쭤볼까요?</legend>
           <div class="sc-chips" role="group" aria-label="주제">${topics.map((t, i) => `<label class="sc-chip"><input type="radio" name="topic" value="${t}" ${i === 0 ? 'checked' : ''}><span>${t}</span></label>`).join('')}</div></fieldset>
+        ${window.MemoirVoice ? window.MemoirVoice.fieldset(3) : ''}
         <button type="submit" class="button primary sc-make">${icons('letter')}<span>초대 주소 만들기</span></button>
         <p class="sc-fine">${window.MemoirGate?.isLoggedIn() ? '' : '초대 주소는 로그인한 뒤에 만들 수 있어요. 버튼을 누르면 로그인 창이 먼저 열려요.'}</p>
       </form>
@@ -85,6 +88,7 @@
     const err = form.querySelector('.sc-error');
     const who = form.querySelector('input[name="who"]:checked')?.value || form.querySelector('input[name="who"]')?.value;
     const topic = form.querySelector('input[name="topic"]:checked')?.value || topics[0];
+    window.MemoirVoice?.fromForm(form); // 링크에 저장되어, 어르신이 시작할 때 그 목소리로 읽는다
     let elderId = who;
     if (who === '__new') {
       const name = form.querySelector('input[name="name"]').value.trim();

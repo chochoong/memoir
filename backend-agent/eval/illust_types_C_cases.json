@@ -1,0 +1,1601 @@
+{
+ "mock": true,
+ "synthetic": true,
+ "note": "illust_types_C.json 에 대한 모의 후보와 기대값 — 모델이 낸 것이 아니라 손으로 쓴 것이다 (AI 작성, 2026-11-16). 기대값(expect)은 코드를 돌리기 전에 「사람이 읽으면 무엇이 대표 그림인가」 로 적었다. 사람이 확인한 정답이 아니다. limit 이 적힌 사례는 자동 판정이 따라가지 못할 것으로 본 것이다 — 기대값은 그대로 두고 한계로 보고한다. 「[시험용 변형]」 은 모델이 틀리게 적었을 때를 흉내 낸 것이다.",
+ "chapters": {
+  "c01": {
+   "type": "사람의 행동과 관계가 중심 (공동 작업 · 일하지 않은 주변 인물)",
+   "center": "아버지와 화자가 둘이서 지붕에 새 이엉을 얹은 일",
+   "center_elements": [
+    {
+     "kind": "person",
+     "text": "아버지",
+     "turn": 1,
+     "quote": "아버지랑 저랑 둘이서"
+    },
+    {
+     "kind": "object",
+     "text": "이엉",
+     "turn": 1,
+     "quote": "지붕에 새 이엉을 얹었어요"
+    },
+    {
+     "kind": "action",
+     "text": "지붕에 새 이엉을 얹었다",
+     "turn": 1,
+     "quote": "아버지랑 저랑 둘이서 지붕에 새 이엉을 얹었어요"
+    }
+   ],
+   "peripheral": [
+    {
+     "text": "옆집 할머니",
+     "why": "마당에서 구경만 했다 — 일을 하지 않았다"
+    },
+    {
+     "text": "사다리",
+     "why": "한 번 나오는 도구"
+    },
+    {
+     "text": "마당",
+     "why": "구경한 자리"
+    }
+   ],
+   "candidates": {
+    "A": {
+     "chapter_no": 1,
+     "scene_title": "아버지와 둘이 지붕에 이엉을 얹다",
+     "scene_summary": "아버지와 둘이 지붕에 이엉을 얹다.",
+     "importance": "main",
+     "reason": "이 항목을 대표한다.",
+     "elements": [
+      {
+       "key": "a1",
+       "kind": "action",
+       "text": "지붕에 새 이엉을 얹었다",
+       "turn": 1,
+       "quote": "아버지랑 저랑 둘이서 지붕에 새 이엉을 얹었어요"
+      },
+      {
+       "key": "p1",
+       "kind": "person",
+       "text": "저",
+       "turn": 1,
+       "quote": "아버지랑 저랑 둘이서",
+       "relation": {
+        "action": "a1",
+        "role": "actor",
+        "evidence": [
+         {
+          "turn": 1,
+          "quote": "아버지랑 저랑 둘이서 지붕에 새 이엉을 얹었어요"
+         }
+        ]
+       }
+      },
+      {
+       "key": "p2",
+       "kind": "person",
+       "text": "아버지",
+       "turn": 1,
+       "quote": "아버지랑 저랑 둘이서",
+       "relation": {
+        "action": "a1",
+        "role": "co_actor",
+        "evidence": [
+         {
+          "turn": 1,
+          "quote": "아버지랑 저랑 둘이서 지붕에 새 이엉을 얹었어요"
+         }
+        ]
+       }
+      },
+      {
+       "key": "o1",
+       "kind": "object",
+       "text": "이엉",
+       "turn": 1,
+       "quote": "지붕에 새 이엉을 얹었어요",
+       "relation": {
+        "action": "a1",
+        "role": "acted_on",
+        "evidence": [
+         {
+          "turn": 1,
+          "quote": "지붕에 새 이엉을 얹었어요"
+         }
+        ]
+       }
+      },
+      {
+       "key": "s1",
+       "kind": "place",
+       "text": "지붕",
+       "turn": 1,
+       "quote": "지붕에 새 이엉을 얹었어요",
+       "role": "setting"
+      }
+     ],
+     "central_action": "a1"
+    },
+    "A_no_father": {
+     "chapter_no": 1,
+     "scene_title": "지붕에 이엉을 얹다",
+     "scene_summary": "지붕에 이엉을 얹다.",
+     "importance": "main",
+     "reason": "이 항목을 대표한다.",
+     "elements": [
+      {
+       "key": "a1",
+       "kind": "action",
+       "text": "지붕에 새 이엉을 얹었다",
+       "turn": 1,
+       "quote": "아버지랑 저랑 둘이서 지붕에 새 이엉을 얹었어요"
+      },
+      {
+       "key": "p1",
+       "kind": "person",
+       "text": "저",
+       "turn": 1,
+       "quote": "아버지랑 저랑 둘이서",
+       "relation": {
+        "action": "a1",
+        "role": "actor",
+        "evidence": [
+         {
+          "turn": 1,
+          "quote": "아버지랑 저랑 둘이서 지붕에 새 이엉을 얹었어요"
+         }
+        ]
+       }
+      },
+      {
+       "key": "o1",
+       "kind": "object",
+       "text": "이엉",
+       "turn": 1,
+       "quote": "지붕에 새 이엉을 얹었어요",
+       "relation": {
+        "action": "a1",
+        "role": "acted_on",
+        "evidence": [
+         {
+          "turn": 1,
+          "quote": "지붕에 새 이엉을 얹었어요"
+         }
+        ]
+       }
+      },
+      {
+       "key": "s1",
+       "kind": "place",
+       "text": "지붕",
+       "turn": 1,
+       "quote": "지붕에 새 이엉을 얹었어요",
+       "role": "setting"
+      }
+     ],
+     "central_action": "a1"
+    },
+    "B": {
+     "chapter_no": 1,
+     "scene_title": "구경하시던 옆집 할머니",
+     "scene_summary": "구경하시던 옆집 할머니.",
+     "importance": "main",
+     "reason": "이 항목을 대표한다.",
+     "elements": [
+      {
+       "key": "a1",
+       "kind": "action",
+       "text": "마당에서 구경만 하셨다",
+       "turn": 1,
+       "quote": "옆집 할머니는 마당에서 구경만 하셨어요"
+      },
+      {
+       "key": "p1",
+       "kind": "person",
+       "text": "옆집 할머니",
+       "turn": 1,
+       "quote": "옆집 할머니는 마당에서",
+       "relation": {
+        "action": "a1",
+        "role": "actor",
+        "evidence": [
+         {
+          "turn": 1,
+          "quote": "옆집 할머니는 마당에서 구경만 하셨어요"
+         }
+        ]
+       }
+      },
+      {
+       "key": "s1",
+       "kind": "place",
+       "text": "마당",
+       "turn": 1,
+       "quote": "마당에서 구경만 하셨어요",
+       "role": "setting"
+      }
+     ],
+     "central_action": "a1"
+    },
+    "C": {
+     "chapter_no": 1,
+     "scene_title": "사다리",
+     "scene_summary": "사다리.",
+     "importance": "main",
+     "reason": "이 항목을 대표한다.",
+     "elements": [
+      {
+       "key": "o1",
+       "kind": "object",
+       "text": "사다리",
+       "turn": 1,
+       "quote": "사다리 위에서 이엉을 받아 올리셨어요"
+      }
+     ]
+    }
+   },
+   "focus": {
+    "right": {
+     "summary": "아버지와 둘이 지붕에 새 이엉을 얹은 날",
+     "core": [
+      {
+       "kind": "action",
+       "text": "지붕에 새 이엉을 얹었다",
+       "turn": 1,
+       "quote": "지붕에 새 이엉을 얹었어요"
+      },
+      {
+       "kind": "person",
+       "text": "아버지",
+       "turn": 1,
+       "quote": "아버지랑 저랑 둘이서"
+      },
+      {
+       "kind": "object",
+       "text": "이엉",
+       "turn": 1,
+       "quote": "지붕에 새 이엉을 얹었어요"
+      }
+     ],
+     "background": [
+      {
+       "kind": "place",
+       "text": "마당",
+       "turn": 1,
+       "quote": "마당에서 구경만 하셨어요"
+      },
+      {
+       "kind": "person",
+       "text": "옆집 할머니",
+       "turn": 1,
+       "quote": "옆집 할머니는 마당에서 구경만 하셨어요"
+      }
+     ]
+    },
+    "swapped": {
+     "summary": "옆집 할머니",
+     "core": [
+      {
+       "kind": "person",
+       "text": "옆집 할머니",
+       "turn": 1,
+       "quote": "옆집 할머니는 마당에서 구경만 하셨어요"
+      },
+      {
+       "kind": "object",
+       "text": "사다리",
+       "turn": 1,
+       "quote": "사다리 위에서 이엉을 받아 올리셨어요"
+      }
+     ],
+     "background": [
+      {
+       "kind": "person",
+       "text": "아버지",
+       "turn": 1,
+       "quote": "아버지랑 저랑 둘이서"
+      },
+      {
+       "kind": "object",
+       "text": "이엉",
+       "turn": 1,
+       "quote": "지붕에 새 이엉을 얹었어요"
+      }
+     ]
+    }
+   },
+   "cases": [
+    {
+     "id": "c01-1",
+     "candidates": [
+      "A",
+      "B",
+      "C"
+     ],
+     "focus": "right",
+     "expect": {
+      "status": "selected",
+      "pick": "A",
+      "source": "candidate",
+      "mode": "SCENE"
+     },
+     "why": "함께 이엉을 얹는 장면이 이 이야기의 중심이다"
+    },
+    {
+     "id": "c01-2",
+     "candidates": [
+      "B",
+      "C"
+     ],
+     "focus": "right",
+     "expect": {
+      "status": "failed"
+     },
+     "why": "구경한 할머니 · 한 번 나온 사다리는 공동 작업을 나타내지 못한다 — 빈칸으로 남긴다"
+    },
+    {
+     "id": "c01-3",
+     "candidates": [
+      "A_no_father",
+      "B",
+      "C"
+     ],
+     "focus": "right",
+     "expect": {
+      "status": "selected",
+      "pick": "A_no_father",
+      "source": "derived_symbolic"
+     },
+     "why": "아버지가 빠진 장면은 막히고, 할머니 대신 그 장면의 이엉 · 지붕을 지킨 그림"
+    },
+    {
+     "id": "c01-4",
+     "candidates": [
+      "B",
+      "C"
+     ],
+     "focus": "swapped",
+     "expect": {
+      "status": "failed"
+     },
+     "why": "[시험용 변형] 모델이 중심 · 배경 표시를 뒤바꿔도 주변 인물 그림은 통과하지 않는다"
+    },
+    {
+     "id": "c01-5",
+     "candidates": [
+      "B",
+      "C"
+     ],
+     "focus": null,
+     "expect": {
+      "status": "failed"
+     },
+     "why": "모델 focus 가 없어도 — 본문에 한 번 나온 사람 · 도구는 대표가 아니다"
+    }
+   ]
+  },
+  "c02": {
+   "type": "특정 사물이 중심",
+   "center": "할아버지의 괘종시계 (밤마다 태엽을 감고, 울리면 잠자리에 들던 시계)",
+   "center_elements": [
+    {
+     "kind": "object",
+     "text": "괘종시계",
+     "turn": 2,
+     "quote": "할아버지 방에는 괘종시계가 걸려 있었어요"
+    },
+    {
+     "kind": "person",
+     "text": "할아버지",
+     "turn": 2,
+     "quote": "할아버지는 밤마다 괘종시계 태엽을 감으셨어요"
+    }
+   ],
+   "peripheral": [
+    {
+     "text": "달력",
+     "why": "벽에 붙어 있었다는 한 번의 언급"
+    },
+    {
+     "text": "할아버지 방",
+     "why": "시계가 걸린 자리"
+    }
+   ],
+   "candidates": {
+    "A": {
+     "chapter_no": 2,
+     "scene_title": "괘종시계",
+     "scene_summary": "괘종시계.",
+     "importance": "main",
+     "reason": "이 항목을 대표한다.",
+     "elements": [
+      {
+       "key": "o1",
+       "kind": "object",
+       "text": "괘종시계",
+       "turn": 2,
+       "quote": "할아버지 방에는 괘종시계가 걸려 있었어요"
+      },
+      {
+       "key": "s1",
+       "kind": "place",
+       "text": "할아버지 방",
+       "turn": 2,
+       "quote": "할아버지 방에는 괘종시계가",
+       "role": "setting"
+      }
+     ]
+    },
+    "B": {
+     "chapter_no": 2,
+     "scene_title": "달력",
+     "scene_summary": "달력.",
+     "importance": "main",
+     "reason": "이 항목을 대표한다.",
+     "elements": [
+      {
+       "key": "o1",
+       "kind": "object",
+       "text": "달력",
+       "turn": 2,
+       "quote": "벽에는 달력도 붙어 있었어요"
+      }
+     ]
+    }
+   },
+   "focus": {
+    "right": {
+     "summary": "할아버지의 괘종시계",
+     "core": [
+      {
+       "kind": "object",
+       "text": "괘종시계",
+       "turn": 2,
+       "quote": "괘종시계 태엽을 감으셨어요"
+      },
+      {
+       "kind": "person",
+       "text": "할아버지",
+       "turn": 2,
+       "quote": "할아버지는 밤마다 괘종시계 태엽을 감으셨어요"
+      }
+     ],
+     "background": [
+      {
+       "kind": "object",
+       "text": "달력",
+       "turn": 2,
+       "quote": "벽에는 달력도 붙어 있었어요"
+      }
+     ]
+    },
+    "swapped": {
+     "summary": "달력",
+     "core": [
+      {
+       "kind": "object",
+       "text": "달력",
+       "turn": 2,
+       "quote": "벽에는 달력도 붙어 있었어요"
+      }
+     ],
+     "background": [
+      {
+       "kind": "object",
+       "text": "괘종시계",
+       "turn": 2,
+       "quote": "괘종시계 태엽을 감으셨어요"
+      }
+     ]
+    }
+   },
+   "cases": [
+    {
+     "id": "c02-1",
+     "candidates": [
+      "A",
+      "B"
+     ],
+     "focus": "right",
+     "expect": {
+      "status": "selected",
+      "pick": "A",
+      "source": "candidate"
+     },
+     "why": "제목 · 본문 세 문장의 괘종시계"
+    },
+    {
+     "id": "c02-2",
+     "candidates": [
+      "B"
+     ],
+     "focus": "right",
+     "expect": {
+      "status": "failed"
+     },
+     "why": "한 번 나온 달력은 대표가 아니다"
+    },
+    {
+     "id": "c02-3",
+     "candidates": [
+      "B"
+     ],
+     "focus": null,
+     "expect": {
+      "status": "failed"
+     },
+     "why": "모델 focus 가 없어도 같다"
+    },
+    {
+     "id": "c02-4",
+     "candidates": [
+      "B"
+     ],
+     "focus": "swapped",
+     "expect": {
+      "status": "failed"
+     },
+     "why": "[시험용 변형] 모델이 달력을 중심이라고 적어도 같다"
+    }
+   ]
+  },
+  "c03": {
+   "type": "풍경 · 장소 자체가 중심 — 짧은 글 (제목에 장소)",
+   "center": "바람에 일렁이는 마을 앞 보리밭",
+   "center_elements": [
+    {
+     "kind": "place",
+     "text": "보리밭",
+     "turn": 3,
+     "quote": "마을 앞 보리밭이 바람에 물결처럼 일렁였어요"
+    }
+   ],
+   "peripheral": [
+    {
+     "text": "종달새",
+     "why": "풍경의 일부 — 그려도 되지만 중심은 보리밭"
+    }
+   ],
+   "candidates": {
+    "A": {
+     "chapter_no": 3,
+     "scene_title": "보리밭",
+     "scene_summary": "보리밭.",
+     "importance": "main",
+     "reason": "이 항목을 대표한다.",
+     "elements": [
+      {
+       "key": "s1",
+       "kind": "place",
+       "text": "보리밭",
+       "turn": 3,
+       "quote": "마을 앞 보리밭이 바람에 물결처럼 일렁였어요",
+       "role": "setting"
+      }
+     ]
+    }
+   },
+   "focus": {
+    "right": {
+     "summary": "봄 보리밭",
+     "core": [
+      {
+       "kind": "place",
+       "text": "보리밭",
+       "turn": 3,
+       "quote": "보리밭이 바람에 물결처럼 일렁였어요"
+      }
+     ],
+     "background": []
+    }
+   },
+   "cases": [
+    {
+     "id": "c03-1",
+     "candidates": [
+      "A"
+     ],
+     "focus": "right",
+     "expect": {
+      "status": "selected",
+      "pick": "A",
+      "source": "candidate"
+     },
+     "why": "제목 · 본문 · 모델 focus 가 모두 보리밭"
+    },
+    {
+     "id": "c03-2",
+     "candidates": [
+      "A"
+     ],
+     "focus": null,
+     "expect": {
+      "status": "selected",
+      "pick": "A",
+      "source": "candidate"
+     },
+     "why": "두 문장짜리 글이라 한 번만 나올 뿐 — 제목과 본문이 모두 보리밭을 말한다"
+    }
+   ]
+  },
+  "c04": {
+   "type": "풍경이 중심 — 비유 제목 (장소가 문장마다 나온다)",
+   "center": "집 앞 바다의 여름 풍경",
+   "center_elements": [
+    {
+     "kind": "place",
+     "text": "바다",
+     "turn": 4,
+     "quote": "우리 집 앞에는 바다가 펼쳐져 있었어요"
+    }
+   ],
+   "peripheral": [],
+   "candidates": {
+    "A": {
+     "chapter_no": 4,
+     "scene_title": "바다",
+     "scene_summary": "바다.",
+     "importance": "main",
+     "reason": "이 항목을 대표한다.",
+     "elements": [
+      {
+       "key": "s1",
+       "kind": "place",
+       "text": "바다",
+       "turn": 4,
+       "quote": "우리 집 앞에는 바다가 펼쳐져 있었어요",
+       "role": "setting"
+      }
+     ]
+    }
+   },
+   "focus": {
+    "right": {
+     "summary": "집 앞 바다",
+     "core": [
+      {
+       "kind": "place",
+       "text": "바다",
+       "turn": 4,
+       "quote": "여름이면 바다가 햇빛에 반짝였어요"
+      }
+     ],
+     "background": []
+    }
+   },
+   "cases": [
+    {
+     "id": "c04-1",
+     "candidates": [
+      "A"
+     ],
+     "focus": "right",
+     "expect": {
+      "status": "selected",
+      "pick": "A",
+      "source": "candidate"
+     },
+     "why": "본문 세 문장이 모두 바다를 말하고, 모델도 바다를 중심이라 적었다"
+    },
+    {
+     "id": "c04-2",
+     "candidates": [
+      "A"
+     ],
+     "focus": null,
+     "expect": {
+      "status": "selected",
+      "pick": "A",
+      "source": "candidate"
+     },
+     "why": "모델 focus 가 없어도 본문 전체가 바다다",
+     "limit": "제목이 비유라 제목 근거가 없고, 모델 focus 도 없으면 신호가 본문 비율 하나뿐이다 — 장소에는 신호 둘을 요구한다(배경을 막으려고)"
+    }
+   ]
+  },
+  "c05": {
+   "type": "풍경이 중심 — 비유 제목, 장소 이름이 문장마다 다르다",
+   "center": "집 앞 바다 · 물결 · 수평선의 노을",
+   "center_elements": [
+    {
+     "kind": "place",
+     "text": "바다",
+     "turn": 5,
+     "quote": "우리 집 앞에는 바다가 펼쳐져 있었어요"
+    },
+    {
+     "kind": "place",
+     "text": "수평선",
+     "turn": 5,
+     "quote": "수평선 위로 노을이 번졌어요"
+    }
+   ],
+   "peripheral": [],
+   "candidates": {
+    "A": {
+     "chapter_no": 5,
+     "scene_title": "바다와 수평선",
+     "scene_summary": "바다와 수평선.",
+     "importance": "main",
+     "reason": "이 항목을 대표한다.",
+     "elements": [
+      {
+       "key": "s1",
+       "kind": "place",
+       "text": "바다",
+       "turn": 5,
+       "quote": "우리 집 앞에는 바다가 펼쳐져 있었어요",
+       "role": "setting"
+      },
+      {
+       "key": "s2",
+       "kind": "place",
+       "text": "수평선",
+       "turn": 5,
+       "quote": "수평선 위로 노을이 번졌어요",
+       "role": "setting"
+      }
+     ]
+    }
+   },
+   "focus": {
+    "right": {
+     "summary": "집 앞 바다의 저녁",
+     "core": [
+      {
+       "kind": "place",
+       "text": "바다",
+       "turn": 5,
+       "quote": "우리 집 앞에는 바다가 펼쳐져 있었어요"
+      },
+      {
+       "kind": "place",
+       "text": "수평선",
+       "turn": 5,
+       "quote": "수평선 위로 노을이 번졌어요"
+      }
+     ],
+     "background": []
+    }
+   },
+   "cases": [
+    {
+     "id": "c05-1",
+     "candidates": [
+      "A"
+     ],
+     "focus": "right",
+     "expect": {
+      "status": "selected",
+      "pick": "A",
+      "source": "candidate"
+     },
+     "why": "세 문장 모두 바닷가 풍경이다 — 바다 · 물결 · 수평선으로 이름만 다르다",
+     "limit": "장소 이름이 한 번씩만 나와 본문 비율이 낮고(1/3) 제목도 비유다 — 코드는 다른 말(물결)이 같은 풍경이라는 것을 모른다"
+    }
+   ]
+  },
+  "c06": {
+   "type": "제목이 비유 (행동 · 사물 중심)",
+   "center": "어머니가 밤마다 털실로 화자의 스웨터를 뜨던 일",
+   "center_elements": [
+    {
+     "kind": "person",
+     "text": "어머니",
+     "turn": 6,
+     "quote": "어머니는 밤마다 털실로 제 스웨터를 뜨셨어요"
+    },
+    {
+     "kind": "object",
+     "text": "털실",
+     "turn": 6,
+     "quote": "빨간 털실이 조금씩 옷이 되어 갔어요"
+    },
+    {
+     "kind": "action",
+     "text": "털실로 스웨터를 뜨셨다",
+     "turn": 6,
+     "quote": "털실로 제 스웨터를 뜨셨어요"
+    }
+   ],
+   "peripheral": [
+    {
+     "text": "라디오",
+     "why": "노래가 흘러나왔다는 한 번의 언급"
+    },
+    {
+     "text": "손",
+     "why": "제목의 비유 — 원문에 「손」 만 따로 그릴 근거가 없다"
+    }
+   ],
+   "candidates": {
+    "A": {
+     "chapter_no": 6,
+     "scene_title": "털실로 스웨터를 뜨시는 어머니",
+     "scene_summary": "털실로 스웨터를 뜨시는 어머니.",
+     "importance": "main",
+     "reason": "이 항목을 대표한다.",
+     "elements": [
+      {
+       "key": "a1",
+       "kind": "action",
+       "text": "털실로 스웨터를 뜨셨다",
+       "turn": 6,
+       "quote": "어머니는 밤마다 털실로 제 스웨터를 뜨셨어요"
+      },
+      {
+       "key": "p1",
+       "kind": "person",
+       "text": "어머니",
+       "turn": 6,
+       "quote": "어머니는 밤마다 털실로",
+       "relation": {
+        "action": "a1",
+        "role": "actor",
+        "evidence": [
+         {
+          "turn": 6,
+          "quote": "어머니는 밤마다 털실로 제 스웨터를 뜨셨어요"
+         }
+        ]
+       }
+      },
+      {
+       "key": "o1",
+       "kind": "object",
+       "text": "털실",
+       "turn": 6,
+       "quote": "털실로 제 스웨터를 뜨셨어요"
+      },
+      {
+       "key": "o2",
+       "kind": "object",
+       "text": "스웨터",
+       "turn": 6,
+       "quote": "털실로 제 스웨터를 뜨셨어요",
+       "relation": {
+        "action": "a1",
+        "role": "acted_on",
+        "evidence": [
+         {
+          "turn": 6,
+          "quote": "털실로 제 스웨터를 뜨셨어요"
+         }
+        ]
+       }
+      }
+     ],
+     "central_action": "a1"
+    },
+    "B": {
+     "chapter_no": 6,
+     "scene_title": "털실과 스웨터",
+     "scene_summary": "털실과 스웨터.",
+     "importance": "main",
+     "reason": "이 항목을 대표한다.",
+     "elements": [
+      {
+       "key": "o1",
+       "kind": "object",
+       "text": "털실",
+       "turn": 6,
+       "quote": "빨간 털실이 조금씩 옷이 되어 갔어요"
+      },
+      {
+       "key": "o2",
+       "kind": "object",
+       "text": "스웨터",
+       "turn": 6,
+       "quote": "털실로 제 스웨터를 뜨셨어요"
+      }
+     ]
+    },
+    "C": {
+     "chapter_no": 6,
+     "scene_title": "손",
+     "scene_summary": "손.",
+     "importance": "main",
+     "reason": "이 항목을 대표한다.",
+     "elements": [
+      {
+       "key": "o1",
+       "kind": "object",
+       "text": "손",
+       "turn": 6,
+       "quote": "봄을 기다리던 손"
+      }
+     ]
+    },
+    "D": {
+     "chapter_no": 6,
+     "scene_title": "라디오",
+     "scene_summary": "라디오.",
+     "importance": "main",
+     "reason": "이 항목을 대표한다.",
+     "elements": [
+      {
+       "key": "o1",
+       "kind": "object",
+       "text": "라디오",
+       "turn": 6,
+       "quote": "라디오에서는 노래가 흘러나왔어요"
+      }
+     ]
+    }
+   },
+   "focus": {
+    "right": {
+     "summary": "어머니가 털실로 스웨터를 뜨시던 겨울밤",
+     "core": [
+      {
+       "kind": "person",
+       "text": "어머니",
+       "turn": 6,
+       "quote": "어머니는 밤마다 털실로 제 스웨터를 뜨셨어요"
+      },
+      {
+       "kind": "object",
+       "text": "털실",
+       "turn": 6,
+       "quote": "빨간 털실이 조금씩 옷이 되어 갔어요"
+      },
+      {
+       "kind": "action",
+       "text": "털실로 스웨터를 뜨셨다",
+       "turn": 6,
+       "quote": "털실로 제 스웨터를 뜨셨어요"
+      }
+     ],
+     "background": [
+      {
+       "kind": "object",
+       "text": "라디오",
+       "turn": 6,
+       "quote": "라디오에서는 노래가 흘러나왔어요"
+      }
+     ]
+    }
+   },
+   "cases": [
+    {
+     "id": "c06-1",
+     "candidates": [
+      "A",
+      "B",
+      "C",
+      "D"
+     ],
+     "focus": "right",
+     "expect": {
+      "status": "selected",
+      "pick": "A",
+      "source": "candidate",
+      "mode": "SCENE"
+     },
+     "why": "뜨개질하시는 어머니 장면"
+    },
+    {
+     "id": "c06-2",
+     "candidates": [
+      "C",
+      "D"
+     ],
+     "focus": "right",
+     "expect": {
+      "status": "failed"
+     },
+     "why": "제목에서 지은 「손」(원문에 없다)과 한 번 나온 라디오뿐"
+    },
+    {
+     "id": "c06-3",
+     "candidates": [
+      "B",
+      "C",
+      "D"
+     ],
+     "focus": "right",
+     "expect": {
+      "status": "selected",
+      "pick": "B",
+      "source": "candidate"
+     },
+     "why": "사람 장면이 없으면 털실 · 스웨터 상징 그림"
+    },
+    {
+     "id": "c06-4",
+     "candidates": [
+      "D"
+     ],
+     "focus": null,
+     "expect": {
+      "status": "failed"
+     },
+     "why": "모델 focus 가 없어도 라디오는 대표가 아니다"
+    }
+   ]
+  },
+  "c07": {
+   "type": "중심 사건 + 잠깐 나오는 주변 인물 · 사물 (이사와 찻잔)",
+   "center": "식구가 트럭에 이삿짐을 싣고 서울로 이사한 일",
+   "center_elements": [
+    {
+     "kind": "action",
+     "text": "서울로 이사를 했다",
+     "turn": 7,
+     "quote": "우리 식구는 서울로 이사를 했어요"
+    },
+    {
+     "kind": "object",
+     "text": "트럭",
+     "turn": 7,
+     "quote": "아버지가 빌려 온 트럭에 이삿짐을 실었어요"
+    },
+    {
+     "kind": "object",
+     "text": "이삿짐",
+     "turn": 7,
+     "quote": "트럭에 이삿짐을 실었어요"
+    }
+   ],
+   "peripheral": [
+    {
+     "text": "찻잔",
+     "why": "새집 주인이 보리차를 따라 준 한 번의 언급"
+    },
+    {
+     "text": "주인 할머니",
+     "why": "도착한 뒤 잠깐 나오는 사람"
+    },
+    {
+     "text": "서울 (하늘)",
+     "why": "가는 곳 — 제목에 있지만 이야기는 이사하는 일이다"
+    }
+   ],
+   "candidates": {
+    "A": {
+     "chapter_no": 7,
+     "scene_title": "트럭과 이삿짐",
+     "scene_summary": "트럭과 이삿짐.",
+     "importance": "main",
+     "reason": "이 항목을 대표한다.",
+     "elements": [
+      {
+       "key": "o1",
+       "kind": "object",
+       "text": "트럭",
+       "turn": 7,
+       "quote": "아버지가 빌려 온 트럭에 이삿짐을 실었어요"
+      },
+      {
+       "key": "o2",
+       "kind": "object",
+       "text": "이삿짐",
+       "turn": 7,
+       "quote": "트럭에 이삿짐을 실었어요"
+      }
+     ]
+    },
+    "B": {
+     "chapter_no": 7,
+     "scene_title": "찻잔",
+     "scene_summary": "찻잔.",
+     "importance": "main",
+     "reason": "이 항목을 대표한다.",
+     "elements": [
+      {
+       "key": "o1",
+       "kind": "object",
+       "text": "찻잔",
+       "turn": 7,
+       "quote": "찻잔에 보리차를 따라 주셨어요"
+      }
+     ]
+    },
+    "C": {
+     "chapter_no": 7,
+     "scene_title": "서울 하늘",
+     "scene_summary": "서울 하늘.",
+     "importance": "main",
+     "reason": "이 항목을 대표한다.",
+     "elements": [
+      {
+       "key": "s1",
+       "kind": "place",
+       "text": "서울",
+       "turn": 7,
+       "quote": "그날 본 서울 하늘은 뿌옜어요",
+       "role": "setting"
+      }
+     ]
+    },
+    "D": {
+     "chapter_no": 7,
+     "scene_title": "보리차를 따라 주시는 주인 할머니",
+     "scene_summary": "보리차를 따라 주시는 주인 할머니.",
+     "importance": "main",
+     "reason": "이 항목을 대표한다.",
+     "elements": [
+      {
+       "key": "a1",
+       "kind": "action",
+       "text": "찻잔에 보리차를 따라 주셨다",
+       "turn": 7,
+       "quote": "주인 할머니가 찻잔에 보리차를 따라 주셨어요"
+      },
+      {
+       "key": "p1",
+       "kind": "person",
+       "text": "주인 할머니",
+       "turn": 7,
+       "quote": "주인 할머니가 찻잔에",
+       "relation": {
+        "action": "a1",
+        "role": "actor",
+        "evidence": [
+         {
+          "turn": 7,
+          "quote": "주인 할머니가 찻잔에 보리차를 따라 주셨어요"
+         }
+        ]
+       }
+      },
+      {
+       "key": "o1",
+       "kind": "object",
+       "text": "찻잔",
+       "turn": 7,
+       "quote": "찻잔에 보리차를 따라 주셨어요",
+       "relation": {
+        "action": "a1",
+        "role": "acted_on",
+        "evidence": [
+         {
+          "turn": 7,
+          "quote": "찻잔에 보리차를 따라 주셨어요"
+         }
+        ]
+       }
+      }
+     ],
+     "central_action": "a1"
+    }
+   },
+   "focus": {
+    "right": {
+     "summary": "트럭에 이삿짐을 싣고 서울로 이사한 날",
+     "core": [
+      {
+       "kind": "action",
+       "text": "서울로 이사를 했다",
+       "turn": 7,
+       "quote": "우리 식구는 서울로 이사를 했어요"
+      },
+      {
+       "kind": "object",
+       "text": "트럭",
+       "turn": 7,
+       "quote": "트럭 짐칸에 앉아서 고개를 넘었어요"
+      },
+      {
+       "kind": "object",
+       "text": "이삿짐",
+       "turn": 7,
+       "quote": "트럭에 이삿짐을 실었어요"
+      }
+     ],
+     "background": [
+      {
+       "kind": "place",
+       "text": "서울",
+       "turn": 7,
+       "quote": "그날 본 서울 하늘은 뿌옜어요"
+      },
+      {
+       "kind": "object",
+       "text": "찻잔",
+       "turn": 7,
+       "quote": "찻잔에 보리차를 따라 주셨어요"
+      },
+      {
+       "kind": "person",
+       "text": "주인 할머니",
+       "turn": 7,
+       "quote": "주인 할머니가 찻잔에 보리차를 따라 주셨어요"
+      }
+     ]
+    },
+    "destination_core": {
+     "summary": "서울로 이사",
+     "core": [
+      {
+       "kind": "place",
+       "text": "서울",
+       "turn": 7,
+       "quote": "그날 본 서울 하늘은 뿌옜어요"
+      },
+      {
+       "kind": "object",
+       "text": "트럭",
+       "turn": 7,
+       "quote": "트럭 짐칸에 앉아서 고개를 넘었어요"
+      },
+      {
+       "kind": "object",
+       "text": "이삿짐",
+       "turn": 7,
+       "quote": "트럭에 이삿짐을 실었어요"
+      }
+     ],
+     "background": []
+    },
+    "swapped": {
+     "summary": "찻잔",
+     "core": [
+      {
+       "kind": "object",
+       "text": "찻잔",
+       "turn": 7,
+       "quote": "찻잔에 보리차를 따라 주셨어요"
+      },
+      {
+       "kind": "person",
+       "text": "주인 할머니",
+       "turn": 7,
+       "quote": "주인 할머니가 찻잔에 보리차를 따라 주셨어요"
+      }
+     ],
+     "background": [
+      {
+       "kind": "object",
+       "text": "트럭",
+       "turn": 7,
+       "quote": "트럭 짐칸에 앉아서 고개를 넘었어요"
+      },
+      {
+       "kind": "object",
+       "text": "이삿짐",
+       "turn": 7,
+       "quote": "트럭에 이삿짐을 실었어요"
+      },
+      {
+       "kind": "place",
+       "text": "서울",
+       "turn": 7,
+       "quote": "그날 본 서울 하늘은 뿌옜어요"
+      }
+     ]
+    }
+   },
+   "cases": [
+    {
+     "id": "c07-1",
+     "candidates": [
+      "A",
+      "B",
+      "C",
+      "D"
+     ],
+     "focus": "right",
+     "expect": {
+      "status": "selected",
+      "pick": "A",
+      "source": "candidate"
+     },
+     "why": "트럭과 이삿짐이 이사를 나타낸다"
+    },
+    {
+     "id": "c07-2",
+     "candidates": [
+      "B",
+      "C",
+      "D"
+     ],
+     "focus": "right",
+     "expect": {
+      "status": "failed"
+     },
+     "why": "찻잔 · 주인 할머니 · 서울 하늘은 이사를 나타내지 못한다"
+    },
+    {
+     "id": "c07-3",
+     "candidates": [
+      "A",
+      "B",
+      "C",
+      "D"
+     ],
+     "focus": null,
+     "expect": {
+      "status": "selected",
+      "pick": "A",
+      "source": "candidate"
+     },
+     "why": "모델 focus 가 없어도 — 트럭이 본문에 되풀이된다"
+    },
+    {
+     "id": "c07-4",
+     "candidates": [
+      "A",
+      "B",
+      "C",
+      "D"
+     ],
+     "focus": "destination_core",
+     "expect": {
+      "status": "selected",
+      "pick": "A",
+      "source": "candidate"
+     },
+     "why": "[시험용 변형] 모델이 가는 곳(서울)을 중심이라 적어도 서울 하늘 그림이 이사 그림을 이기지 않는다"
+    },
+    {
+     "id": "c07-5",
+     "candidates": [
+      "B",
+      "C",
+      "D"
+     ],
+     "focus": "swapped",
+     "expect": {
+      "status": "failed"
+     },
+     "why": "[시험용 변형] 모델이 찻잔 · 주인 할머니를 중심이라 적어도 통과하지 않는다"
+    }
+   ]
+  },
+  "c08": {
+   "type": "공동 작업 + 일하지 않은 주변 인물 (김장과 삼촌)",
+   "center": "어머니와 화자가 둘이서 배추로 김장을 한 일",
+   "center_elements": [
+    {
+     "kind": "person",
+     "text": "어머니",
+     "turn": 8,
+     "quote": "어머니랑 저랑 둘이서"
+    },
+    {
+     "kind": "action",
+     "text": "배추로 김장을 했다",
+     "turn": 8,
+     "quote": "어머니랑 저랑 둘이서 배추로 김장을 했어요"
+    },
+    {
+     "kind": "object",
+     "text": "배추",
+     "turn": 8,
+     "quote": "배추로 김장을 했어요"
+    }
+   ],
+   "peripheral": [
+    {
+     "text": "삼촌",
+     "why": "툇마루에서 신문만 봤다 — 일하지 않았다"
+    },
+    {
+     "text": "툇마루",
+     "why": "삼촌이 앉은 자리"
+    }
+   ],
+   "candidates": {
+    "A": {
+     "chapter_no": 8,
+     "scene_title": "어머니와 둘이 김장하기",
+     "scene_summary": "어머니와 둘이 김장하기.",
+     "importance": "main",
+     "reason": "이 항목을 대표한다.",
+     "elements": [
+      {
+       "key": "a1",
+       "kind": "action",
+       "text": "배추로 김장을 했다",
+       "turn": 8,
+       "quote": "어머니랑 저랑 둘이서 배추로 김장을 했어요"
+      },
+      {
+       "key": "p1",
+       "kind": "person",
+       "text": "저",
+       "turn": 8,
+       "quote": "어머니랑 저랑 둘이서",
+       "relation": {
+        "action": "a1",
+        "role": "actor",
+        "evidence": [
+         {
+          "turn": 8,
+          "quote": "어머니랑 저랑 둘이서 배추로 김장을 했어요"
+         }
+        ]
+       }
+      },
+      {
+       "key": "p2",
+       "kind": "person",
+       "text": "어머니",
+       "turn": 8,
+       "quote": "어머니랑 저랑 둘이서",
+       "relation": {
+        "action": "a1",
+        "role": "co_actor",
+        "evidence": [
+         {
+          "turn": 8,
+          "quote": "어머니랑 저랑 둘이서 배추로 김장을 했어요"
+         }
+        ]
+       }
+      },
+      {
+       "key": "o1",
+       "kind": "object",
+       "text": "배추",
+       "turn": 8,
+       "quote": "배추로 김장을 했어요",
+       "relation": {
+        "action": "a1",
+        "role": "acted_on",
+        "evidence": [
+         {
+          "turn": 8,
+          "quote": "배추로 김장을 했어요"
+         }
+        ]
+       }
+      }
+     ],
+     "central_action": "a1"
+    },
+    "B": {
+     "chapter_no": 8,
+     "scene_title": "신문 보시는 삼촌",
+     "scene_summary": "신문 보시는 삼촌.",
+     "importance": "main",
+     "reason": "이 항목을 대표한다.",
+     "elements": [
+      {
+       "key": "a1",
+       "kind": "action",
+       "text": "툇마루에 앉아서 신문만 보셨다",
+       "turn": 8,
+       "quote": "삼촌은 툇마루에 앉아서 신문만 보셨어요"
+      },
+      {
+       "key": "p1",
+       "kind": "person",
+       "text": "삼촌",
+       "turn": 8,
+       "quote": "삼촌은 툇마루에 앉아서",
+       "relation": {
+        "action": "a1",
+        "role": "actor",
+        "evidence": [
+         {
+          "turn": 8,
+          "quote": "삼촌은 툇마루에 앉아서 신문만 보셨어요"
+         }
+        ]
+       }
+      },
+      {
+       "key": "s1",
+       "kind": "place",
+       "text": "툇마루",
+       "turn": 8,
+       "quote": "툇마루에 앉아서 신문만 보셨어요",
+       "role": "setting"
+      }
+     ],
+     "central_action": "a1"
+    },
+    "C": {
+     "chapter_no": 8,
+     "scene_title": "마당에 묻은 김장독",
+     "scene_summary": "마당에 묻은 김장독.",
+     "importance": "main",
+     "reason": "이 항목을 대표한다.",
+     "elements": [
+      {
+       "key": "o1",
+       "kind": "object",
+       "text": "김장독",
+       "turn": 8,
+       "quote": "김장독을 마당에 묻었어요"
+      },
+      {
+       "key": "s1",
+       "kind": "place",
+       "text": "마당",
+       "turn": 8,
+       "quote": "김장독을 마당에 묻었어요",
+       "role": "setting"
+      }
+     ]
+    }
+   },
+   "focus": {
+    "right": {
+     "summary": "어머니와 둘이 한 김장",
+     "core": [
+      {
+       "kind": "person",
+       "text": "어머니",
+       "turn": 8,
+       "quote": "어머니랑 저랑 둘이서"
+      },
+      {
+       "kind": "action",
+       "text": "배추로 김장을 했다",
+       "turn": 8,
+       "quote": "배추로 김장을 했어요"
+      },
+      {
+       "kind": "object",
+       "text": "배추",
+       "turn": 8,
+       "quote": "배추로 김장을 했어요"
+      }
+     ],
+     "background": [
+      {
+       "kind": "person",
+       "text": "삼촌",
+       "turn": 8,
+       "quote": "삼촌은 툇마루에 앉아서 신문만 보셨어요"
+      },
+      {
+       "kind": "place",
+       "text": "마당",
+       "turn": 8,
+       "quote": "김장독을 마당에 묻었어요"
+      }
+     ]
+    }
+   },
+   "cases": [
+    {
+     "id": "c08-1",
+     "candidates": [
+      "A",
+      "B",
+      "C"
+     ],
+     "focus": "right",
+     "expect": {
+      "status": "selected",
+      "pick": "A",
+      "source": "candidate",
+      "mode": "SCENE"
+     },
+     "why": "어머니와 둘이 김장하는 장면"
+    },
+    {
+     "id": "c08-2",
+     "candidates": [
+      "B"
+     ],
+     "focus": "right",
+     "expect": {
+      "status": "failed"
+     },
+     "why": "신문만 본 삼촌은 김장을 나타내지 못한다"
+    },
+    {
+     "id": "c08-3",
+     "candidates": [
+      "B",
+      "C"
+     ],
+     "focus": "right",
+     "expect": {
+      "status": "selected",
+      "pick": "C",
+      "source": "candidate"
+     },
+     "why": "마당에 묻은 김장독은 김장의 결과 — 상징 그림으로 대표할 수 있다",
+     "limit": "제목의 말(김장)이 요소 이름(김장독)의 일부로만 겹친다 — 코드는 낱말 전체로만 제목과 잇는다. 김장독은 본문 한 번이라 중심 근거가 없다"
+    }
+   ]
+  }
+ }
+}
