@@ -201,6 +201,8 @@
       state.draftElderId = j.elderId; state.spread = 0; state.pendingMemoirTitle = null;
       state.savedMemoirId = r.memoir_id || (r.result && r.result.memoir_id) || null;
       state.draftKept = !(['#style', '#records', '#draft'].includes(location.hash) && !window.SrvInterview?.busy());
+      // 서버는 이미 보관했다 → 책장에도 바로 꽂혀 있다. 「작은 책으로 보관하기」를 누르면 이 책을 꽂는 연출만 한다 (library-arrive)
+      state.freshMemoirId = state.draftKept ? null : state.savedMemoirId;
       state.selected.clear(); state.pickRecords = false;
       // 자서전을 고르던 화면에 있을 때만 초안으로 옮긴다 — 인터뷰 · 다른 화면을 보고 있으면 알리기만 한다
       const here = ['#style', '#records', '#draft'].includes(location.hash) && !window.SrvInterview?.busy();
@@ -266,16 +268,21 @@
     try {
       const r = await window.Srv.call(`/memoirs/saved?elder_id=${encodeURIComponent(AUTH.elderId)}&limit=50`);
       if (my !== libSeq) return;
-      const hide = location.hash === '#draft' || location.hash === '#reader' ? (state.draftKept ? null : state.savedMemoirId) : null;
-      const rows = ((r && r.memoirs) || []).filter((m) => m.memoir_id !== hide && (!m.status || m.status === 'ready'));
+      // 예전에는 초안 화면에 있는 동안 「보관하기 전」 책을 책장에서 빼 두었다 → 보관하기를 누르지 않고 다른 화면으로 가면
+      // 새로고침 전까지 자서전이 사라진 것처럼 보였다(제보 11-16). 서버가 만든 즉시 보관하므로 늘 그대로 보여 준다.
+      const rows = ((r && r.memoirs) || []).filter((m) => !m.status || m.status === 'ready');
+      // 바뀐 게 없으면 다시 그리지 않는다 — 책 꽂는 연출 · 펼치는 중인 책이 끊기지 않게
+      const sig = (list) => list.map((b) => `${b.id}|${b.title}`).join('\n');
+      const now = lib.bookIds().map((id) => lib.getBook(id)).filter(Boolean);
       // 오래된 책이 01 — 서버는 최근 순으로 준다
-      lib.setBooks(rows.reverse().map((m) => {
+      const next = rows.reverse().map((m) => {
         const old = lib.getBook(m.memoir_id), edit = readEdit(m.memoir_id);
         return old && old.document ? old : {
           id: m.memoir_id, elder_id: m.elder_id || AUTH.elderId, title: (edit && edit.title) || m.title || '제목 없는 자서전',
           date: fmtDate(m.created_at), style: m.style || 'spoken', count: (m.session_ids || []).length, body: [], document: null, server: true,
         };
-      }));
+      });
+      if (sig(next) !== sig(now)) lib.setBooks(next);
     } catch (e) {
       if (my !== libSeq) return;
       if (e.status !== 401 && location.hash === '#library') toast('책장을 불러오지 못했어요. 잠시 뒤 다시 열어 주세요.');
@@ -324,6 +331,9 @@
     const left = jobLeft();
     if (left && !job) { job = left; void wait(left, false); }
   });
+
+  // 「자서전 보기」에 들어올 때마다 서버 책장을 다시 본다 — 다른 기기 · 창에서 만든 책도 바로 보이게
+  window.addEventListener('memoir:screen', (e) => { if (e.detail.screen === 'library' && AUTH.user) void reloadLibrary(); });
 
   window.SrvLibrary = {reload: reloadLibrary, ensure, removeSaved, styleTitle, readEdit, writeEdit};
   void ApiError;
