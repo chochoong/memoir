@@ -114,7 +114,7 @@ class Run:
     def go(self, data: dict, images: bool = True, select: bool = True, reprocess: bool = False):
         items, calls = tool.process(data, self.out, select_for=self.select_for if select else None,
                                     image_call=self.image_call if images else None, mock=True, image_model="mock",
-                                    base_dir=PHOTO_BASE, reprocess_stale=reprocess)
+                                    base_dir=PHOTO_BASE, reprocess_stale=reprocess, policy="scene")
         summary = tool.write_outputs(data, self.out, items, True, PHOTO_BASE)
         doc = json.loads((self.out / "book_illustrated.json").read_text(encoding="utf-8"))
         return {it["ident"]: it for it in items}, calls, summary, doc
@@ -416,7 +416,7 @@ def cli(tmp_path, monkeypatch):
     mock_path.write_text(json.dumps({"by_chapter": MOCK}, ensure_ascii=False), encoding="utf-8")
     shutil.copytree(PHOTO_BASE / "illust_book_photos_B", tmp_path / "illust_book_photos_B")
     return type("Cli", (), {"tmp": tmp_path, "out": tmp_path / "runs" / "o",
-                            "base": ["--input", str(seed_path), "--out", str(tmp_path / "runs" / "o")], "mock": str(mock_path)})
+                            "base": ["--input", str(seed_path), "--out", str(tmp_path / "runs" / "o"), "--policy", "scene"], "mock": str(mock_path)})
 
 
 def test_cli_dry_run_plans_without_calling(cli, capsys):
@@ -617,12 +617,12 @@ def test_process_refuses_the_other_mode_in_both_directions(tmp_path):
     r = Run(tmp_path)
     r.go(seed())
     with pytest.raises(il.IllustError) as e:
-        tool.process(seed(), tmp_path, select_for=r.select_for, image_call=r.image_call, mock=False, base_dir=PHOTO_BASE)
+        tool.process(seed(), tmp_path, select_for=r.select_for, image_call=r.image_call, mock=False, base_dir=PHOTO_BASE, policy="scene")
     assert e.value.kind == "mode" and len(r.image_calls) == 6
     live = tmp_path / "live"
-    tool.process(seed(), live, select_for=r.select_for, image_call=r.image_call, mock=False, image_model="m", base_dir=PHOTO_BASE)
+    tool.process(seed(), live, select_for=r.select_for, image_call=r.image_call, mock=False, image_model="m", base_dir=PHOTO_BASE, policy="scene")
     with pytest.raises(il.IllustError):
-        tool.process(seed(), live, select_for=r.select_for, image_call=r.image_call, mock=True, image_model="m", base_dir=PHOTO_BASE)
+        tool.process(seed(), live, select_for=r.select_for, image_call=r.image_call, mock=True, image_model="m", base_dir=PHOTO_BASE, policy="scene")
 
 
 def test_mock_picture_never_counts_in_a_real_run(tmp_path):
@@ -636,7 +636,7 @@ def test_mock_picture_never_counts_in_a_real_run(tmp_path):
             it["basis"]["image"]["model"] = "mock"
     (tmp_path / "state.json").write_text(json.dumps(st, ensure_ascii=False), encoding="utf-8")
     items, calls = tool.process(seed(), tmp_path, select_for=r.select_for, image_call=r.image_call, mock=False,
-                                image_model="mock", base_dir=PHOTO_BASE)
+                                image_model="mock", base_dir=PHOTO_BASE, policy="scene")
     summary = tool.write_outputs(seed(), tmp_path, items, False, PHOTO_BASE)
     assert all(it["failure"] == ["image_mode_mismatch"] for it in items if it["target"])
     assert calls == {"select": 0, "image": 0} and len(r.image_calls) == 6                 # 검사에 걸렸다고 다시 부르지 않는다

@@ -7,7 +7,9 @@
 
 흐름: 한 권 입력 → 목차별 사진 확인 → 사진 없는 항목의 대표 그림 정하기 → 그림 만들기 → 그 본문에 넣기 → 결과와 미리보기.
 사람이 장면을 고르거나 항목마다 승인하는 단계가 없다 (자동). 책 전체에서 몇 개까지라는 한도도 없다.
-**장면 선정 지시문 v4 와 이 자동 흐름은 아직 실제 모델로 돌려 본 적이 없다.**
+고르는 방식은 --policy 다 — theme(기본 · 목차 주제 삽화 chapter_theme_v1, 지시문 1_목차주제_v6) · scene(장면 재현 scene_v5, 지시문 v5).
+**목차 주제 방식은 아직 실제 모델로 돌려 본 적이 없다** (모의 계획으로만 확인). 장면 방식은 2026-11-16 합성 5항목 · 서비스 1항목을 실제로 불렀다.
+--mock-select 의 모의 응답은 방식에 맞는 모양이어야 한다 (theme: 계획 하나 · scene: {"candidates": [...]}).
 
 --dry-run          목차 · 사진 상태 · 대상 수 · 부를 횟수만 보인다. 아무것도 부르지 않는다.
 --mock-select      장면 선정 모델 자리에 끼울 모의 후보 {"by_chapter": {"<식별자 또는 번호>": {"candidates": [...]}}}.
@@ -101,8 +103,9 @@ def mock_image_call(prompt: str, *, model: str, size: str, aspect: str, key: str
             "usage": None}
 
 
-def plan_token(ref: str, targets: list, select_model: str, image_model: str, size: str, aspect: str) -> str:
-    raw = json.dumps([ref, targets, select_model, image_model, size, aspect, book.prompt_hash(), il.prompt_hashes()],
+def plan_token(ref: str, targets: list, select_model: str, image_model: str, size: str, aspect: str,
+               policy: str = book.DEFAULT_POLICY) -> str:
+    raw = json.dumps([ref, targets, select_model, image_model, size, aspect, book.policy_files(policy), il.prompt_hashes()],
                      ensure_ascii=False, sort_keys=True)
     return hashlib.sha256(raw.encode("utf-8")).hexdigest()[:12]
 
@@ -158,9 +161,11 @@ def verify_image(image_dir: Path, run: dict | None, prompt_text: str, mock: bool
 
 def process(data: dict, out: Path, *, select_for=None, image_call=None, mock: bool, key: str = "",
             image_model: str = IMAGE_MODEL, authorization: dict | None = None, base_dir: Path | None = None,
-            reprocess_stale: bool = False) -> tuple[list[dict], dict]:
+            reprocess_stale: bool = False, policy: str = book.DEFAULT_POLICY) -> tuple[list[dict], dict]:
     """
     한 권을 항목마다 처리한다. select_for(항목) → (system, user) 를 받아 응답 글을 돌려주는 함수(없으면 장면을 정하지 않는다).
+    policy 는 고르는 방식 — theme(기본 · 목차 주제 삽화) · scene(장면 재현). 앞선 결과가 다른 방식이면 지시문 해시가 달라
+    「다시 처리 필요」 로 남는다 (새 방식의 결과로 쓰지 않는다).
     image_call 은 그림 모델 자리(없으면 그림을 만들지 않는다). 한 항목의 실패가 다른 항목을 건드리지 않는다.
     """
     state_path = out / "state.json"
@@ -171,6 +176,7 @@ def process(data: dict, out: Path, *, select_for=None, image_call=None, mock: bo
     out.mkdir(parents=True, exist_ok=True)
     state = state or {"items": {}}
     ref = il.input_ref(data)
+    files = book.policy_files(book.check_policy(policy))
     photos = book.photo_states(data)
     image_cfg = {"model": image_model, "size": IMAGE_SIZE, "aspect": IMAGE_ASPECT}
     items, calls = [], {"select": 0, "image": 0}
@@ -205,7 +211,7 @@ def process(data: dict, out: Path, *, select_for=None, image_call=None, mock: bo
 
             # ① 앞선 결과를 다시 써도 되는가 — 그것이 기대던 원문 · 본문 문단 · 지시문 · 설정이 그대로일 때만
             if prev and prev.get("selection"):
-                why = book.reuse_check(data, t, prev, image_cfg)
+                why = book.reuse_check(data, t, prev, image_cfg, policy)
                 if why and reprocess_stale:
                     n = 1
                     while (out / "items" / "_stale" / f"{t['ident']}-{n}").exists():
@@ -231,17 +237,18 @@ def process(data: dict, out: Path, *, select_for=None, image_call=None, mock: bo
                     it["body_changed"] = True         # 항목의 다른 곳이 바뀌었다 — 이 장면이 기대던 것은 그대로다
             elif select_for is not None:
                 folder.mkdir(parents=True, exist_ok=True)
-                system, user = book.select_prompt(), il.select_message(data, [t["ident"]])
+                system, user = book.select_system(policy), book.select_user(data, t["ident"], policy)
                 (folder / "select_request.json").write_text(json.dumps(
-                    {"system": system, "user": user, "prompt_file": book.SELECT_FILE, "prompt_hash": book.prompt_hash()},
+                    {"system": system, "user": user, "policy_id": files["policy_id"], "prompt_file": files["select_prompt"],
+                     "prompt_hash": files["select_prompt_hash"]},
                     ensure_ascii=False, indent=1), encoding="utf-8")
                 if (folder / "select_attempt.json").is_file():
                     # 앞선 실행이 이 항목의 장면 선정을 불렀는데 결과를 남기지 못하고 멈췄다 — 다시 부르지 않는다
                     it["selection"] = {"status": "failed", "reasons": ["select_attempt_without_result"], "tried": [],
                                        "detail": "장면 선정을 부른 기록만 있고 결과가 없다 — 스스로 다시 부르지 않는다"}
                 else:
-                    meta = {"mock": mock, "started_at": img.now(), "call": 1, "prompt_file": book.SELECT_FILE,
-                            "prompt_hash": book.prompt_hash()}
+                    meta = {"mock": mock, "started_at": img.now(), "call": 1, "policy_id": files["policy_id"],
+                            "prompt_file": files["select_prompt"], "prompt_hash": files["select_prompt_hash"]}
                     (folder / "select_attempt.json").write_text(json.dumps(meta, ensure_ascii=False, indent=1), encoding="utf-8")
                     calls["select"] += 1
                     try:
@@ -256,7 +263,7 @@ def process(data: dict, out: Path, *, select_for=None, image_call=None, mock: bo
                             reply = reply["text"]
                         meta["finished_at"] = img.now()
                         (folder / "select_response.txt").write_text(reply, encoding="utf-8")
-                        it["selection"] = book.choose(data, t["ident"], reply)
+                        it["selection"] = book.choose_by(policy, data, t["ident"], reply)
                     (folder / "select_run.json").write_text(json.dumps(meta, ensure_ascii=False, indent=1), encoding="utf-8")
                     it["select_run"] = {k: meta.get(k) for k in ("model_requested", "model_version", "response_id", "usage",
                                                                  "finish", "retries", "started_at", "finished_at", "failure")}
@@ -358,6 +365,8 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--authorized-by")
     ap.add_argument("--authorization-note")
     ap.add_argument("--reprocess-stale", action="store_true")
+    ap.add_argument("--policy", choices=sorted(book.POLICY_IDS), default=book.DEFAULT_POLICY,
+                    help="고르는 방식 — theme(기본 · 목차 주제 삽화) · scene(장면 재현, 앞선 방식)")
     a = ap.parse_args(argv)
     for stream in (sys.stdout, sys.stderr):
         if hasattr(stream, "reconfigure"):
@@ -372,13 +381,13 @@ def main(argv: list[str] | None = None) -> int:
         photos = book.photo_states(data)
         toc = book.toc(data)
         targets = [t["ident"] for t in toc if photos[t["ident"]]["state"] == "no_photo_confirmed" and not t["raw"].get("illustrations")]
-        token = plan_token(il.input_ref(data), targets, SELECT_MODEL, IMAGE_MODEL, IMAGE_SIZE, IMAGE_ASPECT)
+        token = plan_token(il.input_ref(data), targets, SELECT_MODEL, IMAGE_MODEL, IMAGE_SIZE, IMAGE_ASPECT, a.policy)
         if a.dry_run:
             saved = load(a.out / "state.json") if (a.out / "state.json").is_file() else {"items": {}}
             state = saved["items"]
             cfg = {"model": IMAGE_MODEL, "size": IMAGE_SIZE, "aspect": IMAGE_ASPECT}
             stale = [t["ident"] for t in toc if t["ident"] in targets and (state.get(str(t["ident"])) or {}).get("selection")
-                     and book.reuse_check(data, t, state[str(t["ident"])], cfg)]
+                     and book.reuse_check(data, t, state[str(t["ident"])], cfg, a.policy)]
             need_sel = [t for t in targets if not (state.get(str(t)) or {}).get("selection")]
             need_img = [t for t in targets if not ((state.get(str(t)) or {}).get("image") or {}).get("path")
                         and ((state.get(str(t)) or {}).get("selection") or {"status": "selected"})["status"] == "selected"]
@@ -395,13 +404,13 @@ def main(argv: list[str] | None = None) -> int:
                                   "source_turns": t["source_turns"],
                                   "elder_chars": sum(len(u["elder"]) for u in (data.get("source") or {}).get("utterances", [])
                                                      if u["turn"] in t["source_turns"]),
-                                  "select_system_chars": len(book.select_prompt()),
-                                  "select_user_chars": len(il.select_message(data, [t["ident"]]))}
+                                  "select_system_chars": len(book.select_system(a.policy)),
+                                  "select_user_chars": len(book.select_user(data, t["ident"], a.policy))}
                                  for t in toc if t["ident"] in targets],
                 "retries": {"select": "off (attempts=1)", "image": "off (SDK · HTTP)"},
                 "models": {"select": SELECT_MODEL, "image": IMAGE_MODEL, "size": IMAGE_SIZE, "aspect": IMAGE_ASPECT},
                 "estimated_image_cost_usd": round(len(need_img) * IMAGE_USD, 3),
-                "select_prompt": {book.SELECT_FILE: book.prompt_hash()}, "live_confirm": token,
+                "policy": book.policy_files(a.policy), "live_confirm": token,
                 "verified_with_real_model": False, "live_approved": False, "api_called": False}, ensure_ascii=False, indent=1))
             return 0
         if a.live:
@@ -434,7 +443,7 @@ def main(argv: list[str] | None = None) -> int:
         base_dir = a.input.resolve().parent
         items, calls = process(data, a.out, select_for=select_for, image_call=image_call, mock=mock, key=key,
                                image_model="mock" if mock else IMAGE_MODEL, authorization=authorization, base_dir=base_dir,
-                               reprocess_stale=a.reprocess_stale)
+                               reprocess_stale=a.reprocess_stale, policy=a.policy)
     except (il.IllustError, img.Refuse) as e:
         print(f"거부 — {e}", file=sys.stderr)
         return 2

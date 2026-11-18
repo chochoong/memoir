@@ -1,9 +1,12 @@
 """
-자서전 삽화 — 목차별 자동 처리 (로컬 실험 · 서비스 경로와 따로 돈다)
+자서전 삽화 — 목차별 자동 처리 (서비스 연결부 memoir_illust_service 와 로컬 실행기 tools/memoir_illust_book 이 함께 쓴다)
 
     목차 항목마다   photo_states     그 항목 본문에 사진이 있는가 — 있음 · 없음(확인됨) · 모름
-    사진 없는 항목  choose           대표 그림 하나 — 모델 후보와 사람을 뺀 후보를 모두 자동 검사하고, 이 항목의 중심 내용(focus_map)을
-                                     가장 많이 담은 것을 고른다. 배경만 남은 후보는 고르지 않는다
+    사진 없는 항목  choose_by        대표 그림 하나 — 방식(정책)에 따라
+                      theme (기본)   목차 주제 삽화 chapter_theme_v1 — 장 전체의 주제와 분위기 (memoir_illust_theme.choose_theme)
+                      scene          장면 재현 scene_v5 — 아래 choose. 모델 후보와 사람을 뺀 후보를 모두 자동 검사하고, 이 항목의
+                                     중심 내용(focus_map)을 가장 많이 담은 것을 고른다. 배경만 남은 후보는 고르지 않는다
+                                     두 방식의 검사는 다르다. 결과의 policy 칸과 지시문 해시로 어느 방식의 결과인지 남는다
     삽입            insert_position  그 장면의 문단 뒤. 문단을 못 찾으면 그 항목의 끝
                     build_book       원고는 그대로 두고, 사진 · 삽화가 든 별도 결과를 만든다
                     render_markdown · render_html   사람이 볼 미리보기
@@ -63,6 +66,52 @@ def prompt_hash() -> str:
         return hashlib.sha256((il.PROMPTS / SELECT_FILE).read_bytes()).hexdigest()[:16]
     except OSError:
         return "missing"
+
+
+# ---------------------------------------------------------------- 방식 (정책) — 주제(기본) · 장면
+
+# theme  목차 주제 삽화 (chapter_theme_v1 · memoir_illust_theme) — 장 전체의 주제와 분위기. 2026-11-18 부터 기본
+# scene  장면 재현 (scene_v5 · 이 파일의 choose) — 한 장면을 원문 그대로. 기록 · 견주기용으로 남긴다
+DEFAULT_POLICY = "theme"
+POLICY_IDS = {"theme": "chapter_theme_v1", "scene": "scene_v5"}
+
+
+def _theme():
+    from . import memoir_illust_theme
+    return memoir_illust_theme
+
+
+def check_policy(policy: str) -> str:
+    if policy not in POLICY_IDS:
+        raise il.IllustError("policy", f"모르는 방식이다: {policy!r} (쓸 수 있는 값: {', '.join(POLICY_IDS)})")
+    return policy
+
+
+def policy_of(selection: dict | None) -> str:
+    """앞선 선정 결과가 어느 방식으로 만들어졌나. 방식 칸이 없는 결과는 장면 방식(이 변경 전)이다."""
+    return "theme" if (selection or {}).get("policy") == POLICY_IDS["theme"] else "scene"
+
+
+def policy_files(policy: str) -> dict:
+    """그 방식의 지시문 · 그림 양식 파일과 해시 — 결과에 남겨 다른 방식의 결과와 섞이지 않게 한다."""
+    if check_policy(policy) == "theme":
+        t = _theme()
+        return {"policy": policy, "policy_id": POLICY_IDS[policy], "select_prompt": t.SELECT_FILE,
+                "select_prompt_hash": t.prompt_hash(), "style": t.STYLE_FILE, "style_hash": t.style_hash()}
+    return {"policy": policy, "policy_id": POLICY_IDS[policy], "select_prompt": SELECT_FILE,
+            "select_prompt_hash": prompt_hash(), "style": il.STYLE_FILE, "style_hash": il.prompt_hashes().get(il.STYLE_FILE)}
+
+
+def select_system(policy: str = DEFAULT_POLICY) -> str:
+    return _theme().select_prompt() if check_policy(policy) == "theme" else select_prompt()
+
+
+def select_user(data: dict, ident, policy: str = DEFAULT_POLICY) -> str:
+    return _theme().theme_message(data, ident) if check_policy(policy) == "theme" else il.select_message(data, [ident])
+
+
+def choose_by(policy: str, data: dict, ident, reply) -> dict:
+    return _theme().choose_theme(data, ident, reply) if check_policy(policy) == "theme" else choose(data, ident, reply)
 
 
 # ---------------------------------------------------------------- 목차와 사진
@@ -658,13 +707,15 @@ def reuse_basis(data: dict, t: dict, selection: dict, image: dict) -> dict:
                            "session_turn": (tmap.get(n) or {}).get("turn")} for n in turns if n in utts},
         "anchor": anchor,                             # 그 장면의 본문 문단(공백 무시 해시) — 문단이 옮겨져도 같다
         "chapter_hash": None if anchor else t["chapter_hash"],     # 문단을 못 정했던 장면 · 실패한 항목은 항목 본문 전체로 본다
-        "select_prompt": prompt_hash(), "style": il.prompt_hashes().get(il.STYLE_FILE),
+        # 그 결과를 만든 방식의 지시문 · 양식 — 방식이 바뀌면 다른 값이 되어 앞선 그림을 새 방식의 결과로 쓰지 않는다
+        "select_prompt": policy_files(policy_of(selection))["select_prompt_hash"],
+        "style": policy_files(policy_of(selection))["style_hash"],
         "prompt": _sha(selection["prompt"]["text"]) if selected else None,
         "image": image,
     }
 
 
-def reuse_check(data: dict, t: dict, prev: dict, image: dict) -> list[dict]:
+def reuse_check(data: dict, t: dict, prev: dict, image: dict, policy: str | None = None) -> list[dict]:
     """
     앞선 실행의 선정 결과와 그림을 지금 다시 써도 되는가. 쓸 수 없는 까닭들을 돌려준다(없으면 빈 목록 — 다시 쓴다).
 
@@ -679,6 +730,10 @@ def reuse_check(data: dict, t: dict, prev: dict, image: dict) -> list[dict]:
     if not old:
         return [{"reason": "no_basis", "detail": "앞선 결과에 근거 기록이 없어 지금 것과 견줄 수 없다"}]
     now = reuse_basis(data, t, prev["selection"], image)
+    if policy is not None:
+        # 지금 돌리는 방식의 지시문 · 양식과 견준다 — 앞선 결과가 다른 방식이면 select_prompt_changed 로 남는다
+        files = policy_files(check_policy(policy))
+        now["select_prompt"], now["style"] = files["select_prompt_hash"], files["style_hash"]
     why = []
     if old["book"] != now["book"]:
         why.append({"reason": "book_changed", "detail": f"{old['book']} → {now['book']}"})

@@ -27,7 +27,8 @@ from tests._auth import AsHeader                                                
 from tests._nodb import NoDb                                                           # noqa: E402
 
 SEED = json.loads((ROOT / "eval" / "illust_book_seed_B.json").read_text(encoding="utf-8"))
-MOCK = json.loads((ROOT / "eval" / "illust_book_mock_B.json").read_text(encoding="utf-8"))
+MOCK = json.loads((ROOT / "eval" / "illust_book_mock_B.json").read_text(encoding="utf-8"))          # 장면 방식(scene) 모의 후보
+THEME = json.loads((ROOT / "eval" / "illust_theme_mock_D.json").read_text(encoding="utf-8"))["B"]  # 주제 방식(theme) 모의 계획
 ME, OTHER = "u_me", "u_other"
 MID = "m_" + "a" * 32
 PHOTO = "11111111-1111-4111-8111-111111111111"
@@ -84,16 +85,26 @@ class FakeDb:
 
 
 class Calls:
-    """가짜 장면 선정 · 그림 — 부른 장을 센다. 합성 모의 후보(eval/illust_book_mock_B.json)를 장 번호로 돌려준다."""
+    """
+    가짜 선정 · 그림 — 부른 장을 센다. 받은 자료의 모양으로 방식을 가려 그 방식의 합성 모의 응답을 돌려준다
+    (주제: eval/illust_theme_mock_D.json 의 B · 장면: eval/illust_book_mock_B.json).
+    """
 
     def __init__(self, image_fails=False):
-        self.select, self.image, self.image_fails = [], [], image_fails
+        self.select, self.image, self.image_fails, self.policies = [], [], image_fails, []
 
     def select_call(self, system, user, *, model):
-        no = json.loads(user.split("\n", 1)[1])["chapters"][0]["chapter_no"]
+        payload = json.loads(user.split("\n", 1)[1])
+        if "chapter" in payload:                                   # 주제 방식 — 장 하나의 본문 전체
+            no = payload["chapter"]["chapter_no"]
+            self.policies.append("theme")
+            reply = THEME[str(no)]
+        else:                                                      # 장면 방식 — 장 목록 · 문장 · 원문
+            no = payload["chapters"][0]["chapter_no"]
+            self.policies.append("scene")
+            reply = MOCK["by_chapter"][f"c{no:02d}"]
         self.select.append((no, model))
-        return {"text": json.dumps(MOCK["by_chapter"][f"c{no:02d}"], ensure_ascii=False), "usage": {"prompt": 10, "output": 5},
-                "model_version": model}
+        return {"text": json.dumps(reply, ensure_ascii=False), "usage": {"prompt": 10, "output": 5}, "model_version": model}
 
     def image_call(self, prompt, *, model):
         self.image.append((prompt, model))
@@ -258,3 +269,123 @@ def test_routes_show_figures_and_serve_the_image_only_to_the_owner(world):
         assert c.get(f"/api/memoirs/saved/{MID}/illustrations/1", headers={"X-User-Id": ME}).status_code == 404   # 1장은 사진이다
         light = c.get(f"/api/memoirs/saved/{MID}/illustrations", headers={"X-User-Id": ME}).json()
         assert light == body["illustrations"]
+
+
+# ---------------------------------------------------------------- 방식 (목차 주제 기본 · 장면) · 실패한 장만 새 방식으로
+
+
+def test_default_service_policy_is_chapter_theme_and_is_recorded_per_chapter(world):
+    calls = Calls()
+    doc = run(calls)
+    assert calls.policies == ["theme", "theme"]
+    sel = doc["chapters"]["2"]["select"]
+    assert sel["policy_id"] == "chapter_theme_v1" and sel["prompt_file"] == "1_목차주제_v6.md" and sel["mode"] == "THEME"
+    assert doc["settings"]["policy_id"] == "chapter_theme_v1"
+    assert all("[이 장의 주제]" in p and "watercolor" not in p for p, _ in calls.image)       # 주제 방식의 한국어 지시문
+    v = svc.view(MID, world.row["illustrations"])
+    assert v["policy"] == "chapter_theme_v1"
+    assert {c["no"]: c["policy"] for c in v["chapters"]} == {1: None, 2: "chapter_theme_v1", 3: "chapter_theme_v1"}
+
+
+def test_scene_policy_is_still_available_by_setting(world, monkeypatch):
+    monkeypatch.setenv("MEMOIR_ILLUST_POLICY", "scene")
+    calls = Calls()
+    doc = run(calls)
+    assert calls.policies == ["scene", "scene"]
+    assert doc["chapters"]["2"]["select"]["policy_id"] == "scene_v5"
+    monkeypatch.setenv("MEMOIR_ILLUST_POLICY", "story")
+    with pytest.raises(Exception):
+        svc.policy()
+
+
+def _old_production_like(world):
+    """이 변경 전의 기록처럼 — 1장은 앞선 방식으로 넣은 삽화, 2 · 3장은 앞선 방식으로 실패 (방식 칸 없음)."""
+    world.row["result"]["run"]["session_ids"] = ["s-01", "s-02", "s-03"]
+    world.sessions["s-01"]["photo_id"] = None                     # 1장도 사진 없이
+    run(Calls())
+    doc = world.row["illustrations"]
+    for k, ch in doc["chapters"].items():
+        for rec in (ch.get("select") or {}, ):
+            for f in ("policy", "policy_id", "prompt_file", "style_hash"):
+                rec.pop(f, None)
+        ch.pop("policy", None)
+    for k in ("2", "3"):
+        doc["chapters"][k].update(state=svc.FAILED, failure=["no_representative_candidate"], image=None, insertion=None)
+        doc["chapters"][k]["select"]["selection"] = {"status": "failed", "reasons": ["no_representative_candidate"]}
+    doc["status"] = svc.PARTIAL
+    doc["settings"].pop("policy_id", None)
+    return doc
+
+
+def test_reprocess_marks_only_failed_chapters_and_keeps_the_illustrated_one(world):
+    old = _old_production_like(world)
+    key1 = old["chapters"]["1"]["image"]["storage_key"]
+    assert [t["no"] for t in svc.reprocess_targets(old, "theme")] == [2, 3]
+    assert all(t["from_policy"] == "scene_v5" and t["to_policy"] == "chapter_theme_v1" for t in svc.reprocess_targets(old))
+    calls_before = dict(old["calls"])
+
+    done = asyncio.run(svc.prepare_reprocess(MID, ME, "theme"))
+    assert done["changed"] and done["calls_expected"] == {"select": 2, "image": 2}
+    doc = world.row["illustrations"]
+    assert doc["status"] == svc.RUNNING and doc["calls"] == calls_before        # 표시만 — 부르지 않았고 횟수도 그대로
+    for k in ("2", "3"):
+        ch = doc["chapters"][k]
+        assert ch["state"] == svc.PENDING and ch["policy"] == "theme"
+        assert ch["history"][0]["policy_id"] == "scene_v5" and ch["history"][0]["failure"] == ["no_representative_candidate"]
+    assert doc["chapters"]["1"]["state"] == svc.ILLUSTRATED and "history" not in doc["chapters"]["1"]
+
+    calls = Calls()
+    after = run(calls)
+    assert [no for no, _ in calls.select] == [2, 3] and len(calls.image) == 2   # 1장은 부르지 않는다
+    assert after["chapters"]["1"]["image"]["storage_key"] == key1
+    assert {k: c["state"] for k, c in after["chapters"].items()} == {"1": "illustrated", "2": "illustrated", "3": "illustrated"}
+    assert after["chapters"]["2"]["select"]["policy_id"] == "chapter_theme_v1"
+    assert after["calls"] == {"select": calls_before["select"] + 2, "image": calls_before["image"] + 2}
+    v = svc.view(MID, world.row["illustrations"])
+    assert [c["policy"] for c in v["chapters"]] == ["scene_v5", "chapter_theme_v1", "chapter_theme_v1"]   # 1장은 앞선 방식의 그림이다
+
+
+def test_reprocess_does_not_repeat_a_chapter_already_tried_with_the_new_policy(world):
+    _old_production_like(world)
+    asyncio.run(svc.prepare_reprocess(MID, ME, "theme"))
+    failing = Calls(image_fails=True)
+    run(failing)                                                   # 새 방식으로도 그림이 실패했다
+    doc = world.row["illustrations"]
+    assert {k: c["state"] for k, c in doc["chapters"].items() if k != "1"} == {"2": "failed", "3": "failed"}
+    assert svc.reprocess_targets(doc, "theme") == []               # 기록을 옮겨 다시 부르게 하지 않는다
+    again = asyncio.run(svc.prepare_reprocess(MID, ME, "theme"))
+    assert again["changed"] is False
+    calls = Calls()
+    run(calls)
+    assert calls.select == [] and calls.image == []
+
+
+def test_reprocess_leaves_photo_and_unknown_chapters_alone(world):
+    doc = svc.new_doc()
+    doc["chapters"] = {"1": {"no": 1, "state": svc.PHOTO}, "2": {"no": 2, "state": svc.UNKNOWN, "failure": ["photo_info_missing"]},
+                       "3": {"no": 3, "state": svc.HELD, "select": {"attempted_at": "x"}},
+                       "4": {"no": 4, "state": svc.FAILED, "failure": ["error_input"]}}
+    assert [t["no"] for t in svc.reprocess_targets(doc, "theme")] == [4]   # 부르기 전에 실패한 장은 어느 방식으로도 부른 적이 없다
+
+
+def test_reprocess_tool_prints_the_plan_and_only_marks(world, monkeypatch, capsys):
+    from tools import memoir_illust_reprocess as tool
+    _old_production_like(world)
+
+    async def nothing():
+        return None
+
+    async def find(store_mod, prefix):
+        assert prefix == "m_aaaa"
+        return [{"memoir_id": MID, "user_id": ME, "title": "t", "illustrations": json.dumps(world.row["illustrations"])}]
+
+    monkeypatch.setattr(store, "open_pool", nothing)
+    monkeypatch.setattr(store, "enabled", lambda: True)
+    monkeypatch.setattr(tool, "_find", find)
+    assert tool.main(["--memoir", "m_aaaa"]) == 0
+    plan = json.loads(capsys.readouterr().out)
+    assert [t["no"] for t in plan["targets"]] == [2, 3] and plan["untouched"] == [1] and plan["prepared"] is False
+    assert plan["calls_expected"] == {"select": 2, "image": 2} and world.row["illustrations"]["status"] == svc.PARTIAL
+    assert tool.main(["--memoir", "m_aaaa", "--prepare"]) == 0
+    plan = json.loads(capsys.readouterr().out)
+    assert plan["prepared"] is True and world.row["illustrations"]["status"] == svc.RUNNING

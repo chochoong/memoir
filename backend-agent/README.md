@@ -36,7 +36,8 @@ app/
     postcard.py           엽서 — 카드 작성 (엽서_v3.md) · 출처 검사 · Pillow 굽기. 닫혀도 자동으로 굽지 않는다
     memoir.py             자서전 초안 — 회차 합치기 (전역 턴) · 한 번 쓰기 · 구조 검사 (실험)
     memoir_illust_service.py  자서전 삽화 서비스 연결 — 자서전 저장 뒤 사진 없는 장마다 그림 한 장 (017 · docs/삽화_자동삽입_안내.md 10절)
-    memoir_illust_book.py 목차별 자동 삽화 — 사진 상태 · 대표 그림 고르기 · 넣을 자리 (모델을 부르지 않는다)
+    memoir_illust_theme.py    목차 주제 삽화(기본) — 장 전체의 주제 · 분위기 → 소재 · 구도 → 그림 지시문 (모델을 부르지 않는다)
+    memoir_illust_book.py 목차별 자동 삽화 — 사진 상태 · 방식(주제 · 장면) 고르기 · 넣을 자리 (모델을 부르지 않는다)
     memoir_illust.py      삽화 후보 검사 · 그림 지시문 조립 (모델을 부르지 않는다)
     roledoc.py            엽서_v3.md · 자서전_v4.md 에서 실행할 절(§2 · §5 · 역할 · §7-4 · §8-2)만 잇는다
     store.py              저장 (asyncpg). DB 가 없어도 회차는 돈다
@@ -53,6 +54,7 @@ tools/try_photo.py        사진 한 장을 실제 Gemini 로 분석해 본다 (
 tools/seed_sessions.py    자서전 시험 회차를 DB 에 넣고 엽서를 굽는다 (합성 자료 전용)
 tools/memoir_input.py     자서전 합치기 함수의 출력(모델 입력 · turn_map)을 파일로 뽑는다
 tools/memoir_illust_book.py   목차별 자동 삽화 실행기 — dry-run · 모의(비용 없음) · 승인 값이 있어야 도는 실제 호출
+tools/memoir_illust_reprocess.py  운영자 도구 — 앞선 방식으로 실패한 장만 새 방식으로 다시 처리하도록 표시 (부르지 않는다)
 eval/                     자서전 시험용 합성 seed A · B. manifest(*.ids.json)는 git 에 안 올린다
 web/                      프론트 빌드본 (있으면 서빙. git 에는 올리지 않는다)
 run.ps1                   기동 — 배포용(터널 뒤)과 -Dev 두 가지

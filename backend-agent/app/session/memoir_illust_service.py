@@ -5,7 +5,9 @@
 
     ① 입력 만들기   build_input   원고(memoir.result) · 원문(회차 기록 → memoir.merge) · 목차별 사진
     ② 목차별 사진   photo_states  사진이 놓인 장은 그 사진을 보이고 삽화를 만들지 않는다 (memoir_illust_book)
-    ③ 사진 없는 장  장면 선정 1회 → choose(자동 검사 · 대표 고르기) → 그림 1회 → 저장 → 넣을 자리
+    ③ 사진 없는 장  선정 1회 → choose_by(방식) → 그림 1회 → 저장 → 넣을 자리
+                    방식 theme(기본 · 목차 주제 삽화 chapter_theme_v1): 장 전체의 주제와 분위기 → 소재 · 구도 → 장의 첫 문단 뒤
+                    방식 scene(앞선 방식 · scene_v5): 한 장면을 원문 그대로 재현 → 그 장면의 문단 뒤
     ④ 상태 · 그림   memoir.illustrations (017) · 그림 바이트는 사진과 같은 저장소(photostore)
 
 **삽화는 자서전 작업과 따로 돈다.** 자서전 작업은 저장까지 끝나면 done 이고, 삽화가 실패해도 본문은
@@ -20,12 +22,18 @@
 멈췄으면(서버 재시작) 다음에 그 장을 실패로 남긴다 — 다시 부르지 않는다. 실패 · 보류도 저절로 다시 하지 않는다.
 그림이 이미 저장된 장은 넣을 자리만 다시 정한다. 같은 책을 두 번 돌려도 그림은 장마다 한 장이다.
 
+**방식이 바뀌면.** 장마다 그 장을 처리한 방식(policy_id) · 지시문 해시를 적는다 — 앞선 방식의 결과를 새 방식의 결과처럼 보이지 않는다.
+앞선 방식으로 실패한 장은 저절로 다시 하지 않는다. prepare_reprocess(운영자 도구 tools/memoir_illust_reprocess.py)가 실패한 장만
+「새 방식으로 다시」 로 표시하고(앞선 기록은 그 장의 history 에 남긴다), 서버가 그 책을 다음에 열 때 그 장들만 처리한다.
+새 방식으로 이미 부른 장은 다시 부르지 않는다. 사진 장 · 이미 넣은 삽화는 건드리지 않는다.
+
 **사람이 확인한 것이 아니다.** automatic: true · human_reviewed: false 로 적는다. 화면에는 「AI 가 그린 그림」 으로 보인다.
 
 설정 (환경변수 — 함수 안에서 읽는다)
 
     MEMOIR_ILLUST                auto(기본) · off.  auto 는 GEMINI_API_KEY 가 있을 때만 돈다
-    MEMOIR_ILLUST_SELECT_MODEL   장면 선정 모델 (기본 gemini-3.5-flash-lite)
+    MEMOIR_ILLUST_POLICY         theme(기본 · 목차 주제 삽화) · scene(장면 재현)
+    MEMOIR_ILLUST_SELECT_MODEL   선정 모델 (기본 gemini-3.5-flash-lite)
     MEMOIR_ILLUST_IMAGE_MODEL    그림 모델 (기본 gemini-3.1-flash-image · 1K · 5:4)
 
 로그에는 장 번호 · 상태 · 토큰만 남긴다. 원문 · 본문 · 지시문은 남기지 않는다.
@@ -67,12 +75,16 @@ def enabled() -> bool:
     return mode != "off" and bool((os.environ.get("GEMINI_API_KEY") or "").strip())
 
 
-def settings() -> dict:
+def policy() -> str:
+    """삽화를 고르는 방식 — theme(기본 · 목차 주제 삽화) · scene(장면 재현, 앞선 방식). 모르는 값이면 멈춘다."""
+    return book.check_policy(env_str("MEMOIR_ILLUST_POLICY", book.DEFAULT_POLICY).strip().lower() or book.DEFAULT_POLICY)
+
+
+def settings(pol: str | None = None) -> dict:
+    """지금 쓰는 모델 · 그림 설정과 방식(지시문 · 양식 파일과 해시). 결과에 남겨 어느 방식의 결과인지 가린다."""
     return {"select_model": env_str("MEMOIR_ILLUST_SELECT_MODEL", DEFAULT_SELECT_MODEL),
             "image_model": env_str("MEMOIR_ILLUST_IMAGE_MODEL", DEFAULT_IMAGE_MODEL),
-            "size": IMAGE_SIZE, "aspect": IMAGE_ASPECT,
-            "select_prompt": book.SELECT_FILE, "select_prompt_hash": book.prompt_hash(),
-            "style_hash": il.prompt_hashes().get(il.STYLE_FILE)}
+            "size": IMAGE_SIZE, "aspect": IMAGE_ASPECT, **book.policy_files(pol or policy())}
 
 
 def _now() -> str:
@@ -246,6 +258,65 @@ def resume_if_stalled(memoir_id: str, user_id: str, doc: dict | None) -> None:
         schedule(memoir_id, user_id)
 
 
+# ---------------------------------------------------------------- 방식이 바뀐 뒤 실패한 장만 다시 (기록은 지우지 않는다)
+
+REPROCESS_STATES = (FAILED,)
+
+
+def _policy_id_of(rec: dict) -> str:
+    """그 기록이 쓴 방식. 방식 칸이 없는 기록은 이 변경 전 — 장면 방식(scene_v5)이다."""
+    return (rec.get("select") or {}).get("policy_id") or book.POLICY_IDS["scene"]
+
+
+def reprocess_targets(doc: dict | None, pol: str | None = None) -> list[dict]:
+    """
+    방식이 바뀐 뒤 다시 처리할 장 — **실패한 장 가운데, 그 방식으로는 한 번도 부르지 않은 장**만.
+    사진 장 · 이미 넣은 삽화 · 보류 · 사진 정보를 모르는 장은 건드리지 않는다. 같은 방식으로 이미 부른 장은 다시 부르지 않는다
+    (실패 기록을 지우거나 옮겨서 「한 번만」 을 비켜 가지 않는다 — 앞선 기록은 history 에 그대로 남는다).
+    """
+    pid = book.POLICY_IDS[book.check_policy(pol or policy())]
+    out = []
+    for key, ch in sorted(((doc or {}).get("chapters") or {}).items(), key=lambda x: int(x[0])):
+        if ch.get("state") not in REPROCESS_STATES:
+            continue
+        tried = [_policy_id_of(r) for r in [ch, *(ch.get("history") or [])] if r.get("select") or r.get("image")]
+        if pid in tried:
+            continue
+        out.append({"no": int(key), "title": ch.get("title"), "state": ch.get("state"), "failure": ch.get("failure"),
+                    "from_policy": _policy_id_of(ch), "to_policy": pid})
+    return out
+
+
+async def prepare_reprocess(memoir_id: str, user_id: str, pol: str | None = None) -> dict:
+    """
+    실패한 장을 새 방식으로 다시 처리하도록 표시만 한다 — 모델 · 그림을 부르지 않는다. 앞선 기록은 그 장의 history 에 옮겨 둔다.
+    책 상태를 running 으로 두므로, 서버가 그 책을 다음에 열 때(resume_if_stalled) 그 장들만 이어서 처리한다 — 장마다 선정 1회 · 그림 1회.
+    """
+    pol = book.check_policy(pol or policy())
+    rec = await store.load_memoir(memoir_id, user_id)
+    if rec is None:
+        return {"memoir_id": memoir_id, "found": False, "targets": [], "changed": False}
+    doc = rec.get("illustrations")
+    targets = reprocess_targets(doc, pol)
+    if not targets:
+        return {"memoir_id": memoir_id, "found": True, "targets": [], "changed": False}
+    for t in targets:
+        ch = doc["chapters"][str(t["no"])]
+        archived = {**{k: ch.get(k) for k in ("state", "failure", "policy", "select", "image", "insertion", "reason")},
+                    "policy_id": t["from_policy"], "archived_at": _now(), "why": "policy_change"}
+        doc["chapters"][str(t["no"])] = {"no": ch.get("no", t["no"]), "title": ch.get("title"), "state": PENDING, "policy": pol,
+                                         "history": [*(ch.get("history") or []), archived],
+                                         "reprocess": {"from_policy": t["from_policy"], "to_policy": t["to_policy"],
+                                                       "prepared_at": _now()}}
+    doc["status"], doc["finished_at"] = RUNNING, None
+    doc.setdefault("reprocess_log", []).append({"at": _now(), "policy_id": book.POLICY_IDS[pol], "chapters": [t["no"] for t in targets]})
+    await _save(memoir_id, user_id, doc)
+    log.info("삽화 %s — %s 로 다시 처리할 장 %s (표시만 · 부르지 않았다)", memoir_id[:10], book.POLICY_IDS[pol],
+             [t["no"] for t in targets])
+    return {"memoir_id": memoir_id, "found": True, "targets": targets, "changed": True,
+            "calls_expected": {"select": len(targets), "image": len(targets)}}
+
+
 async def _guarded(memoir_id: str, user_id: str) -> None:
     try:
         await run(memoir_id, user_id)
@@ -284,7 +355,11 @@ async def run(memoir_id: str, user_id: str, *, select_call=None, image_call=None
         log.warning("삽화 %s 입력을 만들지 못했다 — %s", memoir_id[:10], doc["error"])
         return doc
     doc["status"], doc["error"], doc["unplaced_photos"] = RUNNING, None, unplaced
-    cfg = doc.get("settings") or settings()
+    # 새로 부르는 장은 지금 설정(방식 · 지시문)으로 한다. 앞선 설정은 지우지 않고 settings_history 에 남긴다 — 장마다 쓴 방식은
+    # 그 장의 select 기록(policy · prompt_hash)에 따로 있다
+    cfg = settings()
+    if doc.get("settings") and doc["settings"] != cfg:
+        doc.setdefault("settings_history", []).append({**doc["settings"], "replaced_at": _now()})
     doc["settings"] = cfg
     for it in items:
         key = str(it["no"])
@@ -340,8 +415,13 @@ async def _chapter(data, it, ch, doc, memoir_id, user_id, cfg, select_call, imag
         if sel_rec.get("attempted_at"):
             ch.update(state=FAILED, failure=["select_attempt_without_result"])
             return
-        system, user = book.select_prompt(), il.select_message(data, [it["ident"]])
-        ch["select"] = sel_rec = {"attempted_at": _now(), "model": cfg["select_model"], "prompt_hash": cfg["select_prompt_hash"]}
+        pol = ch.get("policy") or cfg["policy"]
+        files = book.policy_files(pol)
+        system, user = book.select_system(pol), book.select_user(data, it["ident"], pol)
+        ch["policy"] = pol
+        ch["select"] = sel_rec = {"attempted_at": _now(), "model": cfg["select_model"], "policy": pol,
+                                  "policy_id": files["policy_id"], "prompt_file": files["select_prompt"],
+                                  "prompt_hash": files["select_prompt_hash"], "style_hash": files["style_hash"]}
         ch["state"] = "selecting"
         doc["calls"]["select"] += 1
         await _save(memoir_id, user_id, doc)                 # 부르기 전에 적는다 — 멈춰도 다시 부르지 않는다
@@ -355,7 +435,7 @@ async def _chapter(data, it, ch, doc, memoir_id, user_id, cfg, select_call, imag
         text = reply["text"] if isinstance(reply, dict) else str(reply)
         sel_rec.update(finished_at=_now(), usage=(reply or {}).get("usage") if isinstance(reply, dict) else None,
                        model_version=(reply or {}).get("model_version") if isinstance(reply, dict) else None)
-        selection = await asyncio.to_thread(book.choose, data, it["ident"], text)
+        selection = await asyncio.to_thread(book.choose_by, pol, data, it["ident"], text)
         sel_rec["selection"] = selection
     sel_rec["status"] = selection["status"]
     if selection["status"] != "selected":
@@ -436,8 +516,11 @@ def view(memoir_id: str, doc: dict | None) -> dict:
                          "after_paragraph": (ch.get("insertion") or {}).get("after_paragraph"),
                          "width": img.get("width"), "height": img.get("height"), "ai_generated": True,
                          "caption": "AI가 그린 그림", "scene_title": (ch.get("select") or {}).get("scene_title")})
-        chapters.append({"no": int(key), "state": ch.get("state"), "figures": figs, "failure": ch.get("failure")})
-    return {"status": doc.get("status"), "automatic": True, "human_reviewed": False, "chapters": chapters}
+        chapters.append({"no": int(key), "state": ch.get("state"), "figures": figs, "failure": ch.get("failure"),
+                         # 그 장의 그림을 고른 방식 — 앞선 방식의 결과를 새 방식의 결과처럼 보이지 않게 함께 낸다
+                         "policy": _policy_id_of(ch) if ch.get("select") else None})
+    return {"status": doc.get("status"), "automatic": True, "human_reviewed": False,
+            "policy": (doc.get("settings") or {}).get("policy_id") or book.POLICY_IDS["scene"], "chapters": chapters}
 
 
 def image_record(doc: dict | None, no: str) -> dict | None:
