@@ -169,6 +169,21 @@
     loop();
   }
 
+  /* ── 함께 보는 사진 — 시작 전에 고른 사진을 질문 옆에 작게 ── */
+  let photoUrl = null;
+  function showPhoto(url, used) {
+    document.getElementById('interview-photo')?.remove();
+    if (photoUrl && photoUrl !== url) URL.revokeObjectURL(photoUrl);
+    photoUrl = url;
+    if (!used) return;
+    const words = $q('.studio-words'); if (!words) return;
+    const fig = document.createElement('figure');
+    fig.id = 'interview-photo'; fig.className = 'interview-photo';
+    fig.innerHTML = url ? '<img alt="이야기와 함께 보는 사진"><figcaption>함께 보는 사진</figcaption>' : '<figcaption>사진을 함께 보냈어요</figcaption>';
+    if (url) fig.querySelector('img').src = url;
+    words.parentElement.insertBefore(fig, words);
+  }
+
   /* ── 시작 ── */
   async function start(opts) {
     if (starting || live()) return live();
@@ -217,8 +232,12 @@
         topic, elder_id: elderId,
         voice: window.MemoirVoice ? window.MemoirVoice.get() : 'default', // 질문을 읽는 목소리 (srv-voice)
       };
+      // 시작 전에 고른 사진 (start-photo) — 올리는 중이면 잠깐 기다린다
+      const photoId = CONFIG.photo?.sendIdOnCreate === false ? null : await window.MemoirStartPhoto?.takeId?.();
+      if (photoId) body.photo_id = photoId;
       const closedLeft = await closeLeftover();
       const s = await api.start(body);
+      showPhoto(photoId ? window.MemoirStartPhoto.release() : null, !!photoId);
       sessionId = s.session_id;
       liveKeep(sessionId);
       if (closedLeft) toast('하던 이야기는 저장해 두었어요. 엽서보기의 「엽서로 만들기 전의 이야기」에서 볼 수 있어요.');

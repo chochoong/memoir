@@ -165,7 +165,8 @@
     if (typeof topic !== 'string' || !topic.trim()) return failure('topic_required');
     const t = topic.trim().slice(0, 60);
     const voice = window.MemoirVoice ? window.MemoirVoice.get() : 'default'; // 링크에 저장 → 어르신이 시작할 때 이 목소리
-    try { return issued(await api.linkCreate({elder_id: elderId, title: t, seed: t, topic: t, voice})); }
+    const photoId = await window.MemoirStartPhoto?.takeId?.(); // 시작 전에 고른 사진 → 어르신 화면에 함께 (LinkReq.photo_id)
+    try { const r = issued(await api.linkCreate({elder_id: elderId, title: t, seed: t, topic: t, voice, ...(photoId ? {photo_id: photoId} : {})})); if (photoId) window.MemoirStartPhoto.clear(); return r; }
     catch (e) { return failure(e.status === 404 ? 'elder_not_found' : 'server'); }
   }
   async function revoke(id) {

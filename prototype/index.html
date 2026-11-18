@@ -3081,6 +3081,87 @@ body.pre-login .side-nav [data-locked]::after {
   .sc-make { justify-self: stretch; justify-content: center; }
 }
 
+/* ── 주제 고르기 화면: 기존 칸은 그대로, 오른쪽에 「사진 한 장」 칸만 새로 ──
+   왼쪽: (누구 ·) 주제 · 목소리 · 시작 버튼 (예전 그대로) / 오른쪽: 사진 넣기 */
+.sc-fields { display: grid; gap: 22px; min-width: 0; align-content: start; }
+.sc-side { min-width: 0; }
+.sc-make { min-height: 60px; font-size: 18px; }
+@media (min-width: 900px) {
+  .sc-screen:is([data-screen="start-self"], [data-screen="invite-setup"]):has(.sc-split) { max-width: 1080px; }
+  .sc-split { grid-template-columns: minmax(0, 1fr) 340px; gap: 0 34px; align-items: stretch; padding: 30px 32px; }
+  .sc-split .sc-side { border-left: 1px solid var(--line); padding-left: 32px; }
+  .sc-side .sc-photo { height: 100%; align-content: start; }
+  .sc-side .sp-drop { width: 100%; min-height: 240px; grid-template-columns: 1fr; grid-template-rows: auto auto auto; justify-items: center; align-content: center; text-align: center; row-gap: 6px; }
+  .sc-side .sp-drop .icon { grid-row: auto; width: 46px; height: 46px; margin-bottom: 4px; }
+  .sc-side .sp-card { width: 100%; flex-direction: column; align-items: stretch; }
+  .sc-side .sp-thumb { width: 100%; height: 230px; }
+  .sc-side .sp-thumb img { object-fit: contain; background: var(--soft); }
+}
+/* 한 줄로 쌓는 화면(휴대폰 · 가운데 정렬판): 사진 칸이 시작 버튼보다 위에 오게 */
+@media (max-width: 899px) {
+  .sc-split .sc-fields { display: contents; }
+  .sc-split .sc-side { order: 1; }
+  .sc-split :is(.sc-make, .sc-fine) { order: 2; }
+  .sc-make { justify-self: stretch; width: 100%; justify-content: center; }
+}
+html.sc-centered .sc-split .sc-fields { display: contents; }
+html.sc-centered .sc-split .sc-side { order: 1; }
+html.sc-centered .sc-split :is(.sc-make, .sc-fine) { order: 2; }
+
+/* ── 비교용 가운데 정렬판 (?layout=center) — 한 줄로 쌓고 모든 것을 가운데로 ── */
+html.sc-centered .sc-screen:is([data-screen="start-self"], [data-screen="invite-setup"]) { max-width: 760px; margin-inline: auto; text-align: center; }
+html.sc-centered .sc-screen:is([data-screen="start-self"], [data-screen="invite-setup"]) .sc-intro { margin-inline: auto; }
+html.sc-centered .sc-split { grid-template-columns: 1fr; padding: 32px 30px 28px; row-gap: 26px; }
+html.sc-centered .sc-split .sc-side { border-left: 0; padding-left: 0; }
+html.sc-centered .sc-invite-form legend { justify-content: center; width: 100%; }
+html.sc-centered .sc-chips { justify-content: center; }
+html.sc-centered :is(.sc-manage, .sc-name, .sc-make) { justify-self: center; }
+html.sc-centered .sc-name { text-align: left; width: min(100%, 360px); }
+html.sc-centered .sc-make { width: min(100%, 420px); justify-content: center; }
+html.sc-centered .sc-links { justify-content: center; }
+
+/* ── 사진 한 장 (start-photo.js) — 시작 전에 고르는 칸 ── */
+.sc-optional { font-size: 14px; font-weight: 500; color: var(--muted); margin-left: 4px; }
+.sp-drop {
+  display: grid; grid-template-columns: auto 1fr; grid-template-rows: auto auto; column-gap: 14px; align-items: center; text-align: left;
+  width: min(100%, 420px); min-height: 78px; padding: 14px 18px; border: 2px dashed #cdb7be; border-radius: 14px;
+  background: #fff; color: var(--ink); cursor: pointer; font: inherit;
+}
+.sp-drop:hover, .sc-photo.sp-over .sp-drop { background: #f8eef1; border-color: #8a465e; }
+.sp-drop:focus-visible { outline: 3px solid var(--burgundy); outline-offset: 2px; }
+.sp-drop .icon { grid-row: 1 / 3; width: 34px; height: 34px; color: var(--burgundy); fill: none; stroke: currentColor; stroke-width: 1.7; }
+.sp-drop-main { font-size: 17px; font-weight: 700; color: #7a3448; }
+.sp-drop-sub { font-size: 14px; color: var(--muted); }
+.sp-card { display: flex; gap: 16px; align-items: center; width: min(100%, 460px); padding: 12px; border: 1.5px solid var(--line); border-radius: 14px; background: #fff; }
+.sp-thumb { flex: none; width: 104px; height: 104px; border-radius: 10px; overflow: hidden; background: var(--soft); display: grid; place-items: center; }
+.sp-thumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.sp-thumb span { font-size: 12px; line-height: 1.4; color: var(--muted); padding: 6px; text-align: center; }
+.sp-meta { min-width: 0; display: grid; gap: 6px; text-align: left; }
+.sp-name { font-size: 15px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sp-st { font-size: 14px; color: var(--muted); display: inline-flex; align-items: center; gap: 6px; }
+.sp-st:empty { display: none; }
+.sp-st-ok { color: #2f6b45; font-weight: 600; }
+.sp-st-ok::before { content: "✓"; }
+.sp-st-err { color: #a33; }
+.sp-spin { width: 14px; height: 14px; border: 2px solid #d6bfc7; border-top-color: var(--burgundy); border-radius: 50%; animation: sp-spin .8s linear infinite; }
+@keyframes sp-spin { to { transform: rotate(360deg); } }
+.sp-acts { display: flex; flex-wrap: wrap; gap: 8px; }
+body:not(.ebook-mode) .sp-acts .text-button { min-height: 38px; padding: 4px 12px; font-size: 15px; }
+html.sc-centered .sp-drop, html.sc-centered .sp-card { margin-inline: auto; }
+@media (max-width: 760px) { .sp-drop, .sp-card { width: 100%; } .sp-thumb { width: 84px; height: 84px; } }
+
+/* 인터뷰 화면 — 함께 보는 사진 (질문 위에 작게) */
+.interview-photo { margin: 0 0 14px; display: inline-flex; flex-direction: column; gap: 6px; }
+.interview-photo img { display: block; max-width: min(260px, 70vw); max-height: 200px; border-radius: 12px; border: 6px solid #fff; box-shadow: 0 6px 18px -8px #3a2a2a55; transform: rotate(-1.5deg); }
+.interview-photo figcaption { font-size: 14px; color: var(--muted); }
+
+/* ── 「어떻게 시작할까요?」(누구의 이야기를 담을지 고르는 화면) 한정 — 가운데 정렬 ── */
+.sc-screen[data-screen="start"] { margin-inline: auto; text-align: center; }
+.sc-screen[data-screen="start"] .sc-intro { margin-inline: auto; max-width: none; } /* PC 에서 한 줄 (좁은 화면은 저절로 접힌다) */
+.sc-screen[data-screen="start"] .sc-choice { align-items: center; text-align: center; }
+.sc-screen[data-screen="start"] .sc-choice em { align-self: center; }
+.sc-screen[data-screen="start"] .sc-back { margin-inline: auto; }
+
 </style>
   <style data-from="radio-mic.css">
 /* 8. 인터뷰 마이크 — 충격 방지 거치대에 매단 스튜디오 콘덴서 마이크로 다시 그림(radio-art.js). 색은 라디오 그림과 같은 갈색 · 놋쇠 계열 */
@@ -3863,12 +3944,30 @@ body:not(.ebook-mode) .button.outline {
   background: #fff; border: 1.5px solid #b48f9b; color: #6b2c3d;
 }
 body:not(.ebook-mode) .button.outline:hover { background: #f8eef1; border-color: #8a465e; }
-/* 4-2. 글자 버튼 — 누를 수 있는 글자임이 보이게: 굵게 + 밑줄 */
-body:not(.ebook-mode) .text-button {
-  font-size: 16px; font-weight: 600; color: #7a3448;
-  text-decoration: underline; text-decoration-thickness: 1.5px; text-underline-offset: 5px; text-decoration-color: #d3b3bd;
+/* 4-2. 글자로만 있던 버튼 — 버튼임이 보이도록 흰 상자 + 테두리 (외부 피드백 2차) */
+body:not(.ebook-mode) :is(.text-button, .mlg-secondary) {
+  display: inline-flex; align-items: center; justify-content: center; gap: 6px;
+  min-height: 44px; padding: 8px 16px; border: 1.5px solid #d6bfc7; border-radius: 12px;
+  background: #fff; color: #7a3448; font-size: 16px; font-weight: 600; line-height: 1.3;
+  text-decoration: none; cursor: pointer;
 }
-body:not(.ebook-mode) .text-button:hover { text-decoration-color: currentColor; }
+body:not(.ebook-mode) :is(.text-button, .mlg-secondary):hover { background: #f8eef1; border-color: #8a465e; }
+body:not(.ebook-mode) :is(.text-button, .mlg-secondary) > span { text-decoration: none; }
+/* 제목 옆 「변경」 · 머리말 「이용 안내」 — 같은 상자, 조금 작게 */
+body:not(.ebook-mode) :is(.role-change, .help-button) {
+  display: inline-flex; align-items: center; gap: 5px; min-height: 38px; padding: 4px 12px;
+  border: 1.5px solid #d6bfc7; border-radius: 10px; background: #fff; color: #7a3448; font-weight: 600;
+}
+body:not(.ebook-mode) .role-change > span { text-decoration: none; }
+body:not(.ebook-mode) :is(.role-change, .help-button):hover { background: #f8eef1; border-color: #8a465e; }
+/* 엽서 갈래 거르기(어린 시절 · 가족 …) — 고르지 않은 것도 칸이 보이게 */
+body:not(.ebook-mode) .filter-group button:not([aria-pressed="true"]) { border: 1.5px solid var(--line); background: #fff; }
+/* 「엽서로 만들기 전의 이야기」 펼치기 — 누르는 줄임이 보이게 */
+body:not(.ebook-mode) #pending-stories-summary { display: inline-flex; align-items: center; gap: 8px; padding: 8px 16px; border: 1.5px solid #d6bfc7; border-radius: 12px; background: #fff; cursor: pointer; }
+body:not(.ebook-mode) #pending-stories-summary:hover { background: #f8eef1; }
+/* 4-5. 핵심 버튼은 더 크게 — 이야기 시작 · 자서전 만들기 · 보관하기 */
+body:not(.ebook-mode) .hero-cta { min-height: 66px; font-size: 21px; padding: 0 34px; border-radius: 16px; }
+body:not(.ebook-mode) :is(#choose-style, #generate-draft, #save-volume) { min-height: 60px; font-size: 18px; padding: 0 28px; }
 /* 4-3. 누를 수 없는 버튼 — 회색 바탕 · 회색 글자 (반투명으로만 흐리게 하지 않는다) */
 body:not(.ebook-mode) :is(.button, .srv-mini-btn):disabled,
 body:not(.ebook-mode) :is(.button, .srv-mini-btn)[aria-disabled="true"] {
@@ -3883,6 +3982,7 @@ body:not(.ebook-mode) .filter-group button { font-size: 15px; }
 body:not(.ebook-mode) .pending-stories .button.compact { font-size: 15px; }
 /* 책장 아래 작은 표시(작은 책 01 · 이야기 4개 · 날짜) */
 body:not(.ebook-mode) :is(.ml-volume-label, .ml-book-meta) { font-size: 14px; }
+body:not(.ebook-mode) .help-button { width: max-content; flex: none; white-space: nowrap; gap: 6px; padding: 4px 14px !important; min-height: 40px; }
 
 </style>
 </head>
@@ -3895,7 +3995,7 @@ body:not(.ebook-mode) :is(.ml-volume-label, .ml-book-meta) { font-size: 14px; }
     <symbol id="i-pen" viewBox="0 0 24 24"><path d="m16 3 5 5-12 12-6 1 1-6ZM13 6l5 5M3 21h18"/></symbol>
     <symbol id="i-arrow" viewBox="0 0 24 24"><path d="M4 12h16m-6-6 6 6-6 6"/></symbol>
     <symbol id="i-chevron" viewBox="0 0 24 24"><path d="m9 5 7 7-7 7"/></symbol>
-    <symbol id="i-plus" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></symbol>
+    <symbol id="i-plus" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></symbol><symbol id="i-photo" viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="14" rx="2.5"/><circle cx="8.5" cy="10" r="1.6"/><path d="m21 16-5-5-8 8"/></symbol>
     <symbol id="i-check" viewBox="0 0 24 24"><path d="m5 12 4 4L19 6"/></symbol>
     <symbol id="i-leaf" viewBox="0 0 24 24"><path d="M20 3c1 10-3 17-10 17a7 7 0 0 1-7-7C3 6 10 2 20 3ZM5 19 16 8M9 15v-5M9 15h5"/></symbol>
     <symbol id="i-letter" viewBox="0 0 24 24"><rect x="2" y="4" width="20" height="16" rx="2"/><path d="m2 6 10 8L22 6"/></symbol>
@@ -3930,8 +4030,8 @@ body:not(.ebook-mode) :is(.ml-volume-label, .ml-book-meta) { font-size: 14px; }
 
       <section data-screen="home" class="screen" aria-labelledby="home-heading">
         <div class="hero panel">
-          <div class="hero-copy"><div class="eyebrow">당신의 삶, 그 자체로 소중한 이야기</div><h1 id="home-heading" tabindex="-1">기억은 이야기가 되고,<br> <em>이야기는 책이 됩니다.</em></h1><p class="hero-description">사진 한 장, 마음속 기억 하나.<br>편안하게 들려주시면 한 권의 자서전으로 엮어드려요.</p><button class="button primary hero-cta" data-go="interview"><svg class="icon"><use href="#i-pen"/></svg>이야기 시작하기<svg class="icon end-icon"><use href="#i-arrow"/></svg></button><p class="gentle-note">잘 말하려 애쓰지 않아도 괜찮아요.</p></div>
-          <div class="hero-art"><span class="art-halo"></span><img src="data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSI2NDAiIGhlaWdodD0iNDgwIiB2aWV3Qm94PSIwIDAgNjQwIDQ4MCIgZmlsbD0ibm9uZSIgcm9sZT0iaW1nIiBhcmlhLWxhYmVsbGVkYnk9ImJvb2stdGl0bGUgYm9vay1kZXNjcmlwdGlvbiI+CiAgPHRpdGxlIGlkPSJib29rLXRpdGxlIj7sgqzsp4Tqs7wg7J207JW86riw6rCAIOuLtOq4tCDsnpDshJzsoIQ8L3RpdGxlPgogIDxkZXNjIGlkPSJib29rLWRlc2NyaXB0aW9uIj7tjrzss5Dsp4Qg7YGs66a87IOJIOyxhSDsnITroZwg7Iuc6rOo7KeRIOyCrOynhOqzvCDqsIDsobHsnZgg67mb67CU656cIOyCrOynhCDrkZAg7J6l7J20IO2PrOqwnOyguCDsnojsirXri4jri6QuPC9kZXNjPgogIDxkZWZzPgogICAgPGxpbmVhckdyYWRpZW50IGlkPSJsYW5kc2NhcGUtd2FzaCIgeDE9IjMzNyIgeTE9IjExMCIgeDI9IjMyNSIgeTI9IjQwNyIgZ3JhZGllbnRVbml0cz0idXNlclNwYWNlT25Vc2UiPgogICAgICA8c3RvcCBzdG9wLWNvbG9yPSIjRjVFNERBIiBzdG9wLW9wYWNpdHk9Ii43Ii8+CiAgICAgIDxzdG9wIG9mZnNldD0iMSIgc3RvcC1jb2xvcj0iI0Y1RTREQSIgc3RvcC1vcGFjaXR5PSIuMTIiLz4KICAgIDwvbGluZWFyR3JhZGllbnQ+CiAgICA8bGluZWFyR3JhZGllbnQgaWQ9ImxlZnQtcGFwZXIiIHgxPSIxNDgiIHkxPSIyMjUiIHgyPSIzMzgiIHkyPSIzNjUiIGdyYWRpZW50VW5pdHM9InVzZXJTcGFjZU9uVXNlIj4KICAgICAgPHN0b3Agc3RvcC1jb2xvcj0iI0ZGRkFGMyIvPgogICAgICA8c3RvcCBvZmZzZXQ9Ii42NyIgc3RvcC1jb2xvcj0iI0Y5RjBFNCIvPgogICAgICA8c3RvcCBvZmZzZXQ9IjEiIHN0b3AtY29sb3I9IiNFNUQ2QzEiLz4KICAgIDwvbGluZWFyR3JhZGllbnQ+CiAgICA8bGluZWFyR3JhZGllbnQgaWQ9InJpZ2h0LXBhcGVyIiB4MT0iMzM3IiB5MT0iMzE3IiB4Mj0iNTY4IiB5Mj0iMjgyIiBncmFkaWVudFVuaXRzPSJ1c2VyU3BhY2VPblVzZSI+CiAgICAgIDxzdG9wIHN0b3AtY29sb3I9IiNERUNFQjkiLz4KICAgICAgPHN0b3Agb2Zmc2V0PSIuMTQiIHN0b3AtY29sb3I9IiNGOEVFREYiLz4KICAgICAgPHN0b3Agb2Zmc2V0PSIuNTUiIHN0b3AtY29sb3I9IiNGRkZBRjMiLz4KICAgICAgPHN0b3Agb2Zmc2V0PSIxIiBzdG9wLWNvbG9yPSIjRjdFQ0RDIi8+CiAgICA8L2xpbmVhckdyYWRpZW50PgogICAgPGxpbmVhckdyYWRpZW50IGlkPSJwYWdlLWVkZ2UiIHgxPSIzMjAiIHkxPSIzMzAiIHgyPSIzMjUiIHkyPSI0MDAiIGdyYWRpZW50VW5pdHM9InVzZXJTcGFjZU9uVXNlIj4KICAgICAgPHN0b3Agc3RvcC1jb2xvcj0iI0U5RERDQyIvPgogICAgICA8c3RvcCBvZmZzZXQ9IjEiIHN0b3AtY29sb3I9IiNEMUJEQTYiLz4KICAgIDwvbGluZWFyR3JhZGllbnQ+CiAgICA8bGluZWFyR3JhZGllbnQgaWQ9InBob3RvLXBhcGVyIiB4MT0iMyIgeTE9IjAiIHgyPSIxNjAiIHkyPSIyMDUiIGdyYWRpZW50VW5pdHM9InVzZXJTcGFjZU9uVXNlIj4KICAgICAgPHN0b3Agc3RvcC1jb2xvcj0iI0ZGRkFGMyIvPgogICAgICA8c3RvcCBvZmZzZXQ9IjEiIHN0b3AtY29sb3I9IiNGMEU0RDMiLz4KICAgIDwvbGluZWFyR3JhZGllbnQ+CiAgICA8bGluZWFyR3JhZGllbnQgaWQ9ImhvdXNlLXNreSIgeDE9Ijg1IiB5MT0iMTgiIHgyPSI4NSIgeTI9IjE1MyIgZ3JhZGllbnRVbml0cz0idXNlclNwYWNlT25Vc2UiPgogICAgICA8c3RvcCBzdG9wLWNvbG9yPSIjRDhDQ0I3Ii8+CiAgICAgIDxzdG9wIG9mZnNldD0iMSIgc3RvcC1jb2xvcj0iI0JDQUU5MSIvPgogICAgPC9saW5lYXJHcmFkaWVudD4KICAgIDxsaW5lYXJHcmFkaWVudCBpZD0icG9ydHJhaXQtd2FsbCIgeDE9IjcxIiB5MT0iMTciIHgyPSI3MSIgeTI9IjE0NyIgZ3JhZGllbnRVbml0cz0idXNlclNwYWNlT25Vc2UiPgogICAgICA8c3RvcCBzdG9wLWNvbG9yPSIjQzJCMjk1Ii8+CiAgICAgIDxzdG9wIG9mZnNldD0iMSIgc3RvcC1jb2xvcj0iI0E4OTU3OCIvPgogICAgPC9saW5lYXJHcmFkaWVudD4KICAgIDxyYWRpYWxHcmFkaWVudCBpZD0icGhvdG8tdmlnbmV0dGUiIGN4PSIuNSIgY3k9Ii4zOCIgcj0iLjc1Ij4KICAgICAgPHN0b3Agb2Zmc2V0PSIuMzUiIHN0b3AtY29sb3I9IiM3OTY1NTIiIHN0b3Atb3BhY2l0eT0iMCIvPgogICAgICA8c3RvcCBvZmZzZXQ9IjEiIHN0b3AtY29sb3I9IiM1MTQyMzUiIHN0b3Atb3BhY2l0eT0iLjI2Ii8+CiAgICA8L3JhZGlhbEdyYWRpZW50PgogICAgPGZpbHRlciBpZD0iZ3JvdW5kLXNoYWRvdyIgeD0iLTIwJSIgeT0iLTE1MCUiIHdpZHRoPSIxNDAlIiBoZWlnaHQ9IjQwMCUiPgogICAgICA8ZmVHYXVzc2lhbkJsdXIgc3RkRGV2aWF0aW9uPSIxMyIvPgogICAgPC9maWx0ZXI+CiAgICA8ZmlsdGVyIGlkPSJwaG90by1zaGFkb3ciIHg9Ii0yNSUiIHk9Ii0yMCUiIHdpZHRoPSIxNjAlIiBoZWlnaHQ9IjE2MCUiIGNvbG9yLWludGVycG9sYXRpb24tZmlsdGVycz0ic1JHQiI+CiAgICAgIDxmZURyb3BTaGFkb3cgZHg9IjIiIGR5PSI5IiBzdGREZXZpYXRpb249IjEwIiBmbG9vZC1jb2xvcj0iIzc5NjU1MiIgZmxvb2Qtb3BhY2l0eT0iLjE3Ii8+CiAgICA8L2ZpbHRlcj4KICAgIDxmaWx0ZXIgaWQ9ImJvb2stc2hhZG93IiB4PSItMTAlIiB5PSItMTUlIiB3aWR0aD0iMTMwJSIgaGVpZ2h0PSIxNTAlIiBjb2xvci1pbnRlcnBvbGF0aW9uLWZpbHRlcnM9InNSR0IiPgogICAgICA8ZmVEcm9wU2hhZG93IGR4PSIwIiBkeT0iMTAiIHN0ZERldmlhdGlvbj0iOSIgZmxvb2QtY29sb3I9IiM3OTY1NTIiIGZsb29kLW9wYWNpdHk9Ii4xNSIvPgogICAgPC9maWx0ZXI+CiAgICA8ZmlsdGVyIGlkPSJwYXBlci1ncmFpbiIgeD0iMCIgeT0iMCIgd2lkdGg9IjEwMCUiIGhlaWdodD0iMTAwJSIgY29sb3ItaW50ZXJwb2xhdGlvbi1maWx0ZXJzPSJzUkdCIj4KICAgICAgPGZlVHVyYnVsZW5jZSB0eXBlPSJmcmFjdGFsTm9pc2UiIGJhc2VGcmVxdWVuY3k9Ii43NSIgbnVtT2N0YXZlcz0iMiIgc2VlZD0iMTciIHJlc3VsdD0iZ3JhaW4iLz4KICAgICAgPGZlQ29sb3JNYXRyaXggaW49ImdyYWluIiB0eXBlPSJtYXRyaXgiIHZhbHVlcz0iMCAwIDAgMCAuNDcgIDAgMCAwIDAgLjM5ICAwIDAgMCAwIC4zMSAgMCAwIDAgLjA3IDAiIHJlc3VsdD0idGludGVkLWdyYWluIi8+CiAgICAgIDxmZUNvbXBvc2l0ZSBpbj0idGludGVkLWdyYWluIiBpbjI9IlNvdXJjZUFscGhhIiBvcGVyYXRvcj0iaW4iIHJlc3VsdD0ibWFza2VkLWdyYWluIi8+CiAgICAgIDxmZUJsZW5kIGluPSJTb3VyY2VHcmFwaGljIiBpbjI9Im1hc2tlZC1ncmFpbiIgbW9kZT0ibXVsdGlwbHkiLz4KICAgIDwvZmlsdGVyPgogICAgPGNsaXBQYXRoIGlkPSJob3VzZS13aW5kb3ciPjxyZWN0IHg9IjEyIiB5PSIxMyIgd2lkdGg9IjE2MiIgaGVpZ2h0PSIxNDMiIHJ4PSIxIi8+PC9jbGlwUGF0aD4KICAgIDxjbGlwUGF0aCBpZD0icG9ydHJhaXQtd2luZG93Ij48cmVjdCB4PSIxMiIgeT0iMTMiIHdpZHRoPSIxMjkiIGhlaWdodD0iMTQ0IiByeD0iMSIvPjwvY2xpcFBhdGg+CiAgICA8Y2xpcFBhdGggaWQ9ImxlZnQtcGFnZS1jbGlwIj48cGF0aCBkPSJNNzcgMjQ2QzE0OSAyMTkgMjI3IDIxMCAyOTEgMjIxQzMwOCAyMjQgMzIyIDIzNCAzMzIgMjQ4TDMzOCAzODBDMzIxIDM2NSAzMDQgMzU3IDI4NiAzNTVDMjE4IDM0OSAxNTYgMzUxIDk0IDMzNUw3NyAyNDZaIi8+PC9jbGlwUGF0aD4KICAgIDxjbGlwUGF0aCBpZD0icmlnaHQtcGFnZS1jbGlwIj48cGF0aCBkPSJNMzMyIDI0OEMzNDcgMjMwIDM2MyAyMjAgMzg1IDIxOUM0MzkgMjE2IDUwMCAyMjkgNTUxIDI0OEw1NzQgMzMzQzUwNyAzNDUgNDMzIDM1NSAzNjYgMzY3QzM1NCAzNjkgMzQ2IDM3NCAzMzggMzgwTDMzMiAyNDhaIi8+PC9jbGlwUGF0aD4KICA8L2RlZnM+CgogIDwhLS0gQSBzb2Z0IGxhbmRzY2FwZSBzaXRzIGluc2lkZSB0aGUgb3RoZXJ3aXNlIHRyYW5zcGFyZW50IGNhbnZhcy4gLS0+CiAgPHBhdGggZD0iTTg3IDI3MEM1NiAyMTggODkgMTYwIDE1OSAxNDdDMjEzIDEzNiAyMjUgODggMjg4IDkyQzM0MyA5NiAzNjkgMTMyIDQyNiAxMjFDNDg4IDEwOCA1NTMgMTU2IDU1OCAyMTVDNTYzIDI2OSA2MDAgMjkyIDU2NyAzMzdDNTI5IDM5MCA0NDYgMzkxIDM1NSA0MDVDMjYzIDQxOSAxNzcgNDA4IDEyMCAzNzBDODMgMzQ1IDEwMyAyOTkgODcgMjcwWiIgZmlsbD0idXJsKCNsYW5kc2NhcGUtd2FzaCkiLz4KICA8cGF0aCBkPSJNNzYgMjY4TDE1MSAxOTlDMTYxIDE5MCAxNzAgMTkxIDE4MCAyMDFMMjMyIDI1MUwyODggMTkwQzMwMSAxNzYgMzExIDE3OCAzMjUgMTkwTDQxMCAyNjRMNDYzIDIyMkM0NzIgMjE0IDQ4MSAyMTQgNDkxIDIyM0w1NjggMjg3TDc2IDMwMlYyNjhaIiBmaWxsPSIjRENDQkI5IiBvcGFjaXR5PSIuNCIvPgogIDxwYXRoIGQ9Ik04MyAyOThDMTQyIDI2NyAxODIgMjczIDIzOCAyODVDMzAxIDI5OCAzMjYgMjQ0IDM5MCAyNTlDNDQyIDI3MSA0OTQgMjUzIDU2MyAyODhMNTczIDMzNkw5MCAzNTJMODMgMjk4WiIgZmlsbD0iI0QwQkJBNiIgb3BhY2l0eT0iLjI1Ii8+CiAgPHBhdGggZD0iTTExMiAxODhDMTI3IDE4MyAxMzggMTgyIDE1NCAxODZNNDY5IDE2NEM0ODMgMTYwIDQ5NyAxNjIgNTA4IDE2OCIgc3Ryb2tlPSIjQjU5RDg3IiBzdHJva2Utb3BhY2l0eT0iLjM1IiBzdHJva2Utd2lkdGg9IjEuNSIgc3Ryb2tlLWxpbmVjYXA9InJvdW5kIi8+CiAgPGNpcmNsZSBjeD0iNDg3IiBjeT0iMTEyIiByPSIyMyIgZmlsbD0iI0U1QzdCNSIgb3BhY2l0eT0iLjQ1Ii8+CiAgPGVsbGlwc2UgY3g9IjMzMCIgY3k9IjQwMyIgcng9IjIyNCIgcnk9IjE0IiBmaWxsPSIjNzk2NTUyIiBvcGFjaXR5PSIuMTQiIGZpbHRlcj0idXJsKCNncm91bmQtc2hhZG93KSIvPgoKICA8IS0tIFZpbnRhZ2UgcnVyYWwgcGhvdG9ncmFwaC4gLS0+CiAgPGcgdHJhbnNmb3JtPSJ0cmFuc2xhdGUoMTMyIDc4KSByb3RhdGUoLTEyIDkzIDEwMykiIGZpbHRlcj0idXJsKCNwaG90by1zaGFkb3cpIj4KICAgIDxyZWN0IHdpZHRoPSIxODYiIGhlaWdodD0iMjAzIiByeD0iMyIgZmlsbD0idXJsKCNwaG90by1wYXBlcikiLz4KICAgIDxyZWN0IHg9Ii41IiB5PSIuNSIgd2lkdGg9IjE4NSIgaGVpZ2h0PSIyMDIiIHJ4PSIyLjUiIHN0cm9rZT0iI0Q4QzdCMCIgc3Ryb2tlLW9wYWNpdHk9Ii42Ii8+CiAgICA8ZyBjbGlwLXBhdGg9InVybCgjaG91c2Utd2luZG93KSIgZmlsdGVyPSJ1cmwoI3BhcGVyLWdyYWluKSI+CiAgICAgIDxyZWN0IHg9IjEyIiB5PSIxMyIgd2lkdGg9IjE2MiIgaGVpZ2h0PSIxNDMiIGZpbGw9InVybCgjaG91c2Utc2t5KSIvPgogICAgICA8Y2lyY2xlIGN4PSIxMzkiIGN5PSI0NCIgcj0iMTYiIGZpbGw9IiNFNURBQzEiLz4KICAgICAgPHBhdGggZD0iTTYgOTZMNTEgNTJMODkgODhMMTIyIDU5TDE4MiAxMDBWMTU2SDZWOTZaIiBmaWxsPSIjQUFBNDg5Ii8+CiAgICAgIDxwYXRoIGQ9Ik0zIDExNUM0NCA5MSA2NiA5NSAxMDMgMTA1QzEzMSAxMTIgMTQ5IDkzIDE4MCA5OFYxNThIM1YxMTVaIiBmaWxsPSIjOEU5MTc1Ii8+CiAgICAgIDxwYXRoIGQ9Ik0xMiAxMzNDNTcgMTEzIDEwNyAxMTQgMTc0IDEzMVYxNTZIMTJWMTMzWiIgZmlsbD0iI0I5QUE4NyIvPgogICAgICA8cGF0aCBkPSJNODkgMTE2QzkyIDEyOSAxMDYgMTM2IDEzNCAxNTZIMTAyQzg3IDE0MyA3OSAxMzAgODEgMTE5TDg5IDExNloiIGZpbGw9IiNEN0M2QTQiLz4KICAgICAgPHBhdGggZD0iTTQ5IDkxTDkzIDc1TDEzMiA5M1YxMjJMNDkgMTE5VjkxWiIgZmlsbD0iI0Q5QzhBNSIvPgogICAgICA8cGF0aCBkPSJNNDIgOTNMODggNjdMMTM5IDkxTDEzNSA5N0w4OCA4MEw0NiA5OEw0MiA5M1oiIGZpbGw9IiM3OTY1NTIiLz4KICAgICAgPHBhdGggZD0iTTQ5IDk3TDg4IDgyTDg4IDEyMEw0OSAxMTlWOTdaIiBmaWxsPSIjQzhCNTkwIi8+CiAgICAgIDxwYXRoIGQ9Ik04OCA4MkwxMzIgOTdWMTIyTDg4IDEyMFY4MloiIGZpbGw9IiNFMkQyQjEiLz4KICAgICAgPHBhdGggZD0iTTU3IDEwMUw3MiA5N1YxMTBMNTcgMTEzVjEwMVpNOTkgOTlMMTEyIDEwM1YxMTNMOTkgMTExVjk5WiIgZmlsbD0iIzg1NzU1QSIvPgogICAgICA8cGF0aCBkPSJNNzggMTAxTDg2IDk4VjEyMEw3OCAxMjBWMTAxWiIgZmlsbD0iIzZFNjA0QyIvPgogICAgICA8cGF0aCBkPSJNNjEgMTAwVjExMk0xMDUgMTAxVjExMiIgc3Ryb2tlPSIjQzVCNzk1IiBzdHJva2Utd2lkdGg9IjEuMiIvPgogICAgICA8cGF0aCBkPSJNMTQ0IDExMVY3Nk0zNSAxMTlWODciIHN0cm9rZT0iIzc5NjU1MiIgc3Ryb2tlLXdpZHRoPSIyLjUiIHN0cm9rZS1saW5lY2FwPSJyb3VuZCIvPgogICAgICA8cGF0aCBkPSJNMTQyIDY0QzEzNCA3MCAxMzMgODAgMTQwIDg1QzEzMiA4OSAxMzcgMTAwIDE0NSA5OEMxNTUgMTAxIDE2MSA5MSAxNTQgODVDMTYxIDc3IDE1NCA2NSAxNDggNjlDMTQ3IDY0IDE0NSA2MiAxNDIgNjRaIiBmaWxsPSIjNzc3RDY1Ii8+CiAgICAgIDxwYXRoIGQ9Ik0zNCA3NkMyNyA3NyAyNiA4NCAyOSA4OEMyMiA5MiAyOCAxMDAgMzUgOTlDNDQgMTAzIDUwIDkzIDQ0IDg4QzQ4IDgyIDQxIDc1IDM4IDc5QzM4IDc3IDM2IDc2IDM0IDc2WiIgZmlsbD0iIzg1ODY2QSIvPgogICAgICA8cGF0aCBkPSJNMTkgMTM0TDQ0IDEyOE0xNDkgMTMyTDE3MCAxMzZNMjQgMTQ0TDU5IDEzOE0xMzcgMTQ2TDE2MSAxNTEiIHN0cm9rZT0iIzhEODk2RCIgc3Ryb2tlLW9wYWNpdHk9Ii43IiBzdHJva2Utd2lkdGg9IjEuNSIgc3Ryb2tlLWxpbmVjYXA9InJvdW5kIi8+CiAgICAgIDxyZWN0IHg9IjEyIiB5PSIxMyIgd2lkdGg9IjE2MiIgaGVpZ2h0PSIxNDMiIGZpbGw9InVybCgjcGhvdG8tdmlnbmV0dGUpIi8+CiAgICAgIDxwYXRoIGQ9Ik0yMSAyNEwxNjMgMjFNMTcgMTQ3TDM2IDE1MCIgc3Ryb2tlPSIjRkZGQUYzIiBzdHJva2Utb3BhY2l0eT0iLjE1IiBzdHJva2Utd2lkdGg9IjEuMiIvPgogICAgPC9nPgogICAgPHBhdGggZD0iTTU3IDE3OEM3NyAxODAgMTA0IDE3OSAxMjkgMTc2IiBzdHJva2U9IiNCQUE2OEMiIHN0cm9rZS1vcGFjaXR5PSIuNCIgc3Ryb2tlLXdpZHRoPSIxLjUiIHN0cm9rZS1saW5lY2FwPSJyb3VuZCIvPgogIDwvZz4KCiAgPCEtLSBGYW1pbHkgc2lsaG91ZXR0ZXMga2VlcCB0aGUgbWVtb3J5IHBlcnNvbmFsIHdpdGhvdXQgZGVwaWN0aW5nIGEgcmVhbCBwZXJzb24uIC0tPgogIDxnIHRyYW5zZm9ybT0idHJhbnNsYXRlKDM1NyA4Mykgcm90YXRlKDExIDc2LjUgOTgpIiBmaWx0ZXI9InVybCgjcGhvdG8tc2hhZG93KSI+CiAgICA8cmVjdCB3aWR0aD0iMTUzIiBoZWlnaHQ9IjE5MyIgcng9IjMiIGZpbGw9InVybCgjcGhvdG8tcGFwZXIpIi8+CiAgICA8cmVjdCB4PSIuNSIgeT0iLjUiIHdpZHRoPSIxNTIiIGhlaWdodD0iMTkyIiByeD0iMi41IiBzdHJva2U9IiNEOEM3QjAiIHN0cm9rZS1vcGFjaXR5PSIuNjUiLz4KICAgIDxnIGNsaXAtcGF0aD0idXJsKCNwb3J0cmFpdC13aW5kb3cpIiBmaWx0ZXI9InVybCgjcGFwZXItZ3JhaW4pIj4KICAgICAgPHJlY3QgeD0iMTIiIHk9IjEzIiB3aWR0aD0iMTI5IiBoZWlnaHQ9IjE0NCIgZmlsbD0idXJsKCNwb3J0cmFpdC13YWxsKSIvPgogICAgICA8cGF0aCBkPSJNMjAgMTNWMTU3TTEyOCAxM1YxNTciIHN0cm9rZT0iI0UzRDVCQyIgc3Ryb2tlLW9wYWNpdHk9Ii4zIiBzdHJva2Utd2lkdGg9IjciLz4KICAgICAgPHBhdGggZD0iTTMwIDE4QzQ3IDM4IDQ4IDYxIDM2IDg3TTExOSAxOEMxMDIgMzggMTA1IDYwIDExOSA4NiIgc3Ryb2tlPSIjOUI4OTZFIiBzdHJva2Utb3BhY2l0eT0iLjM1IiBzdHJva2Utd2lkdGg9IjEuMiIvPgogICAgICA8cGF0aCBkPSJNMjAgMTU4TDIzIDExMUMyNCA5NiAzMyA4OCA0OSA4NkM2NiA4NiA3OCA5OCA3OSAxMTRMNzkgMTU4SDIwWiIgZmlsbD0iIzc0NjU1MiIvPgogICAgICA8cGF0aCBkPSJNMzMgOTJMNDggMTA3TDYyIDkxTDU2IDg2SDM5TDMzIDkyWiIgZmlsbD0iI0UwQ0ZBRCIvPgogICAgICA8cGF0aCBkPSJNNDYgMTA1TDUwIDEwNUw1NCAxMzdMNDggMTQzTDQzIDEzNUw0NiAxMDVaIiBmaWxsPSIjNTQ0QTNEIi8+CiAgICAgIDxwYXRoIGQ9Ik0zMiA5NEwzOSAxMTdMNDYgMTA4TTY0IDk0TDU4IDExN0w1MCAxMDgiIHN0cm9rZT0iIzlCODg2RCIgc3Ryb2tlLXdpZHRoPSIxLjMiIHN0cm9rZS1saW5lY2FwPSJyb3VuZCIvPgogICAgICA8cGF0aCBkPSJNMzMgNjJDMzMgNDkgMzkgNDEgNTAgNDFDNjIgNDEgNjggNDkgNjcgNjNMNjUgNzdDNjMgODcgNTYgOTIgNDkgOTBDNDEgODkgMzUgODMgMzQgNzNMMzMgNjJaIiBmaWxsPSIjRDFCOTk1Ii8+CiAgICAgIDxwYXRoIGQ9Ik0zMyA2NUMyOCA0NiAzOSAzNSA1MSAzNkM2NSAzNyA3MiA0NyA2NyA2Nkw2MyA1M0M1NCA1NCA0NiA1MSA0MiA0OUM0MCA1NCAzNyA1NyAzNCA1OEwzMyA2NVoiIGZpbGw9IiM2NTU2NDMiLz4KICAgICAgPHBhdGggZD0iTTkwIDg2QzEwNiA4NSAxMTkgOTUgMTIyIDExMUwxMjggMTU3SDY5TDc0IDExMUM3NSA5NyA3OSA5MCA5MCA4NloiIGZpbGw9IiM5QTgwNjQiLz4KICAgICAgPHBhdGggZD0iTTkwIDg3TDk5IDEwMEwxMDkgODgiIGZpbGw9IiNEQkM4QTciLz4KICAgICAgPHBhdGggZD0iTTc5IDYxQzc5IDQ4IDg1IDM5IDk3IDM5QzExMSAzOCAxMTggNDkgMTE4IDY2TDExOSA4NkMxMTAgOTEgODggOTIgNzggODVMNzkgNjFaIiBmaWxsPSIjNjc1ODQzIi8+CiAgICAgIDxwYXRoIGQ9Ik04NSA1OUM4NSA1MiA5MCA0NyA5OCA0N0MxMDcgNDcgMTExIDU1IDExMSA2NUwxMTAgNzVDMTA5IDg1IDEwMyA5MSA5NyA5MEM4OSA4OSA4NSA4MiA4NCA3NEw4NSA1OVoiIGZpbGw9IiNEQkMzQTEiLz4KICAgICAgPHBhdGggZD0iTTgzIDY2QzgyIDUyIDg3IDQzIDk4IDQzQzEwOCA0MyAxMTQgNTEgMTEyIDY1QzEwNiA2MiAxMDAgNTUgOTkgNTJDOTUgNTggODkgNjAgODMgNjFWNjZaIiBmaWxsPSIjNkY1RTQ4Ii8+CiAgICAgIDxwYXRoIGQ9Ik04NiAxMDFDOTIgMTExIDEwNCAxMTIgMTExIDEwMSIgc3Ryb2tlPSIjQzhBRjhCIiBzdHJva2Utd2lkdGg9IjEuNSIvPgogICAgICA8cGF0aCBkPSJNNDkgMTU4TDUyIDEzMkM1MyAxMjEgNjEgMTE1IDc0IDExNUM4OCAxMTUgOTUgMTIzIDk4IDEzNkwxMDEgMTU4SDQ5WiIgZmlsbD0iI0Q2QzA5QiIvPgogICAgICA8cGF0aCBkPSJNNjYgMTE5TDc0IDEzMEw4MiAxMTkiIGZpbGw9IiNGMERGQzEiLz4KICAgICAgPHBhdGggZD0iTTYxIDEwMkM2MSA5MiA2NyA4NiA3NSA4NkM4NSA4NiA5MCA5NCA4OSAxMDRMODggMTEyQzg2IDEyMCA4MSAxMjQgNzUgMTIzQzY4IDEyMiA2MyAxMTcgNjIgMTEwTDYxIDEwMloiIGZpbGw9IiNEQ0M0QTEiLz4KICAgICAgPHBhdGggZD0iTTYxIDEwNUM1NyA5NSA2MyA4MyA3NSA4M0M4NyA4MyA5MyA5MyA4OSAxMDVMODYgOTdDODAgOTkgNzUgOTYgNzEgOTNDNjkgOTggNjUgMTAwIDYyIDk5TDYxIDEwNVoiIGZpbGw9IiM3NzYzNEMiLz4KICAgICAgPHBhdGggZD0iTTM1IDExOUM0MCAxMzEgNDYgMTM2IDU3IDEzNk0xMTUgMTIwQzEwOCAxMzQgMTAxIDEzNyA5MiAxMzUiIHN0cm9rZT0iI0I5QTE3RiIgc3Ryb2tlLXdpZHRoPSI4IiBzdHJva2UtbGluZWNhcD0icm91bmQiLz4KICAgICAgPHBhdGggZD0iTTY5IDEzN1YxNTdNODAgMTM3VjE1NyIgc3Ryb2tlPSIjQkRBMzdFIiBzdHJva2Utd2lkdGg9IjEuMiIvPgogICAgICA8Y2lyY2xlIGN4PSI3NSIgY3k9IjEzOSIgcj0iMS4zIiBmaWxsPSIjOUQ4NTY2Ii8+CiAgICAgIDxjaXJjbGUgY3g9Ijc1IiBjeT0iMTQ5IiByPSIxLjMiIGZpbGw9IiM5RDg1NjYiLz4KICAgICAgPHJlY3QgeD0iMTIiIHk9IjEzIiB3aWR0aD0iMTI5IiBoZWlnaHQ9IjE0NCIgZmlsbD0idXJsKCNwaG90by12aWduZXR0ZSkiLz4KICAgICAgPHBhdGggZD0iTTE3IDI1TDEzNCAyMU0xMzEgMjlMMTMzIDU1IiBzdHJva2U9IiNGRkZBRjMiIHN0cm9rZS1vcGFjaXR5PSIuMTciLz4KICAgIDwvZz4KICAgIDxwYXRoIGQ9Ik01MyAxNzZDNjggMTc0IDg0IDE3NCAxMDEgMTc2IiBzdHJva2U9IiNCQUE2OEMiIHN0cm9rZS1vcGFjaXR5PSIuNCIgc3Ryb2tlLXdpZHRoPSIxLjUiIHN0cm9rZS1saW5lY2FwPSJyb3VuZCIvPgogIDwvZz4KCiAgPCEtLSBCb3VuZCBjb3ZlciwgaW5kaXZpZHVhbCBwYWdlIGVkZ2VzLCBhbmQgdGhlIGN1cnZlZCBvcGVuIHNwcmVhZC4gLS0+CiAgPGcgZmlsdGVyPSJ1cmwoI2Jvb2stc2hhZG93KSI+CiAgICA8cGF0aCBkPSJNNjYgMjU4TDI4NSAyMjRDMzA3IDIyNCAzMjQgMjM5IDMzNCAyNTNDMzQ4IDIzNSAzNjggMjI1IDM4OCAyMjdMNTU5IDI1OEw1OTAgMzUwQzU5MiAzNTYgNTg5IDM2MyA1ODIgMzY1TDM1NiA0MDdDMzQ4IDQwOSAzNDAgNDA3IDMzMyA0MDJDMzI0IDQwNCAzMTYgNDA0IDMwNyA0MDFMODAgMzY1Qzc0IDM2NCA3MCAzNjEgNjkgMzU1TDU2IDI4MEM1NCAyNjggNTYgMjYxIDY2IDI1OFoiIGZpbGw9IiM3NDNCNDkiLz4KICAgIDxwYXRoIGQ9Ik03MSAzNDVMMzA2IDM4NEMzMTggMzg2IDMyNyAzOTAgMzM2IDM5NkMzNDMgMzkwIDM1MSAzODUgMzY1IDM4M0w1ODMgMzQ0IiBzdHJva2U9IiNBRjdCODIiIHN0cm9rZS13aWR0aD0iMiIgc3Ryb2tlLWxpbmVjYXA9InJvdW5kIi8+CiAgICA8cGF0aCBkPSJNNzYgMjUyTDI5MSAyMjVDMzA3IDIyNyAzMjIgMjM5IDMzMiAyNTNDMzQ3IDIzNCAzNjcgMjI1IDM4OCAyMjVMNTU2IDI1M0w1ODEgMzQyTDM2NSAzODNDMzUzIDM4NSAzNDUgMzg5IDMzNyAzOTVDMzI3IDM4NyAzMTcgMzgyIDMwNCAzODFMODQgMzUxTDc2IDI1MloiIGZpbGw9InVybCgjcGFnZS1lZGdlKSIvPgogICAgPHBhdGggZD0iTTg0IDM0MEMxNTggMzU2IDIyNCAzNTcgMjkxIDM2NkMzMTEgMzY5IDMyMyAzNzUgMzM3IDM4N0MzNTAgMzc4IDM2MCAzNzQgMzc0IDM3Mkw1NzYgMzM1TTg2IDM0NkMxNjEgMzYwIDIyNiAzNjMgMjk0IDM3MkMzMTMgMzc1IDMyNCAzODAgMzM3IDM5MEMzNTAgMzgyIDM2MCAzNzkgMzc0IDM3N0w1NzggMzQwIiBzdHJva2U9IiNCOEE1OEQiIHN0cm9rZS1vcGFjaXR5PSIuNTgiIHN0cm9rZS13aWR0aD0iMS4yIi8+CiAgICA8cGF0aCBkPSJNODAgMjQ5QzE1MSAyMjIgMjI2IDIxNCAyOTEgMjI0QzMwOCAyMjcgMzIxIDIzNyAzMzIgMjUxTDMzOCAzODVDMzIwIDM3MCAzMDQgMzYyIDI4NiAzNjBDMjE2IDM1NCAxNTUgMzU3IDg5IDM0MEw4MCAyNDlaIiBmaWxsPSIjRjhFREREIi8+CiAgICA8cGF0aCBkPSJNMzMyIDI1MUMzNDcgMjMzIDM2NCAyMjQgMzg1IDIyM0M0MzkgMjIwIDUwMyAyMzMgNTU0IDI1Mkw1NzcgMzM4QzUwOCAzNTAgNDM0IDM2MCAzNjYgMzcyQzM1NCAzNzQgMzQ1IDM3OSAzMzggMzg1TDMzMiAyNTFaIiBmaWxsPSIjRUZFMUNEIi8+CiAgICA8cGF0aCBkPSJNNzcgMjQ2QzE0OSAyMTkgMjI3IDIxMCAyOTEgMjIxQzMwOCAyMjQgMzIyIDIzNCAzMzIgMjQ4TDMzOCAzODBDMzIxIDM2NSAzMDQgMzU3IDI4NiAzNTVDMjE4IDM0OSAxNTYgMzUxIDk0IDMzNUw3NyAyNDZaIiBmaWxsPSJ1cmwoI2xlZnQtcGFwZXIpIi8+CiAgICA8cGF0aCBkPSJNMzMyIDI0OEMzNDcgMjMwIDM2MyAyMjAgMzg1IDIxOUM0MzkgMjE2IDUwMCAyMjkgNTUxIDI0OEw1NzQgMzMzQzUwNyAzNDUgNDMzIDM1NSAzNjYgMzY3QzM1NCAzNjkgMzQ2IDM3NCAzMzggMzgwTDMzMiAyNDhaIiBmaWxsPSJ1cmwoI3JpZ2h0LXBhcGVyKSIvPgogICAgPHBhdGggZD0iTTc3IDI0NkMxNDkgMjE5IDIyNyAyMTAgMjkxIDIyMUMzMDggMjI0IDMyMiAyMzQgMzMyIDI0OEMzNDcgMjMwIDM2MyAyMjAgMzg1IDIxOUM0MzkgMjE2IDUwMCAyMjkgNTUxIDI0OCIgc3Ryb2tlPSIjRkZGQUYzIiBzdHJva2Utd2lkdGg9IjIiLz4KICAgIDxnIGNsaXAtcGF0aD0idXJsKCNsZWZ0LXBhZ2UtY2xpcCkiIHN0cm9rZT0iI0JCQTg4RSIgc3Ryb2tlLWxpbmVjYXA9InJvdW5kIj4KICAgICAgPHBhdGggZD0iTTExOCAyNjhDMTcxIDI1MiAyMjAgMjUwIDI2OSAyNTYiIHN0cm9rZS13aWR0aD0iMiIgb3BhY2l0eT0iLjciLz4KICAgICAgPHBhdGggZD0iTTEyMCAyNzlDMTczIDI2NSAyMjUgMjY0IDI4NSAyNzNNMTIyIDI5MEMxNzggMjc4IDIzMSAyNzkgMjg3IDI4N00xMjUgMzAxQzE4MSAyOTIgMjM1IDI5MSAyODkgMzAxTTEyNyAzMTJDMTc5IDMwNSAyMjQgMzA2IDI2OSAzMTMiIG9wYWNpdHk9Ii40NiIgc3Ryb2tlLXdpZHRoPSIxLjMiLz4KICAgICAgPHBhdGggZD0iTTEzMyAzMjhDMTU2IDMyNiAxNzYgMzI2IDE5OCAzMjgiIG9wYWNpdHk9Ii4zOCIgc3Ryb2tlLXdpZHRoPSIxLjIiLz4KICAgIDwvZz4KICAgIDxnIGNsaXAtcGF0aD0idXJsKCNyaWdodC1wYWdlLWNsaXApIiBzdHJva2U9IiNCQkE4OEUiIHN0cm9rZS1saW5lY2FwPSJyb3VuZCI+CiAgICAgIDxwYXRoIGQ9Ik0zNzkgMjU5QzQyMiAyNTEgNDY5IDI1NiA1MTQgMjY4IiBzdHJva2Utd2lkdGg9IjIiIG9wYWNpdHk9Ii43Ii8+CiAgICAgIDxwYXRoIGQ9Ik0zNzYgMjczQzQyMiAyNjYgNDcwIDI3MCA1MjIgMjgyTTM3NyAyODVDNDI1IDI3OSA0NzQgMjgyIDUyNSAyOTVNMzc4IDI5N0M0MjYgMjkxIDQ3OCAyOTMgNTMwIDMwNk0zODAgMzA5QzQyMCAzMDUgNDY0IDMwNiA1MDEgMzEzIiBvcGFjaXR5PSIuNDYiIHN0cm9rZS13aWR0aD0iMS4zIi8+CiAgICAgIDxwYXRoIGQ9Ik0zODYgMzM0TDQ0NyAzMjgiIG9wYWNpdHk9Ii4zOCIgc3Ryb2tlLXdpZHRoPSIxLjIiLz4KICAgIDwvZz4KICAgIDxwYXRoIGQ9Ik0zMzIgMjQ4QzMzNCAyODYgMzM2IDMzMyAzMzggMzgwIiBzdHJva2U9IiNBNzhFNzEiIHN0cm9rZS1vcGFjaXR5PSIuNDUiIHN0cm9rZS13aWR0aD0iMS40Ii8+CiAgICA8cGF0aCBkPSJNMzM2IDI0OEMzNDAgMjc5IDM0MiAzMjIgMzQyIDM3MCIgc3Ryb2tlPSIjRkZGQUYzIiBzdHJva2Utb3BhY2l0eT0iLjciIHN0cm9rZS13aWR0aD0iMS4yIi8+CiAgICA8cGF0aCBkPSJNNDUzIDM1MUw0NjcgMzQ4TDQ3NiAzOThMNDY4IDM5NEw0NjAgNDAyTDQ1MyAzNTFaIiBmaWxsPSIjNzQzQjQ5Ii8+CiAgICA8cGF0aCBkPSJNNDU4IDM1Mkw0NjYgMzkxIiBzdHJva2U9IiNBNTZGNzkiIHN0cm9rZS13aWR0aD0iMSIvPgogIDwvZz4KCiAgPCEtLSBTbWFsbCBib3RhbmljYWwgbWFya3Mgc29mdGVuIHRoZSBjb21wb3NpdGlvbiB3aXRob3V0IG9ic2N1cmluZyB0aGUgYm9vay4gLS0+CiAgPGcgc3Ryb2tlPSIjQTg5MDc4IiBzdHJva2UtbGluZWNhcD0icm91bmQiIHN0cm9rZS1saW5lam9pbj0icm91bmQiPgogICAgPHBhdGggZD0iTTgzIDM4MEM3MyAzNjkgNjUgMzU1IDYzIDM0MCIgc3Ryb2tlLXdpZHRoPSIxLjUiLz4KICAgIDxwYXRoIGQ9Ik02OSAzNTlDNTcgMzU5IDQ5IDM1MSA0OSAzNDNDNjEgMzQzIDY5IDM1MCA2OSAzNTlaIiBmaWxsPSIjQzlCMzlCIiBzdHJva2U9Im5vbmUiLz4KICAgIDxwYXRoIGQ9Ik03NSAzNjlDNzQgMzU2IDc5IDM0NyA4NiAzNDNDOTIgMzU0IDg2IDM2NCA3NSAzNjlaIiBmaWxsPSIjRDlDNkFGIiBzdHJva2U9Im5vbmUiLz4KICAgIDxwYXRoIGQ9Ik01NTggMzkzQzU3MSAzODMgNTgxIDM2OCA1ODQgMzUzIiBzdHJva2Utd2lkdGg9IjEuNSIvPgogICAgPHBhdGggZD0iTTU3MyAzNzlDNTc0IDM2NyA1NjggMzYxIDU2MSAzNTlDNTU3IDM2OSA1NjIgMzc3IDU3MyAzNzlaIiBmaWxsPSIjRDlDNkFGIiBzdHJva2U9Im5vbmUiLz4KICAgIDxwYXRoIGQ9Ik01NzkgMzY4QzU5MCAzNzAgNTk4IDM2MiA2MDAgMzU1QzU4OSAzNTMgNTgyIDM1OSA1NzkgMzY4WiIgZmlsbD0iI0M5QjM5QiIgc3Ryb2tlPSJub25lIi8+CiAgPC9nPgogIDxwYXRoIGQ9Ik0xMDggMTI4VjE0ME0xMDIgMTM0SDExNE01NTIgMTkxVjIwMU01NDcgMTk2SDU1NyIgc3Ryb2tlPSIjQjY4RDgyIiBzdHJva2Utd2lkdGg9IjEuNSIgc3Ryb2tlLWxpbmVjYXA9InJvdW5kIiBvcGFjaXR5PSIuNjUiLz4KICA8Y2lyY2xlIGN4PSI5NiIgY3k9IjMwOSIgcj0iMiIgZmlsbD0iI0I2OEQ4MiIgb3BhY2l0eT0iLjU1Ii8+CiAgPGNpcmNsZSBjeD0iNTQxIiBjeT0iMTI5IiByPSIyLjUiIGZpbGw9IiNDNkEyOEUiIG9wYWNpdHk9Ii42NSIvPgo8L3N2Zz4K" alt="펼친 자서전과 오래된 사진을 담은 따뜻한 삽화"><div class="art-caption"><span>한 장의 기억이</span><strong>한 권의 선물이 되도록.</strong></div></div>
+          <div class="hero-copy"><div class="eyebrow">당신의 삶, 그 자체로 소중한 이야기</div><h1 id="home-heading" tabindex="-1">기억은 이야기가 되고,<br> <em>이야기는 책이 됩니다.</em></h1><p class="hero-description">사진 한 장, 마음속 기억 하나.<br>편안하게 들려주시면 한 권의 자서전으로 엮어드려요.</p><button class="button primary hero-cta" data-go="interview"><svg class="icon"><use href="#i-pen"/></svg>이야기 시작하기<svg class="icon end-icon"><use href="#i-arrow"/></svg></button></div>
+          <div class="hero-art"><span class="art-halo"></span><img src="data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSI2NDAiIGhlaWdodD0iNDgwIiB2aWV3Qm94PSIwIDAgNjQwIDQ4MCIgZmlsbD0ibm9uZSIgcm9sZT0iaW1nIiBhcmlhLWxhYmVsbGVkYnk9ImJvb2stdGl0bGUgYm9vay1kZXNjcmlwdGlvbiI+CiAgPHRpdGxlIGlkPSJib29rLXRpdGxlIj7sgqzsp4Tqs7wg7J207JW86riw6rCAIOuLtOq4tCDsnpDshJzsoIQ8L3RpdGxlPgogIDxkZXNjIGlkPSJib29rLWRlc2NyaXB0aW9uIj7tjrzss5Dsp4Qg7YGs66a87IOJIOyxhSDsnITroZwg7Iuc6rOo7KeRIOyCrOynhOqzvCDqsIDsobHsnZgg67mb67CU656cIOyCrOynhCDrkZAg7J6l7J20IO2PrOqwnOyguCDsnojsirXri4jri6QuPC9kZXNjPgogIDxkZWZzPgogICAgPGxpbmVhckdyYWRpZW50IGlkPSJsYW5kc2NhcGUtd2FzaCIgeDE9IjMzNyIgeTE9IjExMCIgeDI9IjMyNSIgeTI9IjQwNyIgZ3JhZGllbnRVbml0cz0idXNlclNwYWNlT25Vc2UiPgogICAgICA8c3RvcCBzdG9wLWNvbG9yPSIjRjVFNERBIiBzdG9wLW9wYWNpdHk9Ii43Ii8+CiAgICAgIDxzdG9wIG9mZnNldD0iMSIgc3RvcC1jb2xvcj0iI0Y1RTREQSIgc3RvcC1vcGFjaXR5PSIuMTIiLz4KICAgIDwvbGluZWFyR3JhZGllbnQ+CiAgICA8bGluZWFyR3JhZGllbnQgaWQ9ImxlZnQtcGFwZXIiIHgxPSIxNDgiIHkxPSIyMjUiIHgyPSIzMzgiIHkyPSIzNjUiIGdyYWRpZW50VW5pdHM9InVzZXJTcGFjZU9uVXNlIj4KICAgICAgPHN0b3Agc3RvcC1jb2xvcj0iI0ZGRkFGMyIvPgogICAgICA8c3RvcCBvZmZzZXQ9Ii42NyIgc3RvcC1jb2xvcj0iI0Y5RjBFNCIvPgogICAgICA8c3RvcCBvZmZzZXQ9IjEiIHN0b3AtY29sb3I9IiNFNUQ2QzEiLz4KICAgIDwvbGluZWFyR3JhZGllbnQ+CiAgICA8bGluZWFyR3JhZGllbnQgaWQ9InJpZ2h0LXBhcGVyIiB4MT0iMzM3IiB5MT0iMzE3IiB4Mj0iNTY4IiB5Mj0iMjgyIiBncmFkaWVudFVuaXRzPSJ1c2VyU3BhY2VPblVzZSI+CiAgICAgIDxzdG9wIHN0b3AtY29sb3I9IiNERUNFQjkiLz4KICAgICAgPHN0b3Agb2Zmc2V0PSIuMTQiIHN0b3AtY29sb3I9IiNGOEVFREYiLz4KICAgICAgPHN0b3Agb2Zmc2V0PSIuNTUiIHN0b3AtY29sb3I9IiNGRkZBRjMiLz4KICAgICAgPHN0b3Agb2Zmc2V0PSIxIiBzdG9wLWNvbG9yPSIjRjdFQ0RDIi8+CiAgICA8L2xpbmVhckdyYWRpZW50PgogICAgPGxpbmVhckdyYWRpZW50IGlkPSJwYWdlLWVkZ2UiIHgxPSIzMjAiIHkxPSIzMzAiIHgyPSIzMjUiIHkyPSI0MDAiIGdyYWRpZW50VW5pdHM9InVzZXJTcGFjZU9uVXNlIj4KICAgICAgPHN0b3Agc3RvcC1jb2xvcj0iI0U5RERDQyIvPgogICAgICA8c3RvcCBvZmZzZXQ9IjEiIHN0b3AtY29sb3I9IiNEMUJEQTYiLz4KICAgIDwvbGluZWFyR3JhZGllbnQ+CiAgICA8bGluZWFyR3JhZGllbnQgaWQ9InBob3RvLXBhcGVyIiB4MT0iMyIgeTE9IjAiIHgyPSIxNjAiIHkyPSIyMDUiIGdyYWRpZW50VW5pdHM9InVzZXJTcGFjZU9uVXNlIj4KICAgICAgPHN0b3Agc3RvcC1jb2xvcj0iI0ZGRkFGMyIvPgogICAgICA8c3RvcCBvZmZzZXQ9IjEiIHN0b3AtY29sb3I9IiNGMEU0RDMiLz4KICAgIDwvbGluZWFyR3JhZGllbnQ+CiAgICA8bGluZWFyR3JhZGllbnQgaWQ9ImhvdXNlLXNreSIgeDE9Ijg1IiB5MT0iMTgiIHgyPSI4NSIgeTI9IjE1MyIgZ3JhZGllbnRVbml0cz0idXNlclNwYWNlT25Vc2UiPgogICAgICA8c3RvcCBzdG9wLWNvbG9yPSIjRDhDQ0I3Ii8+CiAgICAgIDxzdG9wIG9mZnNldD0iMSIgc3RvcC1jb2xvcj0iI0JDQUU5MSIvPgogICAgPC9saW5lYXJHcmFkaWVudD4KICAgIDxsaW5lYXJHcmFkaWVudCBpZD0icG9ydHJhaXQtd2FsbCIgeDE9IjcxIiB5MT0iMTciIHgyPSI3MSIgeTI9IjE0NyIgZ3JhZGllbnRVbml0cz0idXNlclNwYWNlT25Vc2UiPgogICAgICA8c3RvcCBzdG9wLWNvbG9yPSIjQzJCMjk1Ii8+CiAgICAgIDxzdG9wIG9mZnNldD0iMSIgc3RvcC1jb2xvcj0iI0E4OTU3OCIvPgogICAgPC9saW5lYXJHcmFkaWVudD4KICAgIDxyYWRpYWxHcmFkaWVudCBpZD0icGhvdG8tdmlnbmV0dGUiIGN4PSIuNSIgY3k9Ii4zOCIgcj0iLjc1Ij4KICAgICAgPHN0b3Agb2Zmc2V0PSIuMzUiIHN0b3AtY29sb3I9IiM3OTY1NTIiIHN0b3Atb3BhY2l0eT0iMCIvPgogICAgICA8c3RvcCBvZmZzZXQ9IjEiIHN0b3AtY29sb3I9IiM1MTQyMzUiIHN0b3Atb3BhY2l0eT0iLjI2Ii8+CiAgICA8L3JhZGlhbEdyYWRpZW50PgogICAgPGZpbHRlciBpZD0iZ3JvdW5kLXNoYWRvdyIgeD0iLTIwJSIgeT0iLTE1MCUiIHdpZHRoPSIxNDAlIiBoZWlnaHQ9IjQwMCUiPgogICAgICA8ZmVHYXVzc2lhbkJsdXIgc3RkRGV2aWF0aW9uPSIxMyIvPgogICAgPC9maWx0ZXI+CiAgICA8ZmlsdGVyIGlkPSJwaG90by1zaGFkb3ciIHg9Ii0yNSUiIHk9Ii0yMCUiIHdpZHRoPSIxNjAlIiBoZWlnaHQ9IjE2MCUiIGNvbG9yLWludGVycG9sYXRpb24tZmlsdGVycz0ic1JHQiI+CiAgICAgIDxmZURyb3BTaGFkb3cgZHg9IjIiIGR5PSI5IiBzdGREZXZpYXRpb249IjEwIiBmbG9vZC1jb2xvcj0iIzc5NjU1MiIgZmxvb2Qtb3BhY2l0eT0iLjE3Ii8+CiAgICA8L2ZpbHRlcj4KICAgIDxmaWx0ZXIgaWQ9ImJvb2stc2hhZG93IiB4PSItMTAlIiB5PSItMTUlIiB3aWR0aD0iMTMwJSIgaGVpZ2h0PSIxNTAlIiBjb2xvci1pbnRlcnBvbGF0aW9uLWZpbHRlcnM9InNSR0IiPgogICAgICA8ZmVEcm9wU2hhZG93IGR4PSIwIiBkeT0iMTAiIHN0ZERldmlhdGlvbj0iOSIgZmxvb2QtY29sb3I9IiM3OTY1NTIiIGZsb29kLW9wYWNpdHk9Ii4xNSIvPgogICAgPC9maWx0ZXI+CiAgICA8ZmlsdGVyIGlkPSJwYXBlci1ncmFpbiIgeD0iMCIgeT0iMCIgd2lkdGg9IjEwMCUiIGhlaWdodD0iMTAwJSIgY29sb3ItaW50ZXJwb2xhdGlvbi1maWx0ZXJzPSJzUkdCIj4KICAgICAgPGZlVHVyYnVsZW5jZSB0eXBlPSJmcmFjdGFsTm9pc2UiIGJhc2VGcmVxdWVuY3k9Ii43NSIgbnVtT2N0YXZlcz0iMiIgc2VlZD0iMTciIHJlc3VsdD0iZ3JhaW4iLz4KICAgICAgPGZlQ29sb3JNYXRyaXggaW49ImdyYWluIiB0eXBlPSJtYXRyaXgiIHZhbHVlcz0iMCAwIDAgMCAuNDcgIDAgMCAwIDAgLjM5ICAwIDAgMCAwIC4zMSAgMCAwIDAgLjA3IDAiIHJlc3VsdD0idGludGVkLWdyYWluIi8+CiAgICAgIDxmZUNvbXBvc2l0ZSBpbj0idGludGVkLWdyYWluIiBpbjI9IlNvdXJjZUFscGhhIiBvcGVyYXRvcj0iaW4iIHJlc3VsdD0ibWFza2VkLWdyYWluIi8+CiAgICAgIDxmZUJsZW5kIGluPSJTb3VyY2VHcmFwaGljIiBpbjI9Im1hc2tlZC1ncmFpbiIgbW9kZT0ibXVsdGlwbHkiLz4KICAgIDwvZmlsdGVyPgogICAgPGNsaXBQYXRoIGlkPSJob3VzZS13aW5kb3ciPjxyZWN0IHg9IjEyIiB5PSIxMyIgd2lkdGg9IjE2MiIgaGVpZ2h0PSIxNDMiIHJ4PSIxIi8+PC9jbGlwUGF0aD4KICAgIDxjbGlwUGF0aCBpZD0icG9ydHJhaXQtd2luZG93Ij48cmVjdCB4PSIxMiIgeT0iMTMiIHdpZHRoPSIxMjkiIGhlaWdodD0iMTQ0IiByeD0iMSIvPjwvY2xpcFBhdGg+CiAgICA8Y2xpcFBhdGggaWQ9ImxlZnQtcGFnZS1jbGlwIj48cGF0aCBkPSJNNzcgMjQ2QzE0OSAyMTkgMjI3IDIxMCAyOTEgMjIxQzMwOCAyMjQgMzIyIDIzNCAzMzIgMjQ4TDMzOCAzODBDMzIxIDM2NSAzMDQgMzU3IDI4NiAzNTVDMjE4IDM0OSAxNTYgMzUxIDk0IDMzNUw3NyAyNDZaIi8+PC9jbGlwUGF0aD4KICAgIDxjbGlwUGF0aCBpZD0icmlnaHQtcGFnZS1jbGlwIj48cGF0aCBkPSJNMzMyIDI0OEMzNDcgMjMwIDM2MyAyMjAgMzg1IDIxOUM0MzkgMjE2IDUwMCAyMjkgNTUxIDI0OEw1NzQgMzMzQzUwNyAzNDUgNDMzIDM1NSAzNjYgMzY3QzM1NCAzNjkgMzQ2IDM3NCAzMzggMzgwTDMzMiAyNDhaIi8+PC9jbGlwUGF0aD4KICA8L2RlZnM+CgogIDwhLS0gQSBzb2Z0IGxhbmRzY2FwZSBzaXRzIGluc2lkZSB0aGUgb3RoZXJ3aXNlIHRyYW5zcGFyZW50IGNhbnZhcy4gLS0+CiAgPHBhdGggZD0iTTg3IDI3MEM1NiAyMTggODkgMTYwIDE1OSAxNDdDMjEzIDEzNiAyMjUgODggMjg4IDkyQzM0MyA5NiAzNjkgMTMyIDQyNiAxMjFDNDg4IDEwOCA1NTMgMTU2IDU1OCAyMTVDNTYzIDI2OSA2MDAgMjkyIDU2NyAzMzdDNTI5IDM5MCA0NDYgMzkxIDM1NSA0MDVDMjYzIDQxOSAxNzcgNDA4IDEyMCAzNzBDODMgMzQ1IDEwMyAyOTkgODcgMjcwWiIgZmlsbD0idXJsKCNsYW5kc2NhcGUtd2FzaCkiLz4KICA8cGF0aCBkPSJNNzYgMjY4TDE1MSAxOTlDMTYxIDE5MCAxNzAgMTkxIDE4MCAyMDFMMjMyIDI1MUwyODggMTkwQzMwMSAxNzYgMzExIDE3OCAzMjUgMTkwTDQxMCAyNjRMNDYzIDIyMkM0NzIgMjE0IDQ4MSAyMTQgNDkxIDIyM0w1NjggMjg3TDc2IDMwMlYyNjhaIiBmaWxsPSIjRENDQkI5IiBvcGFjaXR5PSIuNCIvPgogIDxwYXRoIGQ9Ik04MyAyOThDMTQyIDI2NyAxODIgMjczIDIzOCAyODVDMzAxIDI5OCAzMjYgMjQ0IDM5MCAyNTlDNDQyIDI3MSA0OTQgMjUzIDU2MyAyODhMNTczIDMzNkw5MCAzNTJMODMgMjk4WiIgZmlsbD0iI0QwQkJBNiIgb3BhY2l0eT0iLjI1Ii8+CiAgPHBhdGggZD0iTTExMiAxODhDMTI3IDE4MyAxMzggMTgyIDE1NCAxODZNNDY5IDE2NEM0ODMgMTYwIDQ5NyAxNjIgNTA4IDE2OCIgc3Ryb2tlPSIjQjU5RDg3IiBzdHJva2Utb3BhY2l0eT0iLjM1IiBzdHJva2Utd2lkdGg9IjEuNSIgc3Ryb2tlLWxpbmVjYXA9InJvdW5kIi8+CiAgPGNpcmNsZSBjeD0iNDg3IiBjeT0iMTEyIiByPSIyMyIgZmlsbD0iI0U1QzdCNSIgb3BhY2l0eT0iLjQ1Ii8+CiAgPGVsbGlwc2UgY3g9IjMzMCIgY3k9IjQwMyIgcng9IjIyNCIgcnk9IjE0IiBmaWxsPSIjNzk2NTUyIiBvcGFjaXR5PSIuMTQiIGZpbHRlcj0idXJsKCNncm91bmQtc2hhZG93KSIvPgoKICA8IS0tIFZpbnRhZ2UgcnVyYWwgcGhvdG9ncmFwaC4gLS0+CiAgPGcgdHJhbnNmb3JtPSJ0cmFuc2xhdGUoMTMyIDc4KSByb3RhdGUoLTEyIDkzIDEwMykiIGZpbHRlcj0idXJsKCNwaG90by1zaGFkb3cpIj4KICAgIDxyZWN0IHdpZHRoPSIxODYiIGhlaWdodD0iMjAzIiByeD0iMyIgZmlsbD0idXJsKCNwaG90by1wYXBlcikiLz4KICAgIDxyZWN0IHg9Ii41IiB5PSIuNSIgd2lkdGg9IjE4NSIgaGVpZ2h0PSIyMDIiIHJ4PSIyLjUiIHN0cm9rZT0iI0Q4QzdCMCIgc3Ryb2tlLW9wYWNpdHk9Ii42Ii8+CiAgICA8ZyBjbGlwLXBhdGg9InVybCgjaG91c2Utd2luZG93KSIgZmlsdGVyPSJ1cmwoI3BhcGVyLWdyYWluKSI+CiAgICAgIDxyZWN0IHg9IjEyIiB5PSIxMyIgd2lkdGg9IjE2MiIgaGVpZ2h0PSIxNDMiIGZpbGw9InVybCgjaG91c2Utc2t5KSIvPgogICAgICA8Y2lyY2xlIGN4PSIxMzkiIGN5PSI0NCIgcj0iMTYiIGZpbGw9IiNFNURBQzEiLz4KICAgICAgPHBhdGggZD0iTTYgOTZMNTEgNTJMODkgODhMMTIyIDU5TDE4MiAxMDBWMTU2SDZWOTZaIiBmaWxsPSIjQUFBNDg5Ii8+CiAgICAgIDxwYXRoIGQ9Ik0zIDExNUM0NCA5MSA2NiA5NSAxMDMgMTA1QzEzMSAxMTIgMTQ5IDkzIDE4MCA5OFYxNThIM1YxMTVaIiBmaWxsPSIjOEU5MTc1Ii8+CiAgICAgIDxwYXRoIGQ9Ik0xMiAxMzNDNTcgMTEzIDEwNyAxMTQgMTc0IDEzMVYxNTZIMTJWMTMzWiIgZmlsbD0iI0I5QUE4NyIvPgogICAgICA8cGF0aCBkPSJNODkgMTE2QzkyIDEyOSAxMDYgMTM2IDEzNCAxNTZIMTAyQzg3IDE0MyA3OSAxMzAgODEgMTE5TDg5IDExNloiIGZpbGw9IiNEN0M2QTQiLz4KICAgICAgPHBhdGggZD0iTTQ5IDkxTDkzIDc1TDEzMiA5M1YxMjJMNDkgMTE5VjkxWiIgZmlsbD0iI0Q5QzhBNSIvPgogICAgICA8cGF0aCBkPSJNNDIgOTNMODggNjdMMTM5IDkxTDEzNSA5N0w4OCA4MEw0NiA5OEw0MiA5M1oiIGZpbGw9IiM3OTY1NTIiLz4KICAgICAgPHBhdGggZD0iTTQ5IDk3TDg4IDgyTDg4IDEyMEw0OSAxMTlWOTdaIiBmaWxsPSIjQzhCNTkwIi8+CiAgICAgIDxwYXRoIGQ9Ik04OCA4MkwxMzIgOTdWMTIyTDg4IDEyMFY4MloiIGZpbGw9IiNFMkQyQjEiLz4KICAgICAgPHBhdGggZD0iTTU3IDEwMUw3MiA5N1YxMTBMNTcgMTEzVjEwMVpNOTkgOTlMMTEyIDEwM1YxMTNMOTkgMTExVjk5WiIgZmlsbD0iIzg1NzU1QSIvPgogICAgICA8cGF0aCBkPSJNNzggMTAxTDg2IDk4VjEyMEw3OCAxMjBWMTAxWiIgZmlsbD0iIzZFNjA0QyIvPgogICAgICA8cGF0aCBkPSJNNjEgMTAwVjExMk0xMDUgMTAxVjExMiIgc3Ryb2tlPSIjQzVCNzk1IiBzdHJva2Utd2lkdGg9IjEuMiIvPgogICAgICA8cGF0aCBkPSJNMTQ0IDExMVY3Nk0zNSAxMTlWODciIHN0cm9rZT0iIzc5NjU1MiIgc3Ryb2tlLXdpZHRoPSIyLjUiIHN0cm9rZS1saW5lY2FwPSJyb3VuZCIvPgogICAgICA8cGF0aCBkPSJNMTQyIDY0QzEzNCA3MCAxMzMgODAgMTQwIDg1QzEzMiA4OSAxMzcgMTAwIDE0NSA5OEMxNTUgMTAxIDE2MSA5MSAxNTQgODVDMTYxIDc3IDE1NCA2NSAxNDggNjlDMTQ3IDY0IDE0NSA2MiAxNDIgNjRaIiBmaWxsPSIjNzc3RDY1Ii8+CiAgICAgIDxwYXRoIGQ9Ik0zNCA3NkMyNyA3NyAyNiA4NCAyOSA4OEMyMiA5MiAyOCAxMDAgMzUgOTlDNDQgMTAzIDUwIDkzIDQ0IDg4QzQ4IDgyIDQxIDc1IDM4IDc5QzM4IDc3IDM2IDc2IDM0IDc2WiIgZmlsbD0iIzg1ODY2QSIvPgogICAgICA8cGF0aCBkPSJNMTkgMTM0TDQ0IDEyOE0xNDkgMTMyTDE3MCAxMzZNMjQgMTQ0TDU5IDEzOE0xMzcgMTQ2TDE2MSAxNTEiIHN0cm9rZT0iIzhEODk2RCIgc3Ryb2tlLW9wYWNpdHk9Ii43IiBzdHJva2Utd2lkdGg9IjEuNSIgc3Ryb2tlLWxpbmVjYXA9InJvdW5kIi8+CiAgICAgIDxyZWN0IHg9IjEyIiB5PSIxMyIgd2lkdGg9IjE2MiIgaGVpZ2h0PSIxNDMiIGZpbGw9InVybCgjcGhvdG8tdmlnbmV0dGUpIi8+CiAgICAgIDxwYXRoIGQ9Ik0yMSAyNEwxNjMgMjFNMTcgMTQ3TDM2IDE1MCIgc3Ryb2tlPSIjRkZGQUYzIiBzdHJva2Utb3BhY2l0eT0iLjE1IiBzdHJva2Utd2lkdGg9IjEuMiIvPgogICAgPC9nPgogICAgPHBhdGggZD0iTTU3IDE3OEM3NyAxODAgMTA0IDE3OSAxMjkgMTc2IiBzdHJva2U9IiNCQUE2OEMiIHN0cm9rZS1vcGFjaXR5PSIuNCIgc3Ryb2tlLXdpZHRoPSIxLjUiIHN0cm9rZS1saW5lY2FwPSJyb3VuZCIvPgogIDwvZz4KCiAgPCEtLSBGYW1pbHkgc2lsaG91ZXR0ZXMga2VlcCB0aGUgbWVtb3J5IHBlcnNvbmFsIHdpdGhvdXQgZGVwaWN0aW5nIGEgcmVhbCBwZXJzb24uIC0tPgogIDxnIHRyYW5zZm9ybT0idHJhbnNsYXRlKDM1NyA4Mykgcm90YXRlKDExIDc2LjUgOTgpIiBmaWx0ZXI9InVybCgjcGhvdG8tc2hhZG93KSI+CiAgICA8cmVjdCB3aWR0aD0iMTUzIiBoZWlnaHQ9IjE5MyIgcng9IjMiIGZpbGw9InVybCgjcGhvdG8tcGFwZXIpIi8+CiAgICA8cmVjdCB4PSIuNSIgeT0iLjUiIHdpZHRoPSIxNTIiIGhlaWdodD0iMTkyIiByeD0iMi41IiBzdHJva2U9IiNEOEM3QjAiIHN0cm9rZS1vcGFjaXR5PSIuNjUiLz4KICAgIDxnIGNsaXAtcGF0aD0idXJsKCNwb3J0cmFpdC13aW5kb3cpIiBmaWx0ZXI9InVybCgjcGFwZXItZ3JhaW4pIj4KICAgICAgPHJlY3QgeD0iMTIiIHk9IjEzIiB3aWR0aD0iMTI5IiBoZWlnaHQ9IjE0NCIgZmlsbD0idXJsKCNwb3J0cmFpdC13YWxsKSIvPgogICAgICA8cGF0aCBkPSJNMjAgMTNWMTU3TTEyOCAxM1YxNTciIHN0cm9rZT0iI0UzRDVCQyIgc3Ryb2tlLW9wYWNpdHk9Ii4zIiBzdHJva2Utd2lkdGg9IjciLz4KICAgICAgPHBhdGggZD0iTTMwIDE4QzQ3IDM4IDQ4IDYxIDM2IDg3TTExOSAxOEMxMDIgMzggMTA1IDYwIDExOSA4NiIgc3Ryb2tlPSIjOUI4OTZFIiBzdHJva2Utb3BhY2l0eT0iLjM1IiBzdHJva2Utd2lkdGg9IjEuMiIvPgogICAgICA8cGF0aCBkPSJNMjAgMTU4TDIzIDExMUMyNCA5NiAzMyA4OCA0OSA4NkM2NiA4NiA3OCA5OCA3OSAxMTRMNzkgMTU4SDIwWiIgZmlsbD0iIzc0NjU1MiIvPgogICAgICA8cGF0aCBkPSJNMzMgOTJMNDggMTA3TDYyIDkxTDU2IDg2SDM5TDMzIDkyWiIgZmlsbD0iI0UwQ0ZBRCIvPgogICAgICA8cGF0aCBkPSJNNDYgMTA1TDUwIDEwNUw1NCAxMzdMNDggMTQzTDQzIDEzNUw0NiAxMDVaIiBmaWxsPSIjNTQ0QTNEIi8+CiAgICAgIDxwYXRoIGQ9Ik0zMiA5NEwzOSAxMTdMNDYgMTA4TTY0IDk0TDU4IDExN0w1MCAxMDgiIHN0cm9rZT0iIzlCODg2RCIgc3Ryb2tlLXdpZHRoPSIxLjMiIHN0cm9rZS1saW5lY2FwPSJyb3VuZCIvPgogICAgICA8cGF0aCBkPSJNMzMgNjJDMzMgNDkgMzkgNDEgNTAgNDFDNjIgNDEgNjggNDkgNjcgNjNMNjUgNzdDNjMgODcgNTYgOTIgNDkgOTBDNDEgODkgMzUgODMgMzQgNzNMMzMgNjJaIiBmaWxsPSIjRDFCOTk1Ii8+CiAgICAgIDxwYXRoIGQ9Ik0zMyA2NUMyOCA0NiAzOSAzNSA1MSAzNkM2NSAzNyA3MiA0NyA2NyA2Nkw2MyA1M0M1NCA1NCA0NiA1MSA0MiA0OUM0MCA1NCAzNyA1NyAzNCA1OEwzMyA2NVoiIGZpbGw9IiM2NTU2NDMiLz4KICAgICAgPHBhdGggZD0iTTkwIDg2QzEwNiA4NSAxMTkgOTUgMTIyIDExMUwxMjggMTU3SDY5TDc0IDExMUM3NSA5NyA3OSA5MCA5MCA4NloiIGZpbGw9IiM5QTgwNjQiLz4KICAgICAgPHBhdGggZD0iTTkwIDg3TDk5IDEwMEwxMDkgODgiIGZpbGw9IiNEQkM4QTciLz4KICAgICAgPHBhdGggZD0iTTc5IDYxQzc5IDQ4IDg1IDM5IDk3IDM5QzExMSAzOCAxMTggNDkgMTE4IDY2TDExOSA4NkMxMTAgOTEgODggOTIgNzggODVMNzkgNjFaIiBmaWxsPSIjNjc1ODQzIi8+CiAgICAgIDxwYXRoIGQ9Ik04NSA1OUM4NSA1MiA5MCA0NyA5OCA0N0MxMDcgNDcgMTExIDU1IDExMSA2NUwxMTAgNzVDMTA5IDg1IDEwMyA5MSA5NyA5MEM4OSA4OSA4NSA4MiA4NCA3NEw4NSA1OVoiIGZpbGw9IiNEQkMzQTEiLz4KICAgICAgPHBhdGggZD0iTTgzIDY2QzgyIDUyIDg3IDQzIDk4IDQzQzEwOCA0MyAxMTQgNTEgMTEyIDY1QzEwNiA2MiAxMDAgNTUgOTkgNTJDOTUgNTggODkgNjAgODMgNjFWNjZaIiBmaWxsPSIjNkY1RTQ4Ii8+CiAgICAgIDxwYXRoIGQ9Ik04NiAxMDFDOTIgMTExIDEwNCAxMTIgMTExIDEwMSIgc3Ryb2tlPSIjQzhBRjhCIiBzdHJva2Utd2lkdGg9IjEuNSIvPgogICAgICA8cGF0aCBkPSJNNDkgMTU4TDUyIDEzMkM1MyAxMjEgNjEgMTE1IDc0IDExNUM4OCAxMTUgOTUgMTIzIDk4IDEzNkwxMDEgMTU4SDQ5WiIgZmlsbD0iI0Q2QzA5QiIvPgogICAgICA8cGF0aCBkPSJNNjYgMTE5TDc0IDEzMEw4MiAxMTkiIGZpbGw9IiNGMERGQzEiLz4KICAgICAgPHBhdGggZD0iTTYxIDEwMkM2MSA5MiA2NyA4NiA3NSA4NkM4NSA4NiA5MCA5NCA4OSAxMDRMODggMTEyQzg2IDEyMCA4MSAxMjQgNzUgMTIzQzY4IDEyMiA2MyAxMTcgNjIgMTEwTDYxIDEwMloiIGZpbGw9IiNEQ0M0QTEiLz4KICAgICAgPHBhdGggZD0iTTYxIDEwNUM1NyA5NSA2MyA4MyA3NSA4M0M4NyA4MyA5MyA5MyA4OSAxMDVMODYgOTdDODAgOTkgNzUgOTYgNzEgOTNDNjkgOTggNjUgMTAwIDYyIDk5TDYxIDEwNVoiIGZpbGw9IiM3NzYzNEMiLz4KICAgICAgPHBhdGggZD0iTTM1IDExOUM0MCAxMzEgNDYgMTM2IDU3IDEzNk0xMTUgMTIwQzEwOCAxMzQgMTAxIDEzNyA5MiAxMzUiIHN0cm9rZT0iI0I5QTE3RiIgc3Ryb2tlLXdpZHRoPSI4IiBzdHJva2UtbGluZWNhcD0icm91bmQiLz4KICAgICAgPHBhdGggZD0iTTY5IDEzN1YxNTdNODAgMTM3VjE1NyIgc3Ryb2tlPSIjQkRBMzdFIiBzdHJva2Utd2lkdGg9IjEuMiIvPgogICAgICA8Y2lyY2xlIGN4PSI3NSIgY3k9IjEzOSIgcj0iMS4zIiBmaWxsPSIjOUQ4NTY2Ii8+CiAgICAgIDxjaXJjbGUgY3g9Ijc1IiBjeT0iMTQ5IiByPSIxLjMiIGZpbGw9IiM5RDg1NjYiLz4KICAgICAgPHJlY3QgeD0iMTIiIHk9IjEzIiB3aWR0aD0iMTI5IiBoZWlnaHQ9IjE0NCIgZmlsbD0idXJsKCNwaG90by12aWduZXR0ZSkiLz4KICAgICAgPHBhdGggZD0iTTE3IDI1TDEzNCAyMU0xMzEgMjlMMTMzIDU1IiBzdHJva2U9IiNGRkZBRjMiIHN0cm9rZS1vcGFjaXR5PSIuMTciLz4KICAgIDwvZz4KICAgIDxwYXRoIGQ9Ik01MyAxNzZDNjggMTc0IDg0IDE3NCAxMDEgMTc2IiBzdHJva2U9IiNCQUE2OEMiIHN0cm9rZS1vcGFjaXR5PSIuNCIgc3Ryb2tlLXdpZHRoPSIxLjUiIHN0cm9rZS1saW5lY2FwPSJyb3VuZCIvPgogIDwvZz4KCiAgPCEtLSBCb3VuZCBjb3ZlciwgaW5kaXZpZHVhbCBwYWdlIGVkZ2VzLCBhbmQgdGhlIGN1cnZlZCBvcGVuIHNwcmVhZC4gLS0+CiAgPGcgZmlsdGVyPSJ1cmwoI2Jvb2stc2hhZG93KSI+CiAgICA8cGF0aCBkPSJNNjYgMjU4TDI4NSAyMjRDMzA3IDIyNCAzMjQgMjM5IDMzNCAyNTNDMzQ4IDIzNSAzNjggMjI1IDM4OCAyMjdMNTU5IDI1OEw1OTAgMzUwQzU5MiAzNTYgNTg5IDM2MyA1ODIgMzY1TDM1NiA0MDdDMzQ4IDQwOSAzNDAgNDA3IDMzMyA0MDJDMzI0IDQwNCAzMTYgNDA0IDMwNyA0MDFMODAgMzY1Qzc0IDM2NCA3MCAzNjEgNjkgMzU1TDU2IDI4MEM1NCAyNjggNTYgMjYxIDY2IDI1OFoiIGZpbGw9IiM3NDNCNDkiLz4KICAgIDxwYXRoIGQ9Ik03MSAzNDVMMzA2IDM4NEMzMTggMzg2IDMyNyAzOTAgMzM2IDM5NkMzNDMgMzkwIDM1MSAzODUgMzY1IDM4M0w1ODMgMzQ0IiBzdHJva2U9IiNBRjdCODIiIHN0cm9rZS13aWR0aD0iMiIgc3Ryb2tlLWxpbmVjYXA9InJvdW5kIi8+CiAgICA8cGF0aCBkPSJNNzYgMjUyTDI5MSAyMjVDMzA3IDIyNyAzMjIgMjM5IDMzMiAyNTNDMzQ3IDIzNCAzNjcgMjI1IDM4OCAyMjVMNTU2IDI1M0w1ODEgMzQyTDM2NSAzODNDMzUzIDM4NSAzNDUgMzg5IDMzNyAzOTVDMzI3IDM4NyAzMTcgMzgyIDMwNCAzODFMODQgMzUxTDc2IDI1MloiIGZpbGw9InVybCgjcGFnZS1lZGdlKSIvPgogICAgPHBhdGggZD0iTTg0IDM0MEMxNTggMzU2IDIyNCAzNTcgMjkxIDM2NkMzMTEgMzY5IDMyMyAzNzUgMzM3IDM4N0MzNTAgMzc4IDM2MCAzNzQgMzc0IDM3Mkw1NzYgMzM1TTg2IDM0NkMxNjEgMzYwIDIyNiAzNjMgMjk0IDM3MkMzMTMgMzc1IDMyNCAzODAgMzM3IDM5MEMzNTAgMzgyIDM2MCAzNzkgMzc0IDM3N0w1NzggMzQwIiBzdHJva2U9IiNCOEE1OEQiIHN0cm9rZS1vcGFjaXR5PSIuNTgiIHN0cm9rZS13aWR0aD0iMS4yIi8+CiAgICA8cGF0aCBkPSJNODAgMjQ5QzE1MSAyMjIgMjI2IDIxNCAyOTEgMjI0QzMwOCAyMjcgMzIxIDIzNyAzMzIgMjUxTDMzOCAzODVDMzIwIDM3MCAzMDQgMzYyIDI4NiAzNjBDMjE2IDM1NCAxNTUgMzU3IDg5IDM0MEw4MCAyNDlaIiBmaWxsPSIjRjhFREREIi8+CiAgICA8cGF0aCBkPSJNMzMyIDI1MUMzNDcgMjMzIDM2NCAyMjQgMzg1IDIyM0M0MzkgMjIwIDUwMyAyMzMgNTU0IDI1Mkw1NzcgMzM4QzUwOCAzNTAgNDM0IDM2MCAzNjYgMzcyQzM1NCAzNzQgMzQ1IDM3OSAzMzggMzg1TDMzMiAyNTFaIiBmaWxsPSIjRUZFMUNEIi8+CiAgICA8cGF0aCBkPSJNNzcgMjQ2QzE0OSAyMTkgMjI3IDIxMCAyOTEgMjIxQzMwOCAyMjQgMzIyIDIzNCAzMzIgMjQ4TDMzOCAzODBDMzIxIDM2NSAzMDQgMzU3IDI4NiAzNTVDMjE4IDM0OSAxNTYgMzUxIDk0IDMzNUw3NyAyNDZaIiBmaWxsPSJ1cmwoI2xlZnQtcGFwZXIpIi8+CiAgICA8cGF0aCBkPSJNMzMyIDI0OEMzNDcgMjMwIDM2MyAyMjAgMzg1IDIxOUM0MzkgMjE2IDUwMCAyMjkgNTUxIDI0OEw1NzQgMzMzQzUwNyAzNDUgNDMzIDM1NSAzNjYgMzY3QzM1NCAzNjkgMzQ2IDM3NCAzMzggMzgwTDMzMiAyNDhaIiBmaWxsPSJ1cmwoI3JpZ2h0LXBhcGVyKSIvPgogICAgPHBhdGggZD0iTTc3IDI0NkMxNDkgMjE5IDIyNyAyMTAgMjkxIDIyMUMzMDggMjI0IDMyMiAyMzQgMzMyIDI0OEMzNDcgMjMwIDM2MyAyMjAgMzg1IDIxOUM0MzkgMjE2IDUwMCAyMjkgNTUxIDI0OCIgc3Ryb2tlPSIjRkZGQUYzIiBzdHJva2Utd2lkdGg9IjIiLz4KICAgIDxnIGNsaXAtcGF0aD0idXJsKCNsZWZ0LXBhZ2UtY2xpcCkiIHN0cm9rZT0iI0JCQTg4RSIgc3Ryb2tlLWxpbmVjYXA9InJvdW5kIj4KICAgICAgPHBhdGggZD0iTTExOCAyNjhDMTcxIDI1MiAyMjAgMjUwIDI2OSAyNTYiIHN0cm9rZS13aWR0aD0iMiIgb3BhY2l0eT0iLjciLz4KICAgICAgPHBhdGggZD0iTTEyMCAyNzlDMTczIDI2NSAyMjUgMjY0IDI4NSAyNzNNMTIyIDI5MEMxNzggMjc4IDIzMSAyNzkgMjg3IDI4N00xMjUgMzAxQzE4MSAyOTIgMjM1IDI5MSAyODkgMzAxTTEyNyAzMTJDMTc5IDMwNSAyMjQgMzA2IDI2OSAzMTMiIG9wYWNpdHk9Ii40NiIgc3Ryb2tlLXdpZHRoPSIxLjMiLz4KICAgICAgPHBhdGggZD0iTTEzMyAzMjhDMTU2IDMyNiAxNzYgMzI2IDE5OCAzMjgiIG9wYWNpdHk9Ii4zOCIgc3Ryb2tlLXdpZHRoPSIxLjIiLz4KICAgIDwvZz4KICAgIDxnIGNsaXAtcGF0aD0idXJsKCNyaWdodC1wYWdlLWNsaXApIiBzdHJva2U9IiNCQkE4OEUiIHN0cm9rZS1saW5lY2FwPSJyb3VuZCI+CiAgICAgIDxwYXRoIGQ9Ik0zNzkgMjU5QzQyMiAyNTEgNDY5IDI1NiA1MTQgMjY4IiBzdHJva2Utd2lkdGg9IjIiIG9wYWNpdHk9Ii43Ii8+CiAgICAgIDxwYXRoIGQ9Ik0zNzYgMjczQzQyMiAyNjYgNDcwIDI3MCA1MjIgMjgyTTM3NyAyODVDNDI1IDI3OSA0NzQgMjgyIDUyNSAyOTVNMzc4IDI5N0M0MjYgMjkxIDQ3OCAyOTMgNTMwIDMwNk0zODAgMzA5QzQyMCAzMDUgNDY0IDMwNiA1MDEgMzEzIiBvcGFjaXR5PSIuNDYiIHN0cm9rZS13aWR0aD0iMS4zIi8+CiAgICAgIDxwYXRoIGQ9Ik0zODYgMzM0TDQ0NyAzMjgiIG9wYWNpdHk9Ii4zOCIgc3Ryb2tlLXdpZHRoPSIxLjIiLz4KICAgIDwvZz4KICAgIDxwYXRoIGQ9Ik0zMzIgMjQ4QzMzNCAyODYgMzM2IDMzMyAzMzggMzgwIiBzdHJva2U9IiNBNzhFNzEiIHN0cm9rZS1vcGFjaXR5PSIuNDUiIHN0cm9rZS13aWR0aD0iMS40Ii8+CiAgICA8cGF0aCBkPSJNMzM2IDI0OEMzNDAgMjc5IDM0MiAzMjIgMzQyIDM3MCIgc3Ryb2tlPSIjRkZGQUYzIiBzdHJva2Utb3BhY2l0eT0iLjciIHN0cm9rZS13aWR0aD0iMS4yIi8+CiAgICA8cGF0aCBkPSJNNDUzIDM1MUw0NjcgMzQ4TDQ3NiAzOThMNDY4IDM5NEw0NjAgNDAyTDQ1MyAzNTFaIiBmaWxsPSIjNzQzQjQ5Ii8+CiAgICA8cGF0aCBkPSJNNDU4IDM1Mkw0NjYgMzkxIiBzdHJva2U9IiNBNTZGNzkiIHN0cm9rZS13aWR0aD0iMSIvPgogIDwvZz4KCiAgPCEtLSBTbWFsbCBib3RhbmljYWwgbWFya3Mgc29mdGVuIHRoZSBjb21wb3NpdGlvbiB3aXRob3V0IG9ic2N1cmluZyB0aGUgYm9vay4gLS0+CiAgPGcgc3Ryb2tlPSIjQTg5MDc4IiBzdHJva2UtbGluZWNhcD0icm91bmQiIHN0cm9rZS1saW5lam9pbj0icm91bmQiPgogICAgPHBhdGggZD0iTTgzIDM4MEM3MyAzNjkgNjUgMzU1IDYzIDM0MCIgc3Ryb2tlLXdpZHRoPSIxLjUiLz4KICAgIDxwYXRoIGQ9Ik02OSAzNTlDNTcgMzU5IDQ5IDM1MSA0OSAzNDNDNjEgMzQzIDY5IDM1MCA2OSAzNTlaIiBmaWxsPSIjQzlCMzlCIiBzdHJva2U9Im5vbmUiLz4KICAgIDxwYXRoIGQ9Ik03NSAzNjlDNzQgMzU2IDc5IDM0NyA4NiAzNDNDOTIgMzU0IDg2IDM2NCA3NSAzNjlaIiBmaWxsPSIjRDlDNkFGIiBzdHJva2U9Im5vbmUiLz4KICAgIDxwYXRoIGQ9Ik01NTggMzkzQzU3MSAzODMgNTgxIDM2OCA1ODQgMzUzIiBzdHJva2Utd2lkdGg9IjEuNSIvPgogICAgPHBhdGggZD0iTTU3MyAzNzlDNTc0IDM2NyA1NjggMzYxIDU2MSAzNTlDNTU3IDM2OSA1NjIgMzc3IDU3MyAzNzlaIiBmaWxsPSIjRDlDNkFGIiBzdHJva2U9Im5vbmUiLz4KICAgIDxwYXRoIGQ9Ik01NzkgMzY4QzU5MCAzNzAgNTk4IDM2MiA2MDAgMzU1QzU4OSAzNTMgNTgyIDM1OSA1NzkgMzY4WiIgZmlsbD0iI0M5QjM5QiIgc3Ryb2tlPSJub25lIi8+CiAgPC9nPgogIDxwYXRoIGQ9Ik0xMDggMTI4VjE0ME0xMDIgMTM0SDExNE01NTIgMTkxVjIwMU01NDcgMTk2SDU1NyIgc3Ryb2tlPSIjQjY4RDgyIiBzdHJva2Utd2lkdGg9IjEuNSIgc3Ryb2tlLWxpbmVjYXA9InJvdW5kIiBvcGFjaXR5PSIuNjUiLz4KICA8Y2lyY2xlIGN4PSI5NiIgY3k9IjMwOSIgcj0iMiIgZmlsbD0iI0I2OEQ4MiIgb3BhY2l0eT0iLjU1Ii8+CiAgPGNpcmNsZSBjeD0iNTQxIiBjeT0iMTI5IiByPSIyLjUiIGZpbGw9IiNDNkEyOEUiIG9wYWNpdHk9Ii42NSIvPgo8L3N2Zz4K" alt="펼친 자서전과 오래된 사진을 담은 따뜻한 삽화"></div>
         </div>
         <div class="home-shortcuts"><button class="shortcut" data-go="records"><span class="shortcut-icon"><svg class="icon"><use href="#i-letter"/></svg></span><span><strong>엽서보기</strong><small>차곡차곡 모아둔 이야기</small></span><svg class="icon"><use href="#i-chevron"/></svg></button><button class="shortcut" data-go="library"><span class="shortcut-icon"><svg class="icon"><use href="#i-book"/></svg></span><span><strong>자서전 보기</strong><small>나의 얇은 책들이 모이는 책장</small></span><svg class="icon"><use href="#i-chevron"/></svg></button></div>
         <div class="home-lower"><div class="panel recent-panel"><div class="section-heading"><div><span class="eyebrow">차곡차곡 쌓이는 기억</span><h2>최근 나눈 이야기</h2></div><button class="text-button" data-go="records">모두 보기 <svg class="icon"><use href="#i-chevron"/></svg></button></div><div class="recent-list" id="recent-list"></div></div><div class="panel prompt-panel"><span class="eyebrow">오늘의 작은 질문</span><span class="quote-mark">“</span><h2>어린 시절,<br>가장 좋아했던<br>장소는 어디였나요?</h2><p>골목길도, 할머니 댁 마루도 좋아요.<br>떠오르는 그곳부터 시작해 볼까요.</p><button class="text-button" data-go="interview">이 기억 들려주기 <svg class="icon"><use href="#i-arrow"/></svg></button></div></div>
@@ -3939,7 +4039,7 @@ body:not(.ebook-mode) :is(.ml-volume-label, .ml-book-meta) { font-size: 14px; }
       </section>
 
       <section data-screen="interview" class="screen" hidden aria-labelledby="interview-heading">
-        <div class="page-heading interview-page-heading"><div><div class="eyebrow">기억을 따라, 천천히</div><h1 id="interview-heading" tabindex="-1">이야기를 들려주세요</h1><p>잘 말하려 애쓰지 않아도 괜찮아요.</p></div></div>
+        <div class="page-heading interview-page-heading"><div><div class="eyebrow">기억을 따라, 천천히</div><h1 id="interview-heading" tabindex="-1">이야기를 들려주세요</h1></div></div>
         <div class="interview-studio panel" data-interview-state="reading">
           <div class="studio-topline"><span class="pill">어린 시절</span><span class="studio-status" id="listening-status" role="status">질문을 확인해 주세요</span></div>
           <div class="studio-main">
@@ -4740,7 +4840,8 @@ body:not(.ebook-mode) :is(.ml-volume-label, .ml-book-meta) { font-size: 14px; }
     const qs = QUESTIONS[L.topic] || [`「${L.topic}」 하면 어떤 장면이 먼저 떠오르세요?`, '그때 곁에 누가 있었나요?', '그 일을 떠올리면 지금 어떤 마음이 드세요?'];
     const n = L.snap.fragments.filter((f) => f.idx > 0).length;
     L.snap.state = 'SPEAKING'; L.snap.turn = n + 1;
-    L.snap.next_question = qs[n % qs.length] + (n >= qs.length ? ' (예시 질문이 다시 돌아요)' : '');
+    L.snap.next_question = (L.photo && n === 0) ? '함께 보내 주신 사진이 반가워요. 이 사진은 언제, 어디서 찍으신 건가요?'
+      : qs[n % qs.length] + (n >= qs.length ? ' (예시 질문이 다시 돌아요)' : '');
   }
   function commit(L, answer) {
     L.snap.fragments.push({idx: L.snap.fragments.length, question: L.snap.next_question, answer});
@@ -4757,9 +4858,9 @@ body:not(.ebook-mode) :is(.ml-volume-label, .ml-book-meta) { font-size: 14px; }
   }
   // 서버와 같은 목소리 이름만 받는다 (default · young). 예시 모드에서는 소리가 없어 고른 값만 기억한다
   const VOICE_OK = ['default', 'young'];
-  function openSession({topic, elder_id, link, voice}) {
+  function openSession({topic, elder_id, link, voice, photo}) {
     const sid = uid();
-    const L = {topic, elder_id, link, audio: 0, lastAudio: 0, pending: '',
+    const L = {topic, elder_id, link, photo, audio: 0, lastAudio: 0, pending: '',
       snap: {session_id: sid, state: 'SPEAKING', turn: 1, max_turn: 0, next_question: '', question_audio_stream: false, audio_bytes: 0, resumable: false, voice: voice || 'default',
         fragments: [{idx: 0, question: null, answer: topic}]}};
     ask(L);
@@ -4855,10 +4956,11 @@ body:not(.ebook-mode) :is(.ml-volume-label, .ml-book-meta) { font-size: 14px; }
       rows = rows.slice().sort((a, b) => Date.parse(b.created_at) - Date.parse(a.created_at)).slice(0, Number(q.get('limit')) || 20);
       return ok({sessions: rows.map(row)});
     }
+    if (path === '/photos' && method === 'POST') { await sleep(900); const id = 'demo-ph' + (++db.seq); return ok({photo_id: id, url: `/api/photos/${id}`, mime: 'image/jpeg', width: 1024, height: 768, bytes: 123456}); }
     if (path === '/sessions' && method === 'POST') {
       if (!db.elders.some((e) => e.elder_id === body.elder_id)) return err(400, '화자를 골라 주세요', 'elder_required');
       if (body.voice !== undefined && !VOICE_OK.includes(body.voice)) return err(422, '목소리를 확인해 주세요');
-      return ok(snapOf(openSession({topic: body.topic || body.title || '나의 이야기', elder_id: body.elder_id, voice: body.voice})));
+      return ok(snapOf(openSession({topic: body.topic || body.title || '나의 이야기', elder_id: body.elder_id, voice: body.voice, photo: !!body.photo_id})));
     }
     if ((m = path.match(/^\/sessions\/([^/]+)(\/.*)?$/))) {
       const id = m[1], rest = m[2] || '';
@@ -5171,7 +5273,8 @@ body:not(.ebook-mode) :is(.ml-volume-label, .ml-book-meta) { font-size: 14px; }
     if (typeof topic !== 'string' || !topic.trim()) return failure('topic_required');
     const t = topic.trim().slice(0, 60);
     const voice = window.MemoirVoice ? window.MemoirVoice.get() : 'default'; // 링크에 저장 → 어르신이 시작할 때 이 목소리
-    try { return issued(await api.linkCreate({elder_id: elderId, title: t, seed: t, topic: t, voice})); }
+    const photoId = await window.MemoirStartPhoto?.takeId?.(); // 시작 전에 고른 사진 → 어르신 화면에 함께 (LinkReq.photo_id)
+    try { const r = issued(await api.linkCreate({elder_id: elderId, title: t, seed: t, topic: t, voice, ...(photoId ? {photo_id: photoId} : {})})); if (photoId) window.MemoirStartPhoto.clear(); return r; }
     catch (e) { return failure(e.status === 404 ? 'elder_not_found' : 'server'); }
   }
   async function revoke(id) {
@@ -8301,6 +8404,21 @@ renderRecent();renderQuestion();setInterviewMode('reading');show(location.hash.s
     loop();
   }
 
+  /* ── 함께 보는 사진 — 시작 전에 고른 사진을 질문 옆에 작게 ── */
+  let photoUrl = null;
+  function showPhoto(url, used) {
+    document.getElementById('interview-photo')?.remove();
+    if (photoUrl && photoUrl !== url) URL.revokeObjectURL(photoUrl);
+    photoUrl = url;
+    if (!used) return;
+    const words = $q('.studio-words'); if (!words) return;
+    const fig = document.createElement('figure');
+    fig.id = 'interview-photo'; fig.className = 'interview-photo';
+    fig.innerHTML = url ? '<img alt="이야기와 함께 보는 사진"><figcaption>함께 보는 사진</figcaption>' : '<figcaption>사진을 함께 보냈어요</figcaption>';
+    if (url) fig.querySelector('img').src = url;
+    words.parentElement.insertBefore(fig, words);
+  }
+
   /* ── 시작 ── */
   async function start(opts) {
     if (starting || live()) return live();
@@ -8349,8 +8467,12 @@ renderRecent();renderQuestion();setInterviewMode('reading');show(location.hash.s
         topic, elder_id: elderId,
         voice: window.MemoirVoice ? window.MemoirVoice.get() : 'default', // 질문을 읽는 목소리 (srv-voice)
       };
+      // 시작 전에 고른 사진 (start-photo) — 올리는 중이면 잠깐 기다린다
+      const photoId = CONFIG.photo?.sendIdOnCreate === false ? null : await window.MemoirStartPhoto?.takeId?.();
+      if (photoId) body.photo_id = photoId;
       const closedLeft = await closeLeftover();
       const s = await api.start(body);
+      showPhoto(photoId ? window.MemoirStartPhoto.release() : null, !!photoId);
       sessionId = s.session_id;
       liveKeep(sessionId);
       if (closedLeft) toast('하던 이야기는 저장해 두었어요. 엽서보기의 「엽서로 만들기 전의 이야기」에서 볼 수 있어요.');
@@ -9673,6 +9795,153 @@ renderRecent();renderQuestion();setInterviewMode('reading');show(location.hash.s
 }());
 
 </script>
+<script data-from="start-photo.js">
+(function () {
+  'use strict';
+  /* ═══════════════════════════════════════════════════════════════
+     start-photo — 인터뷰를 시작하기 전에 「사진 한 장」 넣기 (골라도, 안 골라도 된다)
+       · 「내 이야기」(start-self) · 「초대 주소 만들기」(invite-setup) 화면의 고르기 칸에 들어간다.
+       · 서버: POST /api/photos (바이트 그대로) → { photo_id }
+               그 photo_id 를 POST /api/sessions · POST /api/links 에 싣는다 (StartReq · LinkReq.photo_id).
+       · 고르는 순간 올린다 — 서버가 올리는 자리에서 사진 분석을 걸어 두므로(analyze_later),
+         시작을 누를 때쯤 단서가 준비되어 첫 질문부터 사진 이야기가 된다 (CONFIG.photo.uploadOnPick).
+       · 로그인 전에는 올리지 않고 들고 있다가, 시작할 때 올린다.
+       · 올리지 못해도 이야기는 시작한다 — 사진은 거들 뿐이다.
+     ═══════════════════════════════════════════════════════════════ */
+  // 비교용으로 끄기: 주소 끝에 ?photo=off (예: ?demo=1&photo=off) — 사진 칸 없는 예전 모습
+  if (new URLSearchParams(location.search).get('photo') === 'off') return;
+  const S = window.Srv;
+  const PCFG = (S && S.CONFIG && S.CONFIG.photo) || {upload: true, maxUploadMB: 20, uploadOnPick: true, sendIdOnCreate: true, waitBeforeStartMs: 8000};
+  // 한 장만 들고 있는다. 화면을 다시 그려도(다른 화면에 다녀와도) 그대로 남는다
+  let pick = null; // {file, url, previewOk, status: 'idle'|'uploading'|'ready'|'failed', id, promise, error}
+
+  const loggedIn = () => !!window.MemoirGate?.isLoggedIn?.();
+  const MB = 1024 * 1024;
+
+  // 너무 큰 사진은 긴 변 2400px JPEG 로 줄여서 올린다 (브라우저가 열 수 있는 형식일 때만)
+  async function bytesOf(file) {
+    if (file.size <= PCFG.maxUploadMB * MB) return {body: await file.arrayBuffer(), mime: file.type};
+    try {
+      const bmp = await createImageBitmap(file);
+      const k = Math.min(1, 2400 / Math.max(bmp.width, bmp.height));
+      const c = document.createElement('canvas'); c.width = Math.round(bmp.width * k); c.height = Math.round(bmp.height * k);
+      c.getContext('2d').drawImage(bmp, 0, 0, c.width, c.height);
+      const blob = await new Promise((r) => c.toBlob(r, 'image/jpeg', 0.88));
+      return {body: await blob.arrayBuffer(), mime: 'image/jpeg'};
+    } catch (_) { return null; }
+  }
+
+  function upload() {
+    if (!pick || !S || !PCFG.upload) return Promise.resolve(null);
+    if (pick.status === 'uploading' || pick.status === 'ready') return pick.promise;
+    const me = pick;
+    me.status = 'uploading'; me.error = '';
+    paintAll();
+    me.promise = (async () => {
+      const b = await bytesOf(me.file);
+      if (!b) throw Object.assign(new Error('too_big'), {status: 413});
+      const r = await S.api.uploadPhoto(b.body, b.mime);
+      return r.photo_id;
+    })().then((id) => { if (pick === me) { me.status = 'ready'; me.id = id; paintAll(); } return id; },
+      (e) => {
+        if (pick === me) {
+          me.status = 'failed';
+          me.error = e.status === 400 ? '이 사진은 열 수 없어요. 다른 사진을 골라 주세요.'
+            : e.status === 413 ? '사진이 너무 커요. 다른 사진을 골라 주세요.'
+            : '사진을 올리지 못했어요. 그래도 사진 없이 시작할 수 있어요.';
+          paintAll();
+        }
+        return null;
+      });
+    return me.promise;
+  }
+
+  function choose(file) {
+    if (!file) return;
+    if (file.type && !file.type.startsWith('image/')) { toast('사진 파일을 골라 주세요.'); return; }
+    clear(false);
+    pick = {file, url: URL.createObjectURL(file), previewOk: true, status: 'idle', id: null, promise: null, error: ''};
+    paintAll();
+    if (PCFG.uploadOnPick && loggedIn()) void upload();
+  }
+
+  function clear(repaint = true) {
+    if (pick?.url) URL.revokeObjectURL(pick.url);
+    pick = null;
+    if (repaint) paintAll();
+  }
+
+  /** 시작 · 초대 직전에 부른다 — 올리는 중이면 잠깐 기다리고, 아직 안 올렸으면 지금 올린다 */
+  async function takeId(waitMs = PCFG.waitBeforeStartMs) {
+    if (!pick) return null;
+    if (pick.status === 'ready') return pick.id;
+    if (pick.status !== 'uploading') void upload();
+    const id = await Promise.race([pick.promise, new Promise((r) => setTimeout(() => r(null), waitMs))]);
+    if (!id) toast('사진은 아직 올라가지 않아 빼고 시작해요.');
+    return id;
+  }
+
+  // ── 고르는 칸 (start-choice 의 다른 칸과 같은 fieldset 모양) ──
+  function fieldset(step) {
+    return `<fieldset class="sc-photo"><legend>${step ? `<span class="sc-step">${step}</span>` : ''}사진 한 장 <small class="sc-optional">골라도, 안 골라도 돼요</small></legend>
+      <div class="sp-body"></div>
+      <input type="file" accept="image/*" class="sp-input" hidden>
+      <p class="sc-voice-note">사진을 넣으면 사진 속 장면부터 여쭤봐요.</p></fieldset>`;
+  }
+
+  function paint(fs) {
+    const body = fs.querySelector('.sp-body');
+    if (!pick) {
+      body.innerHTML = `<button type="button" class="sp-drop" data-sp="pick"><svg class="icon" aria-hidden="true"><use href="#i-photo"/></svg><span class="sp-drop-main">사진 고르기</span><span class="sp-drop-sub">앨범이나 사진기에서 한 장</span></button>`;
+      return;
+    }
+    const st = pick.status === 'uploading' ? '<span class="sp-st sp-st-busy" role="status"><span class="sp-spin" aria-hidden="true"></span>사진을 올리는 중이에요</span>'
+      : pick.status === 'ready' ? '<span class="sp-st sp-st-ok" role="status">사진이 준비됐어요</span>'
+      : pick.status === 'failed' ? `<span class="sp-st sp-st-err" role="alert">${pick.error}</span>`
+      : `<span class="sp-st" role="status">${loggedIn() ? '' : '시작할 때 함께 올려요'}</span>`;
+    body.innerHTML = `<div class="sp-card">
+        <div class="sp-thumb">${pick.previewOk ? `<img src="${pick.url}" alt="고른 사진">` : '<span>미리보기를 보여 드릴 수 없는 형식이에요. 그래도 보낼 수 있어요.</span>'}</div>
+        <div class="sp-meta"><strong class="sp-name"></strong>${st}
+          <div class="sp-acts"><button type="button" class="text-button" data-sp="pick">다른 사진</button><button type="button" class="text-button" data-sp="remove">빼기</button>${pick.status === 'failed' ? '<button type="button" class="text-button" data-sp="retry">다시 올리기</button>' : ''}</div></div></div>`;
+    body.querySelector('.sp-name').textContent = pick.file.name || '고른 사진';
+    const img = body.querySelector('img');
+    if (img) img.addEventListener('error', () => { if (pick) { pick.previewOk = false; paintAll(); } }, {once: true});
+  }
+  function paintAll() {
+    document.querySelectorAll('fieldset.sc-photo').forEach(paint);
+    document.querySelectorAll('form').forEach((f) => f.dispatchEvent(new Event('sp-change')));
+  }
+
+  function bind(form) {
+    const fs = form.querySelector('fieldset.sc-photo'); if (!fs) return;
+    const input = fs.querySelector('.sp-input');
+    fs.addEventListener('click', (e) => {
+      const b = e.target.closest('[data-sp]'); if (!b) return;
+      e.preventDefault();
+      if (b.dataset.sp === 'pick') input.click();
+      if (b.dataset.sp === 'remove') clear();
+      if (b.dataset.sp === 'retry') { pick.status = 'idle'; void upload(); }
+    });
+    input.addEventListener('change', (e) => { e.stopPropagation(); choose(input.files[0]); input.value = ''; });
+    // 끌어다 놓기 (PC)
+    fs.addEventListener('dragover', (e) => { e.preventDefault(); fs.classList.add('sp-over'); });
+    fs.addEventListener('dragleave', () => fs.classList.remove('sp-over'));
+    fs.addEventListener('drop', (e) => { e.preventDefault(); fs.classList.remove('sp-over'); choose(e.dataTransfer.files[0]); });
+    paint(fs);
+  }
+
+  // 로그인하면 들고 있던 사진을 바로 올린다
+  window.addEventListener('memoir:preview-auth', (e) => { if (e.detail?.authenticated && pick && pick.status === 'idle' && PCFG.uploadOnPick) void upload(); });
+
+  /** 회차 · 초대에 실은 뒤 — 들고 있던 사진을 내려놓고, 미리보기 주소는 넘겨준다(인터뷰 화면이 쓴다) */
+  function release() { const url = pick?.previewOk ? pick.url : null; pick = null; paintAll(); return url; }
+
+  window.MemoirStartPhoto = {fieldset, bind, takeId, clear, choose, release,
+    get has() { return !!pick; }, get previewUrl() { return pick?.previewOk ? pick.url : null; },
+    label: () => (pick ? '한 장 넣음' : '넣지 않음')};
+}());
+
+</script>
 <script data-from="start-choice.js">
 (function () {
   'use strict';
@@ -9680,6 +9949,8 @@ renderRecent();renderQuestion();setInterviewMode('reading');show(location.hash.s
   //    「내 이야기 시작하기」를 누르면 둘 중 하나를 고르는 화면(start)이 나온다.
   //    초대는 「초대 주소 만들기」 화면(invite-setup)으로 간다. 주소 발급 · 목록은 기존 RolePreview 그대로.
   const topics = ['어린 시절', '가족', '삶과 일'];
+  // 비교용 가운데 정렬판: 주소 끝에 ?layout=center (데모와 함께면 ?demo=1&layout=center)
+  if (new URLSearchParams(location.search).get('layout') === 'center') document.documentElement.classList.add('sc-centered');
   const main = document.querySelector('main');
   let pendingInvite = false;
 
@@ -9715,16 +9986,18 @@ renderRecent();renderQuestion();setInterviewMode('reading');show(location.hash.s
   let selfTopic = topics[0];
   function renderSelf() {
     self.querySelector('.sc-content').innerHTML = `<p class="sc-intro">오늘 들려주실 이야기의 주제를 골라 주세요. 주제에 맞춰 첫 질문을 드려요.<br><b>「나」의 이야기</b>로 저장돼요. 다른 분의 이야기는 「초대 주소 만들기」로 담아 주세요.</p>
-      <form class="panel sc-invite-form sc-self-form" novalidate>
+      <form class="panel sc-invite-form sc-self-form${window.MemoirStartPhoto ? ' sc-split' : ''}" novalidate><div class="sc-fields">
         <fieldset><legend>이야기 주제</legend>
           <div class="sc-chips" role="group" aria-label="주제">${topics.map((t) => `<label class="sc-chip"><input type="radio" name="topic" value="${t}" ${t === selfTopic ? 'checked' : ''}><span>${t}</span></label>`).join('')}</div></fieldset>
         ${window.MemoirVoice ? window.MemoirVoice.fieldset() : ''}
         <button type="submit" class="button primary sc-make">${icons('mic')}<span>녹음 시작하기</span></button>
         <p class="sc-fine">${window.MemoirGate?.isLoggedIn() ? '버튼을 누르면 마이크를 써도 되는지 여쭤봐요.' : '녹음은 로그인한 뒤에 할 수 있어요. 버튼을 누르면 로그인 창이 먼저 열려요.'}</p>
+        </div>${window.MemoirStartPhoto ? `<div class="sc-side">${window.MemoirStartPhoto.fieldset()}</div>` : ''}
       </form>
       <div class="sc-links"><button type="button" class="text-button" data-go="start">${icons('arrow', 'flip')} 돌아가기</button></div>`;
     const form = self.querySelector('form');
     form.addEventListener('change', () => { selfTopic = form.querySelector('input[name="topic"]:checked')?.value || topics[0]; });
+    window.MemoirStartPhoto?.bind(form);
     form.addEventListener('submit', (e) => {
       e.preventDefault();
       selfTopic = form.querySelector('input[name="topic"]:checked')?.value || topics[0];
@@ -9737,7 +10010,7 @@ renderRecent();renderQuestion();setInterviewMode('reading');show(location.hash.s
     const data = window.RolePreview.store.snapshot();
     const others = data.elders.filter((e) => e.name !== '나');
     invite.querySelector('.sc-content').innerHTML = `<p class="sc-intro">이야기를 들려주실 분에게 보낼 주소를 만들어요. 주소를 받은 분은 휴대폰에서 바로 이야기를 시작할 수 있어요.</p>
-      <form class="panel sc-invite-form" novalidate>
+      <form class="panel sc-invite-form${window.MemoirStartPhoto ? ' sc-split' : ''}" novalidate><div class="sc-fields">
         <fieldset><legend><span class="sc-step">1</span>누구에게 보낼까요?</legend>
           ${others.length ? `<div class="sc-chips" role="group" aria-label="등록한 분">${others.map((e, i) => `<label class="sc-chip"><input type="radio" name="who" value="${escapeText(e.elder_id)}" ${i === 0 ? 'checked' : ''}><span>${escapeText(e.name)}</span></label>`).join('')}<label class="sc-chip"><input type="radio" name="who" value="__new" ${others.length ? '' : 'checked'}><span>새로 적기</span></label></div>` : '<input type="hidden" name="who" value="__new">'}
           <label class="sc-name" ${others.length ? 'hidden' : ''}><span>부르는 이름</span><input name="name" maxlength="30" autocomplete="off" placeholder="예: 어머니, 김순자"></label>
@@ -9748,6 +10021,7 @@ renderRecent();renderQuestion();setInterviewMode('reading');show(location.hash.s
         ${window.MemoirVoice ? window.MemoirVoice.fieldset(3) : ''}
         <button type="submit" class="button primary sc-make">${icons('letter')}<span>초대 주소 만들기</span></button>
         <p class="sc-fine">${window.MemoirGate?.isLoggedIn() ? '' : '초대 주소는 로그인한 뒤에 만들 수 있어요. 버튼을 누르면 로그인 창이 먼저 열려요.'}</p>
+        </div>${window.MemoirStartPhoto ? `<div class="sc-side">${window.MemoirStartPhoto.fieldset()}</div>` : ''}
       </form>
       <div class="sc-links"><button type="button" class="text-button" data-go="invitations">이미 보낸 초대 보기 ${icons('chevron')}</button>
         <button type="button" class="text-button" data-go="start">${icons('arrow', 'flip')} 돌아가기</button></div>`;
@@ -9756,6 +10030,7 @@ renderRecent();renderQuestion();setInterviewMode('reading');show(location.hash.s
       const who = form.querySelector('input[name="who"]:checked')?.value || form.who?.value;
       form.querySelector('.sc-name').hidden = who !== '__new';
     });
+    window.MemoirStartPhoto?.bind(form);
     form.addEventListener('submit', (e) => { e.preventDefault(); make(form); });
   }
 

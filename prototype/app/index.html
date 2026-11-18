@@ -67,6 +67,7 @@
   <script src="login-gate.js" defer></script>
   <script src="postcards-cork.js" defer></script>
   <script src="library-pull.js" defer></script>
+  <script src="start-photo.js" defer></script>
   <script src="start-choice.js" defer></script>
   <script src="book-pdf.js" defer></script>
   <script src="bulk-delete.js" defer></script>
@@ -91,7 +92,7 @@
     <symbol id="i-pen" viewBox="0 0 24 24"><path d="m16 3 5 5-12 12-6 1 1-6ZM13 6l5 5M3 21h18"/></symbol>
     <symbol id="i-arrow" viewBox="0 0 24 24"><path d="M4 12h16m-6-6 6 6-6 6"/></symbol>
     <symbol id="i-chevron" viewBox="0 0 24 24"><path d="m9 5 7 7-7 7"/></symbol>
-    <symbol id="i-plus" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></symbol>
+    <symbol id="i-plus" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></symbol><symbol id="i-photo" viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="14" rx="2.5"/><circle cx="8.5" cy="10" r="1.6"/><path d="m21 16-5-5-8 8"/></symbol>
     <symbol id="i-check" viewBox="0 0 24 24"><path d="m5 12 4 4L19 6"/></symbol>
     <symbol id="i-leaf" viewBox="0 0 24 24"><path d="M20 3c1 10-3 17-10 17a7 7 0 0 1-7-7C3 6 10 2 20 3ZM5 19 16 8M9 15v-5M9 15h5"/></symbol>
     <symbol id="i-letter" viewBox="0 0 24 24"><rect x="2" y="4" width="20" height="16" rx="2"/><path d="m2 6 10 8L22 6"/></symbol>
@@ -126,8 +127,8 @@
 
       <section data-screen="home" class="screen" aria-labelledby="home-heading">
         <div class="hero panel">
-          <div class="hero-copy"><div class="eyebrow">당신의 삶, 그 자체로 소중한 이야기</div><h1 id="home-heading" tabindex="-1">기억은 이야기가 되고,<br> <em>이야기는 책이 됩니다.</em></h1><p class="hero-description">사진 한 장, 마음속 기억 하나.<br>편안하게 들려주시면 한 권의 자서전으로 엮어드려요.</p><button class="button primary hero-cta" data-go="interview"><svg class="icon"><use href="#i-pen"/></svg>이야기 시작하기<svg class="icon end-icon"><use href="#i-arrow"/></svg></button><p class="gentle-note">잘 말하려 애쓰지 않아도 괜찮아요.</p></div>
-          <div class="hero-art"><span class="art-halo"></span><img src="book-illustration.svg" alt="펼친 자서전과 오래된 사진을 담은 따뜻한 삽화"><div class="art-caption"><span>한 장의 기억이</span><strong>한 권의 선물이 되도록.</strong></div></div>
+          <div class="hero-copy"><div class="eyebrow">당신의 삶, 그 자체로 소중한 이야기</div><h1 id="home-heading" tabindex="-1">기억은 이야기가 되고,<br> <em>이야기는 책이 됩니다.</em></h1><p class="hero-description">사진 한 장, 마음속 기억 하나.<br>편안하게 들려주시면 한 권의 자서전으로 엮어드려요.</p><button class="button primary hero-cta" data-go="interview"><svg class="icon"><use href="#i-pen"/></svg>이야기 시작하기<svg class="icon end-icon"><use href="#i-arrow"/></svg></button></div>
+          <div class="hero-art"><span class="art-halo"></span><img src="book-illustration.svg" alt="펼친 자서전과 오래된 사진을 담은 따뜻한 삽화"></div>
         </div>
         <div class="home-shortcuts"><button class="shortcut" data-go="records"><span class="shortcut-icon"><svg class="icon"><use href="#i-letter"/></svg></span><span><strong>엽서보기</strong><small>차곡차곡 모아둔 이야기</small></span><svg class="icon"><use href="#i-chevron"/></svg></button><button class="shortcut" data-go="library"><span class="shortcut-icon"><svg class="icon"><use href="#i-book"/></svg></span><span><strong>자서전 보기</strong><small>나의 얇은 책들이 모이는 책장</small></span><svg class="icon"><use href="#i-chevron"/></svg></button></div>
         <div class="home-lower"><div class="panel recent-panel"><div class="section-heading"><div><span class="eyebrow">차곡차곡 쌓이는 기억</span><h2>최근 나눈 이야기</h2></div><button class="text-button" data-go="records">모두 보기 <svg class="icon"><use href="#i-chevron"/></svg></button></div><div class="recent-list" id="recent-list"></div></div><div class="panel prompt-panel"><span class="eyebrow">오늘의 작은 질문</span><span class="quote-mark">“</span><h2>어린 시절,<br>가장 좋아했던<br>장소는 어디였나요?</h2><p>골목길도, 할머니 댁 마루도 좋아요.<br>떠오르는 그곳부터 시작해 볼까요.</p><button class="text-button" data-go="interview">이 기억 들려주기 <svg class="icon"><use href="#i-arrow"/></svg></button></div></div>
@@ -135,7 +136,7 @@
       </section>
 
       <section data-screen="interview" class="screen" hidden aria-labelledby="interview-heading">
-        <div class="page-heading interview-page-heading"><div><div class="eyebrow">기억을 따라, 천천히</div><h1 id="interview-heading" tabindex="-1">이야기를 들려주세요</h1><p>잘 말하려 애쓰지 않아도 괜찮아요.</p></div></div>
+        <div class="page-heading interview-page-heading"><div><div class="eyebrow">기억을 따라, 천천히</div><h1 id="interview-heading" tabindex="-1">이야기를 들려주세요</h1></div></div>
         <div class="interview-studio panel" data-interview-state="reading">
           <div class="studio-topline"><span class="pill">어린 시절</span><span class="studio-status" id="listening-status" role="status">질문을 확인해 주세요</span></div>
           <div class="studio-main">
