@@ -6,6 +6,7 @@
   <meta name="color-scheme" content="light">
   <title>내말싸미</title>
   <link rel="stylesheet" href="fonts/cover-font.css">
+  <link rel="stylesheet" href="fonts/bookk-font.css">
   <link rel="stylesheet" href="styles.css">
   <link rel="stylesheet" href="pc-navigation.css">
   <link rel="stylesheet" href="ebook-reader.css">
@@ -37,6 +38,7 @@
   <link rel="stylesheet" href="reader-arrows.css">
   <link rel="stylesheet" href="reader-turn.css">
   <link rel="stylesheet" href="srv.css">
+  <link rel="stylesheet" href="readability.css">
   <script src="srv-core.js" defer></script>
   <script src="srv-voice.js" defer></script>
   <script src="srv-demo.js" defer></script>
@@ -78,6 +80,7 @@
   <script src="reader-arrows.js" defer></script>
   <script src="answer-box.js" defer></script>
   <script src="draft-dock.js" defer></script>
+  <script src="reader-font.js" defer></script>
 </head>
 <body>
   <svg class="icon-defs" aria-hidden="true" xmlns="http://www.w3.org/2000/svg"><defs>
@@ -149,7 +152,7 @@
       <section data-screen="records" class="screen" hidden aria-labelledby="records-heading">
         <div class="page-heading personal-header"><div><div class="eyebrow">내 삶의 소중한 조각들</div><div class="personal-heading"><h1 id="records-heading" tabindex="-1">나의 기록</h1><span class="personal-heading-action" data-owner-change="records"></span></div><p class="personal-owner-note" id="records-owner-note" hidden></p><p id="records-description">함께 나눈 이야기를 한 장씩 펼쳐보세요.</p></div><button class="button outline compact" data-go="interview"><svg class="icon"><use href="#i-plus"/></svg>이야기 더하기</button></div>
         <button class="button outline postcard-pick-back" id="cancel-postcard-pick" hidden><svg class="icon flip" aria-hidden="true"><use href="#i-arrow"/></svg>엽서 보기로 돌아가기</button><div class="panel records-panel">
-          <details id="pending-stories" class="pending-stories" hidden><summary id="pending-stories-summary">엽서로 만들기 전의 이야기 (0)</summary><p class="small-copy">인터뷰는 마쳤지만 아직 엽서로 만들지 않은 이야기예요.</p><div id="pending-story-list"></div></details>
+          <details id="pending-stories" class="pending-stories" hidden><summary id="pending-stories-summary">엽서로 만들기 전의 이야기 (0)</summary><p class="small-copy">엽서로 만들지 않은 인터뷰예요.</p><div id="pending-story-list"></div></details>
           <div class="records-toolbar"><div class="filter-group" role="group" aria-label="기록 분류"><button data-filter="all" aria-pressed="true">전체</button><button data-filter="childhood" aria-pressed="false">어린 시절</button><button data-filter="family" aria-pressed="false">가족</button><button data-filter="life" aria-pressed="false">삶과 일</button></div><label class="search-field"><svg class="icon"><use href="#i-search"/></svg><span class="sr-only">이야기 검색</span><input id="record-search" type="search" placeholder="이야기 검색"></label></div><div class="record-list" id="record-list"></div><div class="selection-footer"><div><strong id="selection-count" aria-live="polite">엽서 6장</strong><span id="selection-note">기억이 모이면, 얇은 책 한 권이 됩니다.</span></div><button class="button primary" id="choose-style">엽서로 자서전 만들기</button></div></div>
       </section>
 
@@ -157,11 +160,11 @@
 
       <section data-screen="style" class="screen" hidden aria-labelledby="style-heading">
         <div class="page-heading"><div><div class="eyebrow">나답게 엮는 한 권</div><h1 id="style-heading" tabindex="-1">어떤 느낌으로 담을까요?</h1><p>마음에 드는 문체를 골라보세요. 같은 기억도 새로운 글이 됩니다.</p></div></div><ol class="stepper" aria-label="자서전 만들기 단계"><li class="done"><span><svg class="icon"><use href="#i-check"/></svg></span>기록 선택</li><li aria-current="step"><span>2</span>문체 선택</li><li><span>3</span>초안 살펴보기</li></ol>
-        <div class="style-layout"><div class="style-options" id="style-options" role="group" aria-label="자서전 문체 선택"></div><aside class="panel style-preview"><div class="eyebrow">이런 느낌으로 쓰여요</div><span class="quote-mark">“</span><p id="style-sample" class="serif"></p><span class="sample-credit" id="style-credit"></span><div class="little-rule"></div><p class="small-copy">이 문장은 문체를 비교하기 위한 예시입니다.<br>내 이야기는 선택한 기록을 바탕으로 엮어요.</p></aside></div><div class="panel build-footer"><button class="text-button" data-go="records"><svg class="icon flip"><use href="#i-arrow"/></svg>기록 다시 고르기</button><span id="build-summary">이야기 3개 · 담백한 기록</span><button class="button primary" id="generate-draft"><svg class="icon"><use href="#i-spark"/></svg>초안 미리보기</button></div>
+        <div class="style-layout"><div class="style-options" id="style-options" role="group" aria-label="자서전 문체 선택"></div><aside class="panel style-preview"><div class="eyebrow">이런 느낌으로 쓰여요</div><span class="quote-mark">“</span><p id="style-sample" class="serif"></p><span class="sample-credit" id="style-credit"></span><div class="little-rule"></div><p class="small-copy">예시 문장이에요. 내 책은 고른 엽서로 엮어요.</p></aside></div><div class="panel build-footer"><button class="text-button" data-go="records"><svg class="icon flip"><use href="#i-arrow"/></svg>기록 다시 고르기</button><span id="build-summary">이야기 3개 · 담백한 기록</span><button class="button primary" id="generate-draft"><svg class="icon"><use href="#i-spark"/></svg>초안 미리보기</button></div>
       </section>
 
       <section data-screen="draft" class="screen" hidden aria-labelledby="draft-heading">
-        <div class="page-heading"><div><div class="eyebrow">한 권의 시작</div><h1 id="draft-heading" tabindex="-1">나의 자서전 초안</h1><p>읽어보며 마음에 닿는 문장으로 다듬어 보세요.</p></div><button class="button outline compact" id="edit-draft"><svg class="icon"><use href="#i-pen"/></svg><span>글 수정하기</span></button></div><ol class="stepper" aria-label="자서전 만들기 단계"><li class="done"><span><svg class="icon"><use href="#i-check"/></svg></span>기록 선택</li><li class="done"><span><svg class="icon"><use href="#i-check"/></svg></span>문체 선택</li><li aria-current="step"><span>3</span>초안 살펴보기</li></ol><div class="draft-layout"><article class="panel manuscript"><div class="manuscript-meta"><span>나의 첫 번째 자서전</span><span id="draft-style-label">담백한 기록</span></div><div class="draft-reading" id="draft-reading"><h2 id="draft-title" class="serif"></h2><div id="draft-body" class="serif manuscript-body"></div><div class="manuscript-ending">우리의 이야기는, 계속됩니다.<span>✧</span></div></div><form class="draft-editor" id="draft-editor" hidden><label for="edit-title">책 제목</label><input id="edit-title" maxlength="80"><label for="edit-body">자서전 글</label><textarea id="edit-body" rows="15" maxlength="10000"></textarea><button class="button primary" type="submit">수정한 글 적용하기</button></form></article><aside class="draft-aside"><div class="panel draft-note"><svg class="icon"><use href="#i-leaf"/></svg><h2>당신의 말이,<br>이야기의 중심이에요.</h2><p>마음과 다른 표현이 있다면 편하게 고쳐주세요. 가장 나다운 문장이 가장 좋은 문장입니다.</p></div><div class="draft-actions"><button class="button primary" id="save-volume"><svg class="icon"><use href="#i-book"/></svg>작은 책으로 보관하기</button><button class="button outline" data-go="reader">책으로 미리 읽기</button><button class="button outline" id="download-draft"><svg class="icon"><use href="#i-download"/></svg>글 파일로 내려받기</button><button class="text-button" data-go="style">다른 문체 둘러보기</button></div><p class="small-copy">이 자서전은 서버에 보관되어 있어요.<br>고친 글은 이 기기에서만 보여요.</p></aside></div>
+        <div class="page-heading"><div><div class="eyebrow">한 권의 시작</div><h1 id="draft-heading" tabindex="-1">나의 자서전 초안</h1><p>읽어보며 마음에 닿는 문장으로 다듬어 보세요.</p></div><button class="button outline compact" id="edit-draft"><svg class="icon"><use href="#i-pen"/></svg><span>글 수정하기</span></button></div><ol class="stepper" aria-label="자서전 만들기 단계"><li class="done"><span><svg class="icon"><use href="#i-check"/></svg></span>기록 선택</li><li class="done"><span><svg class="icon"><use href="#i-check"/></svg></span>문체 선택</li><li aria-current="step"><span>3</span>초안 살펴보기</li></ol><div class="draft-layout"><article class="panel manuscript"><div class="manuscript-meta"><span>나의 첫 번째 자서전</span><span id="draft-style-label">담백한 기록</span></div><div class="draft-reading" id="draft-reading"><h2 id="draft-title" class="serif"></h2><div id="draft-body" class="serif manuscript-body"></div><div class="manuscript-ending">우리의 이야기는, 계속됩니다.<span>✧</span></div></div><form class="draft-editor" id="draft-editor" hidden><label for="edit-title">책 제목</label><input id="edit-title" maxlength="80"><label for="edit-body">자서전 글</label><textarea id="edit-body" rows="15" maxlength="10000"></textarea><button class="button primary" type="submit">수정한 글 적용하기</button></form></article><aside class="draft-aside"><div class="panel draft-note"><svg class="icon"><use href="#i-leaf"/></svg><h2>당신의 말이,<br>이야기의 중심이에요.</h2><p>마음과 다른 표현이 있다면 편하게 고쳐주세요. 가장 나다운 문장이 가장 좋은 문장입니다.</p></div><div class="draft-actions"><button class="button primary" id="save-volume"><svg class="icon"><use href="#i-book"/></svg>작은 책으로 보관하기</button><button class="button outline" data-go="reader">책으로 미리 읽기</button><button class="button outline" id="download-draft"><svg class="icon"><use href="#i-download"/></svg>글 파일로 내려받기</button><button class="text-button" data-go="style">다른 문체 둘러보기</button></div><p class="small-copy">고친 글은 이 기기에서만 보여요.</p></aside></div>
       </section>
 
       <section data-screen="reader" class="screen" hidden aria-label="자서전 읽기">

@@ -70,7 +70,7 @@
       screen.append(content);
     }
     content.innerHTML = `
-      <div class="ml-shelf-heading"><h2>모아둔 작은 책 <span>${currentBooks().length}권</span></h2><p>${currentBooks().length?'이야기를 담은 작은 책이 모이는 곳이에요.':'아직 엮은 책이 없어요. 엽서보기에서 엽서를 골라 첫 책을 만들어 보세요.'}</p></div>
+      <div class="ml-shelf-heading"><h2>모아둔 작은 책 <span>${currentBooks().length}권</span></h2>${currentBooks().length?'':'<p>아직 엮은 책이 없어요. 엽서보기에서 엽서를 골라 첫 책을 만들어 보세요.</p>'}</div>
       ${shelfMarkup()}
       <p class="ml-collection-note">얇은 책이 쌓이면, 언젠가 두툼한 한 권의 이야기로.</p>`;
     if (focusedId) screen.querySelector(`[data-library-book="${focusedId}"]`)?.focus({preventScroll:true});

@@ -11,7 +11,7 @@ body:not(.ebook-mode) .ml-remove { min-height: 44px; font-size: 14px; color: #8f
 [data-screen="library"].ml-selecting .ml-cover-bay { position: relative; }
 [data-screen="library"].ml-selecting .ml-cover::before {
   content: ""; position: absolute; bottom: 10px; right: 10px; z-index: 2; width: 30px; height: 30px; border-radius: 50%;
-  background: #fffdf6; border: 2px solid #b39a7c; box-shadow: 0 1px 3px #0005;
+  background: #fbfbfa; border: 2px solid #a5998a; box-shadow: 0 1px 3px #0005;
 }
 [data-screen="library"].ml-selecting li.is-picked .ml-cover::before {
   background: var(--burgundy) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23fff' stroke-width='3' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M5 12.5l4.5 4.5L19 7.5'/%3E%3C/svg%3E") center/18px no-repeat;

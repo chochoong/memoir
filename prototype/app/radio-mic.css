@@ -2,7 +2,7 @@
 .radio-scene .rd-shock-rod { stroke: #4a3a2e; stroke-width: 3; stroke-linecap: round; }
 .radio-scene .rd-shock-ring { fill: none; stroke: #3d2e22; stroke-width: 3.2; stroke-linecap: round; }
 .radio-scene .rd-shock-ring.back { stroke: #6d5a49; stroke-width: 2.6; }
-.radio-scene .rd-elastic { stroke: #b48a62; stroke-width: 1.4; stroke-linecap: round; opacity: .9; }
+.radio-scene .rd-elastic { stroke: #a08b77; stroke-width: 1.4; stroke-linecap: round; opacity: .9; }
 .radio-scene .rd-cable { fill: none; stroke: #2b2420; stroke-width: 3; stroke-linecap: round; }
 .radio-scene .rd-mic-led {
   fill: var(--radio-sign-fill, var(--_radio-sign-fill, #5a4a3e));

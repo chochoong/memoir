@@ -24,7 +24,7 @@
 .sc-step { display: grid; place-items: center; width: 28px; height: 28px; border-radius: 50%; background: var(--burgundy); color: #fff; font-size: 14px; }
 .sc-chips { display: flex; flex-wrap: wrap; gap: 10px; }
 .sc-chip input { position: absolute; opacity: 0; pointer-events: none; }
-.sc-chip span { display: inline-flex; align-items: center; min-height: 46px; padding: 0 18px; border: 1px solid var(--line); border-radius: 999px; background: #fffdf5; font-size: 16px; cursor: pointer; }
+.sc-chip span { display: inline-flex; align-items: center; min-height: 46px; padding: 0 18px; border: 1px solid var(--line); border-radius: 999px; background: #fbfaf9; font-size: 16px; cursor: pointer; }
 .sc-chip input:checked + span { border-color: var(--burgundy); background: var(--blush); color: var(--burgundy); font-weight: 600; }
 .sc-chip input:focus-visible + span { outline: 3px solid var(--burgundy); outline-offset: 2px; }
 .sc-name { display: grid; gap: 6px; max-width: 360px; font-size: 14px; color: var(--muted); }
