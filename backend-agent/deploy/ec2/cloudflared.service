@@ -1,0 +1,22 @@
+# Cloudflare 터널 — systemd 서비스 (EC2 · Ubuntu)
+#
+# setup.sh 가 /etc/systemd/system/cloudflared.service 로 복사만 한다. **켜지 않는다.**
+# 지금 PC 와 같은 터널을 쓰므로, 둘이 같이 켜져 있으면 Cloudflare 가 요청을 둘로 나눠 보낸다
+# (인터뷰 도중 다른 서버로 가면 회차를 못 찾는다). 옮기는 순간에만 README 순서대로 켠다.
+#
+#   켜기   sudo systemctl enable --now cloudflared
+#   로그   journalctl -u cloudflared -f
+
+[Unit]
+Description=cloudflared tunnel (naemalssami.com -> 127.0.0.1:8010)
+After=network-online.target memoir.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+ExecStart=/usr/bin/cloudflared --no-autoupdate --config /etc/cloudflared/config.yml tunnel run
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

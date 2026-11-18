@@ -1,0 +1,28 @@
+# 내말싸미 서버 — systemd 서비스 (EC2 · Ubuntu)
+#
+# setup.sh 가 /etc/systemd/system/memoir.service 로 복사한다.
+#   상태   sudo systemctl status memoir
+#   로그   journalctl -u memoir -f          (지난 로그: journalctl -u memoir --since "1 hour ago")
+#   재시작  sudo systemctl restart memoir     ← 먼저 진행 중인 인터뷰 · 자서전 작업이 없는지 본다
+#
+# **워커는 반드시 1** — 회차 · 자서전 작업이 프로세스 메모리에 있다 (app/main.py _workers).
+
+[Unit]
+Description=memoir (naemalssami) API server
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=ubuntu
+WorkingDirectory=/home/ubuntu/memoir/backend-agent
+Environment=TZ=Asia/Seoul
+Environment=PYTHONUNBUFFERED=1
+ExecStart=/home/ubuntu/memoir/backend-agent/.venv/bin/python -m uvicorn app.main:app --host 127.0.0.1 --port 8010 --workers 1 --proxy-headers
+Restart=always
+RestartSec=5
+# 끄라고 하면 30초 기다렸다 강제로 끈다 (진행 중 요청 마무리)
+TimeoutStopSec=30
+
+[Install]
+WantedBy=multi-user.target

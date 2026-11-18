@@ -1655,9 +1655,23 @@ async def _read(coro):
 # 실기기 확인 때 터널을 하나만 열면 되고, 같은 출처라 CORS 도 필요 없다.
 # 반드시 API 라우트 **뒤에** 마운트한다 — 앞에 두면 /api 까지 삼킨다.
 
-_web = Path(__file__).resolve().parents[1] / "web"
-if (_web / "index.html").exists():
-    app.mount("/assets", StaticFiles(directory=_web / "assets"), name="assets")
+#
+# WEB_INDEX — 화면 파일을 직접 고른다 (backend-agent 기준 상대 경로 또는 절대 경로).
+#   운영: WEB_INDEX=../prototype/index.html  → git pull/merge 만으로 화면이 바뀐다 (web/ 로 복사하지 않는다).
+#   비우면 예전대로 web/index.html.
+# **적었는데 파일이 없으면 서버를 켜지 않는다** — 예전 화면으로 조용히 떨어지면 어느 판이 나가는지 모른다.
+
+_root = Path(__file__).resolve().parents[1]
+_web = _root / "web"
+_web_index_env = env_str("WEB_INDEX").strip()
+_web_index = ((_root / _web_index_env) if not Path(_web_index_env).is_absolute() else Path(_web_index_env)).resolve() \
+    if _web_index_env else _web / "index.html"
+if _web_index_env and not _web_index.is_file():
+    raise RuntimeError(f"WEB_INDEX={_web_index_env!r} 파일이 없습니다 ({_web_index}) — 경로를 고치거나 비우세요")
+if _web_index.is_file():
+    log.info("화면 파일 — %s", _web_index)
+    if (_web / "assets").is_dir():
+        app.mount("/assets", StaticFiles(directory=_web / "assets"), name="assets")
 
     @app.get("/{full_path:path}", include_in_schema=False)
     async def spa(full_path: str):
@@ -1670,4 +1684,4 @@ if (_web / "index.html").exists():
         """
         if full_path.startswith("api/") or full_path == "api":
             raise HTTPException(404, "없는 API 경로입니다")
-        return FileResponse(_web / "index.html")
+        return FileResponse(_web_index)
