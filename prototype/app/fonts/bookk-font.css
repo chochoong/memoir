@@ -1,0 +1,8 @@
+/* 자서전 본문 글꼴 — 부크크 명조 Light (원본 그대로, 잘라내거나 고치지 않음). 출처 · 사용 조건은 PROVENANCE-bookk.md */
+@font-face {
+  font-family: "Bookk Myungjo";
+  src: url("bookk-myungjo-light.woff2") format("woff2");
+  font-style: normal;
+  font-weight: 100 500;
+  font-display: swap;
+}

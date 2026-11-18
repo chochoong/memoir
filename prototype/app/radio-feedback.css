@@ -2,7 +2,7 @@
 .radio-feedback-controls {
   margin: 18px 0 0;
   padding: 16px;
-  border: 1px solid var(--line, #e1d1c7);
+  border: 1px solid var(--line, #d7d4d1);
   border-radius: 10px;
   text-align: left;
 }

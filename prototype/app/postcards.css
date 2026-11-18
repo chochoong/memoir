@@ -4,11 +4,11 @@
   border-radius:0; min-height:104px;
 }
 .postcard-card:last-child { border-bottom:0; }
-.postcard-card:hover { background:#fcf5ed; }
+.postcard-card:hover { background:#f6f4f3; }
 .postcard-card .memory-thumbnail { width:78px; height:70px; }
 .postcard-card .record-copy { flex:1; }
 .postcard-card>.icon { width:18px; color:var(--burgundy); }
-.postcard-dialog { background:#fff9ee; }
+.postcard-dialog { background:#f8f6f5; }
 .postcard-dialog h2 { font-family:var(--serif); line-height:1.7; }
 #postcard-body { font-family:var(--serif); font-size:23px; line-height:2; color:#574738; }
 #postcard-body p { font-size:inherit; color:inherit; margin-bottom:18px; }
