@@ -47,7 +47,8 @@ git -C "$APP" log --oneline -1
 say "3. 가상환경 · 패키지"
 [ -d "$BE/.venv" ] || python3 -m venv "$BE/.venv"
 "$BE/.venv/bin/pip" install -q --upgrade pip
-"$BE/.venv/bin/pip" install -q -r "$BE/requirements.txt"
+"$BE/.venv/bin/pip" install -q -r "$BE/requirements.txt" -c "$BE/requirements.lock"   # 검증된 버전으로 고정
+"$BE/.venv/bin/pip" show google-genai | grep ^Version
 "$BE/.venv/bin/python" -c "import fastapi, asyncpg, google.genai, anthropic, pillow_heif; print('패키지 확인 완료')"
 
 say "4. memoir 서비스"

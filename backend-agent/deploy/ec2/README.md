@@ -99,6 +99,6 @@ DB 는 같은 RDS 라 되돌려도 자료가 갈라지지 않는다.
 | 새 코드 받기 | `cd ~/memoir && git pull --ff-only` |
 | 화면만 바뀌었을 때 | 받기만 하면 끝 (`WEB_INDEX=../prototype/index.html`) |
 | 서버 코드가 바뀌었을 때 | 받은 뒤 `sudo systemctl restart memoir` (진행 중 작업 확인 먼저) |
-| requirements 가 바뀌었을 때 | `~/memoir/backend-agent/.venv/bin/pip install -r ~/memoir/backend-agent/requirements.txt` 후 재시작 |
+| requirements 가 바뀌었을 때 | `cd ~/memoir/backend-agent && .venv/bin/pip install -r requirements.txt -c requirements.lock` 후 재시작. **`-c requirements.lock` 을 빼지 않는다** — 빼면 최신판이 깔린다 (11-18 google-genai 3.x 로 자서전이 모두 실패했다) |
 | 로그 | `journalctl -u memoir -f` · 오늘 것 `journalctl -u memoir --since today` |
 | 서버 상태 | `systemctl status memoir cloudflared` |
