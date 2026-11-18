@@ -21,6 +21,7 @@
   let inputMode = 'voice', micOk = false, sending = false, awaitingReply = false, drainSince = 0;
   let ttsFailed = false, resumeSent = false, level = 0, levelRaf = null, starting = false;
   let topic = '', elderId = '';
+  let receipt = null;       // 글로 보낸 답의 상태 {state: queued · sending · sent · failed, text} — 「보냈는지 모르겠다」 피드백(11-17)
   let queued = false;       // 「이야기 남기기」를 눌렀는데 아직 보낼 수 없다 — 보낼 수 있게 되면 바로 보낸다
   let skippedQ = null;      // 글을 보내려고 낭독을 건너뛴 질문 — 낭독이 끝나도 tts-done 을 다시 올리지 않는다
 
@@ -104,7 +105,8 @@
       const stuck = leftover && Date.now() - drainSince > CONFIG.interview.voiceDrainMs;
       let msg = '떠오르는 기억을 천천히 적어 주세요.';
       if (inputMode === 'switching') msg = '말씀하신 소리를 마저 보내고 있어요…';
-      else if (sending) msg = '보내는 중이에요…';
+      else if (sending && !(receipt && receipt.state === 'sent')) msg = '보내는 중이에요…';
+      else if (sending) msg = '잘 받았어요. 다음 질문을 준비하고 있어요.';
       else if (queued) msg = snap.state === 'SPEAKING' ? '질문을 다 읽으면 바로 보낼게요.' : '앞서 하신 말씀을 정리하는 중이에요. 끝나면 바로 보낼게요.';
       else if (snap.state === 'SPEAKING') msg = ttsFailed ? '질문 소리를 틀지 못했어요. 글을 써서 보내시면 돼요.' : '질문을 읽고 있어요. 다 쓰셨으면 지금 「이야기 남기기」를 눌러도 돼요.';
       else if (snap.state === 'PROCESSING') msg = '이야기를 정리하고 있어요. 미리 써 두셔도 돼요.';
@@ -114,12 +116,45 @@
       status.textContent = awaitingReply ? '잘 받았어요' : '글로 이야기하는 중';
       hint.textContent = msg; sub.textContent = '';
       box.readOnly = sending;
+      paintReceipt(send);
       // 버튼은 끄지 않는다 — 지금 보낼 수 없으면 눌렀을 때 기다렸다가 보낸다 (금지 표시로 막혀 보이지 않게)
       send.disabled = inputMode !== 'keyboard';
       send.setAttribute('aria-busy', String(sending || queued));
       send.classList.toggle('srv-send-wait', sending || queued);
       void text;
     }
+  }
+
+  /* ── 글로 보낸 답 — 보내는 중 · 전달됨 · 못 보냄을 입력칸 위에 크게 보여 준다 ──
+       전달됨(✓)은 서버가 글을 받은 뒤에만 표시한다. 못 보냈으면 글은 입력칸에 그대로 두고 「다시 보내기」를 준다. */
+  let sendLabel = null;
+  function paintReceipt(send) {
+    const panel = $q('#answer-panel');
+    let el = panel.querySelector('.answer-receipt');
+    if (!el) {
+      el = document.createElement('div');
+      el.className = 'answer-receipt'; el.setAttribute('role', 'status'); el.setAttribute('aria-live', 'polite');
+      panel.prepend(el);
+      el.addEventListener('click', (e) => { if (e.target.closest('[data-receipt-retry]')) void sendText(); });
+    }
+    if (sendLabel === null) sendLabel = send.innerHTML;
+    const r = receipt;
+    el.hidden = !r;
+    el.dataset.state = r ? r.state : '';
+    if (r) {
+      const head = {
+        queued: ['ar-wait', '보낼 차례를 기다리고 있어요', snap && snap.state === 'SPEAKING' ? '질문을 다 읽으면 바로 보내요.' : '앞서 하신 말씀을 정리하면 바로 보내요.'],
+        sending: ['ar-wait', '보내는 중이에요', '잠시만 기다려 주세요.'],
+        sent: ['ar-ok', '잘 전달됐어요', awaitingReply ? '다음 질문을 준비하고 있어요.' : '아래에 이어서 적으셔도 돼요.'],
+        failed: ['ar-fail', '글을 보내지 못했어요', '적으신 글은 아래 칸에 그대로 있어요.'],
+      }[r.state];
+      el.innerHTML = `<p class="ar-head"><span class="ar-mark ${head[0]}" aria-hidden="true"></span><strong>${head[1]}</strong></p>
+        <p class="ar-sub">${escapeText(head[2])}</p>
+        ${r.state === 'failed' ? '<button type="button" class="button outline ar-retry" data-receipt-retry>이 글 다시 보내기</button>' : ''}
+        ${r.state === 'sent' ? `<blockquote class="ar-text" tabindex="0" aria-label="보낸 글">${escapeText(r.text)}</blockquote>` : ''}`;
+    }
+    const busy = (sending && !(r && r.state === 'sent')) || queued;   // 서버가 받은 뒤(확정 기다리는 동안)는 다시 평소 버튼
+    send.innerHTML = busy ? `<span class="ar-spin" aria-hidden="true"></span><span>${sending ? '보내는 중…' : '보낼 준비 중…'}</span>` : sendLabel;
   }
 
   // 라디오 마이크 레벨 — 실제 목소리 크기
@@ -140,7 +175,7 @@
     starting = true;
     elderId = opts.elderId; topic = (opts.topic || '').slice(0, CONFIG.interview.topicMax);
     snap = null; sessionId = null; closing = false; stopping = false; held = false; spoken = null;
-    inputMode = 'voice'; micOk = false; sending = false; awaitingReply = false; ttsFailed = false; resumeSent = false; queued = false; skippedQ = null;
+    inputMode = 'voice'; micOk = false; sending = false; awaitingReply = false; ttsFailed = false; resumeSent = false; queued = false; skippedQ = null; receipt = null;
     uploadQueue = Promise.resolve();
     $q('#answer-text').value = '';
     $q('#interview-question').textContent = '첫 질문을 준비하고 있어요…';
@@ -340,9 +375,9 @@
       if (!snap || stopping || closing) return;
     }
     // 아직 보낼 수 없다(정리 중 · 앞서 하신 말씀이 남음 · 다음 질문 낭독 중) — 기다렸다가 보낸다
-    if (snap.state !== 'LISTENING' || snap.audio_bytes > 0) { queued = true; render(); return; }
+    if (snap.state !== 'LISTENING' || snap.audio_bytes > 0) { queued = true; receipt = {state: 'queued', text}; render(); return; }
     queued = false;
-    sending = true; render();
+    sending = true; receipt = {state: 'sending', text}; render();
     const id = sessionId, before = snap.fragments.length;
     try {
       let s;
@@ -353,14 +388,14 @@
         s = await api.speech(id, text);
       }
       box.value = '';
-      awaitingReply = true;
+      awaitingReply = true; receipt = {state: 'sent', text};
       applySnapshot(s);
       try { applySnapshot(await api.done(id)); } catch (_) { /* 3초 뒤 저절로 확정된다 */ }
     } catch (e) {
       const got = !e.status && await waitFor(id, (x) => x.fragments.length > before
         && String(x.fragments[x.fragments.length - 1].answer || '').includes(text), 4500);
-      if (got) box.value = '';
-      else toast('글을 보내지 못했어요. 다시 「이야기 남기기」를 눌러 주세요.');
+      if (got) { box.value = ''; receipt = {state: 'sent', text}; }
+      else { receipt = {state: 'failed', text}; if (!box.value.trim()) box.value = text; }
     } finally { sending = false; if (snap) render(); }
   }
 
