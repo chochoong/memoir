@@ -33,6 +33,8 @@ v0.60 부터 화면은 **팀 시안 2차 B안**(처음가기 · 라디오 스튜
 | `draft-dock.js` | 자서전 초안 — 읽어 내려가는 동안 「작은 책으로 보관하기」 · 「책으로 미리 읽기」가 따라온다 (넓은 화면: 옆 칸 고정, 좁은 화면: 아래 버튼 줄) | — |
 | `reader-font.js` · `fonts/bookk-font.css` | 자서전 본문 글꼴 — 부크크 명조(기본) · 기본 명조를 「보기 설정 → 본문 글꼴」에서 고른다. 사용 조건 확인 필요(`fonts/PROVENANCE-bookk.md`) | — |
 | `readability.css` | 작은 글씨 · 장식 문구 정리, 버튼 대비 · 구분 · 누를 수 없음 표시 (외부 피드백 11-17) | — |
+| `start-choice.js` · `start-choice.css` | 주제 고르기 화면: 예전 칸(주제 · 목소리 · 시작 버튼)은 그대로, PC 에서는 오른쪽 칸에 「사진 한 장」(휴대폰은 시작 버튼 위). 비교용 가운데 정렬판은 주소 끝에 `?layout=center` (예: `?demo=1&layout=center`) | — |
+| `start-photo.js` | 시작 전 「사진 한 장」 넣기 — 「내 이야기」 · 「초대 주소 만들기」 화면. 고르는 순간 `POST /api/photos` 로 올리고, 받은 `photo_id` 를 `POST /api/sessions` · `POST /api/links` 에 싣는다. 끄기: `?photo=off` | `POST /api/photos` · `photo_id` |
 | `srv-demo.js` | 예시 모드(`?demo=1`) — 서버 없이 화면 전체를 돌려 보는 가짜 서버 | (실제 서버를 부르지 않음) |
 
 ## 서버 API 반영 — 이야기 주인공 이름 바꾸기 · 지우기 · 질문 목소리

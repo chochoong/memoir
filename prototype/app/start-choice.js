@@ -4,6 +4,8 @@
   //    「내 이야기 시작하기」를 누르면 둘 중 하나를 고르는 화면(start)이 나온다.
   //    초대는 「초대 주소 만들기」 화면(invite-setup)으로 간다. 주소 발급 · 목록은 기존 RolePreview 그대로.
   const topics = ['어린 시절', '가족', '삶과 일'];
+  // 비교용 가운데 정렬판: 주소 끝에 ?layout=center (데모와 함께면 ?demo=1&layout=center)
+  if (new URLSearchParams(location.search).get('layout') === 'center') document.documentElement.classList.add('sc-centered');
   const main = document.querySelector('main');
   let pendingInvite = false;
 
@@ -39,16 +41,18 @@
   let selfTopic = topics[0];
   function renderSelf() {
     self.querySelector('.sc-content').innerHTML = `<p class="sc-intro">오늘 들려주실 이야기의 주제를 골라 주세요. 주제에 맞춰 첫 질문을 드려요.<br><b>「나」의 이야기</b>로 저장돼요. 다른 분의 이야기는 「초대 주소 만들기」로 담아 주세요.</p>
-      <form class="panel sc-invite-form sc-self-form" novalidate>
+      <form class="panel sc-invite-form sc-self-form${window.MemoirStartPhoto ? ' sc-split' : ''}" novalidate><div class="sc-fields">
         <fieldset><legend>이야기 주제</legend>
           <div class="sc-chips" role="group" aria-label="주제">${topics.map((t) => `<label class="sc-chip"><input type="radio" name="topic" value="${t}" ${t === selfTopic ? 'checked' : ''}><span>${t}</span></label>`).join('')}</div></fieldset>
         ${window.MemoirVoice ? window.MemoirVoice.fieldset() : ''}
         <button type="submit" class="button primary sc-make">${icons('mic')}<span>녹음 시작하기</span></button>
         <p class="sc-fine">${window.MemoirGate?.isLoggedIn() ? '버튼을 누르면 마이크를 써도 되는지 여쭤봐요.' : '녹음은 로그인한 뒤에 할 수 있어요. 버튼을 누르면 로그인 창이 먼저 열려요.'}</p>
+        </div>${window.MemoirStartPhoto ? `<div class="sc-side">${window.MemoirStartPhoto.fieldset()}</div>` : ''}
       </form>
       <div class="sc-links"><button type="button" class="text-button" data-go="start">${icons('arrow', 'flip')} 돌아가기</button></div>`;
     const form = self.querySelector('form');
     form.addEventListener('change', () => { selfTopic = form.querySelector('input[name="topic"]:checked')?.value || topics[0]; });
+    window.MemoirStartPhoto?.bind(form);
     form.addEventListener('submit', (e) => {
       e.preventDefault();
       selfTopic = form.querySelector('input[name="topic"]:checked')?.value || topics[0];
@@ -61,7 +65,7 @@
     const data = window.RolePreview.store.snapshot();
     const others = data.elders.filter((e) => e.name !== '나');
     invite.querySelector('.sc-content').innerHTML = `<p class="sc-intro">이야기를 들려주실 분에게 보낼 주소를 만들어요. 주소를 받은 분은 휴대폰에서 바로 이야기를 시작할 수 있어요.</p>
-      <form class="panel sc-invite-form" novalidate>
+      <form class="panel sc-invite-form${window.MemoirStartPhoto ? ' sc-split' : ''}" novalidate><div class="sc-fields">
         <fieldset><legend><span class="sc-step">1</span>누구에게 보낼까요?</legend>
           ${others.length ? `<div class="sc-chips" role="group" aria-label="등록한 분">${others.map((e, i) => `<label class="sc-chip"><input type="radio" name="who" value="${escapeText(e.elder_id)}" ${i === 0 ? 'checked' : ''}><span>${escapeText(e.name)}</span></label>`).join('')}<label class="sc-chip"><input type="radio" name="who" value="__new" ${others.length ? '' : 'checked'}><span>새로 적기</span></label></div>` : '<input type="hidden" name="who" value="__new">'}
           <label class="sc-name" ${others.length ? 'hidden' : ''}><span>부르는 이름</span><input name="name" maxlength="30" autocomplete="off" placeholder="예: 어머니, 김순자"></label>
@@ -72,6 +76,7 @@
         ${window.MemoirVoice ? window.MemoirVoice.fieldset(3) : ''}
         <button type="submit" class="button primary sc-make">${icons('letter')}<span>초대 주소 만들기</span></button>
         <p class="sc-fine">${window.MemoirGate?.isLoggedIn() ? '' : '초대 주소는 로그인한 뒤에 만들 수 있어요. 버튼을 누르면 로그인 창이 먼저 열려요.'}</p>
+        </div>${window.MemoirStartPhoto ? `<div class="sc-side">${window.MemoirStartPhoto.fieldset()}</div>` : ''}
       </form>
       <div class="sc-links"><button type="button" class="text-button" data-go="invitations">이미 보낸 초대 보기 ${icons('chevron')}</button>
         <button type="button" class="text-button" data-go="start">${icons('arrow', 'flip')} 돌아가기</button></div>`;
@@ -80,6 +85,7 @@
       const who = form.querySelector('input[name="who"]:checked')?.value || form.who?.value;
       form.querySelector('.sc-name').hidden = who !== '__new';
     });
+    window.MemoirStartPhoto?.bind(form);
     form.addEventListener('submit', (e) => { e.preventDefault(); make(form); });
   }
 
