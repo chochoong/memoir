@@ -32,6 +32,8 @@ say "1. 시간대 · 패키지"
 sudo timedatectl set-timezone Asia/Seoul
 sudo apt-get update -y
 sudo apt-get install -y git python3 python3-venv python3-pip curl
+# 엽서 한글 글꼴 — 없으면 엽서가 503 (postcard.FONT_CANDIDATES 의 NotoSerifCJK-Regular.ttc)
+sudo apt-get install -y fonts-noto-cjk
 python3 --version
 
 say "2. 코드 ($BRANCH)"
