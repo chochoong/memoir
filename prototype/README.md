@@ -34,6 +34,8 @@ v0.60 부터 화면은 **팀 시안 2차 B안**(처음가기 · 라디오 스튜
 | `book-figures.js` · `.css` | 초안 · 책 화면(이북)의 그 장 문단 뒤에 사진 · 자동 삽화(「AI가 그린 그림」). 그리는 동안 5초마다 다시 받고, 넣지 못한 장은 초안에 알린다. 버튼 · 선택 없음. 이 기기에서 글을 고친 책 · PDF · 공유 화면에는 아직 그리지 않는다 | `GET /api/memoirs/saved/{id}/illustrations` · `…/illustrations/{장}` |
 | `reader-font.js` · `fonts/bookk-font.css` | 자서전 본문 글꼴 — 부크크 명조(기본) · 기본 명조를 「보기 설정 → 본문 글꼴」에서 고른다. 사용 조건 확인 필요(`fonts/PROVENANCE-bookk.md`) | — |
 | `readability.css` | 작은 글씨 · 장식 문구 정리, 버튼 대비 · 구분 · 누를 수 없음 표시 (외부 피드백 11-17) | — |
+| `start-choice.js` · `start-choice.css` | 주제 고르기 화면: 예전 칸(주제 · 목소리 · 시작 버튼)은 그대로, PC 에서는 오른쪽 칸에 「사진 한 장」(휴대폰은 시작 버튼 위). 비교용 가운데 정렬판은 주소 끝에 `?layout=center` (예: `?demo=1&layout=center`) | — |
+| `start-photo.js` | 시작 전 「사진 한 장」 넣기 — 「내 이야기」 · 「초대 주소 만들기」 화면. 고르는 순간 `POST /api/photos` 로 올리고, 받은 `photo_id` 를 `POST /api/sessions` · `POST /api/links` 에 싣는다. 끄기: `?photo=off` | `POST /api/photos` · `photo_id` |
 | `srv-demo.js` | 예시 모드(`?demo=1`) — 서버 없이 화면 전체를 돌려 보는 가짜 서버 | (실제 서버를 부르지 않음) |
 
 ## 서버 API 반영 — 이야기 주인공 이름 바꾸기 · 지우기 · 질문 목소리
