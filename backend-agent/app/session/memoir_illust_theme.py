@@ -1,34 +1,29 @@
 """
-목차 주제 삽화 — 장 전체의 주제를 나타내는 그림 한 장 (chapter_theme_v1 · 기본 방식, 2026-11-18 ~)
+목차 주제 삽화 — 장 전체의 주제를 나타내는 그림 한 장 (chapter_theme_v2 · 기본 방식, 2026-11-18 ~)
 
 두 방식은 목적이 다르고 검사도 다르다.
 
     장면 방식 scene_v5          한 장면을 원문 그대로 재현한다 (memoir_illust · memoir_illust_book.choose).
                                 인물 · 행동 · 인용을 원문과 글자로 맞추고, 참여 관계 누락 · 부정 표지 · 나이 표지가 있으면 막는다.
-    주제 방식 chapter_theme_v1  장 전체의 중심 주제와 분위기를 나타낸다 (이 파일). 장면을 재현하지 않으므로 위의 검사를 쓰지 않는다.
+    주제 방식 chapter_theme_v2  장 전체의 중심 주제와 분위기를 나타낸다 (이 파일). 장면을 재현하지 않는다.
 
-주제 방식의 흐름 — 장 전체 읽기 → 중심 주제와 분위기 → 대표 시각 소재와 구도 → 한국어 그림 지시문.
+주제 방식의 흐름 — 장 전체 읽기 → 중심 주제와 분위기 → 대표 소재와 구도 → 한국어 그림 지시문 → 생성 · 저장 · 삽입.
 
-    theme_message       장 본문 전체(문단 번호) + 그 장의 원문 말씀 → 모델 (지시문 1_목차주제_v6)
-    parse_plan          모델의 계획 — 주제 · 뒷받침하는 내용 · 그릴 소재(+ 본문 낱말 anchor) · 구도를 따로 받는다
-    theme_checks        ① 주제와 어울리는가   중심 소재의 낱말이 본문(또는 제목)에 실제로 나오고, 제목 · 주제 · 뒷받침 내용과 이어지는가.
-                                              반복 횟수 · 문단 비율은 참고로만 적는다 — 같은 낱말이 반복되지 않아도 주제는 분명할 수 있다.
-                                              제목에만 있고 주제 · 뒷받침 어디와도 이어지지 않으면(비유적 제목) 중심으로 치지 않는다
-                        ② 반대로 그리지 않는가 그 낱말에 걸린 부정만 센다 — 「카페에서 일한 적이 없다」 「카페가 없었다」 「카페에 가지 않았다」
-                                              「커피를 안 마셨다」. 다른 낱말에 걸린 부정(「카페에는 손님이 없었다」)은 세지 않는다.
-                                              낱말은 조사 · 어미까지만 같은 낱말로 본다 — 「카페인」 은 「카페」 가 아니다.
-                                              그 낱말이 본문에서 부정으로만 나오면 그 소재를 빼고, 주제 문장이 그 낱말을 쓰면 실패다
-                        ③ 없는 사건 · 관계    본문에 없는 관계(어머니 · 친구 …) · 숫자를 단 소재와 구도는 뺀다. 주제가 그런 관계를 만들면 실패다
-                        ④ 그릴 수 있는가      중심 소재가 하나도 남지 않으면 실패다 — 지어내서 채우지 않는다
-    build_theme_prompt  남은 소재 · 구도와 고정 양식(2_그림양식_v2)으로 그림 지시문을 조립한다
+    theme_message       제목 + 장 본문 전체(문단 번호) + 그 장의 원문 말씀 → 모델 (지시문 1_목차주제_v7)
+    parse_plan          모델의 계획 — 주제 · 분위기 · 뒷받침 내용 · 그릴 소재 · 구도. 모양이 틀리면 model_output, 비었으면 empty_plan
+    theme_checks        응답 모양 · 주제와 소재가 있는가 · 그림 지시문이 조립되는가만 본다
+    build_theme_prompt  계획의 소재 · 구도와 고정 양식(2_그림양식_v2)으로 한국어 그림 지시문을 조립한다
     choose_theme        위를 묶어 memoir_illust_book.choose 와 같은 모양의 결과를 낸다. 넣을 자리는 장의 첫 문단 뒤다
 
-**막지 않는 것.** 짧은 인용 · 다른 낱말에 걸린 「없 · 안 · 못」 · 참여 인물의 누락 · 나이 표지 · 적은 반복 · 문단 나눔은 주제 그림을
-막지 않는다. 옷차림 · 배경 질감 · 빛 · 색감 · 구도처럼 그림을 꾸미는 표현은 본문에 글자 그대로 없어도 된다. 일반화된 인물도 된다.
+**뜻은 모델이 판단한다 — 코드는 낱말로 막지 않는다 (v2).** 본문의 실제 경험과 부정 · 가정 · 희망으로 말한 일을 가리는 것,
+본문과 반대되는 경험이나 새 사건을 만들지 않는 것은 지시문 v7 이 모델에게 맡긴다. 코드는 「안 · 못 · 없」 같은 낱말 · 반복 횟수 ·
+짧은 인용 · 참여 인물 · 관계 낱말로 소재를 빼거나 생성을 막지 않는다. 그래서 코드는 그 판단을 검증했다고 적지 않는다 —
+결과의 verdict 에 한 검사와 하지 않은 검사(뜻)를 그대로 적고, human 은 not_reviewed 그대로다.
 
-**사람이 확인한 것이 아니다.** 이 검사는 낱말이 본문 · 제목 · 뒷받침 내용 어디에 어떤 꼴(부정 문형)로 나오는지만 본다. 그림이 주제를
-잘 나타내는지(뜻)는 보지 못한다. 결과에 policy · 한 검사 · 하지 못한 검사를 그대로 적는다 — 장면 방식의 원문 대조(quoted · verified)를
-했다고 적지 않는다. 이 파일은 모델도 이미지 API 도 부르지 않는다.
+앞선 판 chapter_theme_v1(지시문 1_목차주제_v6)은 낱말 검사로 소재를 빼고 생성을 막았다(theme_negated · no_central_subject ·
+theme_adds_relation). 그 판으로 만든 기록은 그대로 남는다 — 이 판의 기준으로 다시 검사한 것처럼 바꾸지 않는다.
+
+이 파일은 모델도 이미지 API 도 부르지 않는다.
 """
 
 from __future__ import annotations
@@ -39,9 +34,10 @@ import re
 
 from . import memoir_illust as il
 
-POLICY = "chapter_theme_v1"
+POLICY = "chapter_theme_v2"
+CHECKS_VERSION = "theme_checks_v2"
 MODE = "THEME"
-SELECT_FILE = "1_목차주제_v6.md"
+SELECT_FILE = "1_목차주제_v7.md"           # v6 은 chapter_theme_v1 의 기록으로 남긴다
 STYLE_FILE = "2_그림양식_v2.md"
 STYLE_ID = "watercolor-recall-v2"
 KINDS = ("object", "place", "activity", "person", "nature")
@@ -49,39 +45,19 @@ MAX_SUBJECTS, MAX_MAIN, MAX_SUB = 6, 3, 4
 TEXT_MAX, THEME_MAX, SHORT_MAX, MOOD_MAX, PERIOD_MAX, COMPOSITION_MAX = 40, 120, 30, 40, 30, 220
 DEFAULT_COMPOSITION = "중심 소재를 화면 가운데에 두고, 둘레는 이 장의 분위기에 맞게 여백을 두어 옅게 풀어 준다"
 
-# 본문에 없으면 소재 · 구도 · 주제에 붙일 수 없는 사람 관계 · 역할 낱말 (일반화된 「아이 · 사람 · 여행자」 는 여기에 없다)
-RELATIONS = ("어머니", "엄마", "아버지", "아빠", "할머니", "할아버지", "부모", "삼촌", "외삼촌", "이모", "고모", "숙모", "큰아버지",
-             "작은아버지", "형", "누나", "언니", "오빠", "동생", "남편", "아내", "아들", "딸", "손자", "손녀", "사촌", "친구", "선생님",
-             "사장", "회장", "비서", "손님", "단골", "애인", "연인", "남자친구", "여자친구", "가족", "식구")
-
-# 낱말 뒤에 붙어도 같은 낱말로 보는 조사 · 서술격 어미 (긴 것부터 떼어 본다). 여기 없는 글자가 이어지면 다른 낱말이다 —
-# 「카페인」 의 「인」, 「산책」 의 「책」, 「배낭여행」 의 「여행」. 붙은 말(합성어)은 그 낱말로 세지 않는다
+# 참고 정보(anchor 가 본문 어디에 나오는가)를 셀 때 낱말 뒤에 붙어도 같은 낱말로 보는 조사 · 서술격 어미. 판정에는 쓰지 않는다
 _PARTICLES = sorted("""은 는 이 가 을 를 에 에서 에게 께 께서 한테 의 와 과 도 만 로 으로 랑 이랑 하고 까지 부터 처럼 보다 마다
     조차 밖에 이나 나 이며 며 이다 였다 이었다 였 이었 이라 라 이라고 라고 이야 야 이고 이지만 지만 이든 든 들 님 뿐 쯤 씩""".split(),
                     key=len, reverse=True)
-_VERBAL = ("하", "했", "해", "한", "할", "합", "되", "됐", "된", "될")     # 「독서하던 · 알바했다」 — 그 낱말을 하는 일
+_VERBAL = ("하", "했", "해", "한", "할", "합", "되", "됐", "된", "될")
 _HANGUL = re.compile(r"[가-힣]")
-_CLAUSE_END = re.compile(r"[,.?!…”\"]|는데|지만|면서|고서")
-_ADV = r"(?:\s*(?:별로|전혀|잘|한\s*번도|한번도|아직|결코|다시는|좀처럼))?"
-_PRT = r"(?:은|는|이|가|을|를|에|에서|에는|에서는|에도|에게|로|으로|와|과|랑|이랑|하고|도)?"
-# 그 낱말에 걸린 부정 — 낱말 바로 뒤에서 시작하는 문형만 (사이에 다른 낱말이 주어로 끼면 그 낱말의 부정이다)
-_NEG_PATTERNS = (
-    ("없음 · 아님", re.compile(r"^(?:은|는|이|가|도)?" + _ADV + r"\s*(?:없|아니)")),                       # 카페가 없었다 · 카페는 아니었다
-    ("~하지 않았다", re.compile(r"^" + _PRT + _ADV + r"\s*[가-힣]+(?:지|지는|지도)\s*(?:않|못|말)")),       # 카페에 가지 않았다
-    ("안 · 못 ~", re.compile(r"^" + _PRT + _ADV + r"\s*(?:안|못)\s*[가-힣]")),                              # 커피를 안 마셨다
-    ("~한 적이 없다", re.compile(r"^" + _PRT + r"(?:\s*[가-힣]+){1,2}?\s*(?:적|일)(?:이|은|도)?" + _ADV + r"\s*없")),  # 카페에서 일한 적이 없다
-)
 
-THEME_CHECKED = ["중심 소재의 낱말이 본문(또는 제목)에 실제로 나오는가 — 조사 · 어미까지만 같은 낱말로 본다 (「카페인」 ≠ 「카페」)",
-                 "그 소재가 제목 · 주제 · 뒷받침 내용(또는 뒷받침이 가리킨 문단)과 이어지는가 — 반복 횟수 · 문단 비율은 참고로만 적는다",
-                 "그 낱말에 걸린 부정 문형(…한 적이 없다 · …가 없다 · …하지 않았다 · 안/못 …)으로만 나오는가 — 다른 낱말의 부정은 세지 않는다",
-                 "소재 · 구도 · 주제에 본문에 없는 사람 관계 낱말 · 숫자가 있는가",
-                 "모델이 본문에 없다고 적은 것(not_in_story)을 소재로 삼았는가",
-                 "중심 소재가 하나라도 남는가"]
-THEME_NOT_CHECKED = ["그림이 이 장의 주제를 잘 나타내는가 (뜻) — 낱말이 나오는 곳과 이어짐으로만 어림한다",
-                     "낱말 없이 뜻으로만 드러나는 부정 · 정정, 위 문형 밖의 부정",
-                     "뜻이 다른 같은 낱말 (말 — 탈 것 · 말씀)",
-                     "고유한 인물 이름 · 상표 · 랜드마크 (그림 양식이 그리지 말라고 적을 뿐 코드가 찾지 못한다)",
+THEME_CHECKED = ["응답이 JSON 계획 하나인가 (모양)",
+                 "주제와 그릴 소재가 비어 있지 않은가",
+                 "그림 지시문이 조립되는가 (고정 양식 · 길이 상한)"]
+THEME_NOT_CHECKED = ["주제 · 소재가 이 장에 맞는가 (뜻) — 모델의 판단이다. 코드는 검증하지 않는다",
+                     "본문에서 실제 경험한 일과 부정 · 가정 · 희망으로 말한 일을 모델이 바르게 가렸는가",
+                     "본문과 반대되는 경험이나 본문에 없는 사건 · 인물 관계를 더하지 않았는가 — 지시문 · 그림 양식이 금지할 뿐 코드는 보지 않는다",
                      "이미지 모델이 지시문 밖의 것을 그려 넣는가 (생성 뒤 사람이 본다)"]
 
 
@@ -130,7 +106,7 @@ def _chapter_utts(ctx: dict, ch: dict) -> list[dict]:
 
 
 def theme_message(data: dict, ident) -> str:
-    """모델에 줄 자료 — 그 장의 본문 전체(문단 번호를 붙여)와 그 장이 근거로 쓰는 원문 말씀. 다른 장 · 사진 단서는 싣지 않는다."""
+    """모델에 줄 자료 — 그 장의 제목 · 본문 전체(문단 번호를 붙여)와 그 장이 근거로 쓰는 원문 말씀(참고). 다른 장 · 사진 단서는 싣지 않는다."""
     ctx = il.check_input(data)
     ch = _chapter(data, ident)
     payload = {"chapter": {"chapter_no": ch["no"], "title": ch["title"],
@@ -146,7 +122,11 @@ def _text(v, limit: int) -> str | None:
 
 
 def parse_plan(reply, chapter_no: int | None = None) -> dict:
-    """모델 응답 → 계획. 모양이 틀리면 IllustError("model_output"). 빠진 칸을 지어내지 않는다."""
+    """
+    모델 응답 → 계획. 빠진 칸을 지어내지 않는다.
+        IllustError("model_output")  JSON 이 아니다 · 계획이 객체가 아니다 (응답 형식 오류)
+        IllustError("empty_plan")    주제가 비었다 · 그릴 소재가 하나도 없다 (빈 계획)
+    """
     try:
         out = json.loads(reply) if isinstance(reply, str) else reply
     except (TypeError, ValueError) as e:
@@ -154,11 +134,13 @@ def parse_plan(reply, chapter_no: int | None = None) -> dict:
     if isinstance(out, dict) and isinstance(out.get("chapters"), list):
         pick = [c for c in out["chapters"] if isinstance(c, dict) and (chapter_no is None or c.get("chapter_no") == chapter_no)]
         out = pick[0] if pick else (out["chapters"][0] if out["chapters"] else None)
+    if isinstance(out, list) and len(out) == 1 and isinstance(out[0], dict):
+        out = out[0]                                     # 계획 하나를 목록으로 감싸 낸 응답 — 모양만 벗긴다
     if not isinstance(out, dict):
         raise il.IllustError("model_output", "계획이 객체가 아니다")
     theme = _text(out.get("theme"), THEME_MAX)
     if not theme:
-        raise il.IllustError("model_output", "theme 이 비었다")
+        raise il.IllustError("empty_plan", "theme 이 비었다")
     subjects = []
     for s in out.get("subjects") or []:
         if not isinstance(s, dict) or not _text(s.get("text"), TEXT_MAX):
@@ -168,7 +150,7 @@ def parse_plan(reply, chapter_no: int | None = None) -> dict:
                          "kind_from_model": s.get("kind"), "role": "main" if s.get("role") == "main" else "sub",
                          "anchor": _text(s.get("anchor"), TEXT_MAX)})
     if not subjects:
-        raise il.IllustError("model_output", "subjects 가 비었다")
+        raise il.IllustError("empty_plan", "그릴 소재(subjects)가 하나도 없다")
     supports = [{"point": _text(x.get("point"), THEME_MAX),
                  "paragraphs": [p for p in x.get("paragraphs") or [] if isinstance(p, int) and not isinstance(p, bool)]}
                 for x in out.get("supports") or [] if isinstance(x, dict) and _text(x.get("point"), THEME_MAX)]
@@ -180,7 +162,7 @@ def parse_plan(reply, chapter_no: int | None = None) -> dict:
             "not_in_story": [x.strip() for x in out.get("not_in_story") or [] if isinstance(x, str) and x.strip()]}
 
 
-# ---------------------------------------------------------------- 검사
+# ---------------------------------------------------------------- 검사 — 모양과 존재만. 참고 정보는 판정에 쓰지 않는다
 
 def _pattern(word: str) -> re.Pattern | None:
     key = il._compact(word)
@@ -190,7 +172,7 @@ def _pattern(word: str) -> re.Pattern | None:
 
 
 def _tail_ok(run: str) -> bool:
-    """낱말 바로 뒤에 붙은 한글 덩어리가 조사 · 서술격 어미뿐인가 (또는 「하다 · 되다」 로 그 낱말을 하는 일인가)."""
+    """낱말 바로 뒤에 붙은 한글 덩어리가 조사 · 서술격 어미뿐인가 (또는 「하다 · 되다」)."""
     for _ in range(4):
         if not run:
             return True
@@ -204,10 +186,7 @@ def _tail_ok(run: str) -> bool:
 
 
 def _hits(word: str, text: str) -> list[re.Match]:
-    """
-    낱말이 나오는 자리 — 앞이 낱말 경계이고, 뒤에는 조사 · 어미만 붙은 곳. 「카페인 · 비서가(서가) · 산책(산) · 배낭여행(배낭)」 은
-    그 낱말이 아니다. 특정 낱말을 따로 다루지 않는다 — 모든 낱말에 같은 규칙이다.
-    """
+    """참고용 — 낱말이 나오는 자리 (앞은 낱말 경계, 뒤는 조사 · 어미만). 판정에는 쓰지 않는다."""
     pat = _pattern(word)
     if pat is None:
         return []
@@ -216,170 +195,49 @@ def _hits(word: str, text: str) -> list[re.Match]:
         before = text[m.start() - 1] if m.start() > 0 else " "
         if _HANGUL.match(before):
             continue
-        run = re.match(r"[가-힣]*", text[m.end():]).group(0)
-        if _tail_ok(run):
+        if _tail_ok(re.match(r"[가-힣]*", text[m.end():]).group(0)):
             out.append(m)
     return out
 
 
-def _negation_at(text: str, m: re.Match) -> str | None:
-    """그 낱말에 걸린 부정 문형 — 낱말 바로 뒤부터 같은 마디 안에서만 본다. 걸리면 문형 이름, 아니면 None."""
-    rest = text[m.end():]
-    end = _CLAUSE_END.search(rest)
-    rest = rest[:end.start()] if end else rest
-    return next((name for name, pat in _NEG_PATTERNS if pat.search(rest)), None)
-
-
-def anchor_stats(word: str | None, ch: dict, utts: list[dict]) -> dict:
-    """낱말이 장의 어디에 몇 번, 어떤 꼴로 나오는가. 횟수 · 문단은 참고 정보다 — 통과 조건으로 쓰지 않는다."""
-    out = {"word": word, "mentions": 0, "paragraphs": [], "affirmed": 0, "negated": 0, "negations": [], "title": False,
-           "in_source": False}
+def anchor_reference(word: str | None, ch: dict) -> dict:
+    """참고 정보 — 모델이 적은 본문 낱말이 제목 · 본문 어디에 나오는가. 소재를 빼거나 생성을 막는 데 쓰지 않는다."""
     if not word or _pattern(word) is None:
-        return out
-    paras = set()
-    for i, p in enumerate(ch["paragraphs"]):
-        for m in _hits(word, p):
-            out["mentions"] += 1
-            paras.add(i)
-            neg = _negation_at(p, m)
-            if neg:
-                out["negated"] += 1
-                out["negations"].append({"paragraph": i, "form": neg, "text": p[m.start():m.start() + 30]})
-            else:
-                out["affirmed"] += 1
-    out["paragraphs"] = sorted(paras)
-    out["title"] = bool(_hits(word, ch["title"]))
-    out["in_source"] = any(_hits(word, u["elder"]) for u in utts)
-    return out
-
-
-def _links(word: str, plan: dict, st: dict, n_paras: int) -> list[str]:
-    """그 낱말이 제목 · 주제 · 뒷받침 내용 · 뒷받침이 가리킨 문단 가운데 어디와 이어지는가."""
-    out = []
-    if st["title"]:
-        out.append("title")
-    if _hits(word, " ".join(x for x in (plan["theme"], plan["theme_short"]) if x)):
-        out.append("theme")
-    if any(_hits(word, s["point"]) for s in plan["supports"]):
-        out.append("support_point")
-    cited = {p for s in plan["supports"] for p in s["paragraphs"] if 0 <= p < n_paras}
-    if cited & set(st["paragraphs"]):
-        out.append("support_paragraph")
-    return out
-
-
-def _grounding(s: dict, st: dict, links: list[str], n_paras: int) -> tuple[bool, str]:
-    """
-    중심 소재로 인정하는가 — 본문(또는 제목)에 실제로 나오고, 제목 · 주제 · 뒷받침과 이어지면 된다. 횟수 · 비율은 따지지 않는다.
-    본문에 없이 제목에만 있으면 주제나 뒷받침이 그것을 다룰 때만 (비유적 제목만으로는 아니다).
-    """
-    ref = f"참고: 본문 {st['mentions']}번 · 문단 {len(st['paragraphs'])}/{n_paras}"
-    if not s["anchor"]:
-        return False, "본문 낱말(anchor)이 없다 — 꾸밈 표현"
-    if st["mentions"] and not st["affirmed"]:
-        return False, f"본문에서 그 낱말에 걸린 부정으로만 나온다 ({ref})"
-    if not links:
-        return False, f"제목 · 주제 · 뒷받침 어디와도 이어지지 않는다 — 곁들이는 소재로만 ({ref})"
-    if not st["mentions"]:
-        if st["title"] and set(links) - {"title"}:
-            return True, f"제목에 있고 {' · '.join(x for x in links if x != 'title')} 와 이어진다 (본문에는 없다)"
-        return False, "제목에만 있고 주제 · 뒷받침과 이어지지 않는다 — 비유적 제목일 수 있다"
-    return True, f"본문에 있고 {' · '.join(links)} 와 이어진다 ({ref})"
-
-
-def _unsupported(text: str | None, known: str) -> list[str]:
-    """본문 · 원문에 없는 관계 낱말 · 숫자."""
-    if not text:
-        return []
-    bad = [f"relation:{r}" for r in RELATIONS if r in text and r not in known]
-    # 「형」 같은 한 글자 관계는 다른 낱말 안(형태 · 모형)에서 걸리지 않게 낱말 경계로 다시 본다
-    bad = [b for b in bad if len(b.split(":")[1]) > 1 or _hits(b.split(":")[1], text)]
-    bad += [f"number:{d}" for d in re.findall(r"\d+", text) if d not in known]
-    return bad
+        return {"word": word, "in_title": False, "mentions": 0, "paragraphs": []}
+    paras = [i for i, p in enumerate(ch["paragraphs"]) for _ in _hits(word, p)]
+    return {"word": word, "in_title": bool(_hits(word, ch["title"])), "mentions": len(paras), "paragraphs": sorted(set(paras))}
 
 
 def theme_checks(data: dict, ident, plan: dict) -> dict:
-    """계획을 본문에 비춰 본다. 소재를 빼기는 해도 고쳐 쓰지는 않는다."""
-    ctx = il.check_input(data)
+    """
+    계획을 그대로 쓴다 — 소재를 빼지 않고, 뜻을 따지지 않는다. 중심 소재는 모델이 main 으로 적은 것(없으면 적은 순서의 앞)이다.
+    여기서 실패가 나는 것은 지시문을 조립할 수 없을 때뿐이다 (빈 계획은 parse_plan 이 이미 막았다).
+    """
+    il.check_input(data)
     ch = _chapter(data, ident)
-    utts = _chapter_utts(ctx, ch)
-    known = " ".join([ch["title"], *ch["paragraphs"], *[u["elder"] for u in utts]])
-    n_paras = len(ch["paragraphs"])
-    banned_listed = [il._compact(x) for x in plan["not_in_story"]]
-    kept, dropped, negated_words = [], [], []
-    for s in plan["subjects"]:
-        st = anchor_stats(s["anchor"], ch, utts)
-        links = _links(s["anchor"], plan, st, n_paras) if s["anchor"] else []
-        central, why = _grounding(s, st, links, n_paras)
-        row = {**s, "anchor_stats": st, "links": links, "central": central, "central_basis": why,
-               "repeat_reference": {"mentions": st["mentions"], "paragraphs": len(st["paragraphs"]), "of": n_paras}}
-        bad = _unsupported(s["text"], known)
-        if il._BANNED_LABEL.search(s["text"]):
-            bad.append("banned_label")
-        cs = il._compact(s["text"])
-        # 모델이 「본문에 없다」 고 적은 것 그 자체를 소재로 삼았을 때만 — 긴 설명문 안에 같은 글자가 있다고 빼지 않는다
-        if any(b and (b == cs or (len(b) >= 2 and b in cs)) for b in banned_listed):
-            bad.append("listed_not_in_story")
-        if s["anchor"] and not st["mentions"] and not st["title"]:
-            bad.append("anchor_not_in_chapter")            # 「본문 · 제목에 그대로 나오는 낱말」 이라 했는데 어디에도 없다
-        elif s["anchor"] and not st["mentions"] and not central:
-            bad.append("title_only_not_supported")         # 제목에만 있고 주제 · 뒷받침과 이어지지 않는다
-        if st["mentions"] and not st["affirmed"]:
-            bad.append("negated_in_chapter")
-            negated_words.append(s["anchor"])
-        if bad:
-            dropped.append({**row, "dropped": bad})
-        else:
-            kept.append(row)
-    blocking, notes = [], []
-    theme_text = " ".join(x for x in (plan["theme"], plan["theme_short"]) if x)
-    if any(w and _hits(w, theme_text) for w in negated_words):
-        blocking.append("theme_negated")
-    if [b for b in _unsupported(theme_text, known) if b.startswith("relation:")]:
-        blocking.append("theme_adds_relation")
-    composition = plan["composition"]
-    comp_bad = _unsupported(composition, known) + (["banned_label"] if composition and il._BANNED_LABEL.search(composition) else [])
-    if composition and any(w and _hits(w, composition) for w in negated_words):
-        comp_bad.append("negated_subject")
-    if comp_bad:
-        notes.append({"composition_dropped": comp_bad})
-        composition = None
-    period = plan["period"] if plan["period"] and il._compact(plan["period"]) in il._compact(known) else None
-    if plan["period"] and not period:
-        notes.append({"period_dropped": "본문에 그 말이 없다"})
-    central = [s for s in kept if s["central"]]
-    if not central:
-        blocking.append("no_central_subject")
-    cited = [p for x in plan["supports"] for p in x["paragraphs"]]
-    covered = sorted({p for p in cited if 0 <= p < n_paras})
-    thirds = sorted({min(2, p * 3 // max(n_paras, 1)) for p in covered})
-    checks = [{"check": "central_subject", "ok": bool(central),
-               "detail": [{"text": s["text"], "anchor": s["anchor"], "links": s["links"], "basis": s["central_basis"]} for s in kept]},
-              {"check": "not_negated", "ok": "theme_negated" not in blocking,
-               "detail": [{"text": d["text"], "anchor": d["anchor"], "forms": d["anchor_stats"]["negations"]}
-                          for d in dropped if "negated_in_chapter" in d["dropped"]]},
-              {"check": "no_new_relation_or_number", "ok": "theme_adds_relation" not in blocking,
-               "detail": [{"text": d["text"], "why": d["dropped"]} for d in dropped if any(":" in w for w in d["dropped"])]},
-              # 아래 둘은 참고 정보 — 막지 않는다
-              {"check": "supports_spread", "ok": True, "blocking": False,
-               "detail": {"paragraphs": covered, "cited_but_missing": sorted({p for p in cited if not 0 <= p < n_paras}),
-                          "parts_of_chapter": len(thirds), "of": min(3, n_paras)}},
-              {"check": "repeat_reference", "ok": True, "blocking": False,
-               "detail": [{"text": s["text"], **s["repeat_reference"]} for s in kept + dropped]}]
-    return {"policy": POLICY, "chapter_no": ch["no"], "accept": not blocking, "blocking": blocking, "notes": notes,
-            "theme": plan["theme"], "theme_short": plan["theme_short"], "mood": plan["mood"], "period": period,
-            "supports": plan["supports"], "composition": composition, "composition_from_model": plan["composition"],
-            "subjects": kept, "dropped": dropped, "not_in_story": plan["not_in_story"], "checks": checks}
+    subjects = [{**s, "anchor_reference": anchor_reference(s["anchor"], ch)} for s in plan["subjects"]]
+    main = [s for s in subjects if s["role"] == "main"][:MAX_MAIN]
+    main_from = "model_main" if main else "model_order"
+    main = main or subjects[:1]
+    sub = [s for s in subjects if s not in main][:MAX_SUB]
+    checks = [{"check": "format", "ok": True},
+              {"check": "plan_present", "ok": True, "detail": {"theme": bool(plan["theme"]), "subjects": len(subjects),
+                                                               "main": [s["text"] for s in main], "main_from": main_from}},
+              # 참고 정보 — 막지 않는다. 모델이 적은 낱말이 본문 어디에 나오는지일 뿐, 뜻을 검증한 것이 아니다
+              {"check": "anchor_reference", "ok": True, "blocking": False,
+               "detail": [{"text": s["text"], **s["anchor_reference"]} for s in subjects]}]
+    return {"policy": POLICY, "checks_version": CHECKS_VERSION, "chapter_no": ch["no"], "accept": True, "blocking": [],
+            "theme": plan["theme"], "theme_short": plan["theme_short"], "mood": plan["mood"], "period": plan["period"],
+            "supports": plan["supports"], "composition": plan["composition"], "not_in_story": plan["not_in_story"],
+            "subjects": subjects, "main": main, "sub": sub, "main_from": main_from, "checks": checks}
 
 
 # ---------------------------------------------------------------- 그림 지시문 · 자리
 
 def build_theme_prompt(chk: dict) -> dict:
-    """확인을 지난 계획과 고정 양식(v2)만으로 조립한다. 본문에 없다고 적힌 것(not_in_story)은 지시문에 넣지 않는다."""
+    """계획의 주제 · 소재 · 구도와 고정 양식(v2)으로 조립한다. 본문에 없다고 모델이 적은 것(not_in_story)은 지시문에 넣지 않는다."""
     blocks = style_blocks()
-    central = [s for s in chk["subjects"] if s["central"]]
-    main = [s for s in central if s["role"] == "main"][:MAX_MAIN] or central[:MAX_MAIN]
-    sub = [s for s in chk["subjects"] if s not in main][:MAX_SUB]
+    main, sub = chk["main"], chk["sub"]
     theme = chk["theme_short"] + (f" — {chk['theme']}" if chk["theme"] and chk["theme"] != chk["theme_short"] else "")
     about = [f"- 주제: {theme}", f"- 분위기: {chk['mood'] or '차분하고 따뜻하게'}",
              f"- 때: {chk['period']} — 이보다 더 구체적으로 정하지 않는다" if chk["period"]
@@ -394,15 +252,15 @@ def build_theme_prompt(chk: dict) -> dict:
     block = "[이 장의 주제]\n" + "\n".join(about) + "\n\n[그릴 것]\n" + "\n".join(draw)
     text = "\n\n".join([blocks["style"], block, blocks["people"], blocks["negative"]])
     if len(text) > il.PROMPT_MAX and sub:                      # 길면 보조 소재부터 줄인다
-        return build_theme_prompt({**chk, "subjects": main + sub[:-1]})
+        return build_theme_prompt({**chk, "sub": sub[:-1]})
+    if len(text) > il.PROMPT_MAX:
+        raise il.IllustError("prompt_too_long", f"그림 지시문이 {len(text)}자 — 상한 {il.PROMPT_MAX}자")
     return {"style_id": STYLE_ID, "language": "ko", "policy": POLICY, "text": text, "scene_block": block,
             "elements_used": [s["text"] for s in main + sub],
             "composition": {"main": [s["text"] for s in main], "sub": [s["text"] for s in sub],
                             "layout": chk["composition"] or DEFAULT_COMPOSITION,
                             "layout_from": "model" if chk["composition"] else "default",
-                            "facts": [{"text": s["text"], "anchor": s["anchor"], "paragraphs": s["anchor_stats"]["paragraphs"]}
-                                      for s in main + sub if s["anchor"]],
-                            "expression": [s["text"] for s in main + sub if not s["anchor"]]}}
+                            "from_plan": [{"text": s["text"], "kind": s["kind"], "anchor": s["anchor"]} for s in main + sub]}}
 
 
 def theme_placement(data: dict, ident) -> dict:
@@ -419,30 +277,28 @@ def theme_placement(data: dict, ident) -> dict:
 def choose_theme(data: dict, ident, reply) -> dict:
     """목차 한 장의 주제 그림 — memoir_illust_book.choose 와 같은 모양 (status · mode · scene · prompt · placement …)."""
     ch = _chapter(data, ident)
-    base = {"policy": POLICY, "mode": MODE, "automatic": True, "human": "not_reviewed"}
+    base = {"policy": POLICY, "checks_version": CHECKS_VERSION, "mode": MODE, "automatic": True, "human": "not_reviewed"}
+    verdict = {"policy": POLICY, "checks_version": CHECKS_VERSION, "checked": THEME_CHECKED, "not_checked": THEME_NOT_CHECKED,
+               "meaning_verified_by_code": False}
     try:
         plan = parse_plan(reply, ch["no"])
     except il.IllustError as e:
-        return {**base, "status": "failed", "reasons": ["model_output"], "detail": e.message, "tried": []}
+        return {**base, "status": "failed", "reasons": [e.kind], "detail": e.message, "tried": [],
+                "verdict": {**verdict, "accept": False, "blocking": [e.kind]}}
     chk = theme_checks(data, ident, plan)
-    tried = [{"candidate_index": 0, "scene_title": plan["theme_short"], "mode": MODE, "accepted": chk["accept"],
-              "blocking": chk["blocking"]}]
-    verdict = {"policy": POLICY, "accept": chk["accept"], "blocking": chk["blocking"],
-               "checked": THEME_CHECKED, "not_checked": THEME_NOT_CHECKED}
-    if not chk["accept"]:
-        why = {"no_central_subject": "본문(또는 제목)에 나오고 주제 · 뒷받침과 이어지는 소재를 찾지 못했다 — 지어내서 채우지 않는다",
-               "theme_negated": "주제가 본문이 부정하는 것을 쓴다", "theme_adds_relation": "주제가 본문에 없는 관계를 만든다"}
-        return {**base, "status": "failed", "reasons": chk["blocking"],
-                "detail": " · ".join(why.get(b, b) for b in chk["blocking"]), "theme": chk, "verdict": verdict, "tried": tried}
-    prompt = build_theme_prompt(chk)
+    try:
+        prompt = build_theme_prompt(chk)
+    except il.IllustError as e:
+        return {**base, "status": "failed", "reasons": [e.kind], "detail": e.message, "theme": chk, "tried": [],
+                "verdict": {**verdict, "accept": False, "blocking": [e.kind]}}
     turns = sorted(set(ch["turns"]) | set(ch["chapter_turns"]))
     return {**base, "status": "selected", "source": "theme_plan", "candidate_index": 0,
             "scene": {"scene_title": plan["theme_short"], "scene_summary": plan["theme"], "central_action": None,
                       "source_turns": turns, "source_refs": [],
-                      "evidence": [{"kind": s["kind"], "text": s["text"], "anchor": s["anchor"],
-                                    "paragraphs": s["anchor_stats"]["paragraphs"], "central": s["central"]} for s in chk["subjects"]],
-                      "not_used": [{"kind": d["kind"], "text": d["text"], "why": d["dropped"]} for d in chk["dropped"]],
-                      "dropped_for_picture": []},
+                      "evidence": [{"kind": s["kind"], "text": s["text"], "anchor": s["anchor"], "role": s["role"],
+                                    "anchor_reference": s["anchor_reference"]} for s in chk["subjects"]],
+                      "not_used": [], "dropped_for_picture": []},
             "prompt": prompt, "placement": theme_placement(data, ident), "auto_checks": chk["checks"],
-            "tolerated_reasons": [], "theme": chk, "verdict": verdict, "tried": tried,
-            "choice_reason": f"주제 방식 — 중심 소재 {', '.join(prompt['composition']['main'])} 가 본문에 나오고 주제 · 뒷받침과 이어진다"}
+            "tolerated_reasons": [], "theme": chk, "verdict": {**verdict, "accept": True, "blocking": []},
+            "tried": [{"candidate_index": 0, "scene_title": plan["theme_short"], "mode": MODE, "accepted": True, "blocking": []}],
+            "choice_reason": f"주제 방식 — 모델 계획의 중심 소재 {', '.join(prompt['composition']['main'])} (코드는 뜻을 검증하지 않았다)"}

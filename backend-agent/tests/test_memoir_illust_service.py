@@ -279,12 +279,14 @@ def test_default_service_policy_is_chapter_theme_and_is_recorded_per_chapter(wor
     doc = run(calls)
     assert calls.policies == ["theme", "theme"]
     sel = doc["chapters"]["2"]["select"]
-    assert sel["policy_id"] == "chapter_theme_v1" and sel["prompt_file"] == "1_목차주제_v6.md" and sel["mode"] == "THEME"
-    assert doc["settings"]["policy_id"] == "chapter_theme_v1"
+    # v2 로 판이 바뀌었다 (지시문 v7 · 검사 theme_checks_v2) — 기본 방식이 장마다 기록된다는 뜻은 같다
+    assert sel["policy_id"] == "chapter_theme_v2" and sel["prompt_file"] == "1_목차주제_v7.md" and sel["mode"] == "THEME"
+    assert sel["checks_version"] == "theme_checks_v2"
+    assert doc["settings"]["policy_id"] == "chapter_theme_v2"
     assert all("[이 장의 주제]" in p and "watercolor" not in p for p, _ in calls.image)       # 주제 방식의 한국어 지시문
     v = svc.view(MID, world.row["illustrations"])
-    assert v["policy"] == "chapter_theme_v1"
-    assert {c["no"]: c["policy"] for c in v["chapters"]} == {1: None, 2: "chapter_theme_v1", 3: "chapter_theme_v1"}
+    assert v["policy"] == "chapter_theme_v2"
+    assert {c["no"]: c["policy"] for c in v["chapters"]} == {1: None, 2: "chapter_theme_v2", 3: "chapter_theme_v2"}
 
 
 def test_scene_policy_is_still_available_by_setting(world, monkeypatch):
@@ -321,10 +323,11 @@ def test_reprocess_marks_only_failed_chapters_and_keeps_the_illustrated_one(worl
     old = _old_production_like(world)
     key1 = old["chapters"]["1"]["image"]["storage_key"]
     assert [t["no"] for t in svc.reprocess_targets(old, "theme")] == [2, 3]
-    assert all(t["from_policy"] == "scene_v5" and t["to_policy"] == "chapter_theme_v1" for t in svc.reprocess_targets(old))
+    assert all(t["from_policy"] == "scene_v5" and t["to_policy"] == "chapter_theme_v2" for t in svc.reprocess_targets(old))
     calls_before = dict(old["calls"])
 
-    done = asyncio.run(svc.prepare_reprocess(MID, ME, "theme"))
+    assert asyncio.run(svc.prepare_reprocess(MID, ME, "theme"))["refused"] == "chapters_required"     # 장을 이름 대지 않으면 하지 않는다
+    done = asyncio.run(svc.prepare_reprocess(MID, ME, "theme", [2, 3]))
     assert done["changed"] and done["calls_expected"] == {"select": 2, "image": 2}
     doc = world.row["illustrations"]
     assert doc["status"] == svc.RUNNING and doc["calls"] == calls_before        # 표시만 — 부르지 않았고 횟수도 그대로
@@ -339,21 +342,22 @@ def test_reprocess_marks_only_failed_chapters_and_keeps_the_illustrated_one(worl
     assert [no for no, _ in calls.select] == [2, 3] and len(calls.image) == 2   # 1장은 부르지 않는다
     assert after["chapters"]["1"]["image"]["storage_key"] == key1
     assert {k: c["state"] for k, c in after["chapters"].items()} == {"1": "illustrated", "2": "illustrated", "3": "illustrated"}
-    assert after["chapters"]["2"]["select"]["policy_id"] == "chapter_theme_v1"
+    assert after["chapters"]["2"]["select"]["policy_id"] == "chapter_theme_v2"
     assert after["calls"] == {"select": calls_before["select"] + 2, "image": calls_before["image"] + 2}
     v = svc.view(MID, world.row["illustrations"])
-    assert [c["policy"] for c in v["chapters"]] == ["scene_v5", "chapter_theme_v1", "chapter_theme_v1"]   # 1장은 앞선 방식의 그림이다
+    assert [c["policy"] for c in v["chapters"]] == ["scene_v5", "chapter_theme_v2", "chapter_theme_v2"]   # 1장은 앞선 방식의 그림이다
 
 
 def test_reprocess_does_not_repeat_a_chapter_already_tried_with_the_new_policy(world):
     _old_production_like(world)
-    asyncio.run(svc.prepare_reprocess(MID, ME, "theme"))
+    asyncio.run(svc.prepare_reprocess(MID, ME, "theme", [2, 3]))
     failing = Calls(image_fails=True)
     run(failing)                                                   # 새 방식으로도 그림이 실패했다
     doc = world.row["illustrations"]
     assert {k: c["state"] for k, c in doc["chapters"].items() if k != "1"} == {"2": "failed", "3": "failed"}
     assert svc.reprocess_targets(doc, "theme") == []               # 기록을 옮겨 다시 부르게 하지 않는다
-    again = asyncio.run(svc.prepare_reprocess(MID, ME, "theme"))
+    again = asyncio.run(svc.prepare_reprocess(MID, ME, "theme", [2, 3]))
+    assert all(r["why"].startswith("지금 판(chapter_theme_v2)") for r in again["refused_chapters"])
     assert again["changed"] is False
     calls = Calls()
     run(calls)
@@ -384,8 +388,66 @@ def test_reprocess_tool_prints_the_plan_and_only_marks(world, monkeypatch, capsy
     monkeypatch.setattr(tool, "_find", find)
     assert tool.main(["--memoir", "m_aaaa"]) == 0
     plan = json.loads(capsys.readouterr().out)
-    assert [t["no"] for t in plan["targets"]] == [2, 3] and plan["untouched"] == [1] and plan["prepared"] is False
-    assert plan["calls_expected"] == {"select": 2, "image": 2} and world.row["illustrations"]["status"] == svc.PARTIAL
-    assert tool.main(["--memoir", "m_aaaa", "--prepare"]) == 0
+    # 보기 — 다시 할 수 있는 장을 보이지만, 장을 이름 대기 전에는 대상이 없다
+    assert plan["eligible"] == [2, 3] and plan["targets"] == [] and plan["prepared"] is False
+    assert plan["calls_expected"] == {"select": 0, "image": 0} and world.row["illustrations"]["status"] == svc.PARTIAL
+    assert tool.main(["--memoir", "m_aaaa", "--chapter", "1", "--chapter", "2"]) == 0
+    plan = json.loads(capsys.readouterr().out)
+    assert [t["no"] for t in plan["targets"]] == [2] and [r["no"] for r in plan["refused"]] == [1] and plan["untouched"] == [1, 3]
+    assert plan["calls_expected"] == {"select": 1, "image": 1}
+    assert tool.main(["--memoir", "m_aaaa", "--prepare"]) == 2                     # 장을 이름 대지 않으면 거부
+    capsys.readouterr()
+    assert tool.main(["--memoir", "m_aaaa", "--chapter", "2", "--chapter", "3", "--prepare"]) == 0
     plan = json.loads(capsys.readouterr().out)
     assert plan["prepared"] is True and world.row["illustrations"]["status"] == svc.RUNNING
+
+
+def test_a_chapter_failed_under_theme_v1_can_be_redone_once_with_v2_only_when_named(world):
+    """운영 책 m_d1571e8e 의 경우 — 2 · 3장은 v1 으로 넣었고 1장은 v1 의 낱말 차단으로 실패했다. 1장만 이름 대서 v2 로 한 번 다시 한다."""
+    world.sessions["s-01"]["photo_id"] = None                     # 세 장 모두 사진 없이
+    run(Calls())
+    doc = world.row["illustrations"]
+    for k in ("1", "2", "3"):                                     # 앞선 판(v1)의 기록처럼
+        doc["chapters"][k]["select"]["policy_id"] = "chapter_theme_v1"
+        doc["chapters"][k]["state"] = svc.ILLUSTRATED if k != "1" else doc["chapters"][k]["state"]
+    doc["chapters"]["1"] = {"no": 1, "title": "우물가", "state": svc.FAILED, "failure": ["theme_negated"], "policy": "theme",
+                            "select": {"attempted_at": "2026-11-18T00:00:00+00:00", "finished_at": "2026-11-18T00:00:03+00:00",
+                                       "policy_id": "chapter_theme_v1", "status": "failed",
+                                       "selection": {"status": "failed", "policy": "chapter_theme_v1", "reasons": ["theme_negated"]}}}
+    doc["status"] = svc.PARTIAL
+    keys = {k: doc["chapters"][k]["image"]["storage_key"] for k in ("2", "3")}
+    calls_before = dict(doc["calls"])
+
+    assert [t["no"] for t in svc.reprocess_targets(doc, "theme")] == [1]                 # 다시 할 수 있는 장은 1장뿐
+    assert svc.reprocess_targets(doc, "theme", [2, 3]) == []                            # 넣은 장은 이름을 대도 건드리지 않는다
+    assert [r["no"] for r in svc.refused_chapters(doc, [2, 3])] == [2, 3]
+    done = asyncio.run(svc.prepare_reprocess(MID, ME, "theme", [1]))
+    assert done["changed"] and [t["no"] for t in done["targets"]] == [1] and done["targets"][0]["from_policy"] == "chapter_theme_v1"
+    ch1 = world.row["illustrations"]["chapters"]["1"]
+    assert ch1["history"][0]["policy_id"] == "chapter_theme_v1" and ch1["history"][0]["failure"] == ["theme_negated"]
+
+    calls = Calls()
+    after = run(calls)
+    assert [no for no, _ in calls.select] == [1] and len(calls.image) == 1               # 1장만 — 선정 1 · 그림 1
+    assert {k: c["state"] for k, c in after["chapters"].items()} == {"1": "illustrated", "2": "illustrated", "3": "illustrated"}
+    assert {k: after["chapters"][k]["image"]["storage_key"] for k in ("2", "3")} == keys      # 2 · 3장 그림 그대로
+    assert after["chapters"]["1"]["select"]["policy_id"] == "chapter_theme_v2"
+    assert after["calls"] == {"select": calls_before["select"] + 1, "image": calls_before["image"] + 1}
+    v = svc.view(MID, world.row["illustrations"])
+    assert [c["policy"] for c in v["chapters"]] == ["chapter_theme_v2", "chapter_theme_v1", "chapter_theme_v1"]   # 앞선 그림은 v1 그대로
+    assert svc.reprocess_targets(world.row["illustrations"], "theme", [1]) == []        # 이제 v2 로 불렀다 — 다시 표시되지 않는다
+
+
+def test_a_select_failure_under_v2_is_not_retried_and_records_the_reason(world, monkeypatch):
+    class BadReply(Calls):
+        def select_call(self, system, user, *, model):
+            super().select_call(system, user, model=model)
+            return {"text": "모양이 틀린 응답", "usage": None, "model_version": model}
+    calls = BadReply()
+    doc = run(calls)
+    assert {k: (c["state"], c.get("failure")) for k, c in doc["chapters"].items() if k != "1"} == \
+        {"2": ("failed", ["model_output"]), "3": ("failed", ["model_output"])}
+    assert calls.image == [] and world.row["result"] == book()[0]["result"]        # 그림을 부르지 않았고 본문은 그대로
+    again = Calls()
+    run(again)
+    assert again.select == [] and again.image == []                               # 저절로 다시 부르지 않는다

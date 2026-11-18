@@ -3,7 +3,8 @@
 
     목차 항목마다   photo_states     그 항목 본문에 사진이 있는가 — 있음 · 없음(확인됨) · 모름
     사진 없는 항목  choose_by        대표 그림 하나 — 방식(정책)에 따라
-                      theme (기본)   목차 주제 삽화 chapter_theme_v1 — 장 전체의 주제와 분위기 (memoir_illust_theme.choose_theme)
+                      theme (기본)   목차 주제 삽화 chapter_theme_v2 — 장 전체의 주제와 분위기 (memoir_illust_theme.choose_theme).
+                                     뜻은 모델이 판단하고, 코드는 응답 모양 · 주제와 소재의 존재만 본다 (낱말 검사로 막지 않는다)
                       scene          장면 재현 scene_v5 — 아래 choose. 모델 후보와 사람을 뺀 후보를 모두 자동 검사하고, 이 항목의
                                      중심 내용(focus_map)을 가장 많이 담은 것을 고른다. 배경만 남은 후보는 고르지 않는다
                                      두 방식의 검사는 다르다. 결과의 policy 칸과 지시문 해시로 어느 방식의 결과인지 남는다
@@ -70,10 +71,12 @@ def prompt_hash() -> str:
 
 # ---------------------------------------------------------------- 방식 (정책) — 주제(기본) · 장면
 
-# theme  목차 주제 삽화 (chapter_theme_v1 · memoir_illust_theme) — 장 전체의 주제와 분위기. 2026-11-18 부터 기본
+# theme  목차 주제 삽화 (chapter_theme_v2 · memoir_illust_theme) — 장 전체의 주제와 분위기. 2026-11-18 부터 기본.
+#        앞선 판 chapter_theme_v1(지시문 v6 · 낱말 검사로 막음)의 기록은 그 판 이름 그대로 남는다
 # scene  장면 재현 (scene_v5 · 이 파일의 choose) — 한 장면을 원문 그대로. 기록 · 견주기용으로 남긴다
 DEFAULT_POLICY = "theme"
-POLICY_IDS = {"theme": "chapter_theme_v1", "scene": "scene_v5"}
+POLICY_IDS = {"theme": "chapter_theme_v2", "scene": "scene_v5"}
+CHECKS_VERSIONS = {"theme": "theme_checks_v2", "scene": "scene_checks_v5"}
 
 
 def _theme():
@@ -89,16 +92,17 @@ def check_policy(policy: str) -> str:
 
 def policy_of(selection: dict | None) -> str:
     """앞선 선정 결과가 어느 방식으로 만들어졌나. 방식 칸이 없는 결과는 장면 방식(이 변경 전)이다."""
-    return "theme" if (selection or {}).get("policy") == POLICY_IDS["theme"] else "scene"
+    return "theme" if str((selection or {}).get("policy") or "").startswith("chapter_theme") else "scene"
 
 
 def policy_files(policy: str) -> dict:
     """그 방식의 지시문 · 그림 양식 파일과 해시 — 결과에 남겨 다른 방식의 결과와 섞이지 않게 한다."""
     if check_policy(policy) == "theme":
         t = _theme()
-        return {"policy": policy, "policy_id": POLICY_IDS[policy], "select_prompt": t.SELECT_FILE,
-                "select_prompt_hash": t.prompt_hash(), "style": t.STYLE_FILE, "style_hash": t.style_hash()}
-    return {"policy": policy, "policy_id": POLICY_IDS[policy], "select_prompt": SELECT_FILE,
+        return {"policy": policy, "policy_id": POLICY_IDS[policy], "checks_version": CHECKS_VERSIONS[policy],
+                "select_prompt": t.SELECT_FILE, "select_prompt_hash": t.prompt_hash(), "style": t.STYLE_FILE,
+                "style_hash": t.style_hash()}
+    return {"policy": policy, "policy_id": POLICY_IDS[policy], "checks_version": CHECKS_VERSIONS[policy], "select_prompt": SELECT_FILE,
             "select_prompt_hash": prompt_hash(), "style": il.STYLE_FILE, "style_hash": il.prompt_hashes().get(il.STYLE_FILE)}
 
 

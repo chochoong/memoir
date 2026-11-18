@@ -1,21 +1,23 @@
 """
-운영자 도구 — 앞선 방식으로 실패한 장만 새 방식(목차 주제 삽화)으로 다시 처리하도록 표시한다.
+운영자 도구 — 이름을 댄 실패 장만 지금 판(목차 주제 삽화 chapter_theme_v2)으로 다시 처리하도록 표시한다.
 
-    python tools/memoir_illust_reprocess.py --memoir m_5c0cf761            보기만 — 다시 처리할 장 · 부를 횟수 · 비용 어림
-    python tools/memoir_illust_reprocess.py --memoir m_5c0cf761 --prepare  표시한다 (모델 · 그림을 부르지 않는다)
+    python tools/memoir_illust_reprocess.py --memoir m_d1571e8e                         보기만 — 장 상태 · 다시 할 수 있는 장 · 비용 어림
+    python tools/memoir_illust_reprocess.py --memoir m_d1571e8e --chapter 1 --prepare   1장만 표시한다 (모델 · 그림을 부르지 않는다)
 
 서버 컴퓨터에서 backend-agent 폴더에서 돌린다 — 서버와 같은 .env(PG_* · DB)를 읽는다. 키는 쓰지 않는다.
 
-**이 도구는 부르지 않는다.** --prepare 는 그 책의 실패한 장을 「새 방식으로 다시」 로 표시하고 책 상태를 running 으로 둘 뿐이다.
+**이 도구는 부르지 않는다.** --prepare 는 --chapter 로 이름을 댄 실패 장만 「지금 판으로 다시」 로 표시하고 책 상태를 running 으로 둘 뿐이다.
+--chapter 없이 --prepare 하면 거부한다 — 실패한 장을 모두 저절로 다시 부르지 않는다.
 실제 처리는 **새 코드로 다시 켠 서버**가 그 책을 다음에 열 때(자서전 보기에서 책을 펼치면) 이어서 한다 — 장마다 선정 1회 · 그림 1회.
 한 책을 두 프로세스가 같이 처리하지 않도록 이 도구에서는 처리하지 않는다.
 
 지키는 것 (memoir_illust_service.reprocess_targets)
-- 실패한 장만. 사진 장 · 이미 넣은 삽화 · 보류 · 사진 정보를 모르는 장은 그대로 둔다.
-- 새 방식으로 이미 부른 장은 다시 표시하지 않는다. 앞선 기록은 지우지 않고 그 장의 history 에 옮겨 둔다.
+- 이름을 댄 장 가운데 실패한 장만. 사진 장 · 이미 넣은 삽화 · 보류 · 사진 정보를 모르는 장은 이름을 대도 그대로 둔다(까닭을 보인다).
+- 지금 판으로 이미 부른 장은 다시 표시하지 않는다. 판이 바뀌면(v1 → v2) 앞선 판으로 실패한 장은 한 번 다시 할 수 있다.
+- 앞선 기록 · 호출 수는 지우지 않는다 — 앞선 기록은 그 장의 history 에 옮겨 둔다.
 - --memoir 는 앞부분만 줘도 된다. 둘 이상 걸리면 멈춘다.
 
-종료 코드: 0 됨 / 2 거부(책 없음 · 여럿 · DB 없음)
+종료 코드: 0 됨 / 2 거부(책 없음 · 여럿 · DB 없음 · --chapter 없는 --prepare)
 """
 
 from __future__ import annotations
@@ -47,6 +49,9 @@ async def main_async(args) -> int:
     from app.session import memoir_illust_book as book, memoir_illust_service as svc, store
 
     pol = book.check_policy(args.policy or svc.policy())
+    if args.prepare and not args.chapter:
+        print("--prepare 에는 --chapter 가 있어야 한다 — 다시 처리할 장을 이름 댄다 (실패한 장을 모두 저절로 다시 부르지 않는다)")
+        return 2
     await store.open_pool()
     if not store.enabled():
         print("DB 에 붙지 못했다 — 서버의 .env(PG_*)를 확인한다")
@@ -59,14 +64,16 @@ async def main_async(args) -> int:
     doc = store._jsonb(row["illustrations"])
     states = {k: {"state": c.get("state"), "failure": c.get("failure"), "policy": svc._policy_id_of(c) if c.get("select") else None}
               for k, c in sorted(((doc or {}).get("chapters") or {}).items(), key=lambda x: int(x[0]))}
-    targets = svc.reprocess_targets(doc, pol)
+    eligible = svc.reprocess_targets(doc, pol)                       # 다시 할 수 있는 장 (이름을 대기 전)
+    targets = svc.reprocess_targets(doc, pol, args.chapter) if args.chapter else []
     plan = {"memoir_id": row["memoir_id"], "title": row["title"], "status": (doc or {}).get("status"), "chapters_now": states,
-            "to_policy": book.POLICY_IDS[pol], "targets": targets,
+            "to_policy": book.POLICY_IDS[pol], "eligible": [t["no"] for t in eligible], "requested": args.chapter or [],
+            "targets": targets, "refused": svc.refused_chapters(doc, args.chapter or [], pol),
             "calls_expected": {"select": len(targets), "image": len(targets)},
             "usd_estimate": round(len(targets) * (SELECT_USD + IMAGE_USD), 3),
             "untouched": [int(k) for k in states if int(k) not in [t["no"] for t in targets]]}
     if args.prepare and targets:
-        done = await svc.prepare_reprocess(row["memoir_id"], row["user_id"], pol)
+        done = await svc.prepare_reprocess(row["memoir_id"], row["user_id"], pol, args.chapter)
         plan["prepared"] = done["changed"]
         plan["next"] = "새 코드로 다시 켠 서버에서 그 책을 펼치면 표시한 장만 처리한다"
     else:
@@ -76,9 +83,10 @@ async def main_async(args) -> int:
 
 
 def main(argv: list[str] | None = None) -> int:
-    ap = argparse.ArgumentParser(description="앞선 방식으로 실패한 장만 새 방식으로 다시 처리하도록 표시한다 (부르지 않는다)")
+    ap = argparse.ArgumentParser(description="이름을 댄 실패 장만 지금 판으로 다시 처리하도록 표시한다 (부르지 않는다)")
     ap.add_argument("--memoir", required=True, help="자서전 id 또는 앞부분 (예: m_5c0cf761)")
-    ap.add_argument("--prepare", action="store_true", help="표시한다. 없으면 보기만 한다")
+    ap.add_argument("--chapter", type=int, action="append", help="다시 처리할 장 번호 (여러 번 쓸 수 있다)")
+    ap.add_argument("--prepare", action="store_true", help="--chapter 로 댄 장을 표시한다. 없으면 보기만 한다")
     ap.add_argument("--policy", choices=["theme", "scene"], help="다시 처리할 방식 (기본: 서버 설정 · theme)")
     args = ap.parse_args(argv)
     return asyncio.run(main_async(args))

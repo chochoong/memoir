@@ -6,7 +6,8 @@
     ① 입력 만들기   build_input   원고(memoir.result) · 원문(회차 기록 → memoir.merge) · 목차별 사진
     ② 목차별 사진   photo_states  사진이 놓인 장은 그 사진을 보이고 삽화를 만들지 않는다 (memoir_illust_book)
     ③ 사진 없는 장  선정 1회 → choose_by(방식) → 그림 1회 → 저장 → 넣을 자리
-                    방식 theme(기본 · 목차 주제 삽화 chapter_theme_v1): 장 전체의 주제와 분위기 → 소재 · 구도 → 장의 첫 문단 뒤
+                    방식 theme(기본 · 목차 주제 삽화 chapter_theme_v2): 장 전체의 주제와 분위기 → 소재 · 구도 → 장의 첫 문단 뒤.
+                    뜻은 모델이 판단하고 코드는 응답 모양 · 주제와 소재의 존재만 본다 (낱말 검사로 막지 않는다)
                     방식 scene(앞선 방식 · scene_v5): 한 장면을 원문 그대로 재현 → 그 장면의 문단 뒤
     ④ 상태 · 그림   memoir.illustrations (017) · 그림 바이트는 사진과 같은 저장소(photostore)
 
@@ -23,9 +24,9 @@
 그림이 이미 저장된 장은 넣을 자리만 다시 정한다. 같은 책을 두 번 돌려도 그림은 장마다 한 장이다.
 
 **방식이 바뀌면.** 장마다 그 장을 처리한 방식(policy_id) · 지시문 해시를 적는다 — 앞선 방식의 결과를 새 방식의 결과처럼 보이지 않는다.
-앞선 방식으로 실패한 장은 저절로 다시 하지 않는다. prepare_reprocess(운영자 도구 tools/memoir_illust_reprocess.py)가 실패한 장만
-「새 방식으로 다시」 로 표시하고(앞선 기록은 그 장의 history 에 남긴다), 서버가 그 책을 다음에 열 때 그 장들만 처리한다.
-새 방식으로 이미 부른 장은 다시 부르지 않는다. 사진 장 · 이미 넣은 삽화는 건드리지 않는다.
+앞선 판으로 실패한 장은 저절로 다시 하지 않는다. 운영자가 장을 이름 대서(tools/memoir_illust_reprocess.py --chapter N)
+prepare_reprocess 가 그 장만 「지금 판으로 다시」 로 표시하고(앞선 기록은 그 장의 history 에 남긴다), 서버가 그 책을 다음에
+열 때 그 장들만 처리한다. 지금 판으로 이미 부른 장은 다시 부르지 않는다. 사진 장 · 이미 넣은 삽화는 건드리지 않는다.
 
 **사람이 확인한 것이 아니다.** automatic: true · human_reviewed: false 로 적는다. 화면에는 「AI 가 그린 그림」 으로 보인다.
 
@@ -268,15 +269,20 @@ def _policy_id_of(rec: dict) -> str:
     return (rec.get("select") or {}).get("policy_id") or book.POLICY_IDS["scene"]
 
 
-def reprocess_targets(doc: dict | None, pol: str | None = None) -> list[dict]:
+def reprocess_targets(doc: dict | None, pol: str | None = None, chapters: list[int] | None = None) -> list[dict]:
     """
-    방식이 바뀐 뒤 다시 처리할 장 — **실패한 장 가운데, 그 방식으로는 한 번도 부르지 않은 장**만.
-    사진 장 · 이미 넣은 삽화 · 보류 · 사진 정보를 모르는 장은 건드리지 않는다. 같은 방식으로 이미 부른 장은 다시 부르지 않는다
-    (실패 기록을 지우거나 옮겨서 「한 번만」 을 비켜 가지 않는다 — 앞선 기록은 history 에 그대로 남는다).
+    다시 처리할 수 있는 장 — **실패한 장 가운데, 지금 판(policy_id)으로는 한 번도 부르지 않은 장**만.
+    chapters 를 주면 그 장들 가운데서만 고른다 (운영자가 이름을 댄 장만 — 실패한 장을 모두 저절로 다시 부르지 않는다).
+    사진 장 · 이미 넣은 삽화 · 보류 · 사진 정보를 모르는 장은 이름을 대도 건드리지 않는다. 지금 판으로 이미 부른 장도 다시 부르지
+    않는다 (실패 기록을 지우거나 옮겨서 「한 번만」 을 비켜 가지 않는다 — 앞선 기록은 history 에 그대로 남는다).
+    판이 바뀌면(chapter_theme_v1 → v2) 앞선 판으로 실패한 장은 새 판으로 한 번 다시 할 수 있다.
     """
     pid = book.POLICY_IDS[book.check_policy(pol or policy())]
+    want = None if chapters is None else {int(c) for c in chapters}
     out = []
     for key, ch in sorted(((doc or {}).get("chapters") or {}).items(), key=lambda x: int(x[0])):
+        if want is not None and int(key) not in want:
+            continue
         if ch.get("state") not in REPROCESS_STATES:
             continue
         tried = [_policy_id_of(r) for r in [ch, *(ch.get("history") or [])] if r.get("select") or r.get("image")]
@@ -287,19 +293,41 @@ def reprocess_targets(doc: dict | None, pol: str | None = None) -> list[dict]:
     return out
 
 
-async def prepare_reprocess(memoir_id: str, user_id: str, pol: str | None = None) -> dict:
+def refused_chapters(doc: dict | None, chapters: list[int], pol: str | None = None) -> list[dict]:
+    """이름을 댔지만 다시 처리하지 않는 장과 그 까닭 — 운영자 도구가 보여 준다."""
+    pid = book.POLICY_IDS[book.check_policy(pol or policy())]
+    out = []
+    for c in chapters:
+        ch = ((doc or {}).get("chapters") or {}).get(str(c))
+        if ch is None:
+            why = "그 장의 기록이 없다"
+        elif ch.get("state") not in REPROCESS_STATES:
+            why = f"실패한 장이 아니다 (state={ch.get('state')}) — 건드리지 않는다"
+        elif pid in [_policy_id_of(r) for r in [ch, *(ch.get("history") or [])] if r.get("select") or r.get("image")]:
+            why = f"지금 판({pid})으로 이미 불렀다 — 다시 부르지 않는다"
+        else:
+            continue
+        out.append({"no": int(c), "why": why})
+    return out
+
+
+async def prepare_reprocess(memoir_id: str, user_id: str, pol: str | None = None, chapters: list[int] | None = None) -> dict:
     """
-    실패한 장을 새 방식으로 다시 처리하도록 표시만 한다 — 모델 · 그림을 부르지 않는다. 앞선 기록은 그 장의 history 에 옮겨 둔다.
+    이름을 댄 실패 장을 지금 판으로 다시 처리하도록 표시만 한다 — 모델 · 그림을 부르지 않는다. 앞선 기록은 그 장의 history 에 옮겨 둔다.
+    chapters 가 없으면 아무것도 하지 않는다 (모든 실패 장을 저절로 다시 부르지 않는다).
     책 상태를 running 으로 두므로, 서버가 그 책을 다음에 열 때(resume_if_stalled) 그 장들만 이어서 처리한다 — 장마다 선정 1회 · 그림 1회.
     """
     pol = book.check_policy(pol or policy())
+    if not chapters:
+        return {"memoir_id": memoir_id, "found": None, "targets": [], "changed": False, "refused": "chapters_required"}
     rec = await store.load_memoir(memoir_id, user_id)
     if rec is None:
         return {"memoir_id": memoir_id, "found": False, "targets": [], "changed": False}
     doc = rec.get("illustrations")
-    targets = reprocess_targets(doc, pol)
+    targets = reprocess_targets(doc, pol, chapters)
+    refused = refused_chapters(doc, chapters, pol)
     if not targets:
-        return {"memoir_id": memoir_id, "found": True, "targets": [], "changed": False}
+        return {"memoir_id": memoir_id, "found": True, "targets": [], "changed": False, "refused_chapters": refused}
     for t in targets:
         ch = doc["chapters"][str(t["no"])]
         archived = {**{k: ch.get(k) for k in ("state", "failure", "policy", "select", "image", "insertion", "reason")},
@@ -307,13 +335,14 @@ async def prepare_reprocess(memoir_id: str, user_id: str, pol: str | None = None
         doc["chapters"][str(t["no"])] = {"no": ch.get("no", t["no"]), "title": ch.get("title"), "state": PENDING, "policy": pol,
                                          "history": [*(ch.get("history") or []), archived],
                                          "reprocess": {"from_policy": t["from_policy"], "to_policy": t["to_policy"],
-                                                       "prepared_at": _now()}}
+                                                       "prepared_at": _now(), "requested_chapters": sorted(int(c) for c in chapters)}}
     doc["status"], doc["finished_at"] = RUNNING, None
-    doc.setdefault("reprocess_log", []).append({"at": _now(), "policy_id": book.POLICY_IDS[pol], "chapters": [t["no"] for t in targets]})
+    doc.setdefault("reprocess_log", []).append({"at": _now(), "policy_id": book.POLICY_IDS[pol],
+                                                "requested": sorted(int(c) for c in chapters), "chapters": [t["no"] for t in targets]})
     await _save(memoir_id, user_id, doc)
     log.info("삽화 %s — %s 로 다시 처리할 장 %s (표시만 · 부르지 않았다)", memoir_id[:10], book.POLICY_IDS[pol],
              [t["no"] for t in targets])
-    return {"memoir_id": memoir_id, "found": True, "targets": targets, "changed": True,
+    return {"memoir_id": memoir_id, "found": True, "targets": targets, "changed": True, "refused_chapters": refused,
             "calls_expected": {"select": len(targets), "image": len(targets)}}
 
 
@@ -421,7 +450,8 @@ async def _chapter(data, it, ch, doc, memoir_id, user_id, cfg, select_call, imag
         ch["policy"] = pol
         ch["select"] = sel_rec = {"attempted_at": _now(), "model": cfg["select_model"], "policy": pol,
                                   "policy_id": files["policy_id"], "prompt_file": files["select_prompt"],
-                                  "prompt_hash": files["select_prompt_hash"], "style_hash": files["style_hash"]}
+                                  "prompt_hash": files["select_prompt_hash"], "style_hash": files["style_hash"],
+                                  "checks_version": files["checks_version"]}
         ch["state"] = "selecting"
         doc["calls"]["select"] += 1
         await _save(memoir_id, user_id, doc)                 # 부르기 전에 적는다 — 멈춰도 다시 부르지 않는다
