@@ -66,7 +66,8 @@
     const qs = QUESTIONS[L.topic] || [`「${L.topic}」 하면 어떤 장면이 먼저 떠오르세요?`, '그때 곁에 누가 있었나요?', '그 일을 떠올리면 지금 어떤 마음이 드세요?'];
     const n = L.snap.fragments.filter((f) => f.idx > 0).length;
     L.snap.state = 'SPEAKING'; L.snap.turn = n + 1;
-    L.snap.next_question = qs[n % qs.length] + (n >= qs.length ? ' (예시 질문이 다시 돌아요)' : '');
+    L.snap.next_question = (L.photo && n === 0) ? '함께 보내 주신 사진이 반가워요. 이 사진은 언제, 어디서 찍으신 건가요?'
+      : qs[n % qs.length] + (n >= qs.length ? ' (예시 질문이 다시 돌아요)' : '');
   }
   function commit(L, answer) {
     L.snap.fragments.push({idx: L.snap.fragments.length, question: L.snap.next_question, answer});
@@ -83,9 +84,9 @@
   }
   // 서버와 같은 목소리 이름만 받는다 (default · young). 예시 모드에서는 소리가 없어 고른 값만 기억한다
   const VOICE_OK = ['default', 'young'];
-  function openSession({topic, elder_id, link, voice}) {
+  function openSession({topic, elder_id, link, voice, photo}) {
     const sid = uid();
-    const L = {topic, elder_id, link, audio: 0, lastAudio: 0, pending: '',
+    const L = {topic, elder_id, link, photo, audio: 0, lastAudio: 0, pending: '',
       snap: {session_id: sid, state: 'SPEAKING', turn: 1, max_turn: 0, next_question: '', question_audio_stream: false, audio_bytes: 0, resumable: false, voice: voice || 'default',
         fragments: [{idx: 0, question: null, answer: topic}]}};
     ask(L);
@@ -181,10 +182,11 @@
       rows = rows.slice().sort((a, b) => Date.parse(b.created_at) - Date.parse(a.created_at)).slice(0, Number(q.get('limit')) || 20);
       return ok({sessions: rows.map(row)});
     }
+    if (path === '/photos' && method === 'POST') { await sleep(900); const id = 'demo-ph' + (++db.seq); return ok({photo_id: id, url: `/api/photos/${id}`, mime: 'image/jpeg', width: 1024, height: 768, bytes: 123456}); }
     if (path === '/sessions' && method === 'POST') {
       if (!db.elders.some((e) => e.elder_id === body.elder_id)) return err(400, '화자를 골라 주세요', 'elder_required');
       if (body.voice !== undefined && !VOICE_OK.includes(body.voice)) return err(422, '목소리를 확인해 주세요');
-      return ok(snapOf(openSession({topic: body.topic || body.title || '나의 이야기', elder_id: body.elder_id, voice: body.voice})));
+      return ok(snapOf(openSession({topic: body.topic || body.title || '나의 이야기', elder_id: body.elder_id, voice: body.voice, photo: !!body.photo_id})));
     }
     if ((m = path.match(/^\/sessions\/([^/]+)(\/.*)?$/))) {
       const id = m[1], rest = m[2] || '';
