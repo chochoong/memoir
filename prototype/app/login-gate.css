@@ -3,7 +3,7 @@
 body.pre-login .login-gate-card {
   display: flex; align-items: center; justify-content: space-between; gap: 24px;
   margin-top: 20px; padding: 26px 30px; border: 1px dashed var(--line);
-  background: repeating-linear-gradient(135deg, #fffaeb 0 14px, #fbf3dc 14px 28px);
+  background: repeating-linear-gradient(135deg, #f7f5f3 0 14px, #efece8 14px 28px);
 }
 .login-gate-card h2 { margin: 6px 0 8px; font-size: 22px; line-height: 1.45; }
 .login-gate-card p { margin: 0; color: var(--muted); font-size: 15px; line-height: 1.8; max-width: 560px; }

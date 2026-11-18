@@ -96,7 +96,7 @@ function updateSelection() {
   $('#choose-style').disabled=unavailable||(picking&&!memoirSelection.canGenerate(state.selected.size,MEMOIR_POLICY));
   $('#choose-style').textContent=picking?(!memoirSelection.canGenerate(state.selected.size,MEMOIR_POLICY)?`${selectionRangeText()} 골라주세요`:'문체 고르기 →'):'자서전 만들기';
   $('#cancel-postcard-pick').hidden=!picking;
-  $('#records-description').textContent=picking?'선택 상한을 풀어보는 검토용 화면이에요. 실제 생성은 계정별 허용 범위와 연결해야 합니다.':'엽서를 누르면 그날의 이야기를 읽을 수 있어요.';
+  $('#records-description').textContent=picking?'책에 넣을 엽서를 골라 주세요. 처음엔 모두 골라져 있어요.':'엽서를 누르면 그날의 이야기를 읽을 수 있어요.';
   $('#build-summary').textContent=`엽서 ${state.selected.size}장 · ${selectedStyle().title}`;
   $$('.record-card').forEach((card)=>card.classList.toggle('selected',state.selected.has(Number(card.dataset.id))));
 }

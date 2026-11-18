@@ -17,9 +17,9 @@
 .elder-manage-dialog { width: min(560px, calc(100% - 32px)); }
 .elder-manage-dialog .em-lead { margin: -6px 0 16px; }
 .em-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 10px; max-height: min(50dvh, 420px); overflow: auto; }
-.em-row { display: flex; gap: 8px; align-items: center; padding: 10px; border: 1px solid var(--line); border-radius: 10px; background: #fffdf9; }
+.em-row { display: flex; gap: 8px; align-items: center; padding: 10px; border: 1px solid var(--line); border-radius: 10px; background: #fdfcfb; }
 .em-name { flex: 1; min-width: 0; }
-.em-name input { width: 100%; font: inherit; font-size: 17px; padding: 10px 12px; min-height: 46px; border: 1px solid #cbb29b; border-radius: 8px; background: #fff; color: var(--ink); }
+.em-name input { width: 100%; font: inherit; font-size: 17px; padding: 10px 12px; min-height: 46px; border: 1px solid #bfb2a7; border-radius: 8px; background: #fff; color: var(--ink); }
 .em-name input:disabled { background: transparent; border-color: transparent; color: var(--ink); font-weight: 600; }
 .em-self { font-size: 13px; color: var(--muted, #7a6a5a); padding-right: 6px; white-space: nowrap; }
 .em-del { color: #9b352e; display: inline-flex; align-items: center; gap: 4px; white-space: nowrap; }
@@ -29,15 +29,15 @@
 @media (max-width: 600px) { .em-row { flex-wrap: wrap; } .em-name { flex-basis: 100%; } }
 .elder-pick-dialog { width: min(480px, calc(100% - 32px)); }
 .ep-list { display: flex; flex-wrap: wrap; gap: 10px; margin: 4px 0 16px; }
-.ep-list [aria-pressed="true"] { background: var(--burgundy); color: #fffaf4; border-color: var(--burgundy); }
+.ep-list [aria-pressed="true"] { background: var(--burgundy); color: #fbfaf8; border-color: var(--burgundy); }
 .ep-manage, .sc-manage { display: inline-flex; align-items: center; gap: 6px; font-size: 15px; justify-self: start; }
 /* 지울 수 없을 때 안내 상자 */
-.em-blocked { list-style: none; margin: -2px 0 4px; padding: 16px 18px; border: 1px solid #e3c7a0; border-left: 4px solid #b9874a; border-radius: 10px; background: #fff6e6; color: #4a3a2c; }
+.em-blocked { list-style: none; margin: -2px 0 4px; padding: 16px 18px; border: 1px solid #e3c7a0; border-left: 4px solid #b9874a; border-radius: 10px; background: #f5f2f0; color: #4a3a2c; }
 .em-blocked .emb-head { display: flex; align-items: center; gap: 8px; font-size: 16px; }
 .em-blocked .emb-head .icon { width: 20px; height: 20px; color: #9a6a2e; flex: none; }
 .em-blocked .emb-sub { margin: 8px 0 8px; font-size: 13px; color: #7a6650; }
 .em-blocked .emb-stats { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 8px; }
-.em-blocked .emb-stats li { display: flex; align-items: center; gap: 8px; padding: 8px 10px; border-radius: 8px; background: #fffdf8; border: 1px solid #ecdcc3; font-size: 14px; }
+.em-blocked .emb-stats li { display: flex; align-items: center; gap: 8px; padding: 8px 10px; border-radius: 8px; background: #fcfcfb; border: 1px solid #dcd8d3; font-size: 14px; }
 .em-blocked .emb-stats li .icon { width: 16px; height: 16px; color: var(--burgundy); flex: none; }
 .em-blocked .emb-stats li b { margin-left: auto; font-size: 15px; color: var(--burgundy); }
 .em-blocked .emb-why { margin: 12px 0 0; font-size: 14px; line-height: 1.7; }
@@ -50,7 +50,7 @@
   display: inline-flex; align-items: center; gap: 10px;
   max-width: calc(100% - 32px); min-height: 52px; padding: 8px 18px 8px 14px;
   border: 1px solid #c9a99b; border-radius: 999px;
-  background: #fffaf0; color: #3b2a26; box-shadow: 0 8px 22px #4a2c2426;
+  background: #f9f8f6; color: #3b2a26; box-shadow: 0 8px 22px #4a2c2426;
   font: inherit; text-align: left; cursor: pointer;
 }
 .srv-gen-pill[hidden] { display: none; }
@@ -78,22 +78,22 @@
 
 /* 책장의 「만드는 중」 책 — 빛이 지나가고 별이 반짝인다 */
 [data-screen="library"] .ml-making .ml-cover-making {
-  --ml-cover-color: #7a4a55; --ml-cover-ink: #fbe9c8; --ml-cover-spine: #57303a;
+  --ml-cover-color: #7a4a55; --ml-cover-ink: #e7e2dc; --ml-cover-spine: #57303a;
   overflow: hidden; justify-content: center;
 }
 [data-screen="library"] .ml-making .ml-cover-title { font-size: 19px; }
 [data-screen="library"] .ml-making .ml-volume-label { color: #7a4a55; font-weight: 600; }
 .ml-cover-making .mlm-shine {
   position: absolute; inset: -20% auto -20% -60%; width: 45%;
-  background: linear-gradient(100deg, transparent, #ffffff55 45%, #fff6dd88 50%, #ffffff55 55%, transparent);
+  background: linear-gradient(100deg, transparent, #ffffff55 45%, #f2eeea88 50%, #ffffff55 55%, transparent);
   transform: skewX(-12deg); animation: mlm-shine 2.6s ease-in-out infinite; pointer-events: none;
 }
-.ml-cover-making .mlm-spark { position: absolute; color: #ffe7a8; text-shadow: 0 0 8px #ffd77a; opacity: 0; animation: mlm-twinkle 2.2s ease-in-out infinite; pointer-events: none; }
+.ml-cover-making .mlm-spark { position: absolute; color: #ddd3ca; text-shadow: 0 0 8px #deca9b; opacity: 0; animation: mlm-twinkle 2.2s ease-in-out infinite; pointer-events: none; }
 .ml-cover-making .s1 { top: 12%; left: 16%; font-size: 15px; }
 .ml-cover-making .s2 { top: 22%; right: 14%; font-size: 12px; animation-delay: .5s; }
 .ml-cover-making .s3 { bottom: 20%; right: 22%; font-size: 17px; animation-delay: 1s; }
 .ml-cover-making .s4 { bottom: 12%; left: 22%; font-size: 11px; animation-delay: 1.5s; }
-[data-screen="library"] .ml-making .ml-cover { box-shadow: -3px 1px 0 var(--ml-cover-spine), 0 0 0 2px #f3d79a, 0 0 22px #f0c86f88, 4px 5px 8px #3c261430; animation: mlm-glow 2.2s ease-in-out infinite; }
+[data-screen="library"] .ml-making .ml-cover { box-shadow: -3px 1px 0 var(--ml-cover-spine), 0 0 0 2px #ddcfb0, 0 0 22px #d0bc8f88, 4px 5px 8px #3c261430; animation: mlm-glow 2.2s ease-in-out infinite; }
 @keyframes mlm-shine { 0% { left: -60%; } 60%, 100% { left: 130%; } }
 @keyframes mlm-twinkle { 0%, 100% { opacity: 0; transform: scale(.6) rotate(0); } 50% { opacity: 1; transform: scale(1.15) rotate(20deg); } }
 @keyframes mlm-glow { 0%, 100% { filter: brightness(1); } 50% { filter: brightness(1.12); } }
@@ -110,7 +110,7 @@ body:not(.ebook-mode) .search-field input { background: transparent; }
 .srv-mini-btn {
   display: inline-flex; align-items: center; gap: 6px; vertical-align: middle;
   min-height: 36px; margin-left: 12px; padding: 4px 13px 4px 11px;
-  border: 1px solid #d6c2b5; border-radius: 999px; background: #fffaf0;
+  border: 1px solid #cec4bd; border-radius: 999px; background: #f9f8f6;
   color: #6b4a52; font: inherit; font-size: 14px; font-weight: 500; line-height: 1.2; letter-spacing: -.01em;
   cursor: pointer; transition: border-color .15s, background .15s, color .15s;
 }
@@ -131,7 +131,7 @@ body:not(.ebook-mode) .search-field input { background: transparent; }
 .share-dialog .share-image { margin: 4px 0 14px; text-align: center; }
 .share-dialog .share-image img { display: block; width: min(100%, 300px); aspect-ratio: 4 / 5; margin: 0 auto; border-radius: 10px; box-shadow: 0 8px 22px #3b220e33; background: #c99e70; object-fit: cover; }
 .share-dialog .share-image.loading img { visibility: hidden; }
-.share-dialog .share-image.loading { min-height: 200px; background: linear-gradient(90deg, #f3e9da, #fbf4ea, #f3e9da); background-size: 200% 100%; animation: si-wait 1.2s linear infinite; border-radius: 10px; }
+.share-dialog .share-image.loading { min-height: 200px; background: linear-gradient(90deg, #e9e6e4, #f4f2f1, #e9e6e4); background-size: 200% 100%; animation: si-wait 1.2s linear infinite; border-radius: 10px; }
 @keyframes si-wait { to { background-position: -200% 0; } }
 .share-dialog .share-image figcaption { margin-top: 8px; font-size: 13px; color: var(--muted, #796e68); }
 .share-dialog .share-imgbar { display: flex; gap: 8px; margin: 10px 0 12px; }
@@ -140,7 +140,7 @@ body:not(.ebook-mode) .search-field input { background: transparent; }
 @media (max-width: 600px) { .share-dialog .share-image img { width: min(78%, 260px); } }
 
 /* 읽기 화면 「보기 설정」 안 「이 책 관리」 — 책 지우기 (앞으로 제목 · 글 고치기도 여기에) */
-.ebook-manage { border-top: 1px solid var(--line, #e9ded7); padding-top: 18px; }
+.ebook-manage { border-top: 1px solid var(--line, #e2e0de); padding-top: 18px; }
 .ebook-manage[hidden] { display: none; }
 .ebook-manage .ebook-manage-btn {
   display: inline-flex; align-items: center; gap: 8px; min-height: 44px; padding: 8px 16px;
@@ -175,10 +175,10 @@ dialog:focus, dialog:focus-visible { outline: none; }
 /* 인터뷰 「글로 쓰기」 — 1만 자 · 길면 칸 안에서 스크롤 (answer-box.js) */
 .interview-studio .answer-panel textarea#answer-text {
   max-height: min(48vh, 440px); overflow-y: auto; resize: none;
-  overscroll-behavior: contain; scrollbar-width: thin; scrollbar-color: #c9b3a3 transparent;
+  overscroll-behavior: contain; scrollbar-width: thin; scrollbar-color: #bfb4ac transparent;
 }
 #answer-text::-webkit-scrollbar { width: 10px; }
-#answer-text::-webkit-scrollbar-thumb { background: #c9b3a3; border-radius: 10px; border: 2px solid transparent; background-clip: padding-box; }
+#answer-text::-webkit-scrollbar-thumb { background: #bfb4ac; border-radius: 10px; border: 2px solid transparent; background-clip: padding-box; }
 #answer-text.answer-scrolls { padding-right: 10px; }
 .answer-count { margin: 6px 2px 10px; font-size: 15px; color: var(--muted, #7d6e66); text-align: right; }
 .answer-count.near { color: var(--burgundy, #7a2e3e); font-weight: 600; }
@@ -199,7 +199,7 @@ dialog:focus, dialog:focus-visible { outline: none; }
   position: fixed; left: 50%; transform: translateX(-50%); z-index: 60;
   width: min(560px, calc(100% - 24px)); display: grid; grid-template-columns: 1fr 1.35fr; gap: 8px;
   padding: 8px; border: 1px solid var(--line); border-radius: 16px;
-  background: color-mix(in srgb, var(--paper, #fffaeb) 94%, transparent); backdrop-filter: blur(6px);
+  background: color-mix(in srgb, var(--paper, #f7f5f3) 94%, transparent); backdrop-filter: blur(6px);
   box-shadow: 0 10px 28px rgba(73, 45, 53, .18); animation: draft-dock-in .22s ease-out;
 }
 .draft-dock .button { min-height: 52px; padding: 8px 10px; font-size: 15px; gap: 6px; }
@@ -209,3 +209,32 @@ dialog:focus, dialog:focus-visible { outline: none; }
 @media (max-width: 360px) { .draft-dock .button { font-size: 13.5px; padding: 6px; } }
 /* 버튼 줄이 떠 있는 동안 안내(토스트)는 그 위로 (글 맨 끝에서는 줄이 숨으므로 글은 가리지 않는다) */
 body.draft-dock-on .toast { bottom: var(--draft-dock-space, 180px); }
+
+/* 인터뷰 「글로 쓰기」 — 보낸 답의 상태 (srv-interview paintReceipt) */
+.answer-receipt { margin: 0 0 14px; padding: 14px 16px; border-radius: 14px; border: 1.5px solid var(--line); background: #fff; text-align: left; }
+.answer-receipt[data-state="sent"] { border-color: #8fb79a; background: #f3faf4; }
+.answer-receipt[data-state="failed"] { border-color: #d48a8a; background: #fff4f3; }
+.answer-receipt[data-state="queued"], .answer-receipt[data-state="sending"] { border-color: #c9b6c0; background: #faf6f8; }
+.answer-receipt .ar-head { display: flex; align-items: center; gap: 10px; margin: 0; font-size: 18px; line-height: 1.5; }
+.answer-receipt .ar-head strong { font-weight: 700; color: var(--ink, #2f2622); }
+.answer-receipt .ar-sub { margin: 4px 0 0 34px; font-size: 16px; line-height: 1.6; color: #5f534d; }
+.ar-mark { flex: none; width: 24px; height: 24px; border-radius: 50%; display: inline-grid; place-items: center; }
+.ar-mark.ar-ok { background: #3f8a55; }
+.ar-mark.ar-ok::after { content: ""; width: 10px; height: 5px; border: solid #fff; border-width: 0 0 2.5px 2.5px; transform: translateY(-1px) rotate(-45deg); }
+.ar-mark.ar-fail { background: #b4443f; }
+.ar-mark.ar-fail::after { content: "!"; color: #fff; font-weight: 800; font-size: 15px; line-height: 1; }
+.ar-mark.ar-wait, .ar-spin { border: 3px solid #e3d3db; border-top-color: var(--burgundy, #8a465e); animation: ar-spin .8s linear infinite; }
+.ar-spin { display: inline-block; width: 20px; height: 20px; border-radius: 50%; flex: none; border-color: #ffffff66; border-top-color: #fff; }
+@keyframes ar-spin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) { .ar-mark.ar-wait, .ar-spin { animation-duration: 2.4s; } }
+.answer-receipt .ar-text { margin: 10px 0 0; padding: 10px 14px; max-height: 168px; overflow-y: auto; border-left: 3px solid #8fb79a; background: #fff; border-radius: 0 8px 8px 0; font-size: 17px; line-height: 1.75; white-space: pre-wrap; color: #3d322d; overscroll-behavior: contain; }
+.answer-receipt .ar-retry { margin-top: 12px; width: 100%; min-height: 56px; }
+
+/* 자서전 본문 글꼴 — 부크크 명조 (reader-font.js · fonts/bookk-font.css). html.reader-font-basic 이면 예전 명조 */
+:root { --book-serif: "Bookk Myungjo", var(--serif); }
+html.reader-font-basic { --book-serif: var(--serif); }
+/* ebook-reader.js 가 body 에 직접 넣는 옛 글꼴 값(바탕)보다 앞서도록 !important */
+body.ebook-mode { --ebook-font-family: var(--book-serif) !important; }
+.manuscript-body, .manuscript-body p, .book-page p { font-family: var(--book-serif); }
+.ebook-font-family-group .rf-bookk { font-family: "Bookk Myungjo", var(--serif); }
+.ebook-font-family-group .rf-basic { font-family: var(--serif); }

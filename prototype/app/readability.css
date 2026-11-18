@@ -1,0 +1,66 @@
+/* ═══════════════════════════════════════════════════════════════
+   readability — 외부 피드백(11-17) 3. 작은 글씨 · 과한 설명 / 4. 버튼 가독성
+   기준
+     · 글자: 안내 · 설명 15px 이상, 날짜 · 단계 같은 짧은 표시 14px 이상. 보조 글자색은 --muted(흰 바탕 대비 7:1).
+     · 장식 문구(제목 위 작은 영어식 머리말, 로고 밑 문구, 맨 아래 장식 문장)는 정보가 없어 숨긴다.
+     · 버튼: 주요 = 버건디 채움(흰 글자) · 보조 = 흰 바탕 + 진한 테두리 · 글자 버튼 = 굵게 + 밑줄.
+       누를 수 없을 때는 흐리게만 하지 않고 회색 바탕 · 회색 글자로 바꿔 분명히 보이게.
+   독서 화면(ebook-mode)은 따로 다듬은 화면이라 손대지 않는다.
+   ═══════════════════════════════════════════════════════════════ */
+
+/* 3-1. 정보가 없는 장식 문구 숨기기 */
+body:not(.ebook-mode) :is(
+  .page-heading .eyebrow,                 /* 내 삶의 소중한 조각들 · 나답게 엮는 한 권 · 한 권의 시작 · 기억을 따라, 천천히 */
+  .personal-library-header > .eyebrow,    /* 자서전 보기 (메뉴 이름과 같다) */
+  .hero-copy > .eyebrow,                  /* 당신의 삶, 그 자체로 소중한 이야기 */
+  .section-heading .eyebrow,              /* 차곡차곡 쌓이는 기억 */
+  .brand small,                           /* 로고 밑 「삶을 담아, 오래도록」 */
+  .art-caption > span,                    /* 그림 밑 「한 장의 기억이」 */
+  .page-footnote                          /* 맨 아래 「모든 삶에는, …」 */
+) { display: none; }
+
+/* 3-2. 남기는 안내는 크게 · 진하게 */
+body:not(.ebook-mode) :is(
+  .small-copy, .gentle-note, #selection-note, .sc-fine, .sc-voice-note, .srv-gen-note,
+  .ml-shelf-heading p, .shortcut small, .style-card small, .prompt-panel p, .role-preview-note,
+  .draft-aside > .small-copy, .pending-stories .small-copy, .ml-collection-note
+) { font-size: 15px; line-height: 1.7; color: var(--muted); }
+body:not(.ebook-mode) :is(
+  .eyebrow, .recent-copy small, .record-meta, .record-meta small, .category-label, .manuscript-meta,
+  .stepper li, #build-summary, .sample-credit, .art-caption strong
+) { font-size: 14px; color: var(--muted); letter-spacing: 0; }
+body:not(.ebook-mode) .record-copy p { font-size: 15px; color: var(--muted); }
+body:not(.ebook-mode) .manuscript-ending { font-size: 15px; }
+body:not(.ebook-mode) .toast { font-size: 16px; line-height: 1.55; }
+body:not(.ebook-mode) .help-button { font-size: 16px; }
+@media (max-width: 760px) {
+  body:not(.ebook-mode) .hero-description { font-size: 16px; line-height: 1.8; }
+  body:not(.ebook-mode) .mobile-nav a { font-size: 15px; }
+  body:not(.ebook-mode) .page-heading p { font-size: 16px; }
+}
+
+/* 4-1. 보조 버튼(테두리) — 흰 바탕에서 테두리 · 글자를 또렷하게 */
+body:not(.ebook-mode) .button.outline {
+  background: #fff; border: 1.5px solid #b48f9b; color: #6b2c3d;
+}
+body:not(.ebook-mode) .button.outline:hover { background: #f8eef1; border-color: #8a465e; }
+/* 4-2. 글자 버튼 — 누를 수 있는 글자임이 보이게: 굵게 + 밑줄 */
+body:not(.ebook-mode) .text-button {
+  font-size: 16px; font-weight: 600; color: #7a3448;
+  text-decoration: underline; text-decoration-thickness: 1.5px; text-underline-offset: 5px; text-decoration-color: #d3b3bd;
+}
+body:not(.ebook-mode) .text-button:hover { text-decoration-color: currentColor; }
+/* 4-3. 누를 수 없는 버튼 — 회색 바탕 · 회색 글자 (반투명으로만 흐리게 하지 않는다) */
+body:not(.ebook-mode) :is(.button, .srv-mini-btn):disabled,
+body:not(.ebook-mode) :is(.button, .srv-mini-btn)[aria-disabled="true"] {
+  opacity: 1; background: #ece9e5 !important; color: #7b746f !important;
+  border: 1.5px solid #dcd7d1 !important; box-shadow: none !important; cursor: not-allowed;
+}
+body:not(.ebook-mode) :is(.button, .srv-mini-btn):disabled .icon { opacity: .7; }
+/* 4-4. 모든 버튼 모서리 · 최소 높이 통일 (주요 · 보조 같은 모양) */
+body:not(.ebook-mode) .button { border-radius: 12px; }
+body:not(.ebook-mode) .record-card small { font-size: 14px; }
+body:not(.ebook-mode) .filter-group button { font-size: 15px; }
+body:not(.ebook-mode) .pending-stories .button.compact { font-size: 15px; }
+/* 책장 아래 작은 표시(작은 책 01 · 이야기 4개 · 날짜) */
+body:not(.ebook-mode) :is(.ml-volume-label, .ml-book-meta) { font-size: 14px; }
