@@ -5,7 +5,9 @@
 })(typeof globalThis!=='undefined'?globalThis:this,function(){
   'use strict';
   // A fitting function measures actual browser type. Chunks use Unicode code points.
-  function paginate(paragraphs,fits){
+  // hasFigure(section): 그 문단 뒤에 그림(사진 · 삽화)이 있으면, 글을 다 놓은 뒤 그림만 든 칸({figure:true})을 따로 놓는다.
+  //   남은 자리에 들어가면 같은 쪽에, 아니면 다음 쪽 맨 위에 — 글자 하나가 그림에 끌려 넘어가지 않는다.
+  function paginate(paragraphs,fits,hasFigure){
     const pages=[];
     let page=[];
     paragraphs.forEach((paragraph,section)=>{
@@ -20,6 +22,11 @@
         if(!best&&page.length){pages.push(page);page=[];continue;}
         const length=best||1;
         page.push(block(length));pages.push(page);page=[];start+=length;
+      }
+      if(hasFigure&&hasFigure(section)){
+        const figure={section,start:characters.length,end:characters.length,text:'',figure:true};
+        if(fits([...page,figure]))page.push(figure);
+        else{if(page.length)pages.push(page);page=[figure];}
       }
     });
     if(page.length)pages.push(page);

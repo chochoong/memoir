@@ -111,7 +111,7 @@ body:not(.ebook-mode) .search-field input { background: transparent; }
   display: inline-flex; align-items: center; gap: 6px; vertical-align: middle;
   min-height: 36px; margin-left: 12px; padding: 4px 13px 4px 11px;
   border: 1px solid #cec4bd; border-radius: 999px; background: #f9f8f6;
-  color: #6b4a52; font: inherit; font-size: 14px; font-weight: 500; line-height: 1.2; letter-spacing: -.01em;
+  color: #6b4a52; font: inherit; font-size: 14px; font-weight: 500; line-height: 1.2; letter-spacing: .01em;
   cursor: pointer; transition: border-color .15s, background .15s, color .15s;
 }
 .srv-mini-btn .icon { width: 15px; height: 15px; flex: none; }
@@ -231,10 +231,10 @@ body.draft-dock-on .toast { bottom: var(--draft-dock-space, 180px); }
 .answer-receipt .ar-retry { margin-top: 12px; width: 100%; min-height: 56px; }
 
 /* 자서전 본문 글꼴 — 부크크 명조 (reader-font.js · fonts/bookk-font.css). html.reader-font-basic 이면 예전 명조 */
-:root { --book-serif: "Bookk Myungjo", var(--serif); }
-html.reader-font-basic { --book-serif: var(--serif); }
+:root { --book-serif: "Bookk Myungjo", var(--book-base-serif); }
+html.reader-font-basic { --book-serif: var(--book-base-serif); }
 /* ebook-reader.js 가 body 에 직접 넣는 옛 글꼴 값(바탕)보다 앞서도록 !important */
 body.ebook-mode { --ebook-font-family: var(--book-serif) !important; }
 .manuscript-body, .manuscript-body p, .book-page p { font-family: var(--book-serif); }
-.ebook-font-family-group .rf-bookk { font-family: "Bookk Myungjo", var(--serif); }
-.ebook-font-family-group .rf-basic { font-family: var(--serif); }
+.ebook-font-family-group .rf-bookk { font-family: "Bookk Myungjo", var(--book-base-serif); }
+.ebook-font-family-group .rf-basic { font-family: var(--book-base-serif); }

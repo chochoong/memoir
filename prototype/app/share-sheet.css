@@ -25,7 +25,7 @@
 .sc-dot.kakao { background: #fee500; color: #3a1d1d; }
 .sc-dot.sms { background: #dcefdc; color: #2f6b3a; }
 .sc-dot.mail { background: #dfe8f6; color: #2d4f86; }
-.sc-dot.more { background: #e3e0dd; color: #6c6252; letter-spacing: -1px; }
+.sc-dot.more { background: #e3e0dd; color: #6c6252; letter-spacing: calc(-1px + .02em); }
 .review-dialog .share-status { margin: 10px 0 0; min-height: 0; font-size: 14px; line-height: 1.6; color: var(--burgundy); }
 .review-dialog .share-status:empty { display: none; }
 .share-extras { display: flex; flex-wrap: wrap; gap: 0 18px; margin-top: 8px; padding-top: 6px; border-top: 1px solid var(--line); }

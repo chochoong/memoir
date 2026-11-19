@@ -135,8 +135,29 @@
     const box = document.getElementById('pending-stories');
     box.hidden = !pending.length;
     document.getElementById('pending-stories-summary').textContent = `엽서로 만들기 전의 이야기 (${pending.length})`;
-    document.getElementById('pending-story-list').innerHTML = pending.map((p) => `<div class="pending-story-row"><strong>${escapeText(p.title)}<small> · ${escapeText(p.date)}</small></strong><button type="button" class="button outline compact" data-review-story="${escapeText(p.session_id)}" aria-label="${escapeText(p.title)} 확인">이야기 확인</button></div>`).join('');
+    document.getElementById('pending-story-list').innerHTML = pending.map((p) => `<div class="pending-story-row"><strong>${escapeText(p.title)}<small> · ${escapeText(p.date)}</small></strong><button type="button" class="button outline compact" data-review-story="${escapeText(p.session_id)}" aria-label="${escapeText(p.title)} 확인">이야기 확인</button><button type="button" class="text-button pending-del" data-pending-del="${escapeText(p.session_id)}" aria-label="${escapeText(p.title)} 지우기">${icons('close')}<span>지우기</span></button></div>`).join('');
   };
+  // 엽서로 만들지 않은 이야기 지우기 — 한 번 더 묻고, 잠시 「되돌리기」를 둔 뒤 서버에서 지운다 (DELETE /api/sessions/{id}, 엽서 지우기와 같은 길)
+  document.addEventListener('click', async (e) => {
+    const b = e.target.closest('[data-pending-del]');
+    if (!b) return;
+    const i = pending.findIndex((p) => p.session_id === b.dataset.pendingDel);
+    if (i < 0) return;
+    const item = pending[i];
+    const ok = await window.MemoirTrash.confirm({title: '이 이야기를 지울까요?', items: [`${item.title} · ${item.date}`],
+      desc: '엽서로 만들지 않은 인터뷰예요. 지우면 이 목록에서 사라지고, 엽서나 자서전으로 만들 수 없어요.', ok: '지우기', keep: '그대로 두기'});
+    if (!ok) return;
+    const at = pending.indexOf(item); if (at >= 0) pending.splice(at, 1);
+    window.renderPendingStories();
+    const box = document.getElementById('pending-stories'); if (!box.hidden) document.getElementById('pending-stories-summary').focus({preventScroll: true});
+    window.MemoirTrash.undo(`「${item.title}」 이야기를 지웠어요.`, () => {
+      pending.splice(Math.min(at < 0 ? i : at, pending.length), 0, item);
+      window.renderPendingStories(); toast('이야기를 다시 되돌렸어요.');
+    }, async () => {
+      const {failed} = await remove([item]);
+      if (failed.length) { pending.splice(Math.min(at < 0 ? i : at, pending.length), 0, item); window.renderPendingStories(); toast('이야기를 지우지 못했어요. 잠시 뒤 다시 해 주세요.'); }
+    });
+  });
   window.SrvRecords = {reload, loadBody, remove, bySession: (sid) => recordData.find((x) => x.session_id === sid), numberFor, pending: () => pending.slice()};
   void CONFIG;
 }());

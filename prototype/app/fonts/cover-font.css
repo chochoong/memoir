@@ -1,7 +1,8 @@
-/* Cover-only derived font; license and provenance are kept beside this file. */
+/* Cover-only derived font; license and provenance are kept beside this file.
+   2026-11-19: 한글은 자주 쓰는 2,350자(KS X 1001)만 담은 -ks 파일을 쓴다 (tools/subset_cover_font.py). 드문 글자는 바탕/serif 로 그려진다. */
 @font-face {
   font-family: "Memoir Cover Serif";
-  src: url("memoir-cover-serif-600-ko.woff2") format("woff2");
+  src: url("memoir-cover-serif-600-ko-ks.woff2") format("woff2");
   font-style: normal;
   font-weight: 600;
   font-display: swap;

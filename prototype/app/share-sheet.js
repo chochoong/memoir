@@ -10,12 +10,12 @@
     <span class="eyebrow share-eyebrow"></span><h2 id="share-title"></h2>
     <div class="share-setup"></div>
     <div class="share-main">
-      <figure class="share-image" hidden><img alt="보낼 엽서 그림"><figcaption>이 그림이 그대로 보내져요</figcaption></figure>
+      <figure class="share-image" hidden><img alt="보낼 엽서 그림"><figcaption>엽서 미리보기</figcaption></figure>
       <div class="share-card" aria-label="받는 분에게 보이는 모습"><span class="share-card-art" aria-hidden="true"></span><span class="share-card-copy"><small></small><strong></strong><em></em></span></div>
       <label class="share-msg-label" for="share-msg">함께 보낼 글 <small>고쳐 써도 돼요</small></label>
       <textarea id="share-msg" rows="4"></textarea>
       <div class="share-link"><input id="share-link" readonly aria-label="보낼 링크"><button type="button" class="button outline compact" data-share="copy">${icons('check')}<span>링크 복사</span></button></div>
-      <div class="share-imgbar" hidden><button type="button" class="button outline compact" data-share="img-save">${icons('download')}<span>그림 저장</span></button><button type="button" class="button outline compact" data-share="img-copy">${icons('check')}<span>그림 복사</span></button></div>
+      <div class="share-imgbar" hidden><button type="button" class="button outline compact" data-share="img-save">${icons('download')}<span>엽서 저장</span></button><button type="button" class="button outline compact" data-share="img-copy">${icons('check')}<span>엽서 복사</span></button></div>
       <div class="share-channels" role="group" aria-label="보내는 방법">
         <button type="button" data-share="kakao"><span class="sc-dot kakao" aria-hidden="true">K</span>카카오톡</button>
         <button type="button" data-share="sms"><span class="sc-dot sms" aria-hidden="true">${icons('letter')}</span>문자</button>
@@ -135,7 +135,7 @@
     const copyPic = async () => { try { await navigator.clipboard.write([new ClipboardItem({'image/png': pic.blob})]); return true; } catch (_) { return false; } };
     const copyText = async () => { try { await navigator.clipboard.writeText(msg); return true; } catch (_) { return false; } };
     if (how === 'img-save') { save(); st('엽서 그림을 내려받았어요. 사진처럼 보내거나 간직할 수 있어요.'); o.onSent?.('save'); return; }
-    if (how === 'img-copy') { st(await copyPic() ? '엽서 그림을 복사했어요. 대화방에 붙여 넣기(Ctrl+V · ⌘V) 해 주세요.' : (save(), '그림 복사가 되지 않아 내려받았어요. 내려받은 그림을 보내 주세요.')); o.onSent?.('copy'); return; }
+    if (how === 'img-copy') { st(await copyPic() ? '엽서 그림을 복사했어요. 대화방에 붙여 넣기(Ctrl+V · ⌘V) 해 주세요.' : (save(), '엽서 복사가 되지 않아 내려받았어요. 내려받은 그림을 보내 주세요.')); o.onSent?.('copy'); return; }
     if (isPhone()) {
       const file = new File([pic.blob], name, {type: 'image/png'});
       if (navigator.canShare && navigator.canShare({files: [file]})) {
@@ -157,7 +157,7 @@
     if (how === 'more') { save(); st('엽서 그림을 내려받았어요. 보내실 곳에 그림 파일을 올려 주세요.'); o.onSent?.(how); return; }
     // 카카오톡 · 문자 — 그림을 복사해 붙여 넣기
     if (await copyPic()) st(how === 'kakao' ? '엽서 그림을 복사했어요. 카카오톡 PC 대화방에 붙여 넣기(Ctrl+V · ⌘V) 해 주세요.' : 'PC에서는 문자를 바로 보낼 수 없어요. 엽서 그림을 복사했으니 카카오톡 PC 등에 붙여 넣어 주세요.');
-    else { save(); st('그림 복사가 되지 않아 내려받았어요. 대화방에 그림 파일을 끌어다 놓아 보내 주세요.'); }
+    else { save(); st('엽서 복사가 되지 않아 내려받았어요. 대화방에 그림 파일을 끌어다 놓아 보내 주세요.'); }
     o.onSent?.(how);
   }
   dialog.addEventListener('close', () => { if (current?.picture) current.picture.then((r) => r && setTimeout(() => URL.revokeObjectURL(r.url), 60000)).catch(() => {}); current?.onClose?.(); current = null; });

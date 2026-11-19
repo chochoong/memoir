@@ -6,7 +6,7 @@
 .role-speakers .button{max-width:100%;white-space:normal;overflow-wrap:anywhere}.role-current-speaker,.role-account-strip strong{overflow-wrap:anywhere}
 .personal-header{--personal-accent:#99546d;background:#f7f7f5;color:#171a1f}
 .personal-heading{display:flex;align-items:center;flex-wrap:wrap;gap:4px 14px;margin:8px 0 9px;min-width:0}
-.personal-heading>h1{margin:0;min-width:0;max-width:100%;font-size:34px;font-weight:700;line-height:1.5;letter-spacing:-.055em;overflow-wrap:anywhere;color:#171a1f}
+.personal-heading>h1{margin:0;min-width:0;max-width:100%;font-size:34px;font-weight:700;line-height:1.5;letter-spacing:-.035em;overflow-wrap:anywhere;color:#171a1f}
 .personal-name{color:var(--personal-accent)}
 .personal-heading-action{display:contents}
 .personal-heading .role-change{color:var(--personal-accent)}

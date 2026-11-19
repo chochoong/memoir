@@ -28,7 +28,7 @@ body:not(.ebook-mode) :is(
 body:not(.ebook-mode) :is(
   .eyebrow, .recent-copy small, .record-meta, .record-meta small, .category-label, .manuscript-meta,
   .stepper li, #build-summary, .sample-credit, .art-caption strong
-) { font-size: 14px; color: var(--muted); letter-spacing: 0; }
+) { font-size: 14px; color: var(--muted); letter-spacing: .02em; }
 body:not(.ebook-mode) .record-copy p { font-size: 15px; color: var(--muted); }
 body:not(.ebook-mode) .manuscript-ending { font-size: 15px; }
 body:not(.ebook-mode) .toast { font-size: 16px; line-height: 1.55; }
@@ -62,6 +62,10 @@ body:not(.ebook-mode) .role-change > span { text-decoration: none; }
 body:not(.ebook-mode) :is(.role-change, .help-button):hover { background: #f8eef1; border-color: #8a465e; }
 /* 엽서 갈래 거르기(어린 시절 · 가족 …) — 고르지 않은 것도 칸이 보이게 */
 body:not(.ebook-mode) .filter-group button:not([aria-pressed="true"]) { border: 1.5px solid var(--line); background: #fff; }
+/* PC: 옆 검색칸 높이에 끌려 늘어나지 않게 — 버튼은 제 높이(47px) 그대로 */
+.records-toolbar .filter-group { align-self: center; }
+/* 「떠오르는 기억을 적어주세요」는 입력칸 안 안내 글로 옮겼다. 화면 읽기 프로그램용으로만 남긴다 */
+.answer-panel > label[for="answer-text"] { position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0; }
 /* 「엽서로 만들기 전의 이야기」 펼치기 — 누르는 줄임이 보이게 */
 body:not(.ebook-mode) #pending-stories-summary { display: inline-flex; align-items: center; gap: 8px; padding: 8px 16px; border: 1.5px solid #d6bfc7; border-radius: 12px; background: #fff; cursor: pointer; }
 body:not(.ebook-mode) #pending-stories-summary:hover { background: #f8eef1; }
@@ -83,3 +87,170 @@ body:not(.ebook-mode) .pending-stories .button.compact { font-size: 15px; }
 /* 책장 아래 작은 표시(작은 책 01 · 이야기 4개 · 날짜) */
 body:not(.ebook-mode) :is(.ml-volume-label, .ml-book-meta) { font-size: 14px; }
 body:not(.ebook-mode) .help-button { width: max-content; flex: none; white-space: nowrap; gap: 6px; padding: 4px 14px !important; min-height: 40px; }
+
+/* 4-6. 왼쪽으로 치우쳐 보이던 곳 바로잡기 */
+/* 폭을 줄인 화면(시작 고르기 · 내 이야기 · 초대 주소 만들기)은 상자 자체를 가운데로 */
+.sc-screen { margin-inline: auto; }
+/* 책장: 책이 한 칸을 다 채우지 못한 줄은 가운데에 꽂는다 (칸 너비는 그대로) */
+[data-screen="library"] .ml-shelves { --ml-gap: 28px; }
+[data-screen="library"] .ml-books { display: flex; justify-content: center; gap: var(--ml-gap); }
+[data-screen="library"] .ml-books > li { flex: 0 0 calc((100% - (var(--ml-columns) - 1) * var(--ml-gap)) / var(--ml-columns)); }
+@media (max-width: 1100px) and (min-width: 761px) { [data-screen="library"] .ml-shelves { --ml-gap: 20px; } }
+@media (max-width: 760px) { [data-screen="library"] .ml-shelves { --ml-gap: 18px; } }
+/* 초안 옆 「작은 책으로 보관하기」가 두 줄로 깨지지 않게 */
+body:not(.ebook-mode) .draft-actions #save-volume { padding: 0 16px; font-size: 17px; white-space: nowrap; justify-content: center; }
+
+/* 4-7. 초대 목록 — 「초대 취소」 · 「주소 다시 준비」 같은 크기 */
+body:not(.ebook-mode) .role-invite-actions { align-items: stretch; }
+body:not(.ebook-mode) .role-invite-actions .button { min-width: 168px; min-height: 48px; justify-content: center; font-size: 16px; }
+@media (max-width: 600px) { body:not(.ebook-mode) .role-invite-actions .button { flex: 1 1 0; min-width: 0; } }
+
+/* 4-8. 「누구에게 보낼까요?」 옆 「이름 추가 · 수정하기」 */
+.sc-invite-form legend { flex-wrap: wrap; }
+body:not(.ebook-mode) .sc-invite-form legend .sc-manage { margin-left: 6px; min-height: 36px; padding: 4px 12px; font-size: 14px; font-weight: 600; }
+.sc-empty { margin: 0; font-size: 15px; color: var(--muted); }
+
+/* 4-9. 「이름 추가 · 수정하기」 창 */
+.elder-manage-dialog { width: min(560px, calc(100% - 32px)); }
+.em-add { display: flex; gap: 8px; align-items: stretch; }
+.em-add input, .em-edit-row input { flex: 1; min-width: 0; font: inherit; font-size: 17px; padding: 10px 14px; min-height: 50px; border: 1.5px solid #cfc3bb; border-radius: 10px; background: #fff; color: var(--ink); }
+.em-add input:focus, .em-edit-row input:focus { outline: 3px solid #e8cfd8; border-color: var(--burgundy); }
+.em-add .button, .em-edit-row .button { min-height: 50px; white-space: nowrap; justify-content: center; }
+.em-add-msg { margin: 8px 0 4px; min-height: 0; }
+.em-add-msg:empty { display: none; }
+.em-tags { display: flex; flex-wrap: wrap; gap: 10px; margin: 16px 0 0; padding-top: 16px; border-top: 1px solid var(--line); }
+.em-tag { min-height: 46px; padding: 0 18px; border: 1px solid var(--line); border-radius: 999px; background: #fbfaf9; font: inherit; font-size: 16px; color: var(--ink); cursor: pointer; }
+.em-tag:hover { border-color: #b48f9b; }
+.em-tag[aria-pressed="true"] { border-color: var(--burgundy); background: var(--blush); color: var(--burgundy); font-weight: 700; }
+.em-tag:focus-visible { outline: 3px solid var(--burgundy); outline-offset: 2px; }
+.em-empty { margin: 0; font-size: 15px; color: var(--muted); }
+.em-edit { margin-top: 14px; padding: 16px; border: 1px solid #e3d3d9; border-radius: 12px; background: #fbf6f8; display: grid; gap: 10px; animation: em-in .2s ease-out; }
+.em-edit[hidden] { display: none; }
+@keyframes em-in { from { opacity: 0; transform: translateY(-6px); } to { opacity: 1; transform: none; } }
+.em-edit-label { font-size: 15px; font-weight: 700; color: var(--ink); }
+.em-edit-row { display: flex; gap: 8px; }
+body:not(.ebook-mode) .em-edit .em-del { justify-self: start; min-height: 36px; padding: 4px 12px; font-size: 14px; color: #9b352e; border-color: #e0c2c0; }
+.em-edit-msg { margin: 0; min-height: 0; }
+.em-edit-msg:empty { display: none; }
+.em-edit .em-blocked { margin: 0; }
+@media (max-width: 600px) { .em-edit-row { flex-wrap: wrap; } .em-edit-row input { flex-basis: 100%; } .em-edit-row .button { flex: 1 1 0; } }
+@media (prefers-reduced-motion: reduce) { .em-edit { animation: none; } }
+.em-add input:focus, .em-edit-row input:focus { outline: none; box-shadow: 0 0 0 3px #ecd7df; }
+body:not(.ebook-mode) .role-invite-actions .button { white-space: nowrap; }
+@media (max-width: 600px) { body:not(.ebook-mode) .role-invite-actions .button { padding: 0 10px; font-size: 15px; } }
+
+/* 4-10. 엽서 「이야기 검색」 칸 — 화면 폭에 따라 더 길게 (휴대폰은 원래대로 한 줄 꽉) */
+@media (min-width: 601px) { body:not(.ebook-mode) .search-field { max-width: none; width: clamp(240px, 30vw, 420px); } }
+/* 4-12. 이용 안내 ①②③ — 번호마다 줄을 나누고, 길어서 접히면 번호 뒤에 맞춰 들여 쓴다 */
+.help-step { display: block; padding-left: 1.35em; text-indent: -1.35em; }
+.help-step + .help-step { margin-top: 4px; }
+
+/* 4-13. 엽서에 붙은 사진 (postcard-photo.js) — 흰 테를 두른 인화 사진처럼 */
+.pc-photo { display: block; margin: 0 0 10px; background: #fff; padding: 5px; box-shadow: 0 2px 6px #0003; transform: rotate(-1.5deg); }
+.pc-photo img { display: block; width: 100%; height: 92px; object-fit: cover; background: #ece6dc; }
+.pc-photo:not(.ready) img { visibility: hidden; }
+.record-card .pc-photo { display: none; } /* 엽서 고르기 목록에서는 빼고 글만 */
+.postcard-card:has(.pc-photo) .record-copy p { -webkit-line-clamp: 1; line-clamp: 1; display: -webkit-box; -webkit-box-orient: vertical; overflow: hidden; }
+.pc-held-photo { margin: 2px auto 16px; width: fit-content; max-width: 100%; background: #fff; padding: 10px 10px 8px; box-shadow: 0 4px 14px #0003; transform: rotate(-1.5deg); }
+.pc-held-photo img { display: block; max-width: 100%; max-height: min(300px, 34vh); min-width: 120px; min-height: 80px; background: #ece6dc; }
+.pc-held-photo figcaption { font-size: 14px; color: #7a6e64; text-align: center; margin-top: 6px; }
+@media (max-width: 600px) { .pc-photo img { height: 80px; } .pc-held-photo img { max-height: 26vh; } }
+.postcard-card:has(.pc-photo) > .memory-thumbnail { display: none; } /* 사진이 우표 자리를 대신한다 */
+@media (max-width: 600px) { .pc-held .pc-held-photo { margin-top: 44px; } } /* 휴대폰: 우표 아래에서 시작 */
+
+/* 4-14. 자서전 읽기 — 장마다 놓인 사진 · AI 삽화 (ebook-reader.js figureHTML) */
+.ebook-figure { margin: 1.1em auto 1.3em; text-align: center; break-inside: avoid; }
+.ebook-figure-frame { display: block; width: 100%; max-height: 36vh; margin: 0 auto; }
+.ebook-figure img { display: block; width: 100%; height: 100%; object-fit: contain; }
+.ebook-figure.is-photo .ebook-figure-frame { width: auto; max-width: 92%; height: 34vh; max-height: 34vh; background: #fff; padding: 8px; box-shadow: 0 3px 12px rgba(40, 25, 15, .22); transform: rotate(-1deg); }
+.ebook-figure.is-ai .ebook-figure-frame { border-radius: 6px; overflow: hidden; }
+.ebook-figure figcaption { margin-top: .6em; font-size: .72em; color: var(--ebook-muted, #7a6e64); letter-spacing: .04em; }
+.ebook-figure.is-ai figcaption::before { content: "✦ "; }
+.ebook-figure.fig-missing { display: none; }
+
+/* 4-15. 「엽서로 만들기 전의 이야기」 — 지우기 */
+.pending-story-row { display: flex; align-items: center; gap: 8px; } .pending-story-row > strong { flex: 1; min-width: 0; }
+body:not(.ebook-mode) .pending-story-row .pending-del { min-height: 38px; padding: 4px 12px; font-size: 14px; color: #9b352e; border-color: #e0c2c0; gap: 4px; }
+body:not(.ebook-mode) .pending-story-row .pending-del .icon { width: 14px; height: 14px; }
+
+/* ═══ 5. 2026-11-18 피드백 — 상단 바 · 처음가기 카드 · 엽서보기 · 버튼 모양 ═══ */
+/* 5-1. PC 상단 바를 얇게, 고른 탭은 글자 밑줄 대신 상단 바 아래 경계에 막대 */
+@media (min-width: 761px) {
+  html:has(> body:not(.ebook-mode)) { scroll-padding-top: 84px; }
+  body:not(.ebook-mode) { --pc-navigation-height: 72px; }
+  body:not(.ebook-mode) .sidebar .brand { font-size: 26px; flex-basis: 170px; }
+  body:not(.ebook-mode) .sidebar .brand-mark { width: 32px; height: 37px; }
+  body:not(.ebook-mode) .sidebar .brand-mark .icon { width: 22px; height: 22px; }
+  body:not(.ebook-mode) .sidebar .brand small { margin-top: 5px; }
+  body:not(.ebook-mode) .side-nav { align-self: stretch; }
+  body:not(.ebook-mode) .side-nav a { position: relative; height: 100%; min-height: 0; border-radius: 0; background: none; font-size: 17px; }
+  body:not(.ebook-mode) .side-nav a:hover { background: var(--soft); }
+  body:not(.ebook-mode) .side-nav a[aria-current="page"] { background: none; text-decoration: none; }
+  body:not(.ebook-mode) .side-nav a::after { content: ""; position: absolute; left: 10px; right: 10px; bottom: -1px; height: 3px; border-radius: 3px 3px 0 0; background: transparent; }
+  body:not(.ebook-mode) .side-nav a[aria-current="page"]::after { background: var(--burgundy); }
+  body:not(.ebook-mode) .sidebar .help-button { min-height: 40px; }
+  body:not(.ebook-mode) .workspace > .topbar { top: 14px; }
+}
+@media (min-width: 761px) and (max-width: 1279px) {
+  html:has(> body:not(.ebook-mode)) { scroll-padding-top: 118px; }
+  body:not(.ebook-mode) { --pc-navigation-height: 106px; }
+  body:not(.ebook-mode) .sidebar { grid-template-rows: 50px 56px; row-gap: 0; padding: 0 var(--pc-navigation-gutter); }
+  body:not(.ebook-mode) .sidebar .help-button { min-height: 40px; }
+  body:not(.ebook-mode) .side-nav a { height: 56px; min-height: 0; }
+  body:not(.ebook-mode) .workspace > .topbar { top: 3px; }
+}
+/* 5-2. 처음가기 「엽서보기 · 자서전 보기」 — 더 크게, 오른쪽에 그림 */
+body:not(.ebook-mode) .shortcut { min-height: 140px; padding: 20px 26px; gap: 18px; }
+body:not(.ebook-mode) .shortcut strong { font-size: 22px; }
+body:not(.ebook-mode) .shortcut small { font-size: 15px; }
+body:not(.ebook-mode) .shortcut-icon { width: 56px; height: 56px; border-radius: 14px; transition: background .15s, color .15s; }
+.shortcut-art { margin-left: auto; flex: none; width: 132px; height: 92px; transition: transform .2s; }
+.shortcut-art svg { display: block; width: 100%; height: 100%; }
+body:not(.ebook-mode) .shortcut > .icon:last-child { margin-left: 4px; }
+.shortcut:hover .shortcut-art { transform: rotate(-2deg) scale(1.04); }
+@media (max-width: 1020px) { .shortcut-art { width: 104px; height: 72px; } }
+@media (max-width: 600px) { body:not(.ebook-mode) .shortcut { min-height: 112px; padding: 14px 16px; } .shortcut-art { width: 92px; height: 64px; } body:not(.ebook-mode) .shortcut small { font-size: 13.5px; } }
+/* 5-3. 마우스를 올리면 버튼 바탕이 아이콘 상자와 같은 색이 되던 것 — 아이콘 상자를 장미색으로 바꿔 구분 */
+body:not(.ebook-mode) .shortcut:hover .shortcut-icon,
+body:not(.ebook-mode) .recent-row:hover .memory-thumbnail { background: var(--blush); color: var(--burgundy); }
+body:not(.ebook-mode) .shortcut:hover { background: #fff; }
+body:not(.ebook-mode) .shortcut strong { white-space: nowrap; }
+@media (max-width: 600px) { body:not(.ebook-mode) .shortcut { gap: 12px; } .shortcut-art { width: 78px; height: 56px; } body:not(.ebook-mode) .shortcut-icon { width: 46px; height: 46px; } }
+/* 5-4. 엽서보기 — 개수 · 엽서 지우기 · 짧은 설명을 주제 줄 아래로 (records-layout.js) */
+.records-info { margin: 4px 0 14px; }
+.records-info > div { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 12px; }
+.records-info #selection-count { font-size: 18px; }
+.records-info #selection-note { flex-basis: 100%; font-size: 15px; color: var(--muted); }
+.selection-footer.only-action { justify-content: flex-end; }
+@media (max-width: 600px) { .selection-footer.only-action .button { width: 100%; justify-content: center; } }
+/* 5-5. 타원형(알약 모양) 버튼 · 고르기 칩 → 둥근 사각형으로 통일 (동그란 아이콘 버튼 · 계정 버튼은 그대로) */
+body:not(.ebook-mode) :is(.sc-chip span, .em-tag, .srv-mini-btn, .share-guest-banner button) { border-radius: 12px; }
+.ebook-manage-btn, .demo-badge button { border-radius: 10px !important; }
+.ra-pill, .ra-pbtn { border-radius: 14px !important; }
+
+/* ═══ 6. 2026-11-19 피드백 ═══ */
+/* 6-1. 「최근 나눈 이야기」 — 줄 안쪽에 여백을 둬서 아이콘 상자가 가장자리에 붙지 않게 (마우스를 올리면 바탕이 칠해지는 줄) */
+body:not(.ebook-mode) .recent-row { padding-left: 10px; padding-right: 10px; border-radius: 10px; }
+/* 6-2. 글로 쓰기 — 입력칸 위에 「지금 질문」 (srv-interview paintQuestionCard) */
+.answer-question { margin: 0 0 12px; padding: 12px 14px; border: 1px solid var(--line); border-left: 4px solid var(--burgundy); border-radius: 12px; background: var(--paper); }
+.answer-question[hidden] { display: none; }
+.aq-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 4px; }
+.aq-kicker { font-size: 14px; font-weight: 700; color: var(--burgundy); }
+body:not(.ebook-mode) .aq-hear { min-height: 36px; padding: 4px 12px; font-size: 14px; gap: 5px; }
+body:not(.ebook-mode) .aq-hear .icon { width: 15px; height: 15px; }
+.aq-text { margin: 0; font-size: 18px; line-height: 1.6; font-weight: 600; color: var(--ink); word-break: keep-all; }
+@media (max-width: 600px) { .aq-text { font-size: 17px; } }
+/* 6-3. 휴대폰에서 「자글자글 · 정신없다」 — 작은 화면에서 잔무늬 · 가는 명조 · 비치는 흐림을 걷어 낸다
+   · 창(대화상자) 제목 · 화면 안내 제목: 가는 명조 → 굵은 고딕 (책 본문 · 초안 원고는 그대로 명조)
+   · 창 뒤: 흐리게 비치던 화면 → 진하고 평평한 어둠 (뒤 글자가 아른거리지 않게)
+   · 책 읽기: 종이 잔무늬(노이즈) · 책상 결 무늬를 빼고 평평한 종이색, 가는 본문 획을 아주 살짝 도톰하게 */
+@media (max-width: 760px) {
+  body:not(.ebook-mode) :is(.review-dialog h2, .prompt-panel h2, .conversation-aside h2, .draft-note h2, .elder-pick-dialog h2, .elder-manage-dialog h2) {
+    font-family: var(--sans); font-weight: 700; letter-spacing: 0;
+  }
+  dialog::backdrop { background: rgba(36, 28, 26, .62) !important; backdrop-filter: none !important; -webkit-backdrop-filter: none !important; }
+  .review-dialog p, .elder-pick-dialog p { line-height: 1.7; }
+  html body.ebook-mode { --page-grain: none !important; --desk-grain: linear-gradient(transparent, transparent) !important; }
+  body.ebook-mode :is(.ebook-section p, .book-page p) { -webkit-text-stroke: .25px currentColor; }
+  body.ebook-mode :is(.ebook-section, .ebook-content) { text-rendering: optimizeLegibility; }
+}

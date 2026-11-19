@@ -120,9 +120,11 @@ function renderRecords() {
     list.innerHTML=`<div class="empty-state">${icons('letter')}<h2>지금은 엽서를 불러올 수 없어요.</h2><p>엽서가 사라진 것은 아니에요. 잠시 후 다시 확인해주세요.</p><button class="button outline" id="retry-records">다시 불러오기</button></div>`;
     updateSelection();return;
   }
-  const filtered=currentRecords().filter((record)=>(state.filter==='all'||record.category===state.filter)&&`${record.title} ${record.description}`.includes(state.query));
+  // 「엽서 정리」에서 끌어 바꾼 순서대로 (memoir-order.js — 이 기기에만 기억). 「최근 나눈 이야기」는 그대로 최근 순
+  const ordered=window.MemoirOrder?MemoirOrder.apply('records',currentRecords(),(record)=>record.id):currentRecords();
+  const filtered=ordered.filter((record)=>(state.filter==='all'||record.category===state.filter)&&`${record.title} ${record.description}`.includes(state.query));
   list.innerHTML=filtered.length?filtered.map((record)=>{
-    const content=`<span class="memory-thumbnail ${record.category}" aria-hidden="true">${icons(record.icon)}</span><span class="record-copy"><span class="record-meta"><span class="category-label">${categories[record.category]}</span><span>·</span><span>${record.date}</span></span><strong>${escapeText(record.title)}</strong><p>${escapeText(record.description)}</p></span>`;
+    const content=`<span class="memory-thumbnail ${record.category}" aria-hidden="true">${icons(record.icon)}</span><span class="record-copy">${record.photo_id?`<span class="pc-photo" data-pc-photo="${escapeText(record.photo_id)}" aria-hidden="true"><img alt=""></span>`:''}<span class="record-meta"><span class="category-label">${categories[record.category]}</span><span>·</span><span>${record.date}</span></span><strong>${escapeText(record.title)}</strong><p>${escapeText(record.description)}</p></span>`;
     if(!state.pickRecords)return `<button class="postcard-card" data-postcard="${record.id}">${content}${icons('chevron')}</button>`;
     return `<label class="record-card ${state.selected.has(record.id)?'selected':''}" data-id="${record.id}" for="record-${record.id}"><input type="checkbox" id="record-${record.id}" data-record="${record.id}" ${state.selected.has(record.id)?'checked':''}>${content}</label>`;
   }).join(''):`<div class="empty-state">${icons('search')}<h2>찾는 엽서가 없어요.</h2><p>다른 낱말로 찾아보세요.</p></div>`;
@@ -138,7 +140,7 @@ function openPostcard(id,opener=document.activeElement) {
   if(!record)return;
   const body=postcardBody(record);
   $('#postcard-title').textContent=record.title;
-  $('#postcard-body').innerHTML=body.split('\n\n').map((paragraph)=>`<p>${escapeText(paragraph)}</p>`).join('');
+  $('#postcard-body').innerHTML=(record.photo_id?`<figure class="pc-held-photo" data-pc-photo="${escapeText(record.photo_id)}"><img alt="${escapeText(record.caption||'이야기와 함께 남긴 사진')}">${record.caption?`<figcaption>${escapeText(record.caption)}</figcaption>`:''}</figure>`:'')+body.split('\n\n').map((paragraph)=>`<p>${escapeText(paragraph)}</p>`).join('');
   if(!$('#postcard-dialog').open){postcardOpener=opener;$('#postcard-dialog').showModal();}
 }
 $('#postcard-dialog').addEventListener('close',()=>{

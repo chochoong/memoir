@@ -40,8 +40,16 @@
     color: var(--burgundy);
   }
 
+  /* 고른 탭 뒤 연노랑 캡슐(빛나는 바탕)은 쓰지 않는다 — 아이콘 채움 · 글자 색 · 밑줄로만 표시 */
   body:not(.ebook-mode) .mobile-nav a[data-nav][aria-current="page"]::before {
-    background: var(--blush);
+    background: transparent;
+  }
+
+  /* Selected tab icon: filled, outline removed (fill / outline toggle).
+     The stroke takes the menu background colour so inner details (envelope flap, book spine) stay visible. */
+  body:not(.ebook-mode) .mobile-nav a[data-nav][aria-current="page"] > .icon {
+    fill: currentColor;
+    stroke: var(--paper);
   }
 }
 
