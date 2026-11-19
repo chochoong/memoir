@@ -1,0 +1,72 @@
+/* ═══ 자주색 → 웜톤 (자동 생성: prototype/tools/make_accent.py) ═══
+   html.tone-warm-btn 일 때, 화면 CSS 에서 자주 · 버건디 · 장미 계열 색이 든 선언만 같은 밝기의 테라코타 계열로 다시 적는다.
+   손으로 고치지 말고 다시 만든다. 읽기 화면 · 코르크 보드 · 책장 · 엽서 그림 색은 건드리지 않는다. */
+
+/* styles.css */
+html.tone-warm-btn { --burgundy: #854b2a; --burgundy-dark: #5c3823; }
+html.tone-warm-btn .primary { background: linear-gradient(110deg,#a35c33,#794426); box-shadow: 0 4px 10px #6d422912; }
+html.tone-warm-btn .primary:hover { box-shadow: 0 4px 16px #6d422930; }
+html.tone-warm-btn .question-progress>span { background: #be6c3c; }
+html.tone-warm-btn .style-card[aria-pressed=true] { border: 1.5px solid #c67749; box-shadow: 0 0 0 3px #c6774908; }
+html.tone-warm-btn .toast { box-shadow: 0 5px 20px #56342033; }
+html.tone-warm-btn .review-dialog, html.tone-warm-btn .generation-dialog { box-shadow: 0 25px 100px #3d251733; }
+
+/* radio-feedback.css */
+html.tone-warm-btn .radio-feedback-controls input[type="range"] { accent-color: var(--wine, #854b2a); }
+html.tone-warm-btn .radio-feedback-controls input:focus-visible, html.tone-warm-btn .radio-feedback-controls button:focus-visible { outline: 3px solid var(--wine, #854b2a); }
+
+/* login-view.css */
+html.tone-warm-btn .memoir-login-dialog { box-shadow: 0 20px 90px #41271840; }
+html.tone-warm-btn .memoir-login-dialog::backdrop { background: #42281988; }
+html.tone-warm-btn .memoir-login-dialog .mlg-brand { color: #7c4627; }
+html.tone-warm-btn .memoir-login-dialog .mlg-speaker-choice[aria-pressed="true"] { border-color: #c57648; box-shadow: inset 0 0 0 1px #c5764833; }
+
+/* role-preview.css */
+html.tone-warm-btn .personal-header { --personal-accent: #b46639; }
+
+/* white-rose-theme.css */
+html.tone-warm-btn body:not(.ebook-mode) { --burgundy: #9e5a32; --burgundy-dark: #804929; --blush: #fbeee6; }
+html.tone-warm-btn body:not(.ebook-mode) .style-card[aria-pressed="true"] { box-shadow: 0 0 0 3px #9e5a320a; }
+
+/* yellow-theme.css */
+html.tone-warm-btn body:not(.ebook-mode) { --blush: #faebe3; }
+
+/* start-choice.css */
+html.tone-warm-btn .sp-drop { border: 2px dashed #e5b99f; }
+html.tone-warm-btn .sp-drop:hover, html.tone-warm-btn .sc-photo.sp-over .sp-drop { background: #fcf1ea; border-color: #9e5a32; }
+html.tone-warm-btn .sp-drop-main { color: #844b2a; }
+html.tone-warm-btn .sp-spin { border: 2px solid #e9c2ac; }
+
+/* srv.css */
+html.tone-warm-btn .srv-gen-pill:hover { border-color: #95542f; }
+html.tone-warm-btn .srv-gen-pill:focus-visible { outline: 3px solid #95542f; }
+html.tone-warm-btn .srv-gen-pill b { color: #7d4728; }
+html.tone-warm-btn .srv-gen-pill .sgp-spin { border-top-color: #95542f; }
+@media (prefers-reduced-motion: reduce) {
+  html.tone-warm-btn .srv-gen-pill .sgp-spin { border-top-color: #95542f; border-right-color: #95542f; }
+}
+html.tone-warm-btn .generation-dialog .srv-gen-busy, html.tone-warm-btn #generation-dialog .srv-gen-busy { color: #6c4229; }
+html.tone-warm-btn [data-screen="library"] .ml-making .ml-cover-making { --ml-cover-color: #95542f; --ml-cover-spine: #623b25; }
+html.tone-warm-btn [data-screen="library"] .ml-making .ml-volume-label { color: #95542f; }
+html.tone-warm-btn .srv-mini-btn { color: #8a4e2b; }
+html.tone-warm-btn .srv-mini-btn:hover { border-color: var(--burgundy, #9e5a32); color: var(--burgundy, #9e5a32); }
+html.tone-warm-btn .srv-mini-btn:focus-visible { outline: 3px solid var(--burgundy, #9e5a32); }
+html.tone-warm-btn .srv-mini-btn[aria-pressed="true"] { background: var(--blush, #f9e5d9); border-color: var(--burgundy, #9e5a32); color: var(--burgundy, #9e5a32); }
+html.tone-warm-btn .ebook-manage .ebook-manage-btn:focus-visible { outline: 3px solid var(--burgundy, #854b2a); }
+html.tone-warm-btn .answer-count.near { color: var(--burgundy, #804828); }
+html.tone-warm-btn .answer-receipt[data-state="queued"], html.tone-warm-btn .answer-receipt[data-state="sending"] { border-color: #e4b69b; background: #fdf7f3; }
+html.tone-warm-btn .ar-mark.ar-wait, html.tone-warm-btn .ar-spin { border: 3px solid #f0d5c6; border-top-color: var(--burgundy, #9e5a32); }
+
+/* readability.css */
+html.tone-warm-btn body:not(.ebook-mode) .button.outline { border: 1.5px solid #d8936b; color: #6d422a; }
+html.tone-warm-btn body:not(.ebook-mode) .button.outline:hover { background: #fcf1ea; border-color: #9e5a32; }
+html.tone-warm-btn body:not(.ebook-mode) :is(.text-button, html.tone-warm-btn .mlg-secondary) { border: 1.5px solid #e9c2ac; color: #844b2a; }
+html.tone-warm-btn body:not(.ebook-mode) :is(.text-button, html.tone-warm-btn .mlg-secondary):hover { background: #fcf1ea; border-color: #9e5a32; }
+html.tone-warm-btn body:not(.ebook-mode) :is(.role-change, html.tone-warm-btn .help-button) { border: 1.5px solid #e9c2ac; color: #844b2a; }
+html.tone-warm-btn body:not(.ebook-mode) :is(.role-change, html.tone-warm-btn .help-button):hover { background: #fcf1ea; border-color: #9e5a32; }
+html.tone-warm-btn body:not(.ebook-mode) #pending-stories-summary { border: 1.5px solid #e9c2ac; }
+html.tone-warm-btn body:not(.ebook-mode) #pending-stories-summary:hover { background: #fcf1ea; }
+html.tone-warm-btn .em-add input:focus, html.tone-warm-btn .em-edit-row input:focus { outline: 3px solid #f5d5c2; }
+html.tone-warm-btn .em-tag:hover { border-color: #d8936b; }
+html.tone-warm-btn .em-edit { border: 1px solid #f0d5c6; background: #fdf7f4; }
+html.tone-warm-btn .em-add input:focus, html.tone-warm-btn .em-edit-row input:focus { box-shadow: 0 0 0 3px #f7dccc; }

@@ -33,6 +33,7 @@
     hold.innerHTML = `<div class="pc-hold-dim"></div><article class="pc-held ${kind === 'postit' ? 'postit' : ''}" tabindex="-1">
       <span class="pc-stamp" aria-hidden="true">${icons(record.icon)}</span>
       <div class="pc-meta">${escapeText(categories[record.category])} · ${escapeText(record.date)}</div>
+      ${record.photo_id ? `<figure class="pc-held-photo" data-pc-photo="${escapeText(record.photo_id)}"><img alt="${escapeText(record.caption || '이야기와 함께 남긴 사진')}">${record.caption ? `<figcaption>${escapeText(record.caption)}</figcaption>` : ''}</figure>` : ''}
       <h2 id="pc-held-title">${escapeText(record.title)}</h2><div class="pc-body">${body}</div>
       <p class="pc-note">보드에 다시 꽂으면 제자리로 돌아가요.</p>
       <div class="pc-confirm" role="alertdialog" aria-labelledby="pc-confirm-title" aria-describedby="pc-confirm-desc" hidden>
@@ -161,7 +162,8 @@
       image: {
         name: window.MemoirPostcardImage.fileName(record.title),
         make: async () => {
-          const r = await window.MemoirPostcardImage.render({title: record.title, body: text, date: record.date, category: (typeof categories !== 'undefined' && categories[record.category]) || '', icon: record.icon, who, yellow: idx % 4 === 3});
+          const photo = record.photo_id ? await window.MemoirPostcardPhoto?.image(record.photo_id) : null;
+          const r = await window.MemoirPostcardImage.render({photo, caption: record.caption || '', title: record.title, body: text, date: record.date, category: (typeof categories !== 'undefined' && categories[record.category]) || '', icon: record.icon, who, yellow: idx % 4 === 3});
           // 그림에 다 담지 못한 긴 엽서는 함께 보내는 글에 전체를 붙인다
           if (r.clipped) { const box = document.getElementById('share-msg'); if (box && box.value === o.message) box.value = o.message = `${o.message}\n\n「${record.title}」\n${text}`; }
           return r;

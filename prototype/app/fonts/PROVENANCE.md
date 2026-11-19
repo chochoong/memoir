@@ -32,3 +32,12 @@ python ./build-cover-font.py --source '원본 NotoSerifKR.ttf의 절대 경로'
 ```
 
 실제 작업 패키지: fonttools 4.68.0, brotli 1.2.1, zopfli 0.4.3. 작업 temp 이외의 전역 Python·OS에는 설치하지 않았다. 생성 후 다시 WOFF2를 열어 600 정적 굵기·임베딩 fsType 0·완성형 한글 전체·ASCII 전체를 검증한다.
+
+## 2026-11-19 — 한글 2,350자 판 (`memoir-cover-serif-600-ko-ks.woff2`)
+
+- 화면은 이제 이 파일을 쓴다 (`cover-font.css`). 한 파일로 묶는 빌드(`build.py`)에 글꼴이 그대로 들어가서, 처음 여는 속도를 위해 줄였다.
+- `memoir-cover-serif-600-ko.woff2`(11,172자, 1,165,692바이트)에서 한글 완성형 가운데 **KS X 1001 의 2,350자만** 남겼다. 한글이 아닌 글자 1,155개는 원본과 똑같이 남겼다 → 531,924바이트.
+- 만든 방법: `python prototype/tools/subset_cover_font.py` (fonttools 4.68.0). 결과 검증 값은 `cover-font-ks-metadata.json`.
+- 근거: 저장소와 작업 자료의 한국어 글 약 127만 자 가운데 2,350자 밖의 글자는 시험용 「힣」 하나뿐이었다. 빠진 드문 글자(똠 · 햏 등)가 제목에 나오면 그 글자만 바탕/serif 로 그려진다.
+- 원본 11,172자 파일은 지우지 않고 남겨 둔다 (`cover-font.css` 의 파일 이름만 되돌리면 예전대로).
+- OFL 1.1 은 수정 · 재배포를 허락한다. 저작권 · 라이선스 이름 레코드는 그대로 보존했다.

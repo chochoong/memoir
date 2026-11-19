@@ -122,3 +122,12 @@ html.sc-centered .sp-drop, html.sc-centered .sp-card { margin-inline: auto; }
 .sc-screen[data-screen="start"] .sc-choice { align-items: center; text-align: center; }
 .sc-screen[data-screen="start"] .sc-choice em { align-self: center; }
 .sc-screen[data-screen="start"] .sc-back { margin-inline: auto; }
+
+/* 「녹음 시작하기」 · 「초대 주소 만들기」 — 가로로 더 길게 (PC) */
+@media (min-width: 900px) { .sc-make { min-width: 340px; justify-content: center; } }
+
+/* 「내 이야기」 · 「초대 주소 만들기」 설명 글 — PC 에서 문장이 어중간하게 접히지 않게 폭 제한 해제 */
+.sc-screen:is([data-screen="start-self"], [data-screen="invite-setup"]) .sc-intro { max-width: none; }
+
+/* 시작 버튼 — 오른쪽 사진 칸 앞(구분선)까지 왼쪽 칸 너비만큼 (PC). 여백은 그대로 */
+@media (min-width: 900px) { .sc-split .sc-make { justify-self: stretch; width: 100%; } }

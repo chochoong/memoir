@@ -104,7 +104,7 @@
       if (!leftover) drainSince = 0; else if (!drainSince) drainSince = Date.now();
       const stuck = leftover && Date.now() - drainSince > CONFIG.interview.voiceDrainMs;
       let msg = '떠오르는 기억을 천천히 적어 주세요.';
-      if (inputMode === 'switching') msg = '말씀하신 소리를 마저 보내고 있어요…';
+      if (inputMode === 'switching') msg = '바꾸는 중이에요…';
       else if (sending && !(receipt && receipt.state === 'sent')) msg = '보내는 중이에요…';
       else if (sending) msg = '잘 받았어요. 다음 질문을 준비하고 있어요.';
       else if (queued) msg = snap.state === 'SPEAKING' ? '질문을 다 읽으면 바로 보낼게요.' : '앞서 하신 말씀을 정리하는 중이에요. 끝나면 바로 보낼게요.';
@@ -116,6 +116,7 @@
       status.textContent = awaitingReply ? '잘 받았어요' : '글로 이야기하는 중';
       hint.textContent = msg; sub.textContent = '';
       box.readOnly = sending;
+      paintQuestionCard();
       paintReceipt(send);
       // 버튼은 끄지 않는다 — 지금 보낼 수 없으면 눌렀을 때 기다렸다가 보낸다 (금지 표시로 막혀 보이지 않게)
       send.disabled = inputMode !== 'keyboard';
@@ -184,6 +185,68 @@
     words.parentElement.insertBefore(fig, words);
   }
 
+  /* ── 마이크 — 말로 할 때만 켠다. 글로 쓰는 동안은 완전히 꺼서 휴대폰의 마이크 표시 · 통화 음량도 함께 내려간다 ── */
+  async function openMic() {
+    if (recorder) return recorder;
+    recorder = await startRecorder({
+      onLevel: (l) => { level = l.rms; },
+      onChunk: (pcm) => {
+        if (!sessionId || !micOpen()) return;
+        uploadQueue = uploadQueue
+          .then(() => {
+            if (!sessionId || !isHearing()) return null;
+            if (snap.state === 'PROCESSING') resumeSent = true;
+            return api.audio(sessionId, pcm, MIME);
+          })
+          .then((s) => { if (s) applySnapshot(s); })
+          .catch((e) => log('올림', `실패 · ${e.message || e}`));
+      },
+    });
+    micOk = true;
+    return recorder;
+  }
+  function closeMic() {
+    if (!recorder) return;
+    try { recorder.flushNow(); } catch (_) { /* 이미 멈춤 */ }
+    recorder.stop(); recorder = null; level = 0;
+  }
+
+  /* ── 글로 쓰는 동안 질문 — 저절로 읽지 않는다. 입력칸 위에 글자로 보여 주고, 「질문 듣기」를 누르면 그때 읽는다 ── */
+  let hearing = false;
+  function stopHearing() { speaker.stop(); try { window.speechSynthesis && window.speechSynthesis.cancel(); } catch (_) { /* 없음 */ } hearing = false; }
+  async function hearQuestion() {
+    if (hearing) { stopHearing(); render(); return; }
+    if (!sessionId || !snap || !snap.next_question) return;
+    hearing = true; render();
+    try {
+      await speaker.unlock();
+      const blob = await api.questionAudio(sessionId);
+      if (!hearing) return;
+      if (blob) await speaker.play(blob);
+      else if (window.speechSynthesis && window.SpeechSynthesisUtterance) {
+        // 서버가 이 질문의 소리를 주지 않으면(예시 모드 등) 기기 목소리로 읽는다
+        await new Promise((done) => { const u = new SpeechSynthesisUtterance(snap.next_question); u.lang = 'ko-KR'; u.rate = 0.95; u.onend = u.onerror = done; window.speechSynthesis.speak(u); setTimeout(done, 2500 + snap.next_question.length * 220); /* 끝 알림이 안 오는 기기 대비 */ });
+      } else toast('이 질문은 읽어 드릴 소리가 없어요. 글로 읽어 주세요.');
+    } catch (_) { toast('질문을 읽어 드리지 못했어요.'); }
+    finally { hearing = false; if (snap) render(); }
+  }
+  function paintQuestionCard() {
+    const panel = $q('#answer-panel');
+    let el = panel.querySelector('.answer-question');
+    if (!el) {
+      el = document.createElement('div');
+      el.className = 'answer-question';
+      el.innerHTML = '<div class="aq-head"><span class="aq-kicker">지금 질문</span><button type="button" class="text-button aq-hear" data-hear-question></button></div><p class="aq-text" aria-live="polite"></p>';
+      panel.prepend(el);
+      el.addEventListener('click', (e) => { if (e.target.closest('[data-hear-question]')) void hearQuestion(); });
+    }
+    const q = (snap && snap.next_question) || '';
+    const p = el.querySelector('.aq-text');
+    if (p.textContent !== q) { p.textContent = q; if (q && el.animate) el.animate([{backgroundColor: 'var(--blush)'}, {backgroundColor: 'transparent'}], {duration: 900}); }
+    el.hidden = !q;
+    el.querySelector('.aq-hear').innerHTML = hearing ? `${icons('pause')}<span>듣기 멈추기</span>` : `${icons('play')}<span>질문 듣기</span>`;
+  }
+
   /* ── 시작 ── */
   async function start(opts) {
     if (starting || live()) return live();
@@ -198,21 +261,8 @@
     try {
       await speaker.unlock();
       try {
-        recorder = await startRecorder({
-          onLevel: (l) => { level = l.rms; },
-          onChunk: (pcm) => {
-            if (!sessionId || !micOpen()) return;
-            uploadQueue = uploadQueue
-              .then(() => {
-                if (!sessionId || !isHearing()) return null;
-                if (snap.state === 'PROCESSING') resumeSent = true;
-                return api.audio(sessionId, pcm, MIME);
-              })
-              .then((s) => { if (s) applySnapshot(s); })
-              .catch((e) => log('올림', `실패 · ${e.message || e}`));
-          },
-        });
-        micOk = true; inputMode = 'voice';
+        await openMic();
+        inputMode = 'voice';
       } catch (e) {
         micOk = false; inputMode = 'keyboard';
         toast((e && e.name) === 'NotAllowedError' ? '마이크를 허용하지 않아 글로 이야기를 나눠요.' : '마이크를 쓸 수 없어 글로 이야기를 나눠요.');
@@ -292,7 +342,12 @@
     if (location.hash === '#interview') render();
     if (s.state === 'SPEAKING' && s.next_question && spoken !== s.next_question) {
       spoken = s.next_question;
-      void readQuestion(s.session_id, s.next_question, !!s.question_audio_stream);
+      if (inputMode === 'voice') void readQuestion(s.session_id, s.next_question, !!s.question_audio_stream);
+      else {
+        // 글로 쓰는 중 — 소리 내 읽지 않고 바로 듣기(LISTENING)로 넘긴다. 질문은 입력칸 위에 보이고 「질문 듣기」로 들을 수 있다
+        skippedQ = s.next_question;
+        api.ttsDone(sessionId).then(applySnapshot).catch(() => {});
+      }
     }
   }
 
@@ -351,12 +406,16 @@
   }
   async function toKeyboard() {
     if (inputMode !== 'voice' || stopping || closing || !sessionId) return;
+    // 읽고 있던 질문은 곧바로 멈춘다 — 「글로 쓰기」를 누르면 조용해져야 한다 (11-19 휴대폰 피드백)
+    const readingNow = !!(snap && snap.state === 'SPEAKING');
+    if (readingNow) { skippedQ = snap.next_question; speaker.stop(); }
     if (recorder) recorder.flushNow();
     inputMode = 'switching';
     if (recorder) recorder.setActive(false);
     render();
     await uploadQueue.catch(() => {});
-    try { applySnapshot(await api.get(sessionId)); } catch (_) {}
+    closeMic(); // 마이크를 완전히 끈다 — 「말로 하기」를 누르면 다시 켠다
+    try { applySnapshot(readingNow ? await api.ttsDone(sessionId) : await api.get(sessionId)); } catch (_) {}
     if (stopping || closing) return;
     inputMode = 'keyboard';
     render();
@@ -377,9 +436,19 @@
     if (!await askDropDraft('쓰던 글을 지우고 말로 할까요?', '지우고 말로 하기')) return;
     queued = false;
     if (inputMode !== 'keyboard' || sending || !live()) return;
+    if (hearing) stopHearing();
+    inputMode = 'switching'; render();
+    try { await openMic(); }
+    catch (e) {
+      inputMode = 'keyboard'; render();
+      toast((e && e.name) === 'NotAllowedError' ? '마이크를 허용하지 않아 글로 이어 가요.' : '마이크를 다시 켜지 못했어요. 글로 이어 가요.');
+      return;
+    }
+    if (!live()) { closeMic(); return; }
     inputMode = 'voice';
     if (recorder) recorder.setActive(micOpen());
     render();
+    toast('말로 이야기해요. 다시 글로 쓰려면 「글로 쓰기」를 눌러 주세요.');
   }
   async function sendText() {
     const box = $q('#answer-text');

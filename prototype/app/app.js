@@ -122,7 +122,7 @@ function renderRecords() {
   }
   const filtered=currentRecords().filter((record)=>(state.filter==='all'||record.category===state.filter)&&`${record.title} ${record.description}`.includes(state.query));
   list.innerHTML=filtered.length?filtered.map((record)=>{
-    const content=`<span class="memory-thumbnail ${record.category}" aria-hidden="true">${icons(record.icon)}</span><span class="record-copy"><span class="record-meta"><span class="category-label">${categories[record.category]}</span><span>·</span><span>${record.date}</span></span><strong>${escapeText(record.title)}</strong><p>${escapeText(record.description)}</p></span>`;
+    const content=`<span class="memory-thumbnail ${record.category}" aria-hidden="true">${icons(record.icon)}</span><span class="record-copy">${record.photo_id?`<span class="pc-photo" data-pc-photo="${escapeText(record.photo_id)}" aria-hidden="true"><img alt=""></span>`:''}<span class="record-meta"><span class="category-label">${categories[record.category]}</span><span>·</span><span>${record.date}</span></span><strong>${escapeText(record.title)}</strong><p>${escapeText(record.description)}</p></span>`;
     if(!state.pickRecords)return `<button class="postcard-card" data-postcard="${record.id}">${content}${icons('chevron')}</button>`;
     return `<label class="record-card ${state.selected.has(record.id)?'selected':''}" data-id="${record.id}" for="record-${record.id}"><input type="checkbox" id="record-${record.id}" data-record="${record.id}" ${state.selected.has(record.id)?'checked':''}>${content}</label>`;
   }).join(''):`<div class="empty-state">${icons('search')}<h2>찾는 엽서가 없어요.</h2><p>다른 낱말로 찾아보세요.</p></div>`;
@@ -138,7 +138,7 @@ function openPostcard(id,opener=document.activeElement) {
   if(!record)return;
   const body=postcardBody(record);
   $('#postcard-title').textContent=record.title;
-  $('#postcard-body').innerHTML=body.split('\n\n').map((paragraph)=>`<p>${escapeText(paragraph)}</p>`).join('');
+  $('#postcard-body').innerHTML=(record.photo_id?`<figure class="pc-held-photo" data-pc-photo="${escapeText(record.photo_id)}"><img alt="${escapeText(record.caption||'이야기와 함께 남긴 사진')}">${record.caption?`<figcaption>${escapeText(record.caption)}</figcaption>`:''}</figure>`:'')+body.split('\n\n').map((paragraph)=>`<p>${escapeText(paragraph)}</p>`).join('');
   if(!$('#postcard-dialog').open){postcardOpener=opener;$('#postcard-dialog').showModal();}
 }
 $('#postcard-dialog').addEventListener('close',()=>{

@@ -72,14 +72,14 @@ body.ebook-paged #ebook-content, body.ebook-paged #ebook-right-content {
 /* 머리글(책 제목) · 쪽 번호 — 위아래 여백 안에만 */
 body.ebook-paged #ebook-content::before, body.ebook-paged #ebook-right-content::before,
 body.ebook-paged #ebook-content::after, body.ebook-paged #ebook-right-content::after {
-  position: absolute; z-index: 2; font-family: "Malgun Gothic", "Apple SD Gothic Neo", sans-serif; font-size: 11px; line-height: 1;
-  letter-spacing: .08em; color: var(--ebook-muted); pointer-events: none; opacity: .85;
+  position: absolute; z-index: 2; font-family: var(--sans); font-size: 11px; line-height: 1;
+  letter-spacing: .1em; color: var(--ebook-muted); pointer-events: none; opacity: .85;
 }
 body.ebook-paged #ebook-content::before, body.ebook-paged #ebook-right-content::before {
   content: var(--book-running, ""); top: 13px; left: 0; right: 0; text-align: center; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; padding: 0 56px;
 }
-body.ebook-paged #ebook-content::after { content: attr(data-folio); bottom: 13px; left: 24px; font-variant-numeric: tabular-nums; letter-spacing: .04em; }
-body.ebook-paged #ebook-right-content::after { content: attr(data-folio); bottom: 13px; right: 24px; font-variant-numeric: tabular-nums; letter-spacing: .04em; }
+body.ebook-paged #ebook-content::after { content: attr(data-folio); bottom: 13px; left: 24px; font-variant-numeric: tabular-nums; letter-spacing: .06em; }
+body.ebook-paged #ebook-right-content::after { content: attr(data-folio); bottom: 13px; right: 24px; font-variant-numeric: tabular-nums; letter-spacing: .06em; }
 body.ebook-paged:not(.ebook-spread) #ebook-content::after { left: auto; right: 20px; }
 body.ebook-paged #ebook-content.rb-cover-page::before, body.ebook-paged #ebook-content.rb-cover-page::after { content: none; }
 @media (max-width: 760px) {

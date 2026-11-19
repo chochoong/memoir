@@ -54,8 +54,8 @@
     bar.className = 'trash-select-bar'; bar.hidden = true;
     bar.setAttribute('role', 'region'); bar.setAttribute('aria-label', `${unit} 고르기`);
     bar.innerHTML = `<span class="tsb-count" aria-live="polite"></span>
-      <div class="tsb-actions"><button type="button" class="text-button" data-tsb-all>모두 고르기</button>
-      <button type="button" class="button outline compact" data-tsb-cancel>그만두기</button>
+      <div class="tsb-actions"><button type="button" class="text-button" data-tsb-all>모두 선택</button>
+      <button type="button" class="button outline compact" data-tsb-cancel>취소</button>
       <button type="button" class="button compact trash-ok" data-tsb-delete disabled></button></div>`;
     document.body.append(bar);
     bar.querySelector('[data-tsb-all]').addEventListener('click', onAll);
@@ -69,7 +69,7 @@
         bar.querySelector('.tsb-count').textContent = n ? `${unit} ${n}${counter} 골랐어요` : empty;
         const del = bar.querySelector('[data-tsb-delete]');
         del.disabled = !n; del.textContent = n ? `${n}${counter} 지우기` : '지우기';
-        bar.querySelector('[data-tsb-all]').textContent = total && n === total ? '모두 풀기' : '모두 고르기';
+        bar.querySelector('[data-tsb-all]').textContent = total && n === total ? '모두 해제' : '모두 선택';
       },
     };
   }

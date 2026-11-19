@@ -1,0 +1,25 @@
+/* ═══ 엽서 정리 · 책 정리 — 끌어서 순서 바꾸기 (drag-order.js) ═══ */
+
+/* 정리 버튼은 그 줄 오른쪽 끝에 */
+.records-info .pc-select-toggle { margin-left: auto; }
+[data-screen="library"] .ml-shelf-heading { display: flex; align-items: center; justify-content: flex-start; gap: 8px 16px; flex-wrap: wrap; }
+[data-screen="library"] .ml-shelf-heading .ml-select-toggle { margin-left: auto; }
+[data-screen="library"] .ml-shelf-heading > p { flex-basis: 100%; }
+
+/* 정리 중 — 잡을 수 있다는 표시, 길게 누를 때 글자 고르기 · 그림 메뉴가 뜨지 않게 */
+#record-list.pc-reorder .pc-slot,
+[data-screen="library"].ml-selecting .ml-books > li { cursor: grab; -webkit-touch-callout: none; -webkit-user-select: none; user-select: none; }
+#record-list.pc-reorder .pc-slot img,
+[data-screen="library"].ml-selecting .ml-books > li img { -webkit-user-drag: none; }
+body.drag-ordering, body.drag-ordering * { cursor: grabbing !important; -webkit-user-select: none; user-select: none; }
+
+/* 들고 있는 동안: 원래 자리는 옅은 빈칸, 손에 든 것은 위로 떠서 따라온다 */
+.drag-source { opacity: .28; }
+.drag-source > * { filter: grayscale(.4); }
+.drag-ghost {
+  position: fixed; z-index: 300; pointer-events: none; margin: 0;
+  transform-origin: 50% 40%; will-change: transform;
+  filter: drop-shadow(0 14px 22px #3b220e40);
+}
+.drag-ghost, .drag-ghost * { pointer-events: none !important; }
+@media (prefers-reduced-motion: reduce) { .drag-ghost { filter: none; } }

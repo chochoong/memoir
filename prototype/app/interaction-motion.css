@@ -43,6 +43,13 @@
   body:not(.ebook-mode) .mobile-nav a[data-nav][aria-current="page"]::before {
     background: var(--blush);
   }
+
+  /* 고른 탭 아이콘은 속을 채우고 윤곽선은 지운다(채움 / 윤곽선 전환).
+     선을 캡슐 색으로 칠해 봉투 접힘 · 책등 같은 안쪽 무늬는 그대로 보이게 한다. */
+  body:not(.ebook-mode) .mobile-nav a[data-nav][aria-current="page"] > .icon {
+    fill: currentColor;
+    stroke: var(--blush);
+  }
 }
 
 /* Scale only: preserve native focus outlines and existing rotated SVGs. */

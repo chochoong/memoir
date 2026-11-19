@@ -1,0 +1,54 @@
+/* ═══ 웜톤 비교 판 (index.html 머리의 tone 스크립트) ═══
+   html.tone-warm      — 전체 색감을 웜톤으로: 바탕 크림 · 종이 아이보리 · 선 베이지 · 강조 테라코타 브라운
+   html.tone-warm-btn  — 바탕은 그대로, 버튼과 자주색이던 강조 색(고른 탭 막대 · 단계 번호 · 제목 강조 · 선택 표시 …)을 모두 테라코타로
+   (전체 판은 둘 다 붙는다.) 독서 화면 · 코르크 보드 · 책장 나무 · 엽서는 원래 색을 지킨다. */
+
+/* ── 1) 전체 웜톤: 바탕 · 종이 · 선 · 강조 색 ── */
+html.tone-warm body:not(.ebook-mode) {
+  --canvas: #f7efe4;
+  --paper: #fffaf3;
+  --ink: #33261e;
+  --muted: #6a574a;
+  --line: #e9dac7;
+  --soft: #f3e6d6;
+  --blush: #f8e4d3;
+  --burgundy: #a5582f;
+  --burgundy-dark: #874521;
+  --theme-control-rule: #b59a83;
+  --shadow: 0 4px 18px #5a3a2014;
+  background: var(--canvas);
+}
+html.tone-warm body:not(.ebook-mode) :is(.sidebar, .topbar, .mobile-nav, .hero, .shortcut, .panel, .records-panel, .recent-panel,
+  .prompt-panel, .conversation-aside, .style-preview, .manuscript, .draft-note, .review-dialog, .memoir-login-dialog) { background: var(--paper); }
+html.tone-warm body:not(.ebook-mode) :is(.input, input[type="text"], input[type="search"], textarea, .search-field) { background: #fffdf9; }
+html.tone-warm body:not(.ebook-mode) .shortcut-icon,
+html.tone-warm body:not(.ebook-mode) .memory-thumbnail { background: #f4e8da; color: #8a4f2c; }
+html.tone-warm body:not(.ebook-mode) .sc-step { background: #a5582f; }
+html.tone-warm body:not(.ebook-mode) .nav-count { background: #f1dfcb; color: #7a4424; }
+
+/* ── 2) 자주색이던 강조 색 전부 → 테라코타 (두 판 모두). 하드코딩된 자주색은 warm-accent.css(자동 생성)가 덮는다 ── */
+html.tone-warm-btn body:not(.ebook-mode) { --burgundy: #a5582f; --burgundy-dark: #874521; --blush: #f8e4d3; }
+html.tone-warm-btn body:not(.ebook-mode) .sc-step { background: #a5582f; }
+html.tone-warm-btn body:not(.ebook-mode) .nav-count { background: #f1dfcb; color: #7a4424; }
+
+/* ── 3) 버튼 웜톤 (두 판 모두) ── */
+html.tone-warm-btn body:not(.ebook-mode) .primary,
+html.tone-warm-btn body:not(.ebook-mode) .button.primary { background: #b0603a; border-color: #b0603a; color: #fff; box-shadow: 0 4px 12px #8a45241f; }
+html.tone-warm-btn body:not(.ebook-mode) .primary:hover { background: #944c2a; border-color: #944c2a; }
+html.tone-warm-btn body:not(.ebook-mode) .primary:disabled { background: #ece6df !important; color: #7b746f !important; }
+html.tone-warm-btn body:not(.ebook-mode) :is(.button.outline, .text-button, .mlg-secondary, .role-change, .help-button, .srv-mini-btn) {
+  border-color: #e0bc9f; color: #8a4524; background: #fffaf5;
+}
+html.tone-warm-btn body:not(.ebook-mode) :is(.button.outline, .text-button, .mlg-secondary, .role-change, .help-button, .srv-mini-btn):hover { background: #fbeadb; border-color: #b0603a; }
+html.tone-warm-btn body:not(.ebook-mode) :is(.pending-del, .em-del, .pc-trash) { color: #9b352e; }
+/* 고른 칩 · 탭 · 분류 */
+html.tone-warm-btn body:not(.ebook-mode) .sc-chip input:checked + span,
+html.tone-warm-btn body:not(.ebook-mode) .em-tag[aria-pressed="true"],
+html.tone-warm-btn body:not(.ebook-mode) .filter-group button[aria-pressed="true"],
+html.tone-warm-btn body:not(.ebook-mode) .ep-list [aria-pressed="true"] { border-color: #b0603a; background: #fbe6d5; color: #874521; }
+html.tone-warm-btn body:not(.ebook-mode) .ep-list [aria-pressed="true"] { background: #b0603a; color: #fff; }
+html.tone-warm-btn body:not(.ebook-mode) .shortcut:hover .shortcut-icon,
+html.tone-warm-btn body:not(.ebook-mode) .recent-row:hover .memory-thumbnail { background: #fbe6d5; color: #8a4524; }
+html.tone-warm-btn body:not(.ebook-mode) .sp-drop { border-color: #dcb79a; }
+html.tone-warm-btn body:not(.ebook-mode) .sp-drop:hover { background: #fbeadb; border-color: #b0603a; }
+html.tone-warm-btn body:not(.ebook-mode) .sp-drop-main, html.tone-warm-btn body:not(.ebook-mode) .sp-drop .icon { color: #8a4524; }

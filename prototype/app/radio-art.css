@@ -20,8 +20,8 @@
 }
 .radio-scene .rd-sign-t {
   fill: var(--radio-sign-text-fill, var(--_radio-sign-text-fill, #8f7d6a));
-  font: 800 17px Pretendard, sans-serif;
-  letter-spacing: .14em;
+  font: 800 17px var(--sans);
+  letter-spacing: .16em;
   transition: fill .3s;
 }
 .radio-scene .rd-sign {

@@ -120,16 +120,37 @@
   if (shelfScreen) new MutationObserver(() => { if (running() && !shelfScreen.querySelector('.ml-making-item')) paintShelf(); }).observe(shelfScreen, {childList: true, subtree: true});
   document.addEventListener('click', (e) => { if (e.target.closest('[data-gen-open]')) { e.preventDefault(); if (running() && !dialog.open) dialog.showModal(); paintPill(); } });
 
+  /* 지난 시간 — 서버는 4초마다 묻지만(pollMs), 화면은 이 기기의 시계로 1분까지 5초 · 그 뒤로 10초 단위로 센다.
+     (예전에는 물을 때마다 서버가 준 초를 그대로 써서 「34초」처럼 4초 간격의 어중간한 숫자가 나왔다) */
+  let stageText = '', clock = null; // clock: {base: 서버가 준 지난 초, at: 그때의 이 기기 시각}
+  function agoText() {
+    if (!clock) return '';
+    const sec = Math.max(0, clock.base + (Date.now() - clock.at) / 1000);
+    if (sec < 5) return '방금 시작했어요';
+    const step = sec < 60 ? 5 : 10, s = Math.floor(sec / step) * step;
+    return `${s >= 60 ? `${Math.floor(s / 60)}분${s % 60 ? ` ${s % 60}초` : ''}` : `${s}초`} 지났어요`;
+  }
+  let shown = '';
+  function paintClock() {
+    const ago = agoText(), text = ago ? `${stageText} · ${ago}` : stageText;
+    if (text === shown) return;
+    shown = text;
+    dialog.querySelector('#generation-stage').textContent = text;
+    lastStage = text.replace(/ 지났어요$/, '');
+    paintPill();
+    const li = shelfScreen && shelfScreen.querySelector('.ml-making-item .mlm-stage'); if (li) li.textContent = lastStage;
+  }
+  setInterval(() => { if (state.generating && clock) paintClock(); }, 1000);
   function paintStage(j) {
     if (j.stage && j.stage !== 'analysis') stagePast = true;
-    const st = j.stage === 'chapter' && j.chapters ? `${j.chapters}장 중 ${j.chapter}장을 쓰고 있어요`
+    stageText = j.stage === 'chapter' && j.chapters ? `${j.chapters}장 중 ${j.chapter}장을 쓰고 있어요`
       : j.stage === 'analysis' && stagePast ? '이야기를 다시 정리하고 있어요'
       : STAGE[j.stage] || '자서전을 만들고 있어요';
+    // 서버 초는 처음 한 번(또는 이 기기 시계와 10초 넘게 어긋날 때)만 맞춘다 — 숫자가 거꾸로 가거나 튀지 않게
     const sec = Number(j.elapsed) || 0;
-    const ago = sec >= 60 ? `${Math.floor(sec / 60)}분 ${sec % 60}초` : `${sec}초`;
-    dialog.querySelector('#generation-stage').textContent = `${st} · ${ago} 지났어요`;
-    lastStage = `${st} · ${ago}`;
-    paintPill();
+    const mine = clock ? clock.base + (Date.now() - clock.at) / 1000 : null;
+    if (mine === null || Math.abs(mine - sec) > 10) clock = {base: sec, at: Date.now()};
+    paintClock();
   }
 
   async function generate() {
@@ -140,7 +161,7 @@
     const ids = chosen.sort((a, b) => Date.parse(a.created_at) - Date.parse(b.created_at)).map((r) => r.session_id);
     const style = styles.some((s) => s.id === state.style) ? state.style : (styles[0] ? styles[0].id : 'essay');
     state.generating = true;
-    stagePast = false;
+    stagePast = false; clock = null; shown = '';
     dialog.querySelector('#generation-stage').textContent = '자서전 만들기를 시작하고 있어요…';
     if (!dialog.open) dialog.showModal();
     let first;
@@ -166,7 +187,7 @@
     const t0 = Date.now();
     let misses = 0;
     state.generating = true;
-    lastStage = '이어서 기다리고 있어요';
+    lastStage = '이어서 기다리고 있어요'; clock = null; shown = '';
     paintPill();
     for (;;) {
       if (my !== seq) return;
@@ -288,11 +309,76 @@
       if (e.status !== 401 && location.hash === '#library') toast('책장을 불러오지 못했어요. 잠시 뒤 다시 열어 주세요.');
     }
   }
+  /* ── 자서전 속 사진 · 삽화 (GET /api/memoirs/saved/{id} 의 illustrations) ──
+       서버가 장마다 그 회차의 사진(kind: photo)을 놓거나, 사진 없는 장에는 AI 삽화(kind: illustration)를 그린다.
+       {chapters: [{no, figures: [{kind, url, after_paragraph, width, height, ai_generated, caption}]}]}
+       after_paragraph 는 그 장 안 문단 번호(0부터) — 읽기 화면의 문단 번호(sections)로 바꿔 둔다.
+       이 기기에서 글을 고친 책은 문단 자리가 달라졌을 수 있어 그림을 넣지 않는다. */
+  const figStore = new Map(); // memoir_id → {status, at: {문단 번호: [그림]}}
+  function mapFigures(doc, ill) {
+    const at = {};
+    if (doc && !doc.edited && Array.isArray(doc.sections) && ill && Array.isArray(ill.chapters)) {
+      ill.chapters.forEach((ch) => (ch.figures || []).forEach((f) => {
+        if (!f || !f.url) return;
+        let i = doc.sections.findIndex((s) => s.chapterNo === ch.no && s.paragraphIndex === f.after_paragraph);
+        if (i < 0) { // 자리를 모르면 그 장 끝에
+          const last = doc.sections.map((s, k) => (s.chapterNo === ch.no ? k : -1)).filter((k) => k >= 0).pop();
+          if (last === undefined) return; i = last;
+        }
+        (at[i] = at[i] || []).push({kind: f.kind, url: f.url, w: f.width || 4, h: f.height || 3, caption: f.caption || '', ai: !!f.ai_generated});
+      }));
+    }
+    return {status: (ill && ill.status) || 'off', at};
+  }
+  function setFigures(book, ill) {
+    const v = mapFigures(book.document, ill);
+    book.figureStatus = v.status; book.figures = v.at; figStore.set(book.id, v);
+  }
+  /** 그 책의 그림 — 읽기 화면 · PDF 가 쓴다. 고친 글이면 넣지 않는다 */
+  function figures(id, doc) {
+    if (!id || (doc && doc.edited)) return {};
+    return (figStore.get(id) || {}).at || {};
+  }
+  /** 그림을 (다시) 받는다. 서버가 아직 그리는 중이면 이 책을 보는 동안 잠시 뒤 다시 묻는다 */
+  const polling = new Map();
+  async function loadFigures(id, doc, tries = 0) {
+    if (!id || !doc) return {};
+    try {
+      const ill = await window.Srv.call(`/memoirs/saved/${encodeURIComponent(id)}/illustrations`);
+      const before = JSON.stringify((figStore.get(id) || {}).at || {});
+      const v = mapFigures(doc, ill);
+      figStore.set(id, v);
+      const book = window.MemoirLibrary.getBook(id);
+      if (book && book.document === doc) { book.figureStatus = v.status; book.figures = v.at; }
+      if (JSON.stringify(v.at) !== before && location.hash === '#reader' && state.savedMemoirId === id) window.dispatchEvent(new Event('resize'));
+      clearTimeout(polling.get(id));
+      if (['running', 'not_started'].includes(v.status) && tries < 20) {
+        polling.set(id, setTimeout(() => { if (state.savedMemoirId === id && ['#reader', '#draft'].includes(location.hash)) void loadFigures(id, doc, tries + 1); }, 8000));
+      }
+      return v.at;
+    } catch (_) { return figures(id); }
+  }
+  async function refreshFigures(book) {
+    if (!book || !book.document) return;
+    const v = figStore.get(book.id);
+    if (v && !['running', 'not_started'].includes(v.status)) return;
+    await loadFigures(book.id, book.document);
+  }
+  // 「책으로 미리 읽기」 — 만든 직후의 책(서버가 이미 보관)도 그림을 받아 넣는다
+  window.addEventListener('memoir:screen', (e) => {
+    if (e.detail.screen !== 'reader' || !state.savedMemoirId || !state.document || state.document.edited) return;
+    const v = figStore.get(state.savedMemoirId);
+    if (!v || ['running', 'not_started'].includes(v.status)) void loadFigures(state.savedMemoirId, state.document);
+  });
   /** 책 한 권의 본문을 받아 둔다 (펼치기 · PDF · 공유 전에) */
   async function ensure(id) {
     const book = window.MemoirLibrary.getBook(id);
     if (!book) return null;
-    if (book.document) return book;
+    if (book.document) {
+      // 방금 만들어 책장에 꽂은 책은 본문이 이미 있다 — 사진 · 삽화만 처음 한 번 받는다
+      if (!figStore.has(book.id)) await loadFigures(book.id, book.document);
+      return book;
+    }
     if (book._loading) return book._loading;
     book._loading = (async () => {
       try {
@@ -301,6 +387,7 @@
         const edit = readEdit(id);
         if (edit) doc = contract.editMemoir(doc, {title: edit.title, body: edit.body});
         book.document = doc; book.title = doc.title; book.body = [...doc.body];
+        setFigures(book, r.illustrations);
         return book;
       } catch (e) {
         toast(e.status === 404 ? '이 책을 찾을 수 없어요. 책장을 다시 불러올게요.' : '책을 펼치지 못했어요. 잠시 뒤 다시 눌러 주세요.');
@@ -335,6 +422,6 @@
   // 「자서전 보기」에 들어올 때마다 서버 책장을 다시 본다 — 다른 기기 · 창에서 만든 책도 바로 보이게
   window.addEventListener('memoir:screen', (e) => { if (e.detail.screen === 'library' && AUTH.user) void reloadLibrary(); });
 
-  window.SrvLibrary = {reload: reloadLibrary, ensure, removeSaved, styleTitle, readEdit, writeEdit};
+  window.SrvLibrary = {reload: reloadLibrary, ensure, removeSaved, styleTitle, readEdit, writeEdit, refreshFigures, figures, loadFigures};
   void ApiError;
 }());
