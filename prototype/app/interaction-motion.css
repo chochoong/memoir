@@ -40,15 +40,16 @@
     color: var(--burgundy);
   }
 
+  /* 고른 탭 뒤 연노랑 캡슐(빛나는 바탕)은 쓰지 않는다 — 아이콘 채움 · 글자 색 · 밑줄로만 표시 */
   body:not(.ebook-mode) .mobile-nav a[data-nav][aria-current="page"]::before {
-    background: var(--blush);
+    background: transparent;
   }
 
-  /* 고른 탭 아이콘은 속을 채우고 윤곽선은 지운다(채움 / 윤곽선 전환).
-     선을 캡슐 색으로 칠해 봉투 접힘 · 책등 같은 안쪽 무늬는 그대로 보이게 한다. */
+  /* Selected tab icon: filled, outline removed (fill / outline toggle).
+     The stroke takes the menu background colour so inner details (envelope flap, book spine) stay visible. */
   body:not(.ebook-mode) .mobile-nav a[data-nav][aria-current="page"] > .icon {
     fill: currentColor;
-    stroke: var(--blush);
+    stroke: var(--paper);
   }
 }
 

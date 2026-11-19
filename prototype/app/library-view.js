@@ -47,8 +47,10 @@
     </button></li>`;
   }
 
+  // 「책 정리」에서 끌어 바꾼 순서 (memoir-order.js — 이 기기에만 기억)
+  function orderedBooks(){return window.MemoirOrder?MemoirOrder.apply('books',currentBooks(),(book)=>book.id):currentBooks();}
   function shelfMarkup() {
-    const visibleBooks=currentBooks();
+    const visibleBooks=orderedBooks();
     const columns = shelfColumns();
     let rows = '';
     for (let start = 0; start < visibleBooks.length; start += columns) {
@@ -134,7 +136,7 @@
     render();
   }
   function setBooks(list) { books.splice(0, books.length, ...list); if (location.hash === '#library') render(); }
-  window.MemoirLibrary = {render, saveDraft, setBooks, openBook, getBook:(id)=>currentBooks().find((book)=>book.id===id), removeBooks, restoreBooks, bookIds:()=>currentBooks().map((book)=>book.id),
+  window.MemoirLibrary = {render, saveDraft, setBooks, openBook, getBook:(id)=>currentBooks().find((book)=>book.id===id), removeBooks, restoreBooks, bookIds:()=>orderedBooks().map((book)=>book.id),
     // 지금 읽기 화면에 펼친 책이 책장의 어느 책인지(초안을 미리 읽는 중이면 없음)
     // 제목으로 찾지 않는다 — 같은 엽서로 다시 만든 책은 제목이 같아, 다른 책(엽서 하나 적은 앞선 책)을 공유하던 문제 (11-19 제보 「공유하면 글 하나가 사라짐」)
     findOpen:()=>{const id=state.draftKept?state.savedMemoirId:null;return id&&currentBooks().some((book)=>book.id===id)?id:null;}};

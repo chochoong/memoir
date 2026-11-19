@@ -10,9 +10,9 @@
   const TITLE_FONT = '"Memoir Cover Serif", "Noto Serif KR", "Batang", "바탕", serif';
   const BODY_FONT = '"Pretendard Variable", Pretendard, "Malgun Gothic", "Apple SD Gothic Neo", "Noto Sans KR", "Noto Sans CJK KR", sans-serif';
   const PAPER = ['#fffdf6', '#fbf3e3'], YELLOW = ['#fdeba4', '#f8df8c'];
-  // 강조 색 — 웜톤 판(html.tone-warm-btn)이면 테라코타, 아니면 자주색
+  // 강조 색 — 웜톤 판(html.tone-warm-btn)이면 노랑 강조색(#F5B420) 계열의 짙은 겨자색, 아니면 자주색
   const warm = () => document.documentElement.classList.contains('tone-warm-btn');
-  const ACCENT = () => (warm() ? '#a5582f' : '#8a465e'), SIGN = () => (warm() ? '#8a4a2a' : '#7a4a55');
+  const ACCENT = () => (warm() ? '#b8830a' : '#8a465e'), SIGN = () => (warm() ? '#8a640f' : '#7a4a55');
 
   /** 글자 단위로 줄을 나눈다 — 한국어는 띄어쓰기 없이 길게 이어지는 경우가 많아 단어보다 글자로 끊는 게 안전하다 */
   function wrap(ctx, text, width) {

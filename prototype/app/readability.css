@@ -164,7 +164,7 @@ body:not(.ebook-mode) .role-invite-actions .button { white-space: nowrap; }
 .ebook-figure img { display: block; width: 100%; height: 100%; object-fit: contain; }
 .ebook-figure.is-photo .ebook-figure-frame { width: auto; max-width: 92%; height: 34vh; max-height: 34vh; background: #fff; padding: 8px; box-shadow: 0 3px 12px rgba(40, 25, 15, .22); transform: rotate(-1deg); }
 .ebook-figure.is-ai .ebook-figure-frame { border-radius: 6px; overflow: hidden; }
-.ebook-figure figcaption { margin-top: .6em; font-size: .72em; color: var(--ebook-muted, #7a6e64); letter-spacing: .02em; }
+.ebook-figure figcaption { margin-top: .6em; font-size: .72em; color: var(--ebook-muted, #7a6e64); letter-spacing: .04em; }
 .ebook-figure.is-ai figcaption::before { content: "✦ "; }
 .ebook-figure.fig-missing { display: none; }
 
@@ -187,7 +187,7 @@ body:not(.ebook-mode) .pending-story-row .pending-del .icon { width: 14px; heigh
   body:not(.ebook-mode) .side-nav a:hover { background: var(--soft); }
   body:not(.ebook-mode) .side-nav a[aria-current="page"] { background: none; text-decoration: none; }
   body:not(.ebook-mode) .side-nav a::after { content: ""; position: absolute; left: 10px; right: 10px; bottom: -1px; height: 3px; border-radius: 3px 3px 0 0; background: transparent; }
-  body:not(.ebook-mode) .side-nav a[aria-current="page"]::after { background: transparent; }
+  body:not(.ebook-mode) .side-nav a[aria-current="page"]::after { background: var(--burgundy); }
   body:not(.ebook-mode) .sidebar .help-button { min-height: 40px; }
   body:not(.ebook-mode) .workspace > .topbar { top: 14px; }
 }
@@ -246,7 +246,7 @@ body:not(.ebook-mode) .aq-hear .icon { width: 15px; height: 15px; }
    · 책 읽기: 종이 잔무늬(노이즈) · 책상 결 무늬를 빼고 평평한 종이색, 가는 본문 획을 아주 살짝 도톰하게 */
 @media (max-width: 760px) {
   body:not(.ebook-mode) :is(.review-dialog h2, .prompt-panel h2, .conversation-aside h2, .draft-note h2, .elder-pick-dialog h2, .elder-manage-dialog h2) {
-    font-family: var(--sans); font-weight: 700; letter-spacing: -.02em;
+    font-family: var(--sans); font-weight: 700; letter-spacing: 0;
   }
   dialog::backdrop { background: rgba(36, 28, 26, .62) !important; backdrop-filter: none !important; -webkit-backdrop-filter: none !important; }
   .review-dialog p, .elder-pick-dialog p { line-height: 1.7; }

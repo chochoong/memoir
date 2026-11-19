@@ -81,13 +81,15 @@ body:not(.ebook-mode) #postcard-body,
 body:not(.ebook-mode) #postcard-body p,
 body:not(.ebook-mode) .story-review-body p { color: var(--ink); }
 
-/* Selected navigation is marked by hue only — no underline (PC and mobile). */
+/* Selected navigation has both hue and an underline, on PC and mobile. */
 body:not(.ebook-mode) :is(.side-nav a, .mobile-nav a) { color: var(--ink); }
 body:not(.ebook-mode) .side-nav a:hover { background: var(--soft); }
 body:not(.ebook-mode) :is(.side-nav a, .mobile-nav a)[aria-current="page"] {
   color: var(--burgundy);
   background: var(--blush);
-  text-decoration: none;
+  text-decoration-line: underline;
+  text-decoration-thickness: 3px;
+  text-underline-offset: 7px;
 }
 body:not(.ebook-mode) :is(.nav-count, .avatar, .shortcut-icon, .pill,
   .preview-label, .style-icon, .memory-thumbnail,

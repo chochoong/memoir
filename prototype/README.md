@@ -36,9 +36,11 @@ v0.60 부터 화면은 **팀 시안 2차 B안**(처음가기 · 라디오 스튜
 | `start-choice.js` · `start-choice.css` | 주제 고르기 화면: 예전 칸(주제 · 목소리 · 시작 버튼)은 그대로, PC 에서는 오른쪽 칸에 「사진 한 장」(휴대폰은 시작 버튼 위). 비교용 가운데 정렬판은 주소 끝에 `?layout=center` (예: `?demo=1&layout=center`) | — |
 | `start-photo.js` | 시작 전 「사진 한 장」 넣기 — 「내 이야기」 · 「초대 주소 만들기」 화면. 고르는 순간 `POST /api/photos` 로 올리고, 받은 `photo_id` 를 `POST /api/sessions` · `POST /api/links` 에 싣는다. 끄기: `?photo=off` | `POST /api/photos` · `photo_id` |
 | `postcard-photo.js` | 이야기를 시작할 때 넣은 사진을 엽서 · 자서전에 — 자서전 읽기는 장마다 서버가 놓은 사진 · AI 삽화(`illustrations`)를 그 문단 뒤에(「AI가 그린 그림」 표시). 엽서는 보드의 엽서 윗부분 · 펼친 엽서(사진 설명 함께) · 막 만든 엽서 창 · 공유 그림. `GET /api/photos/{photo_id}` 를 로그인 머리글과 함께 받아 이 화면에서만 쓰는 주소로 | `GET /api/photos/{id}` |
-| `records-layout.js` | 엽서보기 — 「엽서 n장 · 엽서 지우기 · 짧은 설명」을 주제 줄 아래로 옮긴다 (맨 아래엔 「자서전 만들기」만) | — |
-| `warm-tone.css` | 비교용 웜톤 판 — 주소 끝 `?tone=warm`(전체 웜톤) · `?tone=buttons`(버튼만 웜톤). 없으면 지금 색. 고르는 스크립트는 `app/index.html` 머리에 | — |
-| `warm-accent.css` | 웜톤 판에서 자주 · 버건디 · 장미 색이 든 모든 화면 규칙을 테라코타로 덮는 파일 — **자동 생성**(`tools/make_accent.py`, 손으로 고치지 않는다) | — |
+| `records-layout.js` | 엽서보기 — 「엽서 n장 · 엽서 정리 · 짧은 설명」을 주제 줄 아래로 옮긴다 (맨 아래엔 「자서전 만들기」만) | — |
+| `memoir-order.js` | 「엽서 정리 · 책 정리」에서 끌어 바꾼 순서를 기억해 보드 · 책장에 그 순서로 늘어놓는다. 서버에 순서 API 가 없어 이 브라우저(localStorage `memoir.order.<records\|books>.<elder_id>`)에만. 보기 순서일 뿐 — 「최근 나눈 이야기」는 최근 순, 자서전 장 순서는 날짜 순 그대로 | (서버 요청 중 — 순서 저장) |
+| `drag-order.js` · `drag-order.css` | 정리 중 끌어서 순서 바꾸기 부품(보드 · 책장 공용). 마우스는 바로 끌기, 손가락은 0.35초 꾹 눌러 끌기(그냥 밀면 화면 스크롤), 화면 끝에서 저절로 스크롤, Esc 로 취소. 검색 · 분류 중에는 끄고 안내 | — |
+| `warm-tone.css` | 색 판 — **기본은 B 판(`buttons`): 바탕 그대로 · 강조만 노랑 #F5B420** (v1.09 확정, 주요 버튼은 노란 바탕 + 짙은 갈색 글씨). 주소 끝 `?tone=warm`(전체 웜톤) · `?tone=none`(예전 자주색)으로 비교. 고르는 스크립트는 `app/index.html` 머리의 `DEFAULT_TONE` | — |
+| `warm-accent.css` | B 판에서 자주 · 버건디 · 장미 색이 든 모든 화면 규칙을 같은 밝기의 노랑(겨자) 계열로 덮는 파일 — **자동 생성**(`python tools/make_accent.py app app/warm-accent.css`, tinycss2 필요. 손으로 고치지 않는다. 색을 바꿀 땐 스크립트의 `ACCENT_HEX`) | — |
 | `srv-demo.js` | 예시 모드(`?demo=1`) — 서버 없이 화면 전체를 돌려 보는 가짜 서버 | (실제 서버를 부르지 않음) |
 
 ## 서버 API 반영 — 이야기 주인공 이름 바꾸기 · 지우기 · 질문 목소리

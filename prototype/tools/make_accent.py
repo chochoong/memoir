@@ -1,8 +1,8 @@
-"""자주색(버건디 · 장미색) → 웜톤 덮어쓰기 CSS 를 만든다.
+"""자주색(버건디 · 장미색) → 노랑 강조색(#F5B420) 덮어쓰기 CSS 를 만든다.
 python3 tools/make_accent.py app app/warm-accent.css   (pip install tinycss2 필요 — 색을 바꿀 CSS 를 고친 뒤 다시 돌린다)
 
 화면 CSS 를 읽어, 값에 자주 계열 색(색상각 300~359°, 채도 0.12 이상)이 든 선언만 골라
-`html.tone-warm-btn <원래 선택자>` 로 같은 속성을 웜톤 색으로 다시 적는다. @media 는 그대로 감싼다.
+`html.tone-warm-btn <원래 선택자>` 로 같은 속성을 노랑 계열 색(밝기는 원래 색 그대로)으로 다시 적는다. @media 는 그대로 감싼다.
 읽기 화면 · 코르크 보드 · 책장 · 엽서 그림 같은 「소재 색」 파일은 건드리지 않는다.
 """
 import colorsys
@@ -21,7 +21,10 @@ html = open(os.path.join(APP, 'index.html'), encoding='utf-8').read()
 files = [f for f in re.findall(r'<link rel="stylesheet" href="([^"]+)">', html) if os.path.basename(f) not in SKIP]
 
 HEX = re.compile(r'#([0-9a-fA-F]{3}|[0-9a-fA-F]{6}|[0-9a-fA-F]{8})\b')
-TARGET_H = 22 / 360  # 테라코타
+# 강조색 #F5B420 (v1.09 확정) 의 색상각 — 밝기는 원래 색을 따르고, 채도는 아래 표 ×1.3 (최대 1)
+ACCENT_HEX = 'f5b420'
+TARGET_H = colorsys.rgb_to_hls(*[int(ACCENT_HEX[i:i + 2], 16) / 255 for i in (0, 2, 4)])[0]
+S_GAIN = 1.3
 
 
 def purple(h):
@@ -43,8 +46,8 @@ def warm(m):
     if not purple(v):
         return m.group(0)
     H, L, S = colorsys.rgb_to_hls(*v[:3])
-    # 버튼과 같은 테라코타 계열이 되게 채도를 맞춘다 (밝기만 원래 색을 따른다)
-    S2 = 0.72 if L > 0.86 else 0.58 if L > 0.6 else 0.52 if L > 0.3 else 0.45
+    # 밝기별 채도 표(v1.0x 테라코타 때와 같은 표)에 ×1.3 — 노랑은 채도가 낮으면 흙빛이 된다
+    S2 = min(1.0, S_GAIN * (0.72 if L > 0.86 else 0.58 if L > 0.6 else 0.52 if L > 0.3 else 0.45))
     r, g, b = colorsys.hls_to_rgb(TARGET_H, L, S2)
     out = '#%02x%02x%02x' % (round(r * 255), round(g * 255), round(b * 255))
     if len(v) == 4:
@@ -97,8 +100,8 @@ def rules(nodes, indent=''):
     return out
 
 
-lines = ['/* ═══ 자주색 → 웜톤 (자동 생성: prototype/tools/make_accent.py) ═══',
-         '   html.tone-warm-btn 일 때, 화면 CSS 에서 자주 · 버건디 · 장미 계열 색이 든 선언만 같은 밝기의 테라코타 계열로 다시 적는다.',
+lines = ['/* ═══ 자주색 → 노랑 강조색 #F5B420 (자동 생성: prototype/tools/make_accent.py) ═══',
+         '   html.tone-warm-btn 일 때, 화면 CSS 에서 자주 · 버건디 · 장미 계열 색이 든 선언만 같은 밝기의 노랑(겨자) 계열로 다시 적는다.',
          '   손으로 고치지 말고 다시 만든다. 읽기 화면 · 코르크 보드 · 책장 · 엽서 그림 색은 건드리지 않는다. */']
 total = 0
 for f in files:
@@ -108,5 +111,5 @@ for f in files:
         lines.append(f'\n/* {f} */')
         lines.extend(got)
         total += len(got)
-open(OUT, 'w', encoding='utf-8').write('\n'.join(lines) + '\n')
+open(OUT, 'w', encoding='utf-8', newline='\n').write('\n'.join(lines) + '\n')
 print('rules', total, 'from', len(files), 'files')

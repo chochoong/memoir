@@ -1,0 +1,25 @@
+/* 사이드바(PC 위쪽 메뉴) · 휴대폰 위쪽 줄 로고 — 갓 쓴 사람 + 「내말싸미」 붓글씨 그림.
+   그림의 투명 부분을 틀(mask)로 써서 획 색은 글자 색(currentColor)을 따른다 → 테마 색이 바뀌어도 맞춰진다.
+   원본: assets/brand-logo.png (741×160, 가로:세로 = 4.63:1) */
+.brand.has-logo { --logo-h: 40px; }
+.brand.has-logo .brand-mark { display: none; }
+.has-logo .brand-text {           /* 글자는 화면 읽기 프로그램용으로만 남긴다 */
+  position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0;
+  overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0;
+}
+.has-logo .brand-logo {
+  display: block; flex: none;
+  width: calc(var(--logo-h) * 4.63); height: var(--logo-h);
+  background: currentColor;
+  -webkit-mask: url(assets/brand-logo.png) left center / contain no-repeat;
+          mask: url(assets/brand-logo.png) left center / contain no-repeat;
+}
+@media (max-width: 1020px) { .brand.has-logo { --logo-h: 34px; } }
+
+/* 휴대폰 위쪽 줄(높이 73px) — 「내말싸미」 글자 대신 같은 로고 */
+@media (max-width: 760px) {
+  .mobile-brand.has-logo { --logo-h: 32px; display: flex; align-items: center; letter-spacing: 0; }
+}
+@media (max-width: 360px) {
+  .mobile-brand.has-logo { --logo-h: 28px; }
+}

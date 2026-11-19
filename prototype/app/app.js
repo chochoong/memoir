@@ -120,7 +120,9 @@ function renderRecords() {
     list.innerHTML=`<div class="empty-state">${icons('letter')}<h2>지금은 엽서를 불러올 수 없어요.</h2><p>엽서가 사라진 것은 아니에요. 잠시 후 다시 확인해주세요.</p><button class="button outline" id="retry-records">다시 불러오기</button></div>`;
     updateSelection();return;
   }
-  const filtered=currentRecords().filter((record)=>(state.filter==='all'||record.category===state.filter)&&`${record.title} ${record.description}`.includes(state.query));
+  // 「엽서 정리」에서 끌어 바꾼 순서대로 (memoir-order.js — 이 기기에만 기억). 「최근 나눈 이야기」는 그대로 최근 순
+  const ordered=window.MemoirOrder?MemoirOrder.apply('records',currentRecords(),(record)=>record.id):currentRecords();
+  const filtered=ordered.filter((record)=>(state.filter==='all'||record.category===state.filter)&&`${record.title} ${record.description}`.includes(state.query));
   list.innerHTML=filtered.length?filtered.map((record)=>{
     const content=`<span class="memory-thumbnail ${record.category}" aria-hidden="true">${icons(record.icon)}</span><span class="record-copy">${record.photo_id?`<span class="pc-photo" data-pc-photo="${escapeText(record.photo_id)}" aria-hidden="true"><img alt=""></span>`:''}<span class="record-meta"><span class="category-label">${categories[record.category]}</span><span>·</span><span>${record.date}</span></span><strong>${escapeText(record.title)}</strong><p>${escapeText(record.description)}</p></span>`;
     if(!state.pickRecords)return `<button class="postcard-card" data-postcard="${record.id}">${content}${icons('chevron')}</button>`;
