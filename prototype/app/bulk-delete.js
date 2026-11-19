@@ -1,6 +1,6 @@
 (function () {
   'use strict';
-  // 엽서 · 자서전이 함께 쓰는 「지우기」 부품: 한 번 더 묻는 창, 여러 개 고를 때 아래 막대, 지운 뒤 「되돌리기」.
+  // 엽서 · 자서전이 함께 쓰는 「정리 · 지우기」 부품: 한 번 더 묻는 창, 정리할 때 아래 막대, 지운 뒤 「되돌리기」.
 
   // ── 한 번 더 묻는 창 ──
   const dialog = document.createElement('dialog');
@@ -48,14 +48,14 @@
   }
   function clearUndo() { clearTimeout(undoTimer); undoBar?.remove(); undoBar = null; flush(); }
 
-  // ── 여러 개 고를 때 아래 막대 ──
-  function selectBar({unit, counter, empty, onAll, onCancel, onDelete}) {
+  // ── 정리할 때 아래 막대 (끌어서 순서 바꾸기 안내 · 고른 개수 · 모두 선택 · 정리 끝내기 · 지우기) ──
+  function selectBar({unit, counter, empty, onAll, onCancel, onDelete, cancelLabel = '취소'}) {
     const bar = document.createElement('div');
     bar.className = 'trash-select-bar'; bar.hidden = true;
     bar.setAttribute('role', 'region'); bar.setAttribute('aria-label', `${unit} 고르기`);
     bar.innerHTML = `<span class="tsb-count" aria-live="polite"></span>
-      <div class="tsb-actions"><button type="button" class="text-button" data-tsb-all>모두 고르기</button>
-      <button type="button" class="button outline compact" data-tsb-cancel>그만두기</button>
+      <div class="tsb-actions"><button type="button" class="text-button" data-tsb-all>모두 선택</button>
+      <button type="button" class="button outline compact" data-tsb-cancel>${escapeText(cancelLabel)}</button>
       <button type="button" class="button compact trash-ok" data-tsb-delete disabled></button></div>`;
     document.body.append(bar);
     bar.querySelector('[data-tsb-all]').addEventListener('click', onAll);
@@ -65,11 +65,12 @@
       el: bar,
       show() { bar.hidden = false; document.body.classList.add('trash-selecting'); const t = document.getElementById('toast'); if (t) t.hidden = true; },
       hide() { bar.hidden = true; document.body.classList.remove('trash-selecting'); },
-      update(n, total) {
-        bar.querySelector('.tsb-count').textContent = n ? `${unit} ${n}${counter} 골랐어요` : empty;
+      // hint — 아무것도 고르지 않았을 때 보이는 안내 (검색 중이면 「전체에서 순서를 바꿀 수 있어요」처럼 바꿔 넣는다)
+      update(n, total, hint) {
+        bar.querySelector('.tsb-count').textContent = n ? `${unit} ${n}${counter} 골랐어요` : (hint || empty);
         const del = bar.querySelector('[data-tsb-delete]');
         del.disabled = !n; del.textContent = n ? `${n}${counter} 지우기` : '지우기';
-        bar.querySelector('[data-tsb-all]').textContent = total && n === total ? '모두 풀기' : '모두 고르기';
+        bar.querySelector('[data-tsb-all]').textContent = total && n === total ? '모두 해제' : '모두 선택';
       },
     };
   }

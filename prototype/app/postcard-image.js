@@ -8,8 +8,11 @@
      ═══════════════════════════════════════════════════════════════ */
   const W = 1080, H = 1350;
   const TITLE_FONT = '"Memoir Cover Serif", "Noto Serif KR", "Batang", "바탕", serif';
-  const BODY_FONT = '"Malgun Gothic", "Apple SD Gothic Neo", "Noto Sans KR", "Noto Sans CJK KR", sans-serif';
+  const BODY_FONT = '"Pretendard Variable", Pretendard, "Malgun Gothic", "Apple SD Gothic Neo", "Noto Sans KR", "Noto Sans CJK KR", sans-serif';
   const PAPER = ['#fffdf6', '#fbf3e3'], YELLOW = ['#fdeba4', '#f8df8c'];
+  // 강조 색 — 웜톤 판(html.tone-warm-btn)이면 노랑 강조색(#F5B420) 계열의 짙은 겨자색, 아니면 자주색
+  const warm = () => document.documentElement.classList.contains('tone-warm-btn');
+  const ACCENT = () => (warm() ? '#b8830a' : '#8a465e'), SIGN = () => (warm() ? '#8a640f' : '#7a4a55');
 
   /** 글자 단위로 줄을 나눈다 — 한국어는 띄어쓰기 없이 길게 이어지는 경우가 많아 단어보다 글자로 끊는 게 안전하다 */
   function wrap(ctx, text, width) {
@@ -55,11 +58,11 @@
   }
 
   /**
-   * @param {{title:string, body:string, date:string, category?:string, icon?:string, who?:string, yellow?:boolean}} card
+   * @param {{title:string, body:string, date:string, category?:string, icon?:string, who?:string, yellow?:boolean, photo?:HTMLImageElement, caption?:string}} card
    * @returns {Promise<{blob: Blob, clipped: boolean, url: string}>}
    */
   async function render(card) {
-    try { await Promise.all([document.fonts.load(`600 56px ${TITLE_FONT}`, card.title || '가'), document.fonts.ready]); } catch (_) { /* 기본 글꼴로 그린다 */ }
+    try { await Promise.all([document.fonts.load(`600 56px ${TITLE_FONT}`, card.title || '가'), document.fonts.load(`400 30px ${BODY_FONT}`, `${card.body || card.text || ''}가나다0123`), document.fonts.ready]); } catch (_) { /* 기본 글꼴로 그린다 */ }
     const c = document.createElement('canvas'); c.width = W; c.height = H;
     const ctx = c.getContext('2d');
     cork(ctx);
@@ -80,7 +83,7 @@
     const sw = 150, sh = 170, sx = px + pw - 70 - sw, sy = py + 64;
     ctx.fillStyle = '#fffaf0'; ctx.fillRect(sx, sy, sw, sh);
     ctx.setLineDash([7, 6]); ctx.strokeStyle = '#b89a7c'; ctx.lineWidth = 3; ctx.strokeRect(sx + 9, sy + 9, sw - 18, sh - 18); ctx.setLineDash([]);
-    const ic = await iconImage(card.icon || 'letter', '#8a465e');
+    const ic = await iconImage(card.icon || 'letter', ACCENT());
     if (ic) ctx.drawImage(ic, sx + (sw - 84) / 2, sy + (sh - 84) / 2, 84, 84);
 
     // 분류 · 날짜
@@ -93,6 +96,27 @@
     tLines.forEach((t, i) => ctx.fillText(t, ix, py + 196 + i * 78));
     let top = Math.max(py + 196 + (tLines.length - 1) * 78 + 60, sy + sh + 40);
 
+    // 사진 — 이야기를 시작할 때 넣은 사진. 자르지 않고 칸에 맞춰, 흰 테를 두르고 살짝 기울여 붙인다
+    if (card.photo && card.photo.naturalWidth) {
+      const maxW = iw - 120, maxH = 330, k = Math.min(maxW / card.photo.naturalWidth, maxH / card.photo.naturalHeight);
+      const w = Math.round(card.photo.naturalWidth * k), h = Math.round(card.photo.naturalHeight * k), border = 16;
+      const cx = px + pw / 2, cy = top + border + h / 2;
+      ctx.save();
+      ctx.translate(cx, cy); ctx.rotate(-1.4 * Math.PI / 180);
+      ctx.shadowColor = 'rgba(59,34,14,.28)'; ctx.shadowBlur = 18; ctx.shadowOffsetY = 8;
+      ctx.fillStyle = '#ffffff'; ctx.fillRect(-w / 2 - border, -h / 2 - border, w + border * 2, h + border * 2 + (card.caption ? 44 : 0));
+      ctx.shadowColor = 'transparent';
+      ctx.drawImage(card.photo, -w / 2, -h / 2, w, h);
+      if (card.caption) {
+        ctx.fillStyle = '#7a6e64'; ctx.font = `400 26px ${BODY_FONT}`; ctx.textAlign = 'center';
+        let cap = card.caption; while (cap && ctx.measureText(cap).width > w) cap = cap.slice(0, -1);
+        ctx.fillText(cap === card.caption ? cap : `${cap.slice(0, -1)}…`, 0, h / 2 + border + 26);
+        ctx.textAlign = 'left';
+      }
+      ctx.restore();
+      top += h + border * 2 + (card.caption ? 44 : 0) + 34;
+    }
+
     // 본문 — 줄 친 종이. 넘치면 글자를 줄이고, 그래도 넘치면 마지막 줄을 「…」로
     const footH = 120, bottom = py + ph - footH;
     let size = 40, lh = 72, lines;
@@ -104,7 +128,13 @@
     }
     const max = Math.max(1, Math.floor((bottom - top) / lh));
     const clipped = lines.length > max;
-    if (clipped) { lines = lines.slice(0, max); let last = lines[max - 1]; while (last && ctx.measureText(`${last}…`).width > iw) last = last.slice(0, -1); lines[max - 1] = `${last.trimEnd()}…`; }
+    if (clipped) {
+      lines = lines.slice(0, max);
+      while (lines.length > 1 && !lines[lines.length - 1].trim()) lines.pop(); // 문단 사이 빈 줄에 「…」만 남지 않게
+      const n = lines.length - 1; let last = lines[n];
+      while (last && ctx.measureText(`${last}…`).width > iw) last = last.slice(0, -1);
+      lines[n] = `${last.trimEnd()}…`;
+    }
     ctx.strokeStyle = 'rgba(160,130,105,.32)'; ctx.lineWidth = 2;
     const rows = Math.floor((bottom - top) / lh);
     for (let i = 0; i < rows; i++) { const y = top + (i + 1) * lh - lh * .28; ctx.beginPath(); ctx.moveTo(ix, y); ctx.lineTo(ix + iw, y); ctx.stroke(); }
@@ -112,7 +142,7 @@
     lines.forEach((t, i) => ctx.fillText(t, ix, top + (i + 1) * lh - lh * .42));
 
     // 누구의 이야기
-    ctx.fillStyle = '#7a4a55'; ctx.font = `600 34px ${TITLE_FONT}`; ctx.textAlign = 'right';
+    ctx.fillStyle = SIGN(); ctx.font = `600 34px ${TITLE_FONT}`; ctx.textAlign = 'right';
     ctx.fillText(card.who ? `— ${card.who}의 이야기` : '— 나의 이야기', px + pw - 70, py + ph - 56);
     ctx.textAlign = 'left';
     ctx.restore();

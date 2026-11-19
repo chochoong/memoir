@@ -33,6 +33,7 @@
     hold.innerHTML = `<div class="pc-hold-dim"></div><article class="pc-held ${kind === 'postit' ? 'postit' : ''}" tabindex="-1">
       <span class="pc-stamp" aria-hidden="true">${icons(record.icon)}</span>
       <div class="pc-meta">${escapeText(categories[record.category])} · ${escapeText(record.date)}</div>
+      ${record.photo_id ? `<figure class="pc-held-photo" data-pc-photo="${escapeText(record.photo_id)}"><img alt="${escapeText(record.caption || '이야기와 함께 남긴 사진')}">${record.caption ? `<figcaption>${escapeText(record.caption)}</figcaption>` : ''}</figure>` : ''}
       <h2 id="pc-held-title">${escapeText(record.title)}</h2><div class="pc-body">${body}</div>
       <p class="pc-note">보드에 다시 꽂으면 제자리로 돌아가요.</p>
       <div class="pc-confirm" role="alertdialog" aria-labelledby="pc-confirm-title" aria-describedby="pc-confirm-desc" hidden>
@@ -161,7 +162,8 @@
       image: {
         name: window.MemoirPostcardImage.fileName(record.title),
         make: async () => {
-          const r = await window.MemoirPostcardImage.render({title: record.title, body: text, date: record.date, category: (typeof categories !== 'undefined' && categories[record.category]) || '', icon: record.icon, who, yellow: idx % 4 === 3});
+          const photo = record.photo_id ? await window.MemoirPostcardPhoto?.image(record.photo_id) : null;
+          const r = await window.MemoirPostcardImage.render({photo, caption: record.caption || '', title: record.title, body: text, date: record.date, category: (typeof categories !== 'undefined' && categories[record.category]) || '', icon: record.icon, who, yellow: idx % 4 === 3});
           // 그림에 다 담지 못한 긴 엽서는 함께 보내는 글에 전체를 붙인다
           if (r.clipped) { const box = document.getElementById('share-msg'); if (box && box.value === o.message) box.value = o.message = `${o.message}\n\n「${record.title}」\n${text}`; }
           return r;
@@ -262,21 +264,21 @@
     commitDelete([id]);
   }
 
-  // ── 엽서 골라 지우기 (한 장도 여러 장도) ──
+  // ── 엽서 정리: 끌어서 순서 바꾸기 + 골라 지우기 (한 장도 여러 장도) ──
   let selecting = false;
   const picked = new Set();
   const toolbar = document.querySelector('[data-screen="records"] .records-toolbar');
   const toggle = document.createElement('button');
-  // 「엽서 N장 | 엽서 지우기」 — 개수 옆의 작은 버튼. 켰을 때만 엽서를 골라 지운다 (책장의 「N권 | 책 지우기」와 같은 모양)
+  // 「엽서 N장 ……… 엽서 정리」 — 그 줄 오른쪽 끝의 작은 버튼. 켰을 때만 엽서를 끌어 옮기고 · 골라 지운다 (책장의 「책 정리」와 같은 모양)
   toggle.type = 'button'; toggle.className = 'srv-mini-btn pc-select-toggle';
-  toggle.innerHTML = `${icons('check')}<span>엽서 지우기</span>`;
+  toggle.innerHTML = `${icons('check')}<span>엽서 정리</span>`;
   document.getElementById('selection-count')?.after(toggle);
   void toolbar;
   const visibleIds = () => [...list.querySelectorAll('.pc-slot > .postcard-card')].map((c) => Number(c.dataset.postcard));
   let selectBar = null;
   function ensureBar() {
     if (selectBar) return selectBar;
-    selectBar = window.MemoirTrash.selectBar({unit: '엽서', counter: '장', empty: '지울 엽서를 눌러 골라 주세요',
+    selectBar = window.MemoirTrash.selectBar({unit: '엽서', counter: '장', empty: '끌어서 순서를 바꿔요 · 지울 엽서는 눌러 골라요', cancelLabel: '정리 끝내기',
       onAll: () => { const ids = visibleIds(); const all = ids.every((id) => picked.has(id)); ids.forEach((id) => all ? picked.delete(id) : picked.add(id)); syncSelectUi(); },
       onCancel: () => setSelecting(false),
       onDelete: removePicked});
@@ -303,8 +305,15 @@
       slot.classList.toggle('is-picked', on);
       if (selecting) card.setAttribute('aria-pressed', String(on)); else card.removeAttribute('aria-pressed');
     });
-    if (selecting) ensureBar().update(picked.size, visibleIds().length);
+    if (selecting) ensureBar().update(picked.size, visibleIds().length, canReorder() ? '' : '순서는 「전체」에서 검색 없이 바꿀 수 있어요 · 지울 엽서는 눌러 골라요');
+    list.classList.toggle('pc-reorder', selecting && canReorder());
   }
+  // 순서는 모든 엽서가 보일 때만 바꾼다 — 일부만 보일 때 옮기면 가려진 엽서 사이 어디로 갔는지 알 수 없다
+  const canReorder = () => state.filter === 'all' && !state.query && !state.pickRecords;
+  if (window.MemoirDrag) window.MemoirDrag.attach({root: list, item: '.pc-slot',
+    idOf: (slot) => slot.querySelector('.postcard-card')?.dataset.postcard,
+    enabled: () => selecting && canReorder() && !holding,
+    onDrop: (ids) => { window.MemoirOrder.save('records', ids); renderRecords(); }});
   async function removePicked() {
     const ids = [...picked].filter((id) => recordData.some((r) => r.id === id));
     if (!ids.length) return;

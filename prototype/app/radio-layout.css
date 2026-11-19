@@ -99,7 +99,7 @@
   font-size: 30px;
   font-weight: 600;
   line-height: 1.6;
-  letter-spacing: -.045em;
+  letter-spacing: -.025em;
   overflow-wrap: anywhere;
   text-wrap: pretty;
 }
@@ -312,7 +312,7 @@
   .interview-studio .interview-question {
     font-size: clamp(26px, 7.2vw, 30px);
     line-height: 1.5;
-    letter-spacing: -.05em;
+    letter-spacing: -.03em;
   }
 
   .interview-studio .interview-question br {

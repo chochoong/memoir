@@ -1,7 +1,7 @@
 (function () {
   'use strict';
-  // 자서전(책장)에서도 엽서와 같은 규칙으로 지운다:
-  //  · 맨 위 「책 지우기」를 켰을 때만 책을 골라 지운다 (책마다 붙던 버튼은 너저분해서 뺐다)
+  // 자서전(책장)에서도 엽서와 같은 규칙으로 정리한다:
+  //  · 맨 위 오른쪽 「책 정리」를 켰을 때만 책을 끌어 순서를 바꾸고 · 골라 지운다 (책마다 붙던 버튼은 너저분해서 뺐다)
   //  · 늘 한 번 더 묻고, 지운 뒤 잠시 「되돌리기」
   //  책을 지워도 그 책을 만든 엽서는 그대로 남는다.
   const shelf = document.querySelector('[data-screen="library"]');
@@ -19,11 +19,11 @@
     const heading = shelf.querySelector('.ml-shelf-heading');
     if (heading && !heading.querySelector('.ml-select-toggle')) {
       const t = document.createElement('button');
-      // 「모아둔 작은 책 N권 | 책 지우기」 — 개수 옆의 작은 버튼 (엽서보기와 같은 모양)
+      // 「모아둔 작은 책 N권 ……… 책 정리」 — 그 줄 오른쪽 끝의 작은 버튼 (엽서보기와 같은 모양)
       t.type = 'button'; t.className = 'srv-mini-btn ml-select-toggle';
-      t.innerHTML = `${icons('check')}<span>책 지우기</span>`;
+      t.innerHTML = `${icons('check')}<span>책 정리</span>`;
       t.addEventListener('click', () => setSelecting(!selecting));
-      (heading.querySelector('h2') || heading).append(t);
+      heading.append(t);
     }
     sync();
   }
@@ -44,12 +44,17 @@
   }
   function ensureBar() {
     if (bar) return bar;
-    bar = window.MemoirTrash.selectBar({unit: '책', counter: '권', empty: '지울 책을 눌러 골라 주세요',
+    bar = window.MemoirTrash.selectBar({unit: '책', counter: '권', empty: '끌어서 순서를 바꿔요 · 지울 책은 눌러 골라요', cancelLabel: '정리 끝내기',
       onAll: () => { const ids = window.MemoirLibrary.bookIds(); const all = ids.every((id) => picked.has(id)); ids.forEach((id) => all ? picked.delete(id) : picked.add(id)); sync(); },
       onCancel: () => setSelecting(false),
       onDelete: removePicked});
     return bar;
   }
+  // 끌어서 순서 바꾸기 — 놓으면 기억하고 책장을 다시 그린다 (책 번호 「작은 책 01」도 새 순서를 따른다)
+  if (window.MemoirDrag) window.MemoirDrag.attach({root: shelf, item: '.ml-books > li',
+    idOf: (li) => li.querySelector('[data-library-book]')?.dataset.libraryBook,
+    enabled: () => selecting,
+    onDrop: (ids) => { window.MemoirOrder.save('books', ids); window.MemoirLibrary.render(); }});
   function setSelecting(on) {
     selecting = on; picked.clear();
     if (on) { ensureBar().show(); window.MemoirTrash.clearUndo(); } else bar?.hide();

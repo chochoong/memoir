@@ -1,6 +1,6 @@
 /* Each recent story has one native button, including its surrounding space. */
 /* The home promise uses the surrounding UI font; cover/reader serif stays local. */
-#home-heading{font-family:inherit;letter-spacing:-.02em}
+#home-heading{font-family:inherit;letter-spacing:0}
 @media(max-width:360px){
   #home-heading br{display:none}
   [data-screen="home"] .hero{min-height:690px}
@@ -15,3 +15,28 @@
 .recent-row:active{background:#e2dfdc80}
 .recent-row:focus-visible{outline:3px solid var(--burgundy);outline-offset:3px;border-radius:5px}
 @media(max-width:359px){.recent-panel{padding-left:16px;padding-right:16px}.recent-row{gap:10px}.recent-row .memory-thumbnail{width:42px;height:50px}.recent-chevron .icon{width:18px}}
+/* 처음가기 맨 위 칸(PC 두 칸 배치) — 글은 왼쪽 테두리에서 조금 들이고, 책 그림은 그만큼 오른쪽 테두리에서 띄워 양쪽 여백을 같게 (v1.09, 11-19 요청)
+   글 여백 = 글 칸 너비의 18% = 그림 칸 너비의 21.24% (글 칸 : 그림 칸 = 1.18 : 1).
+   그림 오른쪽 끝(잎사귀)은 그림 너비의 6.5% 안쪽에 있어 그만큼 빼 준다. 1020px 이하는 한 줄 배치라 그대로 */
+@media(min-width:1021px){
+  [data-screen="home"] .hero-copy{padding-left:clamp(39px,18%,170px)}
+  [data-screen="home"] .hero-art img{align-self:flex-end;margin-left:0;margin-right:calc(21.24% - .065 * min(120%, 570px))}
+}
+/* 설명 문장은 뜻이 끊기는 곳에서만 접히게 — 좁은 휴대폰에서 「엮어드려요.」만 홀로 남지 않게 */
+[data-screen="home"] .hero-description .keep-line{white-space:nowrap}
+/* 휴대폰(760px 이하): 제목 · 설명 · 버튼을 가운데로 — 위아래로 쌓인 책 그림과 같은 축 */
+@media(max-width:760px){
+  [data-screen="home"] .hero-copy{text-align:center}
+  [data-screen="home"] .hero-cta{display:flex;margin-left:auto;margin-right:auto}
+}
+/* 작은 휴대폰(360px 이하): 칸 높이 690 → 610 — 버튼과 책 그림 사이 빈 공간을 다른 휴대폰과 비슷하게 */
+@media(max-width:360px){[data-screen="home"] .hero{min-height:610px}}
+/* 태블릿(761~1020px): PC처럼 글 칸 · 그림 칸 두 칸으로 (원래는 그림을 글 뒤에 옅게 겹쳐 깔았다).
+   PC와 같은 원칙 — 글 왼쪽 여백(글 칸의 18% = 그림 칸의 21.24%)과 책 그림 오른쪽 끝(잎사귀) 여백을 같게.
+   그림은 칸 안에 맞춘다(PC처럼 칸보다 크게 그리면 책이 글자를 덮는다). 잎사귀는 그림 너비의 5.3% 안쪽 */
+@media(min-width:761px) and (max-width:1020px){
+  [data-screen="home"] .hero{display:grid;grid-template-columns:1.18fr 1fr;min-height:400px}
+  [data-screen="home"] .hero-copy{padding-left:clamp(30px,18%,170px);padding-right:0}
+  [data-screen="home"] .hero-art{position:relative;top:auto;right:auto;bottom:auto;width:auto;height:auto;opacity:1;padding:0;display:flex;flex-direction:column;align-items:center;justify-content:center;transform:none}
+  [data-screen="home"] .hero-art img{width:calc(100% - 21.24% + .053 * 100%);max-width:570px;align-self:flex-end;margin:0 calc(21.24% - .053 * min(100%, 570px)) 0 0}
+}

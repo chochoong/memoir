@@ -14,7 +14,7 @@ body.ebook-mode {
   --ebook-selection: #f3e7e6;
   --ebook-font-size: 24px;
   --ebook-line-height: 1.9;
-  --ebook-font-family: var(--serif);
+  --ebook-font-family: var(--book-base-serif);
   --ebook-paragraph-gap: 1.35em;
 }
 
@@ -106,7 +106,7 @@ body.ebook-mode[data-reader-theme="night"] {
   background: var(--ebook-bg);
   box-shadow: 0 -12px 48px #00000014;
   color: var(--ebook-ink);
-  font-family: "Malgun Gothic", "Apple SD Gothic Neo", sans-serif;
+  font-family: var(--sans);
   font-size: 16px;
   line-height: 1.6;
   color-scheme: light;
@@ -148,7 +148,7 @@ body.ebook-mode[data-reader-theme="night"] .ebook-sheet {
   font-size: 21px;
   font-weight: 700;
   line-height: 1.5;
-  letter-spacing: -.035em;
+  letter-spacing: -.015em;
 }
 
 .ebook-sheet-header > button {
@@ -186,7 +186,7 @@ body.ebook-mode[data-reader-theme="night"] .ebook-sheet {
   font-size: 16px;
   font-weight: 600;
   line-height: 1.5;
-  letter-spacing: -.02em;
+  letter-spacing: 0;
 }
 
 .ebook-theme-options,
@@ -351,7 +351,7 @@ body.ebook-mode[data-reader-theme="night"] .ebook-sheet {
   font-size: 16px;
   font-weight: 500;
   line-height: 1.65;
-  letter-spacing: -.03em;
+  letter-spacing: -.01em;
   overflow-wrap: anywhere;
 }
 
@@ -420,7 +420,7 @@ body.ebook-mode[data-reader-theme="night"] .ebook-sheet {
   font-size: 18px;
   font-weight: 600;
   line-height: 1.65;
-  letter-spacing: -.025em;
+  letter-spacing: -.005em;
 }
 
 .ebook-empty p {
@@ -550,11 +550,11 @@ body.ebook-mode[data-reader-theme="night"] .ebook-sheet {
   .ebook-book-title {
     overflow: hidden;
     color: var(--ebook-ink);
-    font-family: "Malgun Gothic", "Apple SD Gothic Neo", sans-serif;
+    font-family: var(--sans);
     font-size: 16px;
     font-weight: 500;
     line-height: 1.5;
-    letter-spacing: -.025em;
+    letter-spacing: -.005em;
     text-align: center;
     text-overflow: ellipsis;
     white-space: nowrap;
@@ -570,7 +570,7 @@ body.ebook-mode[data-reader-theme="night"] .ebook-sheet {
     font-family: var(--ebook-font-family);
     font-size: var(--ebook-font-size);
     line-height: var(--ebook-line-height);
-    letter-spacing: -.025em;
+    letter-spacing: -.005em;
     word-break: keep-all;
     overflow-wrap: break-word;
     -webkit-text-size-adjust: 100%;
@@ -589,11 +589,11 @@ body.ebook-mode[data-reader-theme="night"] .ebook-sheet {
     display: block;
     margin: 0 0 16px;
     color: var(--ebook-muted);
-    font-family: "Malgun Gothic", "Apple SD Gothic Neo", sans-serif;
+    font-family: var(--sans);
     font-size: 14px;
     font-weight: 500;
     line-height: 1.6;
-    letter-spacing: .12em;
+    letter-spacing: .14em;
   }
 
   .ebook-content .ebook-title {
@@ -603,7 +603,7 @@ body.ebook-mode[data-reader-theme="night"] .ebook-sheet {
     font-size: clamp(32px, 8vw, 40px);
     font-weight: 600;
     line-height: 1.55;
-    letter-spacing: -.045em;
+    letter-spacing: -.025em;
     overflow-wrap: anywhere;
     text-wrap: balance;
   }
@@ -611,11 +611,11 @@ body.ebook-mode[data-reader-theme="night"] .ebook-sheet {
   .ebook-byline {
     margin: 0;
     color: var(--ebook-muted);
-    font-family: "Malgun Gothic", "Apple SD Gothic Neo", sans-serif;
+    font-family: var(--sans);
     font-size: 14px;
     font-weight: 400;
     line-height: 1.8;
-    letter-spacing: -.015em;
+    letter-spacing: .005em;
   }
 
   .ebook-divider {
@@ -639,11 +639,11 @@ body.ebook-mode[data-reader-theme="night"] .ebook-sheet {
     display: block;
     margin-bottom: 12px;
     color: var(--ebook-muted);
-    font-family: "Malgun Gothic", "Apple SD Gothic Neo", sans-serif;
+    font-family: var(--sans);
     font-size: 14px;
     font-weight: 400;
     line-height: 1.6;
-    letter-spacing: .1em;
+    letter-spacing: .12em;
   }
 
   .ebook-section h2 {
@@ -653,7 +653,7 @@ body.ebook-mode[data-reader-theme="night"] .ebook-sheet {
     font-size: calc(var(--ebook-font-size) + 4px);
     font-weight: 600;
     line-height: 1.7;
-    letter-spacing: -.04em;
+    letter-spacing: -.02em;
     text-wrap: balance;
   }
 
@@ -676,7 +676,7 @@ body.ebook-mode[data-reader-theme="night"] .ebook-sheet {
     color: var(--ebook-muted);
     font-size: 15px;
     line-height: 1.8;
-    letter-spacing: .2em;
+    letter-spacing: .22em;
     text-align: center;
   }
 
@@ -688,7 +688,7 @@ body.ebook-mode[data-reader-theme="night"] .ebook-sheet {
     border-top: 1px solid var(--ebook-rule);
     background: var(--ebook-bg);
     color: var(--ebook-ink);
-    font-family: "Malgun Gothic", "Apple SD Gothic Neo", sans-serif;
+    font-family: var(--sans);
     transform: translateY(0);
     transition: transform 180ms ease, opacity 180ms ease;
   }
@@ -703,7 +703,7 @@ body.ebook-mode[data-reader-theme="night"] .ebook-sheet {
     color: var(--ebook-muted);
     font-size: 14px;
     line-height: 1.6;
-    letter-spacing: -.015em;
+    letter-spacing: .005em;
   }
 
   #ebook-chapter-current {
@@ -748,7 +748,7 @@ body.ebook-mode[data-reader-theme="night"] .ebook-sheet {
     font-size: 14px;
     font-weight: 400;
     line-height: 1.4;
-    letter-spacing: -.02em;
+    letter-spacing: 0;
   }
 
   .ebook-toolbar button .icon {
@@ -772,7 +772,7 @@ body.ebook-mode[data-reader-theme="night"] .ebook-sheet {
     background: var(--ebook-bg);
     box-shadow: 0 3px 16px #0000000b;
     color: var(--ebook-muted);
-    font-family: "Malgun Gothic", "Apple SD Gothic Neo", sans-serif;
+    font-family: var(--sans);
     font-size: 14px;
     line-height: 1.4;
   }
@@ -902,7 +902,7 @@ body.ebook-paged .ebook-page-controls {
   gap:18px; width:min(360px,calc(100% - 48px)); height:52px; color:var(--ebook-ink);
   transition:opacity 150ms ease;
 }
-#ebook-page-label { font-family:"Malgun Gothic",sans-serif; font-size:14px; font-variant-numeric:tabular-nums; }
+#ebook-page-label { font-family:var(--sans); font-size:14px; font-variant-numeric:tabular-nums; }
 .ebook-page-controls button { border:1px solid var(--ebook-rule); background:var(--ebook-bg); border-radius:50%; }
 body.ebook-paged .ebook-flip-sheet { position:absolute; z-index:5; inset:0; pointer-events:none; backface-visibility:hidden; transform-style:preserve-3d; box-shadow:8px 0 22px #23140d2a; overflow:hidden; }
 .ebook-flip-sheet::after { content:""; position:absolute; inset:0; background:linear-gradient(90deg,transparent 50%,#4e321d18 85%,#fff8 96%,#3d281f24); pointer-events:none; }

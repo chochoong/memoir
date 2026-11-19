@@ -153,8 +153,7 @@ body:not(.ebook-mode) .filter-group button { color: var(--ink); }
 body:not(.ebook-mode) .filter-group button[aria-pressed="true"] {
   background: var(--blush);
   color: var(--burgundy);
-  text-decoration: underline;
-  text-underline-offset: 4px;
+  text-decoration: none;
 }
 body:not(.ebook-mode) .record-card.selected { background: var(--blush); }
 body:not(.ebook-mode) .style-card[aria-pressed="true"] {

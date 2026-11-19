@@ -97,7 +97,7 @@
     document.body.dataset.readerTurn=effectiveTurn;
     document.body.style.setProperty('--ebook-font-size',`${preferences.fontSize}px`);
     document.body.style.setProperty('--ebook-line-height',preferences.lineHeight);
-    document.body.style.setProperty('--ebook-font-family',preferences.fontFamily==='serif'?'"Batang", "바탕", Georgia, serif':'"Malgun Gothic", "Apple SD Gothic Neo", sans-serif');
+    document.body.style.setProperty('--ebook-font-family',preferences.fontFamily==='serif'?'"Batang", "바탕", Georgia, serif':'var(--sans)');
     queryAll('[data-reader-theme-choice]').forEach(button=>button.setAttribute('aria-pressed',String(button.dataset.readerThemeChoice===preferences.theme)));
     queryAll('[data-reader-font]').forEach(button=>button.setAttribute('aria-pressed',String(button.dataset.readerFont===preferences.fontFamily)));
     queryAll('button[data-reader-turn]').forEach(button=>{button.setAttribute('aria-pressed',String(button.dataset.readerTurn===effectiveTurn));button.hidden=button.dataset.readerTurn==='paper'&&!paperAvailable;});
@@ -107,9 +107,21 @@
     query('#ebook-line-height').value=Math.round(preferences.lineHeight*10);query('#ebook-line-value').textContent=preferences.lineHeight.toFixed(1);
     query('#ebook-font-down').disabled=preferences.fontSize<=18;query('#ebook-font-up').disabled=preferences.fontSize>=32;
   }
+  // 자서전 속 사진 · 삽화 — 그 문단이 끝나는 쪽에 함께 놓는다 (srv-memoir 의 book.figures)
+  function figuresAt(index){
+    if(state.document?.edited||!state.savedMemoirId)return [];
+    return (window.SrvLibrary?.figures?.(state.savedMemoirId,state.document)||{})[index]||[];
+  }
+  function figureHTML(f){
+    const label=f.ai?'AI가 그린 그림':(f.caption||'');
+    return `<figure class="ebook-figure ${f.ai?'is-ai':'is-photo'}"><span class="ebook-figure-frame" style="aspect-ratio:${Number(f.w)||4} / ${Number(f.h)||3}"><img alt="${escapeText(f.ai?'AI가 그린 그림':(f.caption||'이야기와 함께 남긴 사진'))}" data-fig-src="${escapeText(f.url)}"></span>${label?`<figcaption>${escapeText(label)}</figcaption>`:''}</figure>`;
+  }
   function blockHTML(block){
     const heading=headingFor(block.section);
-    return `<section class="ebook-section" data-section-index="${block.section}">${block.start===0&&heading.show?`<span class="ebook-chapter-label">${String(heading.number).padStart(2,'0')}</span><h2>${escapeText(heading.title)}</h2>`:''}<p>${escapeText(block.text)}</p></section>`;
+    // 쪽 모드: 그림은 그림만 든 칸(block.figure)으로 따로 온다 / 세로 스크롤: 문단 뒤에 바로
+    if(block.figure)return `<section class="ebook-section ebook-figure-only" data-section-index="${block.section}"><p hidden></p>${figuresAt(block.section).map(figureHTML).join('')}</section>`;
+    const figs=block.end===undefined?figuresAt(block.section).map(figureHTML).join(''):'';
+    return `<section class="ebook-section" data-section-index="${block.section}">${block.start===0&&heading.show?`<span class="ebook-chapter-label">${String(heading.number).padStart(2,'0')}</span><h2>${escapeText(heading.title)}</h2>`:''}<p>${escapeText(block.text)}</p>${figs}</section>`;
   }
   function coverHTML(){return `<div class="ebook-cover-page"><span class="ebook-eyebrow">나의 작은 자서전</span><h1 class="ebook-title" id="ebook-title" tabindex="-1">${escapeText(state.title)}</h1><span class="ebook-cover-rule" aria-hidden="true"></span><p class="ebook-byline">내말싸미에서 엮은 나의 이야기</p><p class="ebook-cover-caption">말로 남긴 기억이, 한 권의 책으로.</p></div>`;}
   function resetSwipe(spring=false){
@@ -202,7 +214,7 @@
       window.scrollTo({top:0,behavior:'instant'});
       const viewport=query('#ebook-viewport');
       measure.style.width=`${query('#ebook-content').clientWidth}px`;measure.style.height=`${viewport.clientHeight}px`;
-      pages=pager.paginate(sections,(blocks)=>{measure.innerHTML=blocks.map(blockHTML).join('');return measure.scrollHeight<=measure.clientHeight+1;});
+      pages=pager.paginate(sections,(blocks)=>{measure.innerHTML=blocks.map(blockHTML).join('');return measure.scrollHeight<=measure.clientHeight+1;},(section)=>figuresAt(section).length>0);
       measure.innerHTML='';
     }else renderScroll();
     scrollToLocation(location,atStart);

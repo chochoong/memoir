@@ -44,6 +44,26 @@
   let db;
   try { db = JSON.parse(localStorage.getItem(KEY) || 'null'); } catch (_) { db = null; }
   if (!db || !db.sessions) db = seed();
+  // 예시 사진 — 「우리 가족의 첫 소풍」 엽서에 붙어 있다 (예전 예시 기록에도 붙여 준다)
+  const SEED_PHOTO = 'demo-ph-seed';
+  db.sessions.forEach((x) => { if (x.photo_id === undefined && x.postcard && x.postcard.title === '우리 가족의 첫 소풍') { x.photo_id = SEED_PHOTO; x.postcard.caption = x.postcard.caption || '소풍날, 돗자리에 둘러앉은 가족'; } });
+  const SEED_SVG = `<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="900" viewBox="0 0 1200 900"><defs><filter id="s"><feColorMatrix type="matrix" values=".39 .77 .19 0 0 .35 .69 .17 0 0 .27 .53 .13 0 0 0 0 0 1 0"/></filter><radialGradient id="v" cx=".5" cy=".5" r=".75"><stop offset=".6" stop-opacity="0"/><stop offset="1" stop-opacity=".3"/></radialGradient><linearGradient id="k" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#9cc7e8"/><stop offset="1" stop-color="#e8f1f4"/></linearGradient></defs><g filter="url(#s)"><rect width="1200" height="900" fill="url(#k)"/><circle cx="980" cy="160" r="70" fill="#fff6d6"/><path d="M0 470Q250 360 520 440T1200 400V900H0Z" fill="#7fa36a"/><path d="M0 560Q300 500 640 560T1200 540V900H0Z" fill="#94b47a"/><rect x="150" y="300" width="40" height="230" fill="#6b4a32"/><circle cx="170" cy="280" r="120" fill="#4f7a45"/><circle cx="100" cy="330" r="80" fill="#5c8a50"/><circle cx="250" cy="320" r="90" fill="#5c8a50"/><path d="M330 670L850 630L930 760L390 810Z" fill="#c95b4f"/><g fill="#3d3330"><circle cx="460" cy="560" r="34"/><circle cx="580" cy="545" r="38"/><circle cx="700" cy="590" r="26"/><circle cx="790" cy="600" r="24"/></g><rect x="430" y="590" width="60" height="110" rx="24" fill="#2f4b6e"/><rect x="545" y="580" width="72" height="125" rx="26" fill="#efe7da"/><rect x="678" y="612" width="46" height="80" rx="18" fill="#d9a441"/><rect x="770" y="620" width="42" height="74" rx="16" fill="#7aa6c9"/><rect x="600" y="690" width="120" height="50" rx="8" fill="#2b2b2b"/><rect x="610" y="698" width="100" height="34" rx="4" fill="#f4e1a8"/></g><rect width="1200" height="900" fill="url(#v)"/></svg>`;
+  // 올린 사진 — 이 탭 메모리에 둔다. 작으면(2MB 아래) 이 브라우저에도 남겨 다시 열어도 보이게
+  const photos = new Map();
+  const PHOTO_KEY = 'memoir.demo.photo.';
+  async function keepPhoto(id, body, mime) {
+    const blob = new Blob([body], {type: mime || 'image/jpeg'});
+    photos.set(id, blob);
+    if (blob.size < 2 * 1024 * 1024) {
+      try { const url = await new Promise((r) => { const f = new FileReader(); f.onload = () => r(f.result); f.readAsDataURL(blob); }); localStorage.setItem(PHOTO_KEY + id, url); } catch (_) { /* 꽉 차면 이 탭에서만 */ }
+    }
+  }
+  async function photoBlob(id) {
+    if (id === SEED_PHOTO) return new Blob([SEED_SVG], {type: 'image/svg+xml'});
+    if (photos.has(id)) return photos.get(id);
+    try { const url = localStorage.getItem(PHOTO_KEY + id); if (url) return await (await fetch(url)).blob(); } catch (_) {}
+    return null;
+  }
   const save = () => { try { localStorage.setItem(KEY, JSON.stringify(db)); } catch (_) {} };
   save();
 
@@ -97,23 +117,37 @@
     if (L.snap.state === 'CLOSED') return;
     L.snap.state = 'CLOSED';
     db.sessions.unshift({session_id: L.snap.session_id, title: L.topic, elder_id: L.elder_id, state: 'CLOSED', created_at: now(),
-      fragments: L.snap.fragments, postcard: null, deleted: false});
+      fragments: L.snap.fragments, postcard: null, deleted: false, photo_id: L.photo || null});
     if (L.link) { const k = db.links.find((x) => x.link_id === L.link); if (k) k.state = 'ended'; }
     save();
   }
 
   // ── 가짜 서버 ──
   const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+  let headersMime = '';
   class Res { constructor(status, body) { this.status = status; this.body = body; } }
   const ok = (b) => new Res(200, b), made = (b) => new Res(201, b), err = (s, detail, code) => new Res(s, {detail, code});
   const said = (s) => s.fragments.some((f) => f.idx > 0 && String(f.answer || '').trim());
-  const row = (s) => ({session_id: s.session_id, title: s.title, elder_id: s.elder_id, state: s.state, created_at: s.created_at, photo_id: null,
+  const row = (s) => ({session_id: s.session_id, title: s.title, elder_id: s.elder_id, state: s.state, created_at: s.created_at, photo_id: s.photo_id || null,
     turn: s.fragments.length - 1, fragment_count: s.fragments.length, has_words: said(s), has_postcard: !!s.postcard, postcard_title: s.postcard ? s.postcard.title : null});
   const mySessions = () => db.sessions.filter((s) => !s.deleted);
   function cardFrom(s) {
     const answers = s.fragments.filter((f) => f.idx > 0).map((f) => f.answer).filter((a) => a && !a.startsWith('(예시 화면)'));
     const text = answers.length ? answers.join('\n\n') : '들려주신 이야기를 엽서로 옮겼어요. (예시 화면에서는 마이크 말씀을 글로 옮기지 않아 예시 문장으로 채웠어요.)';
-    return {title: `${s.title} 이야기`, text, style: 'spoken', caption: '', created_at: now()};
+    return {title: `${s.title} 이야기`, text, style: 'spoken', caption: s.photo_id ? '함께 보내 주신 사진' : '', photo_id: s.photo_id || null, created_at: now()};
+  }
+  // 자서전 속 사진 · 삽화 (예시) — 장마다 그 회차의 사진을 첫 문단 뒤에. 사진 없는 첫 장에는 예시 삽화 한 장(「AI가 그린 그림」 모양 보기용)
+  const DEMO_ILLUST = `<svg xmlns="http://www.w3.org/2000/svg" width="1250" height="1000" viewBox="0 0 1250 1000"><rect width="1250" height="1000" fill="#f3ead9"/><circle cx="1010" cy="190" r="80" fill="#f6d9a0"/><path d="M0 700Q300 600 640 680T1250 650V1000H0Z" fill="#c9d3a8"/><rect x="590" y="360" width="70" height="360" rx="20" fill="#7b5a3f"/><circle cx="625" cy="320" r="210" fill="#8fae6f"/><circle cx="470" cy="400" r="140" fill="#9cbb7b"/><circle cx="790" cy="400" r="150" fill="#86a766"/><g fill="#5d4a3d"><circle cx="420" cy="690" r="22"/><circle cx="500" cy="700" r="20"/><circle cx="820" cy="690" r="22"/></g><rect x="402" y="710" width="36" height="70" rx="14" fill="#c46a5a"/><rect x="483" y="718" width="34" height="62" rx="14" fill="#5f86a8"/><rect x="802" y="710" width="36" height="70" rx="14" fill="#d9a441"/></svg>`;
+  function demoIllust(x) {
+    const ids = (x.session_ids || (x.result && x.result.run && x.result.run.session_ids) || []);
+    const chosen = ids.map((id) => db.sessions.find((s) => s.session_id === id)).filter(Boolean).sort((a, b) => Date.parse(a.created_at) - Date.parse(b.created_at));
+    let drew = false;
+    const chapters = chosen.map((s, i) => {
+      if (s.photo_id) return {no: i + 1, state: 'photo', figures: [{kind: 'photo', url: `/api/photos/${s.photo_id}`, after_paragraph: 0, width: s.photo_id === SEED_PHOTO ? 1200 : null, height: s.photo_id === SEED_PHOTO ? 900 : null, ai_generated: false, caption: null}]};
+      if (!drew) { drew = true; return {no: i + 1, state: 'illustrated', figures: [{kind: 'illustration', url: `/api/memoirs/saved/${x.memoir_id}/illustrations/${i + 1}?v=demo`, after_paragraph: 0, width: 1250, height: 1000, ai_generated: true, caption: 'AI가 그린 그림'}]}; }
+      return {no: i + 1, state: 'none', figures: []};
+    });
+    return {status: 'done', automatic: true, human_reviewed: false, chapters};
   }
   function memoirResult(ids, style) {
     const chosen = ids.map((id) => db.sessions.find((s) => s.session_id === id)).filter(Boolean)
@@ -147,7 +181,7 @@
       if (path === '/i/start') {
         if (k.state === 'ended') return err(409, '끝난 인터뷰예요', 'ended');
         let L = linkLive();
-        if (!L) { L = openSession({topic: k.topic, elder_id: k.elder_id, link: k.link_id, voice: k.voice}); k.session_id = L.snap.session_id; k.state = 'in_progress'; save(); }
+        if (!L) { L = openSession({topic: k.topic, elder_id: k.elder_id, link: k.link_id, voice: k.voice, photo: k.photo_id || null}); k.session_id = L.snap.session_id; k.state = 'in_progress'; save(); }
         return ok({...snapOf(L), ...linkView(k)});
       }
       if (path === '/i/transcript') {
@@ -182,12 +216,13 @@
       rows = rows.slice().sort((a, b) => Date.parse(b.created_at) - Date.parse(a.created_at)).slice(0, Number(q.get('limit')) || 20);
       return ok({sessions: rows.map(row)});
     }
-    if (path === '/photos' && method === 'POST') { await sleep(900); const id = 'demo-ph' + (++db.seq); return ok({photo_id: id, url: `/api/photos/${id}`, mime: 'image/jpeg', width: 1024, height: 768, bytes: 123456}); }
+    if (path === '/photos' && method === 'POST') { await sleep(900); const id = 'demo-ph' + (++db.seq) + '-' + Date.now().toString(36); save(); if (body instanceof ArrayBuffer || ArrayBuffer.isView(body)) await keepPhoto(id, body, headersMime); return ok({photo_id: id, url: `/api/photos/${id}`, mime: 'image/jpeg', width: 1024, height: 768, bytes: 123456}); }
     if (path === '/sessions' && method === 'POST') {
       if (!db.elders.some((e) => e.elder_id === body.elder_id)) return err(400, '화자를 골라 주세요', 'elder_required');
       if (body.voice !== undefined && !VOICE_OK.includes(body.voice)) return err(422, '목소리를 확인해 주세요');
-      return ok(snapOf(openSession({topic: body.topic || body.title || '나의 이야기', elder_id: body.elder_id, voice: body.voice, photo: !!body.photo_id})));
+      return ok(snapOf(openSession({topic: body.topic || body.title || '나의 이야기', elder_id: body.elder_id, voice: body.voice, photo: body.photo_id || null})));
     }
+    if ((m = path.match(/^\/photos\/([^/]+)$/)) && method === 'GET') { const blob = await photoBlob(m[1]); return blob ? new Res(200, blob) : err(404, '사진을 찾을 수 없어요'); }
     if ((m = path.match(/^\/sessions\/([^/]+)(\/.*)?$/))) {
       const id = m[1], rest = m[2] || '';
       const L = live.get(id);
@@ -218,11 +253,17 @@
       const rows = db.memoirs.filter((x) => !x.deleted && (!q.get('elder_id') || x.elder_id === q.get('elder_id')));
       return ok({memoirs: rows.slice().reverse().map(({result, deleted, ...r}) => r)});
     }
+    if ((m = path.match(/^\/memoirs\/saved\/([^/]+)\/illustrations(?:\/(\d+))?$/))) {
+      const x = db.memoirs.find((y) => y.memoir_id === m[1] && !y.deleted);
+      if (!x) return err(404, '자서전을 찾을 수 없어요', 'memoir_not_found');
+      if (m[2]) return new Res(200, new Blob([DEMO_ILLUST], {type: 'image/svg+xml'}));
+      return ok(demoIllust(x));
+    }
     if ((m = path.match(/^\/memoirs\/saved\/([^/]+)$/))) {
       const x = db.memoirs.find((y) => y.memoir_id === m[1] && !y.deleted);
       if (!x) return err(404, '자서전을 찾을 수 없어요', 'memoir_not_found');
       if (method === 'DELETE') { x.deleted = true; save(); return ok({memoir_id: x.memoir_id, deleted: true}); }
-      const {deleted, ...r} = x; return ok(r);
+      const {deleted, ...r} = x; return ok({...r, illustrations: demoIllust(x)});
     }
     if ((m = path.match(/^\/memoirs\/([^/]+)$/))) {
       const j = db.jobs[m[1]];
@@ -252,7 +293,7 @@
     // 초대 링크
     const linkOut = (k) => { const {token, ...r} = k; return r; };
     const issue = (base) => {
-      const k = {link_id: 'demo-l' + (++db.seq), elder_id: base.elder_id, title: base.title || base.topic, theme: null, topic: base.topic, picked_topic: null, voice: base.voice || 'default',
+      const k = {link_id: 'demo-l' + (++db.seq), elder_id: base.elder_id, title: base.title || base.topic, theme: null, topic: base.topic, picked_topic: null, voice: base.voice || 'default', photo_id: base.photo_id || null,
         state: 'ready', session_id: null, created_at: now(), expires_at: new Date(Date.now() + 72 * 3600e3).toISOString(), token: tok()};
       db.links.unshift(k); save();
       return made({...linkOut(k), token: k.token, url: `${pageUrl()}?demo=elder#${k.token}`});
@@ -302,8 +343,10 @@
     let body = init.body;
     if (typeof body === 'string') { try { body = JSON.parse(body); } catch (_) { body = {}; } }
     if (init.signal && init.signal.aborted) throw new DOMException('Aborted', 'AbortError');
+    headersMime = (init.headers && (init.headers['Content-Type'] || init.headers['content-type'])) || '';
     const r = await handle(method, u.pathname, u.searchParams, body || {});
     if (r.status === 204) return new Response(null, {status: 204});
+    if (r.body instanceof Blob) return new Response(r.body, {status: r.status, headers: {'Content-Type': r.body.type || 'application/octet-stream'}});
     return new Response(JSON.stringify(r.body), {status: r.status, headers: {'Content-Type': 'application/json'}});
   };
 

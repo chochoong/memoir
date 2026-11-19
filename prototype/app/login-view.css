@@ -8,12 +8,12 @@
 .memoir-login-dialog .mlg-close .icon { width:22px; height:22px; }
 .memoir-login-dialog .mlg-layout { display:grid; grid-template-columns:.8fr 1.2fr; }
 .memoir-login-dialog .mlg-visual { display:flex; flex-direction:column; align-items:center; justify-content:center; min-width:0; padding:35px 22px 38px; background:radial-gradient(at 50% 35%,#f6f4f2,transparent 75%),#eae8e5; border-right:1px solid #dddad6; text-align:center; }
-.memoir-login-dialog .mlg-brand { align-self:flex-start; font-size:25px; font-weight:800; letter-spacing:-.08em; color:#693a3b; margin:0 0 10px 6px; }
+.memoir-login-dialog .mlg-brand { align-self:flex-start; font-size:25px; font-weight:800; letter-spacing:-.06em; color:#693a3b; margin:0 0 10px 6px; }
 .memoir-login-dialog .mlg-visual img { display:block; width:135%; max-width:340px; margin:4px -20px 0; }
-.memoir-login-dialog .mlg-visual p { margin-top:0; color:#7c6f65; font-family:var(--serif); font-size:21px; line-height:1.85; letter-spacing:-.04em; }
+.memoir-login-dialog .mlg-visual p { margin-top:0; color:#7c6f65; font-family:var(--serif); font-size:21px; line-height:1.85; letter-spacing:-.02em; }
 .memoir-login-dialog .mlg-visual-rule { width:38px; height:1px; background:#aa998b; margin-top:24px; }
 .memoir-login-dialog .mlg-main { min-width:0; padding:32px 30px 25px; }
-.memoir-login-dialog h2 { margin:0 0 13px; font-size:28px; line-height:1.55; letter-spacing:-.06em; }
+.memoir-login-dialog h2 { margin:0 0 13px; font-size:28px; line-height:1.55; letter-spacing:-.04em; }
 .memoir-login-dialog #login-preview-description { font-size:17px; line-height:1.85; color:var(--muted); }
 .memoir-login-dialog .mlg-content { margin-top:25px; }
 .memoir-login-dialog .mlg-welcome-note { font-size:15px; color:#7f726a; line-height:1.9; padding:17px 18px; margin-bottom:23px; border-radius:9px; background:#f0eeed; }

@@ -1,0 +1,15 @@
+{
+  "source_file": "memoir-cover-serif-600-ko.woff2",
+  "source_bytes": 1165692,
+  "source_sha256": "c1029f5eca8716a277b653724b121f40009c56b126a4dd177264aa193345071b",
+  "derived_file": "memoir-cover-serif-600-ko-ks.woff2",
+  "derived_bytes": 531924,
+  "derived_sha256": "910301d2405cdecb0202a717d8ff63bc9e29d6ec1f3cd0088eae327ce73a3563",
+  "hangul_kept": 2350,
+  "hangul_set": "KS X 1001 완성형 2,350자",
+  "ks_complete": true,
+  "non_hangul_kept": 1155,
+  "non_hangul_same_as_source": true,
+  "printable_ascii_complete": true,
+  "license": "SIL Open Font License 1.1 (OFL-NotoSerifKR.txt)"
+}

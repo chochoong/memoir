@@ -9,15 +9,23 @@
   function elderName() {
     try { return window.RolePreview.store.snapshot().elders.find((e) => e.elder_id === currentElderId())?.name || '나'; } catch { return '나'; }
   }
-  function bookFrom(title, paragraphs, docSections, date) {
+  // figs: 읽기 화면과 같은 문단 번호 → [그림] (srv-memoir figures). 문단 뒤에 사진 · AI 삽화를 넣는다
+  function bookFrom(title, paragraphs, docSections, date, figs) {
     const texts = paragraphs.map(String).filter((p) => p.trim());
     const sections = [];
     texts.forEach((text, i) => {
       const h = model.chapterHeading(docSections?.[i], i);
-      if (h.show || !sections.length) sections.push({title: h.title, number: h.number, paras: [text]});
-      else sections[sections.length - 1].paras.push(text);
+      if (h.show || !sections.length) sections.push({title: h.title, number: h.number, paras: [text], after: [figs?.[i] || []]});
+      else { sections[sections.length - 1].paras.push(text); sections[sections.length - 1].after.push(figs?.[i] || []); }
     });
     return {title, sections, elder: elderName(), date: date || new Date().toLocaleDateString('ko-KR')};
+  }
+  const figsOf = (id, doc) => (id && window.SrvLibrary?.figures ? window.SrvLibrary.figures(id, doc) : {});
+  const figCount = (b) => b.sections.reduce((n, s) => n + (s.after || []).reduce((m, a) => m + a.length, 0), 0);
+  function figureHTML(f, src) {
+    if (!src) return '';
+    const label = f.ai ? '✦ AI가 그린 그림' : (f.caption || '');
+    return `<figure class="pb-figure ${f.ai ? 'is-ai' : 'is-photo'}"><img src="${src}" alt="${escapeText(f.ai ? 'AI가 그린 그림' : (f.caption || '이야기와 함께 남긴 사진'))}">${label ? `<figcaption>${escapeText(label)}</figcaption>` : ''}</figure>`;
   }
 
   // ── 고르는 창 ──
@@ -47,8 +55,8 @@
     const chars = current.sections.reduce((n, s) => n + s.paras.join('').length, 0);
     const perPage = (big ? 1100 : 520) * (large ? 0.7 : 1);
     const body = current.sections.reduce((n, s) => n + Math.max(1, Math.ceil(s.paras.join('').length / perPage)), 0);
-    const pages = 1 + (opts.toc.checked ? 1 : 0) + body + 1;
-    dialog.querySelector('.pdf-pages').textContent = `이야기 ${current.sections.length}편 · 약 ${pages}쪽 (표지 · ${opts.toc.checked ? '차례 · ' : ''}맺음 쪽 포함, 글 ${chars.toLocaleString()}자)`;
+    const nf = figCount(current), pages = 1 + (opts.toc.checked ? 1 : 0) + body + Math.ceil(nf * (big ? .4 : .7)) + 1;
+    dialog.querySelector('.pdf-pages').textContent = `이야기 ${current.sections.length}편 · 약 ${pages}쪽 (표지 · ${opts.toc.checked ? '차례 · ' : ''}맺음 쪽 포함, 글 ${chars.toLocaleString()}자${nf ? ` · 사진 · 그림 ${nf}장` : ''})`;
   }
   opts.addEventListener('change', estimate);
 
@@ -68,7 +76,7 @@
   const pageStyle = document.createElement('style');
   document.head.append(pageStyle);
 
-  function build() {
+  function build(srcs) {
     const b = current, big = opts.size.value === 'A4', large = opts.font.value === 'large';
     pageStyle.textContent = `@page { size: ${big ? 'A4' : 'A5'}; margin: ${big ? '24mm 22mm 26mm' : '18mm 16mm 20mm'}; @bottom-center { content: counter(page); font-size: 9pt; color: #9a8a76; } }
       @page :first { @bottom-center { content: none; } }`;
@@ -76,13 +84,21 @@
     const toc = opts.toc.checked ? `<section class="pb-toc"><h2>차례</h2><ol>${b.sections.map((s) => `<li><span>${String(s.number).padStart(2, '0')}</span>${escapeText(s.title)}</li>`).join('')}</ol></section>` : '';
     printRoot.innerHTML = `<section class="pb-cover"><span class="pb-kicker">${escapeText(window.Srv.honor(b.elder))}의 작은 자서전</span><h1>${escapeText(b.title)}</h1><span class="pb-rule"></span><p class="pb-by">이야기 · ${escapeText(b.elder)}　　엮음 · 내말싸미</p><p class="pb-date">${escapeText(b.date)}</p></section>
       ${toc}
-      ${b.sections.map((s) => `<section class="pb-chapter"><span class="pb-num">${String(s.number).padStart(2, '0')}</span><h2>${escapeText(s.title)}</h2>${s.paras.map((p) => `<p>${escapeText(p)}</p>`).join('')}</section>`).join('')}
+      ${b.sections.map((s) => `<section class="pb-chapter"><span class="pb-num">${String(s.number).padStart(2, '0')}</span><h2>${escapeText(s.title)}</h2>${s.paras.map((p, k) => `<p>${escapeText(p)}</p>${((s.after || [])[k] || []).map((f) => figureHTML(f, srcs && srcs.get(f.url))).join('')}`).join('')}</section>`).join('')}
       <section class="pb-end"><span>✧</span><p>당신의 이야기는 계속됩니다.</p><small>이 책은 ${escapeText(b.elder === '나' ? '제가' : window.Srv.honor(b.elder) + '이')} 들려준 이야기를 바탕으로 내말싸미에서 엮었습니다.<br>${escapeText(b.date)}</small></section>`;
   }
 
-  opts.addEventListener('submit', (e) => {
+  opts.addEventListener('submit', async (e) => {
     e.preventDefault();
-    build();
+    // 사진 · 그림을 먼저 다 받아 둔다 — 인쇄 창이 빈 칸으로 찍지 않게
+    const all = current.sections.flatMap((s) => (s.after || []).flat());
+    const go = opts.querySelector('[type="submit"]'); const label = go && go.innerHTML;
+    if (all.length && go) { go.disabled = true; go.textContent = '사진을 담는 중…'; }
+    const srcs = new Map();
+    await Promise.all(all.map(async (f) => { const u = await window.MemoirPostcardPhoto?.srcPath(f.url); if (u) srcs.set(f.url, u); }));
+    if (all.length && go) { go.disabled = false; go.innerHTML = label; }
+    build(srcs);
+    await Promise.all([...printRoot.querySelectorAll('img')].map((img) => (img.decode ? img.decode().catch(() => {}) : null)));
     dialog.close();
     document.body.classList.add('printing-book');
     // 저장할 때 파일 이름이 책 제목으로 잡히도록
@@ -97,7 +113,7 @@
   document.addEventListener('click', (e) => {
     const btn = e.target.closest('[data-book-pdf]');
     if (!btn) return;
-    window.SrvLibrary.ensure(btn.dataset.bookPdf).then((book) => { if (book) open(bookFrom(book.title, book.document?.body || book.body, book.document?.sections, book.date)); });
+    window.SrvLibrary.ensure(btn.dataset.bookPdf).then((book) => { if (book) open(bookFrom(book.title, book.document?.body || book.body, book.document?.sections, book.date, figsOf(book.id, book.document))); });
   });
 
   // ── 읽기 화면: 아래 독서 메뉴(목차 · 책갈피 · 보기 설정) 옆에 넣는다 — 위쪽 막대는 제목 자리를 지킨다 ──
@@ -108,7 +124,7 @@
     btn.innerHTML = `${icons('download')}<span>PDF 저장</span>`;
     toolbar.append(btn);
     toolbar.classList.add('has-pdf');
-    btn.addEventListener('click', () => open(bookFrom(state.title, state.document?.body || state.body, state.document?.sections)));
+    btn.addEventListener('click', () => open(bookFrom(state.title, state.document?.body || state.body, state.document?.sections, null, figsOf(state.savedMemoirId, state.document))));
   }
 
   // ── 초안 화면: 「글 파일(.txt)로 내려받기」 대신 PDF — txt 는 휴대폰 · PC 에서 따로 열 앱이 있어야 편하게 읽힌다 ──
@@ -118,7 +134,12 @@
     pdfBtn.innerHTML = `${icons('download')}<span>PDF로 저장하기</span>`;
     dl.replaceWith(pdfBtn);
     // 고친 글(state.body)을 그대로 담는다 — 장 제목은 서버가 준 sections 를 쓴다
-    pdfBtn.addEventListener('click', () => open(bookFrom(state.title, state.body, state.document?.sections)));
+    pdfBtn.addEventListener('click', async () => {
+      // 만든 직후의 책도 서버가 놓은 사진 · 그림을 받아 담는다 (고친 글이면 넣지 않는다)
+      let figs = {};
+      if (state.savedMemoirId && state.document && !state.document.edited) figs = await window.SrvLibrary?.loadFigures?.(state.savedMemoirId, state.document) || {};
+      open(bookFrom(state.title, state.body, state.document?.sections, null, figs));
+    });
   }
 
   window.MemoirPdf = {open, bookFrom};
