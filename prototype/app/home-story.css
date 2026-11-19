@@ -1,6 +1,6 @@
 /* Each recent story has one native button, including its surrounding space. */
 /* The home promise uses the surrounding UI font; cover/reader serif stays local. */
-#home-heading{font-family:inherit;letter-spacing:-.02em}
+#home-heading{font-family:inherit;letter-spacing:0}
 @media(max-width:360px){
   #home-heading br{display:none}
   [data-screen="home"] .hero{min-height:690px}

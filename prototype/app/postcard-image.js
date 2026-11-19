@@ -8,7 +8,7 @@
      ═══════════════════════════════════════════════════════════════ */
   const W = 1080, H = 1350;
   const TITLE_FONT = '"Memoir Cover Serif", "Noto Serif KR", "Batang", "바탕", serif';
-  const BODY_FONT = '"Malgun Gothic", "Apple SD Gothic Neo", "Noto Sans KR", "Noto Sans CJK KR", sans-serif';
+  const BODY_FONT = '"Pretendard Variable", Pretendard, "Malgun Gothic", "Apple SD Gothic Neo", "Noto Sans KR", "Noto Sans CJK KR", sans-serif';
   const PAPER = ['#fffdf6', '#fbf3e3'], YELLOW = ['#fdeba4', '#f8df8c'];
   // 강조 색 — 웜톤 판(html.tone-warm-btn)이면 테라코타, 아니면 자주색
   const warm = () => document.documentElement.classList.contains('tone-warm-btn');
@@ -62,7 +62,7 @@
    * @returns {Promise<{blob: Blob, clipped: boolean, url: string}>}
    */
   async function render(card) {
-    try { await Promise.all([document.fonts.load(`600 56px ${TITLE_FONT}`, card.title || '가'), document.fonts.ready]); } catch (_) { /* 기본 글꼴로 그린다 */ }
+    try { await Promise.all([document.fonts.load(`600 56px ${TITLE_FONT}`, card.title || '가'), document.fonts.load(`400 30px ${BODY_FONT}`, `${card.body || card.text || ''}가나다0123`), document.fonts.ready]); } catch (_) { /* 기본 글꼴로 그린다 */ }
     const c = document.createElement('canvas'); c.width = W; c.height = H;
     const ctx = c.getContext('2d');
     cork(ctx);

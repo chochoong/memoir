@@ -97,7 +97,7 @@
     document.body.dataset.readerTurn=effectiveTurn;
     document.body.style.setProperty('--ebook-font-size',`${preferences.fontSize}px`);
     document.body.style.setProperty('--ebook-line-height',preferences.lineHeight);
-    document.body.style.setProperty('--ebook-font-family',preferences.fontFamily==='serif'?'"Batang", "바탕", Georgia, serif':'"Malgun Gothic", "Apple SD Gothic Neo", sans-serif');
+    document.body.style.setProperty('--ebook-font-family',preferences.fontFamily==='serif'?'"Batang", "바탕", Georgia, serif':'var(--sans)');
     queryAll('[data-reader-theme-choice]').forEach(button=>button.setAttribute('aria-pressed',String(button.dataset.readerThemeChoice===preferences.theme)));
     queryAll('[data-reader-font]').forEach(button=>button.setAttribute('aria-pressed',String(button.dataset.readerFont===preferences.fontFamily)));
     queryAll('button[data-reader-turn]').forEach(button=>{button.setAttribute('aria-pressed',String(button.dataset.readerTurn===effectiveTurn));button.hidden=button.dataset.readerTurn==='paper'&&!paperAvailable;});

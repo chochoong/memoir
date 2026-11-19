@@ -17,7 +17,7 @@ body.ebook-mode[data-reader-theme="night"] .ebook-toolbar #ebook-remove-book { c
 .pdf-preview { display: flex; justify-content: center; gap: 14px; padding: 18px 0 20px; margin-bottom: 6px; background: var(--soft, #f1e7c9); border-radius: 12px; }
 .pdf-sheet { width: 74px; height: 104px; background: #fffdf6; border-radius: 2px; box-shadow: 0 6px 14px -6px #4a33184d, 0 0 0 1px #e3d4b4; padding: 10px 9px; display: flex; flex-direction: column; gap: 6px; }
 .pdf-cover { background: #6f2c3c; justify-content: center; align-items: center; text-align: center; }
-.pdf-cover b { font-family: var(--serif); font-size: 8.5px; line-height: 1.45; color: #f1dcb4; font-weight: 600; }
+.pdf-cover b { font-family: var(--book-base-serif); font-size: 8.5px; line-height: 1.45; color: #f1dcb4; font-weight: 600; }
 .pdf-cover i { width: 18px; height: 1px; background: #e6c991; }
 .pdf-sheet s { display: block; height: 3px; background: #e2d6be; border-radius: 2px; }
 .pdf-toc s:nth-child(2) { width: 80%; } .pdf-toc s:nth-child(3) { width: 65%; }
@@ -53,17 +53,17 @@ body.ebook-mode[data-reader-theme="night"] .ebook-toolbar #ebook-remove-book { c
   #print-book section:last-child { break-after: auto; }
   .pb-cover { height: 100%; min-height: 170mm; display: flex; flex-direction: column; justify-content: center; text-align: center; }
   .pb-a4 .pb-cover { min-height: 240mm; }
-  .pb-kicker { font-size: 10pt; letter-spacing: .25em; color: #8a6d4c; }
-  .pb-cover h1 { font-size: 24pt; line-height: 1.5; margin: 14pt 0; letter-spacing: -.03em; color: #5b2333; }
+  .pb-kicker { font-size: 10pt; letter-spacing: .27em; color: #8a6d4c; }
+  .pb-cover h1 { font-size: 24pt; line-height: 1.5; margin: 14pt 0; letter-spacing: -.01em; color: #5b2333; }
   .pb-rule { display: block; width: 28mm; height: .6pt; background: #b08a5a; margin: 6pt auto 16pt; }
   .pb-by { font-size: 11pt; color: #6e5a45; }
   .pb-date { font-size: 9.5pt; color: #9a8a76; margin-top: 4pt; }
-  .pb-toc h2 { font-size: 16pt; margin: 10mm 0 8mm; letter-spacing: .2em; }
+  .pb-toc h2 { font-size: 16pt; margin: 10mm 0 8mm; letter-spacing: .22em; }
   .pb-toc ol { list-style: none; padding: 0; margin: 0; }
   .pb-toc li { display: flex; gap: 10pt; padding: 6pt 0; border-bottom: .5pt solid #e2d6c0; font-size: 12pt; }
   .pb-toc li span { color: #a0805a; font-size: 10pt; min-width: 18pt; }
-  .pb-num { display: block; font-size: 9.5pt; letter-spacing: .2em; color: #a0805a; margin-top: 12mm; }
-  .pb-chapter h2 { font-size: 17pt; margin: 4pt 0 12pt; color: #4d3a2a; letter-spacing: -.02em; }
+  .pb-num { display: block; font-size: 9.5pt; letter-spacing: .22em; color: #a0805a; margin-top: 12mm; }
+  .pb-chapter h2 { font-size: 17pt; margin: 4pt 0 12pt; color: #4d3a2a; letter-spacing: 0; }
   .pb-chapter p { font-size: 11pt; line-height: 2; margin: 0 0 9pt; text-indent: 1em; text-align: left; orphans: 2; widows: 2; word-break: keep-all; }
   .pb-a4 .pb-chapter p { font-size: 12pt; }
   .pb-large .pb-chapter p { font-size: 14pt; line-height: 1.95; }
