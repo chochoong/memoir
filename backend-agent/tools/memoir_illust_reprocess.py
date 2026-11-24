@@ -17,7 +17,15 @@
 - 앞선 기록 · 호출 수는 지우지 않는다 — 앞선 기록은 그 장의 history 에 옮겨 둔다.
 - --memoir 는 앞부분만 줘도 된다. 둘 이상 걸리면 멈춘다.
 
-종료 코드: 0 됨 / 2 거부(책 없음 · 여럿 · DB 없음 · --chapter 없는 --prepare)
+사진 다시 계산 (2026-11-24 — 회차 사진이 빠지던 규칙을 고친 뒤 이미 만든 책에)
+
+    python tools/memoir_illust_reprocess.py --memoir m_d1571e8e --refresh-photos            보기만 — 사진이 새로 놓일 장 · 놓지 못한 사진
+    python tools/memoir_illust_reprocess.py --memoir m_d1571e8e --refresh-photos --apply    적어 둔다 (모델 · 그림을 부르지 않는다)
+
+    사진이 새로 놓이는 장은 photo 로 바뀐다 — 앞서 만든 AI 삽화 기록 · 저장된 그림은 지우지 않는다(화면에는 사진이 먼저 보인다).
+    새로 그림을 만들 장은 생기지 않고, 책 상태를 running 으로 두지 않는다. 책마다 운영자가 고른다 — 모든 책을 한꺼번에 바꾸지 않는다.
+
+종료 코드: 0 됨 / 2 거부(책 없음 · 여럿 · DB 없음 · --chapter 없는 --prepare · --refresh-photos 없는 --apply)
 """
 
 from __future__ import annotations
@@ -49,6 +57,9 @@ async def main_async(args) -> int:
     from app.session import memoir_illust_book as book, memoir_illust_service as svc, store
 
     pol = book.check_policy(args.policy or svc.policy())
+    if args.apply and not args.refresh_photos:
+        print("--apply 는 --refresh-photos 와 함께만 쓴다")
+        return 2
     if args.prepare and not args.chapter:
         print("--prepare 에는 --chapter 가 있어야 한다 — 다시 처리할 장을 이름 댄다 (실패한 장을 모두 저절로 다시 부르지 않는다)")
         return 2
@@ -61,6 +72,11 @@ async def main_async(args) -> int:
         print(f"책을 하나로 정하지 못했다 — {len(rows)}권이 걸린다 ({[r['memoir_id'][:12] for r in rows][:5]})")
         return 2
     row = rows[0]
+    if args.refresh_photos:                                  # 사진 배치만 다시 계산 — 부르지 않는다
+        out = await svc.refresh_photos(row["memoir_id"], row["user_id"], apply=args.apply)
+        print(json.dumps({"memoir_id": row["memoir_id"], "title": row["title"], "refresh_photos": out}, ensure_ascii=False,
+                         indent=1, default=str))
+        return 0
     doc = store._jsonb(row["illustrations"])
     states = {k: {"state": c.get("state"), "failure": c.get("failure"), "policy": svc._policy_id_of(c) if c.get("select") else None}
               for k, c in sorted(((doc or {}).get("chapters") or {}).items(), key=lambda x: int(x[0]))}
@@ -88,6 +104,8 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--chapter", type=int, action="append", help="다시 처리할 장 번호 (여러 번 쓸 수 있다)")
     ap.add_argument("--prepare", action="store_true", help="--chapter 로 댄 장을 표시한다. 없으면 보기만 한다")
     ap.add_argument("--policy", choices=["theme", "scene"], help="다시 처리할 방식 (기본: 서버 설정 · theme)")
+    ap.add_argument("--refresh-photos", action="store_true", help="사진 배치만 지금 규칙으로 다시 계산한다 (부르지 않는다)")
+    ap.add_argument("--apply", action="store_true", help="--refresh-photos 의 결과를 적어 둔다. 없으면 보기만 한다")
     args = ap.parse_args(argv)
     return asyncio.run(main_async(args))
 

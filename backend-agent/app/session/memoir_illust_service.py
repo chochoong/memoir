@@ -14,10 +14,13 @@
 **삽화는 자서전 작업과 따로 돈다.** 자서전 작업은 저장까지 끝나면 done 이고, 삽화가 실패해도 본문은
 그대로 열린다. 상태는 memoir.illustrations 에만 적는다 — memoir.result(원고)는 건드리지 않는다.
 
-**사진은 회차에 붙은 사진(session.photo_id)이다.** 한 회차의 말씀이 한 장에만 쓰였을 때만 그 회차의 사진을 그 장에 놓는다
-(그 회차 말씀이 처음 나오는 문단 뒤). 여러 장에 걸친 회차 · 장에 쓰이지 않은 회차의 사진은 어느 장의 사진으로도 치지 않는다
-— 올라와 있다는 것만으로 표시된 사진이 아니다 (unplaced_photos 에 까닭과 함께 남긴다). 그래서 모든 장의 사진 상태가 정해진다
-(photo_placement.complete) — 사진이 놓이지 않은 장은 「사진 없음 확인」 이다.
+**사진은 회차에 붙은 사진(session.photo_id)이다** (2026-11-24 고침). 그 회차 말씀이 쓰인 장이 하나면 그 장, 여럿이면 **그 회차의
+서로 다른 원문 턴을 가장 많이 쓴 장**(같으면 그 회차의 가장 앞선 턴을 쓴 장, 그래도 같으면 앞 장) 한 곳에 놓는다 — 그 장에서 그 회차
+말씀이 처음 나오는 문단 뒤. 원문 출처(turns)만 쓰고 AI 로 관련성을 짐작하지 않는다. 같은 사진을 서로 다른 회차가 썼으면 회차마다
+따로 놓는다(같은 장이면 한 번만 보인다). 어느 장에도 쓰이지 않은 회차의 사진 · 찾을 수 없는 사진은 놓지 않고 까닭을 남긴다
+(unplaced_photos · 화면 응답에도). 그때 그 사진이 갈 수 있었던 장(못 쓰는 사진의 대표 장 · 출처가 없는 장)은 사진이 없다고 단정하지
+않는다 — 「모름」 이라 AI 삽화를 만들지 않는다. 그 밖의 장은 「사진 없음 확인」 이다 (책에 사진이 있다고 다른 장의 삽화를 끄지 않는다).
+앞서(2026-11-16 ~ 11-23) 규칙은 「한 장에만 쓰였을 때만」 놓아, 여러 장에 걸친 회차의 사진이 빠지고 그 장들에 AI 삽화가 들어갔다.
 
 **다시 부르지 않는다.** 장면 선정과 그림은 장마다 한 번이다. 부르기 **전에** 「불렀다」 를 DB 에 적고, 결과를 적지 못한 채
 멈췄으면(서버 재시작) 다음에 그 장을 실패로 남긴다 — 다시 부르지 않는다. 실패 · 보류도 저절로 다시 하지 않는다.
@@ -156,34 +159,119 @@ def _size(data: bytes) -> tuple[int | None, int | None]:
 
 # ---------------------------------------------------------------- 입력
 
-def place_session_photos(chapters: list[dict], turn_map: list[dict], photos: dict[str, dict]) -> tuple[dict, list[dict]]:
+# 사진을 놓지 못한 까닭 — 화면 응답(unplaced_photos)에도 나간다
+UNPLACED_DETAIL = {
+    "session_not_cited": "이 회차의 말씀이 자서전 어느 장에도 출처로 쓰이지 않았다 — 어느 장에 놓을지 근거가 없어 놓지 않았다",
+    "photo_missing": "회차에 적힌 사진을 찾을 수 없다 — 사진이 지워졌거나 잘못된 사진 번호다",
+    "photo_not_owned": "회차에 적힌 사진이 이 계정의 사진이 아니다",
+    "photo_not_stored": "사진이 아직 저장되지 않았다 (올리는 중이었거나 실패했다)",
+}
+UNAVAILABLE = ("photo_missing", "photo_not_owned", "photo_not_stored")
+NOT_CITED_WHY = {
+    "memoir_has_no_sources": "자서전 문장에 출처(원문 턴)가 하나도 없다 — 집필 · 편집 과정에서 출처가 빠졌을 수 있다",
+    "session_turns_not_cited": "자서전은 다른 회차의 말씀을 출처로 쓰지만 이 회차의 말씀은 쓰지 않았다 — 이 회차 내용이 빠졌다",
+    "session_has_no_utterances": "이 회차에 자서전 재료가 된 말씀이 없다",
+}
+
+
+def session_usage(chapters: list[dict], turn_map: list[dict]) -> dict[str, dict[int, dict]]:
+    """
+    회차마다 장별로 쓰인 **서로 다른** 원문 턴과 그 회차 말씀이 처음 나오는 문단. 같은 턴을 여러 문장이 인용해도 한 번만 센다.
+        {session_id: {장 번호: {"turns": {전역 턴, …}, "first_para": 문단 번호 | None}}}
+    장 단위 출처(source_turns — 문장마다 출처가 없는 원고)도 그 장의 턴으로 센다 (문단은 모른다).
+    """
+    sid_of = {m["global_turn"]: m["session_id"] for m in turn_map}
+    out: dict[str, dict[int, dict]] = {}
+    for ch in chapters:
+        for pi, para in enumerate(ch.get("paragraphs") or []):
+            for x in para.get("sentences") or []:
+                for g in x.get("turns") or []:
+                    if g in sid_of:
+                        u = out.setdefault(sid_of[g], {}).setdefault(ch["no"], {"turns": set(), "first_para": None})
+                        u["turns"].add(g)
+                        u["first_para"] = pi if u["first_para"] is None else min(u["first_para"], pi)
+        for g in ch.get("source_turns") or []:
+            if g in sid_of:
+                out.setdefault(sid_of[g], {}).setdefault(ch["no"], {"turns": set(), "first_para": None})["turns"].add(g)
+    return out
+
+
+def representative_chapter(usage: dict[int, dict]) -> tuple[int, dict]:
+    """
+    회차 사진을 놓을 대표 장 — 원문 출처만으로 정한다 (AI 로 관련성을 짐작하지 않는다).
+        ① 그 회차의 서로 다른 원문 턴을 가장 많이 쓴 장
+        ② 같으면 그 회차의 가장 앞선 원문 턴을 쓴 장 (회차의 첫 이야기가 나오는 장)
+        ③ 그래도 같으면 장 번호가 작은 장
+    """
+    no = min(usage, key=lambda n: (-len(usage[n]["turns"]), min(usage[n]["turns"]), n))
+    rule = "single_chapter" if len(usage) == 1 else "most_distinct_turns"
+    return no, {"rule": rule, "chapters": {str(n): len(u["turns"]) for n, u in sorted(usage.items())}}
+
+
+def place_session_photos(chapters: list[dict], turn_map: list[dict], photos: dict[str, dict],
+                         unavailable: dict[str, dict] | None = None, utterances: list[dict] | None = None) -> tuple[dict, list[dict]]:
     """
     회차 사진 → 장. {장 번호: [사진]} 과 놓지 않은 사진 목록.
 
-    photos 는 {session_id: 사진 행}. 한 회차의 말씀이 **한 장에만** 쓰였을 때 그 장에 놓고, 자리는 그 회차 말씀이 처음
-    나오는 문단 뒤다. 여러 장에 걸쳤거나 어느 장에도 쓰이지 않았으면 놓지 않는다.
+    photos 는 {session_id: 사진 행}(쓸 수 있는 사진), unavailable 은 {session_id: {photo_id, reason}}(회차에 적혔지만 못 쓰는 사진).
+    - 그 회차 말씀이 쓰인 장이 하나면 그 장, 여럿이면 대표 장(representative_chapter) 한 곳에 놓는다. 자리는 그 장에서 그 회차 말씀이
+      처음 나오는 문단 뒤다 (모르면 장 머리).
+    - **같은 사진을 서로 다른 회차가 썼으면 회차마다 따로 놓는다** — 파일이 같다고 빼지 않는다. 같은 장에 같은 사진이 두 번 놓이면
+      한 번만 보이고, 두 회차의 연결은 sessions 에 함께 남긴다.
+    - 어느 장에도 쓰이지 않은 회차의 사진은 놓지 않는다(session_not_cited) — 첫 장 같은 데 억지로 놓지 않고 까닭을 남긴다.
+    - 못 쓰는 사진도 대표 장을 적어 둔다 — 그 장은 사진이 없다고 단정하지 않는다(build_input 의 「모름」).
     """
-    sid_of = {m["global_turn"]: m["session_id"] for m in turn_map}
-    used: dict[str, list[tuple[int, int]]] = {}
-    for ch in chapters:
-        for pi, para in enumerate(ch["paragraphs"]):
-            for x in para["sentences"]:
-                for t in x.get("turns") or []:
-                    if t in sid_of:
-                        used.setdefault(sid_of[t], []).append((ch["no"], pi))
+    usage = session_usage(chapters, turn_map)
+    any_cited = any(usage.values())
+    said = {}
+    for u in utterances or []:
+        said[u["session_id"]] = said.get(u["session_id"], 0) + 1
     placed: dict[int, list[dict]] = {}
     unplaced = []
     for sid, p in photos.items():
-        spots = used.get(sid, [])
-        nos = sorted({no for no, _ in spots})
         base = {"photo_id": p["photo_id"], "session_id": sid}
-        if len(nos) == 1:
-            first = min(pi for no, pi in spots if no == nos[0])
-            placed.setdefault(nos[0], []).append({**base, "after_paragraph": first, "width": p.get("width"),
-                                                  "height": p.get("height"), "url": f"/api/photos/{p['photo_id']}"})
-        else:
-            unplaced.append({**base, "reason": "session_in_many_chapters" if nos else "session_not_cited", "chapters": nos})
+        if not usage.get(sid):
+            why = ("session_has_no_utterances" if utterances is not None and not said.get(sid)
+                   else "session_turns_not_cited" if any_cited else "memoir_has_no_sources")
+            unplaced.append({**base, "reason": "session_not_cited", "diagnosis": why, "chapters": []})
+            continue
+        no, basis = representative_chapter(usage[sid])
+        first = usage[sid][no]["first_para"]
+        row = next((x for x in placed.get(no, []) if x["photo_id"] == p["photo_id"]), None)
+        if row is not None:                                   # 같은 장 · 같은 사진 — 한 번만 보이고 두 회차의 연결은 남긴다
+            row["sessions"].append(sid)
+            if first is not None and (row["after_paragraph"] is None or first < row["after_paragraph"]):
+                row["after_paragraph"] = first
+            continue
+        placed.setdefault(no, []).append({**base, "sessions": [sid], "after_paragraph": first, "width": p.get("width"),
+                                          "height": p.get("height"), "url": f"/api/photos/{p['photo_id']}", "placement": basis})
+    for sid, miss in (unavailable or {}).items():
+        no = representative_chapter(usage[sid])[0] if usage.get(sid) else None
+        unplaced.append({"photo_id": miss["photo_id"], "session_id": sid, "reason": miss["reason"],
+                         "chapters": sorted(usage.get(sid, {})), "chapter": no})
+    for rows in placed.values():                              # 한 장 안에서는 문단 순서대로 (같은 문단이면 회차 순서)
+        rows.sort(key=lambda x: (x["after_paragraph"] if x["after_paragraph"] is not None else -1))
     return placed, unplaced
+
+
+def uncertain_chapters(chapters: list[dict], placed: dict, unplaced: list[dict]) -> dict[int, str]:
+    """
+    사진이 없다고 단정할 수 없는 장 — 그 장에는 AI 삽화를 만들지 않는다 (사진 상태 「모름」). {장 번호: 까닭}
+        못 쓰는 사진(photo_missing · photo_not_owned · photo_not_stored)의 대표 장 — 사용자가 사진을 붙인 이야기의 장이다
+        어느 장에도 쓰이지 않은 회차 사진이 있을 때, 문장에 출처가 하나도 없는 장 — 그 사진이 갈 장일 수 있다
+    사진이 실제로 놓인 장은 「사진 있음」 이 먼저다. 출처가 있는 다른 장은 그대로 — 책에 사진이 있다고 다른 장의 삽화를 끄지 않는다.
+    """
+    out: dict[int, str] = {}
+    for u in unplaced:
+        if u["reason"] in UNAVAILABLE and u.get("chapter") is not None and u["chapter"] not in placed:
+            out[u["chapter"]] = u["reason"]
+    if any(u["reason"] == "session_not_cited" for u in unplaced):
+        for ch in chapters:
+            cites = any(x.get("turns") for para in ch.get("paragraphs") or [] for x in para.get("sentences") or []) \
+                or bool(ch.get("source_turns"))
+            if not cites and ch["no"] not in placed:
+                out.setdefault(ch["no"], "chapter_without_sources")
+    return out
 
 
 async def build_input(rec: dict, user_id: str) -> tuple[dict, list[dict]]:
@@ -198,22 +286,34 @@ async def build_input(rec: dict, user_id: str) -> tuple[dict, list[dict]]:
         recs.append(r)
     src, turn_map = memoir.merge(recs)
     photos: dict[str, dict] = {}
+    unavailable: dict[str, dict] = {}
     for r in recs:
         if not r.get("photo_id"):
             continue
         p = await store.load_photo(r["photo_id"])
-        if p is not None and p["user_id"] == user_id and p["status"] == "stored":
+        why = ("photo_missing" if p is None else "photo_not_owned" if p["user_id"] != user_id
+               else "photo_not_stored" if p["status"] != "stored" else None)
+        if why:                                               # 회차에 사진이 적혔는데 못 쓴다 — 조용히 빼지 않고 까닭을 남긴다
+            unavailable[r["session_id"]] = {"photo_id": str(r["photo_id"]), "reason": why}
+        else:
             photos[r["session_id"]] = p
     chapters = copy.deepcopy(result.get("chapters") or [])
-    placed, unplaced = place_session_photos(chapters, turn_map, photos)
+    placed, unplaced = place_session_photos(chapters, turn_map, photos, unavailable, src["utterances"])
+    unsure = uncertain_chapters(chapters, placed, unplaced)
     for ch in chapters:
-        ch["photos"] = placed.get(ch["no"], [])
+        if ch["no"] in placed:
+            ch["photos"] = placed[ch["no"]]
+        elif ch["no"] not in unsure:
+            ch["photos"] = []                                 # 사진이 없는 것이 확인된 장
+        # unsure 인 장은 photos 칸을 두지 않는다 → photo_states 가 「모름」 으로 본다 (AI 삽화를 만들지 않는다)
     data = {"schema_version": il.INPUT_SCHEMA,
             "memoir": {"memoir_id": rec["memoir_id"], "style": result.get("style"), "title": result.get("title"),
                        "chapters": chapters},
             "source": {"utterances": src["utterances"], "turn_map": turn_map},
             "photos": [{"photo_id": p["photo_id"], "session_id": sid, "turns": [], "clues": None} for sid, p in photos.items()],
-            "photo_placement": {"complete": True, "basis": "회차 사진(session.photo_id)을 장에 놓는 규칙이 모든 장에 적용됐다"}}
+            "photo_placement": {"complete": not unsure,
+                                "basis": "회차 사진(session.photo_id)을 그 회차 말씀이 가장 많이 쓰인 장에 놓는 규칙",
+                                "uncertain_chapters": {str(k): v for k, v in sorted(unsure.items())}}}
     return data, unplaced
 
 
@@ -357,6 +457,62 @@ async def _save(memoir_id: str, user_id: str, doc: dict) -> None:
     await store.save_memoir_illustrations(memoir_id, user_id, doc)
 
 
+def apply_photo_state(ch: dict, ph: dict) -> str | None:
+    """
+    장 하나에 사진 상태를 얹는다. 바뀐 것을 돌려준다 (없으면 None). **모델 · 그림을 부르지 않는다.**
+        사진 있음    → photo. 앞서 AI 삽화를 넣은 장이면 그 그림 기록은 지우지 않고 남긴다 — 화면에는 사진이 먼저다
+        모름         → 아직 처리하지 않은 장 · 사진 장이었던 장은 photo_unknown (AI 삽화를 만들지 않는다).
+                       이미 넣은 AI 삽화 · 실패 · 보류 기록은 그대로 둔다 — 다시 계산했다고 있던 결과를 지우지 않는다
+        사진 없음    → 사진 장이었는데 이제 사진이 없으면 photo_unknown(사진이 사라졌다 · 다시 부르지 않는다). 그 밖에는 그대로
+    """
+    before = ch.get("state")
+    ch["photo_state"], ch["photo_basis"] = ph["state"], ph["basis"]
+    ch["photos"] = [{k: p.get(k) for k in ("photo_id", "after_paragraph", "width", "height", "sessions")} for p in ph["photos"]]
+    if ph["state"] == "has_photo":
+        if before == ILLUSTRATED:
+            ch["photo_over_illustration"] = {"at": _now(), "image_kept": True}
+        ch["state"], ch["reason"], ch["failure"] = PHOTO, "이 장에 사진이 있다 — 삽화를 넣지 않는다", None
+    elif ph["state"] == "unknown":
+        if before in (None, PENDING, PHOTO, UNKNOWN):
+            ch["state"], ch["failure"] = UNKNOWN, ["photo_info_missing"]
+    elif before == PHOTO:
+        ch["state"], ch["failure"] = UNKNOWN, ["photo_missing"]
+    return None if ch.get("state") == before else f"{before} → {ch.get('state')}"
+
+
+async def refresh_photos(memoir_id: str, user_id: str, apply: bool = False) -> dict:
+    """
+    이미 만든 자서전의 사진 배치만 지금 규칙으로 다시 계산한다 — **모델 · 그림을 부르지 않고**, 책 상태를 running 으로 두지 않는다.
+    사진이 새로 놓이는 장은 photo 로 바뀐다(앞서 넣은 AI 삽화 기록은 지우지 않는다). 새로 그림을 만들 장은 생기지 않는다.
+    apply=False 면 바뀔 것만 보여 준다.
+    """
+    rec = await store.load_memoir(memoir_id, user_id)
+    if rec is None:
+        return {"memoir_id": memoir_id, "found": False}
+    doc = copy.deepcopy(rec.get("illustrations"))
+    if not doc or not doc.get("chapters"):
+        return {"memoir_id": memoir_id, "found": True, "changes": [], "note": "삽화 처리 기록이 없다 — 다시 계산할 것이 없다"}
+    data, unplaced = await build_input(rec, user_id)
+    states = book.photo_states(data)
+    changes = []
+    for it in book.toc(data):
+        ch = doc["chapters"].get(str(it["no"]))
+        if ch is None:
+            continue
+        old_photos = [x.get("photo_id") for x in ch.get("photos") or []]
+        moved = apply_photo_state(ch, states[it["ident"]])
+        new_photos = [x.get("photo_id") for x in ch.get("photos") or []]
+        if moved or old_photos != new_photos:
+            changes.append({"no": it["no"], "state": moved or ch.get("state"), "photos": new_photos,
+                            "image_kept": bool((ch.get("image") or {}).get("storage_key")) and ch.get("state") == PHOTO})
+    doc["unplaced_photos"] = unplaced
+    if apply and (changes or unplaced != (rec.get("illustrations") or {}).get("unplaced_photos")):
+        doc.setdefault("photo_refresh_log", []).append({"at": _now(), "changes": changes, "unplaced": len(unplaced)})
+        await _save(memoir_id, user_id, doc)
+    return {"memoir_id": memoir_id, "found": True, "applied": apply, "changes": changes, "unplaced_photos": unplaced,
+            "uncertain_chapters": data["photo_placement"]["uncertain_chapters"], "calls": 0}
+
+
 async def run(memoir_id: str, user_id: str, *, select_call=None, image_call=None) -> dict | None:
     """
     한 권을 장마다 처리한다. 장 하나의 실패가 다른 장을 막지 않는다. 상태는 단계마다 DB 에 적는다.
@@ -394,13 +550,7 @@ async def run(memoir_id: str, user_id: str, *, select_call=None, image_call=None
         key = str(it["no"])
         ch = doc["chapters"].get(key) or {"no": it["no"], "title": it["title"], "state": PENDING}
         doc["chapters"][key] = ch
-        ph = photos[it["ident"]]
-        ch["photo_state"], ch["photo_basis"] = ph["state"], ph["basis"]
-        ch["photos"] = [{k: p.get(k) for k in ("photo_id", "after_paragraph", "width", "height")} for p in ph["photos"]]
-        if ph["state"] == "has_photo":
-            ch["state"], ch["reason"] = PHOTO, "이 장에 사진이 있다 — 삽화를 넣지 않는다"
-        elif ph["state"] == "unknown":
-            ch["state"], ch["failure"] = UNKNOWN, ["photo_info_missing"]
+        apply_photo_state(ch, photos[it["ident"]])
     await _save(memoir_id, user_id, doc)
 
     for it in items:
@@ -547,10 +697,18 @@ def view(memoir_id: str, doc: dict | None) -> dict:
                          "width": img.get("width"), "height": img.get("height"), "ai_generated": True,
                          "caption": "AI가 그린 그림", "scene_title": (ch.get("select") or {}).get("scene_title")})
         chapters.append({"no": int(key), "state": ch.get("state"), "figures": figs, "failure": ch.get("failure"),
+                         "photo_state": ch.get("photo_state"),
                          # 그 장의 그림을 고른 방식 — 앞선 방식의 결과를 새 방식의 결과처럼 보이지 않게 함께 낸다
                          "policy": _policy_id_of(ch) if ch.get("select") else None})
+    # 회차에 붙였지만 어느 장에도 놓지 못한 사진 — 조용히 사라지지 않게 까닭과 함께 낸다 (화면이 따로 보여 줄 수 있다)
+    unplaced = [{"photo_id": u.get("photo_id"), "session_id": u.get("session_id"), "reason": u.get("reason"),
+                 "diagnosis": u.get("diagnosis"), "chapters": u.get("chapters") or [],
+                 "detail": UNPLACED_DETAIL.get(u.get("reason"), u.get("reason")),
+                 "url": f"/api/photos/{u['photo_id']}" if u.get("reason") not in UNAVAILABLE and u.get("photo_id") else None}
+                for u in doc.get("unplaced_photos") or []]
     return {"status": doc.get("status"), "automatic": True, "human_reviewed": False,
-            "policy": (doc.get("settings") or {}).get("policy_id") or book.POLICY_IDS["scene"], "chapters": chapters}
+            "policy": (doc.get("settings") or {}).get("policy_id") or book.POLICY_IDS["scene"], "chapters": chapters,
+            "unplaced_photos": unplaced}
 
 
 def image_record(doc: dict | None, no: str) -> dict | None:

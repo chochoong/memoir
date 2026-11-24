@@ -197,14 +197,19 @@ def test_interrupted_calls_are_not_repeated_after_a_restart(world):
     assert doc["chapters"]["1"]["state"] == svc.PHOTO
 
 
-def test_a_session_photo_counts_only_for_the_one_chapter_it_belongs_to():
+def test_a_session_photo_split_over_chapters_goes_to_one_representative_chapter():
+    """
+    2026-11-24 뜻이 바뀐 시험 — 앞서는 「여러 장에 걸친 회차의 사진은 어느 장에도 놓지 않는다」(session_in_many_chapters)를 확인했다.
+    그 규칙이 사용자가 붙인 사진을 빠뜨리고 그 장들에 AI 삽화를 넣는 원인이라, 대표 장 한 곳에 놓는 규칙으로 바꿨다
+    (자세한 사례는 tests/test_memoir_illust_photos.py).
+    """
     row, _, photos = book()
     chapters = row["result"]["chapters"]
     tmap = [{"global_turn": 1, "session_id": "s-01", "turn": 1}, {"global_turn": 2, "session_id": "s-01", "turn": 2},
             {"global_turn": 3, "session_id": "s-03", "turn": 1}]
-    # s-01 의 말씀이 1장 · 2장에 걸쳤다 — 어느 장의 사진으로도 치지 않는다
+    # s-01 의 말씀이 1장(턴 1) · 2장(턴 2)에 한 턴씩 걸쳤다 — 같으면 그 회차의 앞선 턴을 쓴 1장
     placed, unplaced = svc.place_session_photos(chapters, tmap, {"s-01": photos[PHOTO]})
-    assert placed == {} and unplaced[0]["reason"] == "session_in_many_chapters" and unplaced[0]["chapters"] == [1, 2]
+    assert unplaced == [] and list(placed) == [1] and placed[1][0]["placement"]["chapters"] == {"1": 1, "2": 1}
     placed, unplaced = svc.place_session_photos(chapters, tmap, {"s-09": photos[PHOTO]})
     assert placed == {} and unplaced[0]["reason"] == "session_not_cited"
 
