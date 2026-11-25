@@ -34,8 +34,8 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
 from app.session import controller as sc
-from app.session import (auth, limits, link, memoir, memoir_illust_service, memoir_jobs, photo, photostore, postcard,
-                         prompt, share, store, stt, tts, words)
+from app.session import (auth, limits, link, memoir, memoir_illust_service, memoir_jobs, memoir_photos, photo, photostore,
+                         postcard, prompt, share, store, stt, tts, words)
 from app.session import style as styles
 from app.session.conf import env_flag, env_int, env_str
 from app.session.machine import State, TransitionError
@@ -1162,8 +1162,9 @@ async def saved_memoir(memoir_id: str, who: str = Depends(auth.current_user)):
         return _memoir_gone()
     doc = rec.pop("illustrations", None)
     memoir_illust_service.resume_if_stalled(rec["memoir_id"], who, doc)
+    rows = await _read(store.list_photo_placements(rec["memoir_id"], who))
     return {**{k: v for k, v in rec.items() if k != "user_id"},
-            "illustrations": memoir_illust_service.view(rec["memoir_id"], doc)}
+            "illustrations": memoir_photos.merged_view(rec["memoir_id"], doc, rec.get("result"), rows)}
 
 
 @app.get("/api/memoirs/saved/{memoir_id}/illustrations")
@@ -1174,7 +1175,8 @@ async def saved_memoir_illustrations(memoir_id: str, who: str = Depends(auth.cur
         return _memoir_gone()
     doc = rec.get("illustrations")
     memoir_illust_service.resume_if_stalled(rec["memoir_id"], who, doc)
-    return memoir_illust_service.view(rec["memoir_id"], doc)
+    rows = await _read(store.list_photo_placements(rec["memoir_id"], who))
+    return memoir_photos.merged_view(rec["memoir_id"], doc, rec.get("result"), rows)
 
 
 @app.get("/api/memoirs/saved/{memoir_id}/illustrations/{chapter_no}")
@@ -1197,6 +1199,182 @@ async def saved_memoir_illustration_image(memoir_id: str, chapter_no: int, reque
         raise HTTPException(503, "지금은 그림을 불러오지 못했습니다") from e
     return Response(content=data, media_type=img.get("mime") or "image/jpeg",
                     headers={"Cache-Control": f"private, max-age={photo.cache_seconds()}", "ETag": etag})
+
+
+# ---------------------------------------------------------------- 완성된 자서전의 사진 넣기 · 옮기기 · 빼기 (018)
+#
+# memoir_photos.py 머리 참조. 모델 · 그림 호출이 없다 — 넣은 사진도 분석하지 않는다.
+# 실패는 {detail, code} 다: 404 memoir_not_found · placement_not_found · photo_not_found,
+# 422 bad_position · no_such_chapter · no_such_paragraph · too_many_photos · photo_not_stored, 400 사진 형식, 503 저장 실패.
+
+def _placement_failure(e: memoir_photos.PlacementError) -> JSONResponse:
+    return JSONResponse({"detail": e.detail, "code": e.code}, status_code=e.status)
+
+
+def _placement_gone() -> JSONResponse:
+    return JSONResponse({"detail": "사진 배치를 찾을 수 없어요", "code": "placement_not_found"}, status_code=404)
+
+
+async def _json_small(request: Request) -> dict:
+    raw = await _body_capped(request, 16_384)
+    try:
+        body = json.loads(raw or b"{}")
+    except ValueError:
+        raise HTTPException(400, "JSON 본문을 읽지 못했습니다") from None
+    if not isinstance(body, dict):
+        raise HTTPException(400, "JSON 객체여야 합니다")
+    return body
+
+
+def _placement_out(p: dict) -> dict:
+    return {"placement_id": p["placement_id"], "origin": p["origin"], "photo_id": p["photo_id"],
+            "url": f"/api/photos/{p['photo_id']}", "chapter_no": p.get("chapter_no"),
+            "after_paragraph": p.get("after_paragraph"), "display_order": p.get("display_order") or 0,
+            "width": p.get("width"), "height": p.get("height")}
+
+
+@app.post("/api/memoirs/saved/{memoir_id}/photos", status_code=201)
+async def memoir_photo_add(memoir_id: str, request: Request, chapter_no: int | None = None,
+                           after_paragraph: int | None = None, display_order: int | None = None,
+                           request_id: str | None = None, who: str = Depends(auth.current_user)):
+    """
+    책의 한 문단 뒤에 사진을 넣는다. 두 가지 모양:
+        새 사진    본문 = 사진 바이트 그대로 (POST /api/photos 와 같다), 자리는 주소의 ?chapter_no=&after_paragraph=
+        내 사진    Content-Type: application/json  {photo_id, chapter_no, after_paragraph, display_order?, request_id?}
+                   — 이미 올린 내 사진(예: 책에서 뺀 회차 사진)을 다시 넣는다
+    display_order 가 없으면 그 문단 뒤 맨 끝. request_id 를 주면 같은 요청을 다시 보내도 한 장만 들어간다.
+    응답 201 {placement}. 원고 · 엽서 · 자동 배치는 바꾸지 않는다.
+    """
+    rec = await _read(store.load_memoir(memoir_id[:64], who))
+    if rec is None:
+        return _memoir_gone()
+    as_json = (request.headers.get("content-type") or "").split(";")[0].strip().lower() == "application/json"
+    body = await _json_small(request) if as_json else {}
+    if as_json:
+        chapter_no, after_paragraph = body.get("chapter_no"), body.get("after_paragraph")
+        display_order, request_id = body.get("display_order"), body.get("request_id")
+    try:
+        no, ap = memoir_photos.check_position(rec["result"], chapter_no, after_paragraph)
+        order = None if display_order is None else memoir_photos.as_int(display_order, "display_order")
+    except memoir_photos.PlacementError as e:
+        return _placement_failure(e)
+    rows = await _read(store.list_photo_placements(rec["memoir_id"], who))
+    pid = memoir_photos.manual_id(rec["memoir_id"], who, str(request_id)[:128] if request_id else None)
+    again = next((r for r in rows if r["placement_id"] == pid), None)
+    if again is not None:                                        # 같은 요청을 다시 보냈다 — 두 장을 만들지 않는다
+        return JSONResponse({"placement": jsonable_encoder(_placement_out(again))}, status_code=200)
+    if sum(1 for r in rows if r["origin"] == "manual") >= memoir_photos.max_photos():
+        return JSONResponse({"detail": f"책 한 권에 사진은 {memoir_photos.max_photos()}장까지 넣을 수 있어요",
+                             "code": "too_many_photos"}, status_code=422)
+
+    saved = None
+    if as_json:
+        pic = await _read(store.load_photo(str(body.get("photo_id") or "")))
+        if pic is None or pic["user_id"] != who:
+            return JSONResponse({"detail": "사진을 찾을 수 없어요", "code": "photo_not_found"}, status_code=404)
+        if pic["status"] != "stored":
+            return JSONResponse({"detail": "사진이 아직 저장되지 않았어요", "code": "photo_not_stored"}, status_code=422)
+    else:
+        data = await _body_capped(request, photostore.max_bytes())
+        try:
+            prepared = await photo.prepare(data)
+        except photo.PhotoRejected as e:
+            raise HTTPException(400, str(e)) from e
+        try:
+            pic = saved = await photo.save(prepared, user_id=who)
+        except (store.StoreUnavailable, photostore.PhotoStoreError) as e:
+            raise HTTPException(503, "지금은 사진을 저장하지 못했습니다") from e
+        # 분석(photo.analyze_later)을 걸지 않는다 — 책에 넣는 사진은 질문에 쓰지 않는다 (유료 호출 0)
+
+    now = memoir_photos.final_photos(rec.get("illustrations"), rows)
+    try:
+        row = await store.save_photo_placement({
+            "placement_id": pid, "memoir_id": rec["memoir_id"], "user_id": who, "photo_id": pic["photo_id"],
+            "origin": "manual", "chapter_no": no, "after_paragraph": ap,
+            "display_order": order if order is not None else memoir_photos.next_order(now, no, ap),
+            "hidden": False, "width": pic.get("width"), "height": pic.get("height")})
+    except store.StoreUnavailable as e:
+        if saved is not None:                                    # 방금 올린 사진은 되돌린다 (배치 없이 남는 사진을 만들지 않는다)
+            try:
+                await photostore.current().delete(saved["storage_key"])
+            except Exception as e2:                              # noqa: BLE001
+                log.error("자서전 사진 되돌리기 실패 %s (%s)", saved["photo_id"][:8], type(e2).__name__)
+            await store.delete_photo_row(saved["photo_id"])
+        raise HTTPException(503, "지금은 사진을 넣지 못했습니다") from e
+    if row is None:
+        return _placement_gone()
+    log.info("자서전 사진 넣기 %s — %s장 %s문단 뒤 · %s", rec["memoir_id"][:10], no, ap, "새 사진" if saved else "내 사진")
+    return JSONResponse({"placement": jsonable_encoder(_placement_out(row))}, status_code=201)
+
+
+def _target(rec: dict, rows: list[dict], placement_id: str) -> dict | None:
+    """옮기거나 뺄 사진 — 지금 책에 보이는 것만 (자동 · 옮겨 둔 자동 · 넣은 사진). 뺀 사진은 없다(404)."""
+    return next((p for p in memoir_photos.final_photos(rec.get("illustrations"), rows)
+                 if p["placement_id"] == placement_id), None)
+
+
+@app.patch("/api/memoirs/saved/{memoir_id}/photos/{placement_id}")
+async def memoir_photo_move(memoir_id: str, placement_id: str, request: Request,
+                            who: str = Depends(auth.current_user)):
+    """
+    사진을 옮긴다 — 자동으로 놓인 회차 사진(a_…)도, 넣은 사진(p_…)도. 본문 {chapter_no?, after_paragraph?, display_order?}.
+    자리를 바꾸고 display_order 를 안 주면 새 자리의 맨 끝. 자동 사진을 옮긴 자리는 재처리 뒤에도 지킨다.
+    """
+    rec = await _read(store.load_memoir(memoir_id[:64], who))
+    if rec is None:
+        return _memoir_gone()
+    body = await _json_small(request)
+    rows = await _read(store.list_photo_placements(rec["memoir_id"], who))
+    cur = _target(rec, rows, placement_id[:64])
+    if cur is None:
+        return _placement_gone()
+    try:
+        moving = "chapter_no" in body or "after_paragraph" in body
+        no, ap = (memoir_photos.check_position(rec["result"], body.get("chapter_no", cur.get("chapter_no")),
+                                               body.get("after_paragraph", cur.get("after_paragraph")))
+                  if moving else (cur.get("chapter_no"), cur.get("after_paragraph")))
+        given = body.get("display_order")
+        order = memoir_photos.as_int(given, "display_order") if given is not None else None
+    except memoir_photos.PlacementError as e:
+        return _placement_failure(e)
+    if order is None:
+        now = memoir_photos.final_photos(rec.get("illustrations"), rows)
+        same = (no, ap) == (cur.get("chapter_no"), cur.get("after_paragraph"))
+        order = (cur.get("display_order") or 0) if same else memoir_photos.next_order(now, no, ap, skip=placement_id)
+    row = await _read(store.save_photo_placement({
+        "placement_id": cur["placement_id"], "memoir_id": rec["memoir_id"], "user_id": who, "photo_id": cur["photo_id"],
+        "origin": cur["origin"], "chapter_no": no, "after_paragraph": ap, "display_order": order, "hidden": False,
+        "width": cur.get("width"), "height": cur.get("height")}))
+    if row is None:
+        return _placement_gone()
+    return {"placement": _placement_out(row)}
+
+
+@app.delete("/api/memoirs/saved/{memoir_id}/photos/{placement_id}", status_code=204)
+async def memoir_photo_remove(memoir_id: str, placement_id: str, who: str = Depends(auth.current_user)):
+    """
+    책에서 사진을 뺀다 — 이 책에서만. 사진 파일 · 엽서 · 다른 책은 그대로다.
+    자동 사진은 「뺐다」 를 남긴다 (재처리 · 다시 열기에도 다시 나타나지 않는다). 다시 넣으려면 POST 의 JSON 모양으로.
+    """
+    rec = await _read(store.load_memoir(memoir_id[:64], who))
+    if rec is None:
+        return _memoir_gone()
+    rows = await _read(store.list_photo_placements(rec["memoir_id"], who))
+    cur = _target(rec, rows, placement_id[:64])
+    if cur is None:
+        return _placement_gone()
+    if cur["origin"] == "manual":
+        ok = await _read(store.delete_photo_placement(cur["placement_id"], rec["memoir_id"], who))
+    else:
+        ok = await _read(store.save_photo_placement({
+            "placement_id": cur["placement_id"], "memoir_id": rec["memoir_id"], "user_id": who,
+            "photo_id": cur["photo_id"], "origin": "auto", "chapter_no": cur.get("chapter_no"),
+            "after_paragraph": cur.get("after_paragraph"), "display_order": cur.get("display_order") or 0,
+            "hidden": True, "width": cur.get("width"), "height": cur.get("height")})) is not None
+    if not ok:
+        return _placement_gone()
+    log.info("자서전 사진 빼기 %s — %s", rec["memoir_id"][:10], cur["origin"])
+    return Response(status_code=204)
 
 
 @app.delete("/api/memoirs/saved/{memoir_id}")

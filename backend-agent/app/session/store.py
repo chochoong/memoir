@@ -1143,6 +1143,75 @@ async def save_memoir_illustrations(memoir_id: str, user_id: str, doc: dict) -> 
     await _auth_write("자서전 삽화 상태 저장", run)
 
 
+# ---------------------------------------------------------------- 자서전 사진 배치 (018)
+#
+# 사용자가 완성된 책에 넣거나 옮기거나 뺀 사진. 자동 배치(memoir.illustrations)와 따로 둔다 — memoir_photos.py 머리 참조.
+# 모든 쿼리에 memoir_id · user_id 를 함께 건다 — 남의 책 · 남의 배치는 「없음」 이다.
+
+_PLACEMENT_COLS = ("placement_id, memoir_id, user_id, photo_id, origin, chapter_no, after_paragraph, display_order, "
+                   "hidden, width, height, created_at, updated_at")
+
+
+def _placement_row(r: Any) -> dict:
+    d = {k: r[k] for k in ("placement_id", "memoir_id", "user_id", "origin", "chapter_no", "after_paragraph",
+                           "display_order", "hidden", "width", "height", "created_at", "updated_at")}
+    d["photo_id"] = str(r["photo_id"])
+    return d
+
+
+async def list_photo_placements(memoir_id: str, user_id: str) -> list[dict]:
+    """DB 를 열지 않은 서버(풀 없음)에는 배치가 있을 수 없다 — 빈 목록. 열린 DB 에서의 실패는 StoreUnavailable 이다."""
+    if _pool is None:
+        return []
+
+    async def run(con):
+        return await con.fetch(
+            f"""
+            SELECT {_PLACEMENT_COLS} FROM memoir_photo_placement
+             WHERE memoir_id = $1 AND user_id = $2
+             ORDER BY created_at, placement_id
+            """,
+            memoir_id, user_id)
+    return [_placement_row(r) for r in await _auth_write("자서전 사진 배치 읽기", run)]
+
+
+async def save_photo_placement(rec: dict) -> dict | None:
+    """
+    배치 한 줄을 넣거나 고친다 (placement_id 기준). 같은 id 가 **다른 책 · 다른 사람** 것이면 고치지 않고 None.
+    """
+    async def run(con):
+        return await con.fetchrow(
+            f"""
+            INSERT INTO memoir_photo_placement (placement_id, memoir_id, user_id, photo_id, origin, chapter_no,
+                                                after_paragraph, display_order, hidden, width, height)
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+            ON CONFLICT (placement_id) DO UPDATE
+               SET chapter_no = EXCLUDED.chapter_no, after_paragraph = EXCLUDED.after_paragraph,
+                   display_order = EXCLUDED.display_order, hidden = EXCLUDED.hidden, updated_at = now()
+             WHERE memoir_photo_placement.memoir_id = EXCLUDED.memoir_id
+               AND memoir_photo_placement.user_id = EXCLUDED.user_id
+            RETURNING {_PLACEMENT_COLS}
+            """,
+            rec["placement_id"], rec["memoir_id"], rec["user_id"], uuid.UUID(str(rec["photo_id"])), rec["origin"],
+            rec.get("chapter_no"), rec.get("after_paragraph"), int(rec.get("display_order") or 0),
+            bool(rec.get("hidden")), rec.get("width"), rec.get("height"))
+    row = await _auth_write("자서전 사진 배치 저장", run)
+    return _placement_row(row) if row else None
+
+
+async def delete_photo_placement(placement_id: str, memoir_id: str, user_id: str) -> bool:
+    """사용자가 넣은 사진(manual)을 책에서 뺀다 — 행만 지운다. 사진 파일 · photo 행은 그대로다."""
+    async def run(con):
+        return await con.fetchval(
+            """
+            DELETE FROM memoir_photo_placement
+             WHERE placement_id = $1 AND memoir_id = $2 AND user_id = $3 AND origin = 'manual'
+            RETURNING placement_id
+            """,
+            placement_id, memoir_id, user_id)
+    return bool(await _auth_write("자서전 사진 배치 지우기", run))
+
+
 async def delete_memoir(memoir_id: str, user_id: str) -> bool:
     async def run(con):
         return await con.fetchval(
