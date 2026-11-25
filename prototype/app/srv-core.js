@@ -9,7 +9,7 @@
     const CONFIG = {
     // 화면 아래와 개발용 패널에 그대로 찍힌다. 「고친 게 반영이 안 된 것 같다」는
     // 대부분 예전 파일이 열려 있는 경우라서, 눈으로 확인할 자리를 만들어 둔다.
-    version: 'v1.13 · 2026-11-25 (자서전 만들기 「문체 선택」 화면에 삽화 그림체 — 수채화 · 연필담채화 · 유화 · 기본 수채화)',
+    version: 'v1.14 · 2026-11-25 (자서전 만들기 「문체 선택」 화면에 삽화 그림체 — 수채화 · 애니풍 · 유화 · 기본 수채화)',
 
     // 이 화면을 백엔드가 직접 서빙하면(web/ 폴더) 빈 문자열 그대로 둔다.
     // 다른 포트에서 열어 시험할 때만 'http://127.0.0.1:8010' 처럼 채운다.
@@ -368,7 +368,7 @@
     return res.json();
   }
 
-  // illustStyle — 삽화 그림체 (watercolor · pencil_wash · oil_painting · illust-style.js). 문체 style 과 따로 보낸다. 없으면 서버가 수채화
+  // illustStyle — 삽화 그림체 (watercolor · anime · oil_painting · illust-style.js). 문체 style 과 따로 보낸다. 없으면 서버가 수채화
   function memoirBody(req, style, illustStyle) {
     return JSON.stringify(Object.assign(req.exclude
       ? { elder_id: req.elderId, exclude_session_ids: req.exclude }

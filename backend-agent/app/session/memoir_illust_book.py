@@ -106,7 +106,7 @@ def policy_files(policy: str, art_style: str | None = None) -> dict:
         art = t.stored_art_style(art_style)
         return {"policy": policy, "policy_id": POLICY_IDS[policy], "checks_version": CHECKS_VERSIONS[policy],
                 "select_prompt": t.SELECT_FILE, "select_prompt_hash": t.prompt_hash(), "style": t.STYLE_FILE,
-                "style_hash": t.style_hash(), "art_style": art, "art_style_file": t.ART_STYLES[art]["file"],
+                "style_hash": t.style_hash(), "art_style": art, "art_style_file": t.KNOWN_ART_STYLES[art]["file"],
                 "art_style_hash": t.art_style_hash(art)}
     return {"policy": policy, "policy_id": POLICY_IDS[policy], "checks_version": CHECKS_VERSIONS[policy], "select_prompt": SELECT_FILE,
             "select_prompt_hash": prompt_hash(), "style": il.STYLE_FILE, "style_hash": il.prompt_hashes().get(il.STYLE_FILE),

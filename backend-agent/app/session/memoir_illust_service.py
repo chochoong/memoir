@@ -33,11 +33,13 @@ prepare_reprocess 가 그 장만 「지금 판으로 다시」 로 표시하고(
 
 **사람이 확인한 것이 아니다.** automatic: true · human_reviewed: false 로 적는다. 화면에는 「AI 가 그린 그림」 으로 보인다.
 
-**삽화 그림체는 책마다 하나다 (2026-11-25).** 자서전을 만들 때 화면이 보낸 illust_style(watercolor 수채화 · pencil_wash
-연필담채화 · oil_painting 유화, 없으면 수채화)을 schedule → run 이 책 기록(doc.art_style)에 적고, 그 책의 모든 AI 삽화를 그
+**삽화 그림체는 책마다 하나다 (2026-11-25).** 자서전을 만들 때 화면이 보낸 illust_style(watercolor 수채화 · anime
+애니풍 · oil_painting 유화, 없으면 수채화)을 schedule → run 이 책 기록(doc.art_style)에 적고, 그 책의 모든 AI 삽화를 그
 그림체로 그린다. **다시 처리해도 책에 적힌 그림체를 쓴다** — 그림체 칸이 없는 책(그림체를 고르기 전에 만든 책)은 수채화다.
 장마다 선정 기록(select.art_style · art_style_hash)과 그림 기록(image.art_style · style_id)에도 남는다. 이미 저장한 그림은
 그림체가 무엇이든 다시 그리지 않는다. 사진 장은 그림체와 상관없이 원본 사진이다. 문체(memoir.style)와는 따로다.
+연필담채화(pencil_wash)는 11-25 에 선택지에서 뺐다 — 새 책은 고를 수 없고(400), 이미 그 그림체로 만든 책은 그대로 보이고
+저장된 그림을 다시 쓰며 남은 장도 같은 그림체로 이어서 그린다. 애니풍으로 이름을 바꾸거나 다시 그리지 않는다.
 
 설정 (환경변수 — 함수 안에서 읽는다)
 
@@ -107,7 +109,8 @@ def book_art_style(doc: dict | None, requested: str | None = None) -> str:
     """
     그 책의 그림체. **기록이 있는 책은 기록이 정한다** — 다시 처리 · 이어서 처리해도 같은 그림체이고, 그림체 칸이 없는 앞선 책
     (그림체를 고르기 전에 만든 책)은 수채화다. requested(화면이 고른 값)는 기록이 없는 새 책에만 쓴다 — 없으면 수채화.
-    모르는 값은 UnsupportedArtStyle — 다른 그림체로 바꿔 그리지 않는다.
+    모르는 값은 UnsupportedArtStyle — 다른 그림체로 바꿔 그리지 않는다. 기록의 그림체가 지금은 고를 수 없는 것(연필담채화)이어도
+    그 책은 그 그림체 그대로다 — requested 로 덮지 않는다.
     """
     if doc:
         return th.stored_art_style(doc.get("art_style"))
@@ -729,7 +732,7 @@ def view(memoir_id: str, doc: dict | None) -> dict:
         status     off(꺼짐) · not_started · running · done · partial · failed
         chapters   [{no, state, art_style, figures: [{kind: photo|illustration, url, after_paragraph, width, height, ai_generated,
                      caption, art_style(삽화만)}]}]
-        art_style  {id: watercolor | pencil_wash | oil_painting, label: 수채화 | 연필담채화 | 유화} — 그 책의 그림체
+        art_style  {id: watercolor | anime | oil_painting, label: 수채화 | 애니풍 | 유화} — 그 책의 그림체
     """
     if not doc:
         return {"status": "not_started" if enabled() else "off", "automatic": True, "chapters": []}
@@ -762,7 +765,7 @@ def view(memoir_id: str, doc: dict | None) -> dict:
     return {"status": doc.get("status"), "automatic": True, "human_reviewed": False,
             "policy": (doc.get("settings") or {}).get("policy_id") or book.POLICY_IDS["scene"], "chapters": chapters,
             "unplaced_photos": unplaced,
-            "art_style": {"id": art, "label": (th.ART_STYLES.get(art) or {}).get("label")}}
+            "art_style": {"id": art, "label": (th.KNOWN_ART_STYLES.get(art) or {}).get("label")}}
 
 
 def image_record(doc: dict | None, no: str) -> dict | None:

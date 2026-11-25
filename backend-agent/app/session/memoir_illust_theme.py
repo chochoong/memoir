@@ -15,8 +15,9 @@
     build_theme_prompt  계획의 소재 · 구도 + 공통 양식(2_그림양식_v3) + 그 책의 그림체 하나로 한국어 그림 지시문을 조립한다
     choose_theme        위를 묶어 memoir_illust_book.choose 와 같은 모양의 결과를 낸다. 넣을 자리는 장의 첫 문단 뒤다
 
-**그림체는 그림 지시문의 표현 양식일 뿐이다 (2026-11-25).** 책마다 하나(수채화 watercolor · 연필담채화 pencil_wash ·
-유화 oil_painting, 기본 수채화)를 화면에서 고르고, 그 책의 모든 AI 삽화가 같은 그림체로 그려진다. 계획(주제 · 소재 · 구도)을
+**그림체는 그림 지시문의 표현 양식일 뿐이다 (2026-11-25).** 책마다 하나(수채화 watercolor · 애니풍 anime ·
+유화 oil_painting, 기본 수채화)를 화면에서 고르고, 그 책의 모든 AI 삽화가 같은 그림체로 그려진다.
+연필담채화(pencil_wash)는 새 책에서 고를 수 없다 — 이미 그 그림체로 만든 책만 그대로 읽고 이어서 그린다(RETIRED_ART_STYLES). 계획(주제 · 소재 · 구도)을
 고르는 지시문 v8 에는 그림체를 알리지 않는다 — 같은 장은 그림체가 달라도 같은 계획이고, 그림 지시문의 [그림체] ·
 [이 그림체에서 피할 것] 두 블록만 다르다. 그림체 때문에 원문에 없는 사건 · 인물 관계를 더하지 않는다(공통 양식 그대로).
 자서전 문체(memoir.style · spoken · essay …)와는 따로다.
@@ -53,11 +54,18 @@ TEXT_MAX, THEME_MAX, SHORT_MAX, MOOD_MAX, PERIOD_MAX, COMPOSITION_MAX = 40, 120,
 DEFAULT_COMPOSITION = "중심 소재를 화면 가운데에 두고, 둘레는 이 장의 분위기에 맞게 여백을 둔다"
 
 # 삽화 그림체 — 책마다 하나. 화면 · API 의 illust_style 과 같은 식별자다. 문체(style)와 따로다
+# ART_STYLES 는 **새 책이 고를 수 있는 것**이다 (화면의 선택지와 같다).
 ART_STYLES = {
     "watercolor": {"label": "수채화", "file": "2_그림체_수채화_v1.md"},
-    "pencil_wash": {"label": "연필담채화", "file": "2_그림체_연필담채화_v1.md"},
+    "anime": {"label": "애니풍", "file": "2_그림체_애니풍_v1.md"},
     "oil_painting": {"label": "유화", "file": "2_그림체_유화_v1.md"},
 }
+# 새 책은 고를 수 없는 그림체 — 이미 그 그림체로 만든 책의 기록만 읽는다 (조회 · 저장된 그림 다시 쓰기 · 남은 장 이어서 처리).
+# 연필담채화는 2026-11-25 견본을 본 뒤 선택지에서 빼고 애니풍을 넣었다. 그 기록을 애니풍으로 이름만 바꾸거나 다시 그리지 않는다.
+RETIRED_ART_STYLES = {
+    "pencil_wash": {"label": "연필담채화", "file": "2_그림체_연필담채화_v1.md"},
+}
+KNOWN_ART_STYLES = {**ART_STYLES, **RETIRED_ART_STYLES}
 DEFAULT_ART_STYLE = "watercolor"            # 고르지 않았을 때 · 그림체를 고르기 전에 만든 책
 ART_STYLE_CODE = "unsupported_illust_style"
 ART_STYLE_SAYS = "지원하지 않는 삽화 그림체예요."
@@ -80,17 +88,24 @@ def pick_art_style(v) -> str:
 
 
 def stored_art_style(v) -> str:
-    """저장된 책의 그림체. 값이 없으면(그림체를 고르기 전에 만든 책) 수채화다. 모르는 값은 거절한다."""
-    return DEFAULT_ART_STYLE if v in (None, "") else pick_art_style(v)
+    """
+    저장된 책의 그림체. 값이 없으면(그림체를 고르기 전에 만든 책) 수채화다. 지금은 고를 수 없는 그림체(RETIRED_ART_STYLES)도
+    그대로 돌려준다 — 그 책은 그 그림체의 책이다. 어느 목록에도 없는 값은 거절한다.
+    """
+    if v in (None, ""):
+        return DEFAULT_ART_STYLE
+    if not isinstance(v, str) or v not in KNOWN_ART_STYLES:
+        raise UnsupportedArtStyle(f"art_style={v!r}")
+    return v
 
 
 def art_style_hash(art: str) -> str:
-    return _file_hash(ART_STYLES[pick_art_style(art)]["file"])
+    return _file_hash(KNOWN_ART_STYLES[stored_art_style(art)]["file"])
 
 
 def art_style_blocks(art: str) -> dict[str, str]:
-    """그 그림체의 [그림체] · [이 그림체에서 피할 것] 블록."""
-    name = ART_STYLES[pick_art_style(art)]["file"]
+    """그 그림체의 [그림체] · [이 그림체에서 피할 것] 블록. 지금은 고를 수 없는 그림체도 — 그 그림체의 책을 이어서 처리할 때 쓴다."""
+    name = KNOWN_ART_STYLES[stored_art_style(art)]["file"]
     b = il._blocks(il.PROMPTS / name)
     missing = [n for n in ("1", "2") if not b.get(n)]
     if missing:
@@ -100,8 +115,9 @@ def art_style_blocks(art: str) -> dict[str, str]:
 
 def art_style_info(art: str) -> dict:
     """책 · 장 기록에 남기는 그림체 — 식별자 · 화면 이름 · 파일 · 해시."""
-    art = pick_art_style(art)
-    return {"id": art, "label": ART_STYLES[art]["label"], "file": ART_STYLES[art]["file"], "hash": art_style_hash(art)}
+    art = stored_art_style(art)
+    return {"id": art, "label": KNOWN_ART_STYLES[art]["label"], "file": KNOWN_ART_STYLES[art]["file"], "hash": art_style_hash(art),
+            "selectable": art in ART_STYLES}
 
 # 참고 정보(anchor 가 본문 어디에 나오는가)를 셀 때 낱말 뒤에 붙어도 같은 낱말로 보는 조사 · 서술격 어미. 판정에는 쓰지 않는다
 _PARTICLES = sorted("""은 는 이 가 을 를 에 에서 에게 께 께서 한테 의 와 과 도 만 로 으로 랑 이랑 하고 까지 부터 처럼 보다 마다
@@ -297,11 +313,13 @@ def build_theme_prompt(chk: dict, art_style: str = DEFAULT_ART_STYLE) -> dict:
     계획의 주제 · 소재 · 구도 + 공통 양식(v3) + 그 책의 그림체 하나로 조립한다. 본문에 없다고 모델이 적은 것(not_in_story)은 지시문에
     넣지 않는다. 순서 — 공통 양식 → 그림체 → 이 장의 주제 · 그릴 것 → 인물 표현 → 넣지 않는 것 → 이 그림체에서 피할 것.
     그림체가 달라도 주제 · 그릴 것 블록(scene_block)은 같다. 모르는 그림체는 IllustError("art_style") — 지시문에 넣지 않는다.
+    art_style 은 **그 책에 적힌 그림체**다 — 새 책이 고를 수 있는지는 라우트 · new_doc 이 pick_art_style 로 먼저 본다.
+    그래서 지금은 고를 수 없는 그림체(연필담채화)의 책도 남은 장을 같은 그림체로 그린다.
     """
     try:
-        art = pick_art_style(art_style)
+        art = stored_art_style(art_style) if art_style is not None else DEFAULT_ART_STYLE
     except UnsupportedArtStyle as e:
-        raise il.IllustError("art_style", f"모르는 그림체다: {art_style!r} (쓸 수 있는 값: {', '.join(ART_STYLES)})") from e
+        raise il.IllustError("art_style", f"모르는 그림체다: {art_style!r} (아는 값: {', '.join(KNOWN_ART_STYLES)})") from e
     blocks = style_blocks()
     medium = art_style_blocks(art)
     main, sub = chk["main"], chk["sub"]
@@ -322,8 +340,8 @@ def build_theme_prompt(chk: dict, art_style: str = DEFAULT_ART_STYLE) -> dict:
         return build_theme_prompt({**chk, "sub": sub[:-1]}, art)
     if len(text) > il.PROMPT_MAX:
         raise il.IllustError("prompt_too_long", f"그림 지시문이 {len(text)}자 — 상한 {il.PROMPT_MAX}자")
-    return {"style_id": f"{art}-{STYLE_VERSION}", "art_style": art, "art_style_label": ART_STYLES[art]["label"],
-            "art_style_file": ART_STYLES[art]["file"], "art_style_hash": art_style_hash(art), "style_file": STYLE_FILE,
+    return {"style_id": f"{art}-{STYLE_VERSION}", "art_style": art, "art_style_label": KNOWN_ART_STYLES[art]["label"],
+            "art_style_file": KNOWN_ART_STYLES[art]["file"], "art_style_hash": art_style_hash(art), "style_file": STYLE_FILE,
             "language": "ko", "policy": POLICY, "text": text, "scene_block": block,
             "elements_used": [s["text"] for s in main + sub],
             "composition": {"main": [s["text"] for s in main], "sub": [s["text"] for s in sub],

@@ -2,7 +2,7 @@
   'use strict';
   /* ═══════════════════════════════════════════════════════════════
      illust-style — 자서전 만들기 「문체 선택」 화면의 「삽화 그림체」 고르기 (2026-11-25)
-       · 수채화(watercolor · 기본) · 연필담채화(pencil_wash) · 유화(oil_painting) 셋 중 하나.
+       · 수채화(watercolor · 기본) · 애니풍(anime) · 유화(oil_painting) 셋 중 하나.
        · 고른 값은 POST /api/memoirs 본문의 illust_style 로 간다 (srv-memoir.js generate → api.memoirStart).
          고르지 않으면 수채화다 — 서버도 값이 없으면 수채화로 그린다. 모르는 값은 서버가 400 unsupported_illust_style.
        · 그 책의 모든 AI 삽화(사진이 없는 장)가 같은 그림체로 그려진다. 사진은 원본 그대로. 장마다 고르거나 승인하는 단계는 없다.
@@ -11,7 +11,7 @@
      ═══════════════════════════════════════════════════════════════ */
   const LIST = [
     {id: 'watercolor', title: '수채화', note: '부드러운 번짐과 종이결, 따뜻하고 절제된 색'},
-    {id: 'pencil_wash', title: '연필담채화', note: '연필 선과 명암 위에 옅은 색을 더한 손그림'},
+    {id: 'anime', title: '애니풍', note: '깔끔한 선과 맑은 색, 애니메이션 영화 같은 그림'},
     {id: 'oil_painting', title: '유화', note: '붓 자국과 겹친 물감, 깊이 있는 색감'},
   ];
   const DEFAULT = 'watercolor';

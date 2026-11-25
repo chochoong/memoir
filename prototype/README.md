@@ -32,7 +32,7 @@ v0.60 부터 화면은 **팀 시안 2차 B안**(처음가기 · 라디오 스튜
 | `answer-box.js` | 인터뷰 「글로 쓰기」 칸 — 한 번에 1만 자, 길면 칸 안에서 스크롤, 글자 수 표시 | `POST /api/sessions/{id}/speech` (서버 글자 수 상한 없음) |
 | `draft-dock.js` | 자서전 초안 — 읽어 내려가는 동안 「작은 책으로 보관하기」 · 「책으로 미리 읽기」가 따라온다 (넓은 화면: 옆 칸 고정, 좁은 화면: 아래 버튼 줄) | — |
 | `book-figures.js` · `.css` | 초안 · 책 화면(이북)의 그 장 문단 뒤에 사진 · 자동 삽화(「AI가 그린 그림」). 그리는 동안 5초마다 다시 받고, 넣지 못한 장은 초안에 알린다. 버튼 · 선택 없음. 이 기기에서 글을 고친 책 · PDF · 공유 화면에는 아직 그리지 않는다 | `GET /api/memoirs/saved/{id}/illustrations` · `…/illustrations/{장}` |
-| `illust-style.js` · `.css` | 자서전 만들기 「문체 선택」 화면 아래 「삽화 그림체」 — 수채화(기본) · 연필담채화 · 유화 중 하나를 고른다. 문체와 따로이고, 그 책의 사진 없는 장의 AI 삽화가 모두 같은 그림체로 그려진다(사진은 원본 그대로 · 장마다 고르는 단계 없음). 고른 값은 이 화면을 연 동안만 기억한다. 카드 모양은 문체 카드(`.style-card`)를 빌려 쓴다 | `POST /api/memoirs` 의 `illust_style` = `watercolor` · `pencil_wash` · `oil_painting` (없으면 서버가 수채화, 모르는 값은 400 `unsupported_illust_style`) |
+| `illust-style.js` · `.css` | 자서전 만들기 「문체 선택」 화면 아래 「삽화 그림체」 — 수채화(기본) · 애니풍 · 유화 중 하나를 고른다. 문체와 따로이고, 그 책의 사진 없는 장의 AI 삽화가 모두 같은 그림체로 그려진다(사진은 원본 그대로 · 장마다 고르는 단계 없음). 고른 값은 이 화면을 연 동안만 기억한다. 카드 모양은 문체 카드(`.style-card`)를 빌려 쓴다 | `POST /api/memoirs` 의 `illust_style` = `watercolor` · `anime` · `oil_painting` (없으면 서버가 수채화, 모르는 값은 400 `unsupported_illust_style`) |
 | `reader-font.js` · `fonts/bookk-font.css` | 자서전 본문 글꼴 — 부크크 명조(기본) · 기본 명조를 「보기 설정 → 본문 글꼴」에서 고른다. 사용 조건 확인 필요(`fonts/PROVENANCE-bookk.md`) | — |
 | `readability.css` | 작은 글씨 · 장식 문구 정리, 버튼 대비 · 구분 · 누를 수 없음 표시 (외부 피드백 11-17) | — |
 | `start-choice.js` · `start-choice.css` | 주제 고르기 화면: 예전 칸(주제 · 목소리 · 시작 버튼)은 그대로, PC 에서는 오른쪽 칸에 「사진 한 장」(휴대폰은 시작 버튼 위). 비교용 가운데 정렬판은 주소 끝에 `?layout=center` (예: `?demo=1&layout=center`) | — |

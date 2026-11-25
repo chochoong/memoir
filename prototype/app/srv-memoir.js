@@ -3,7 +3,7 @@
   /* ═══════════════════════════════════════════════════════════════
      srv-memoir — 자서전 만들기 · 책장 (시안 화면 + 서버)
        · 만들기: POST /api/memoirs {session_ids, style, illust_style} → 202 {job_id}
-                 illust_style 은 삽화 그림체 (illust-style.js — 수채화 · 연필담채화 · 유화, 기본 수채화). 문체와 따로다.
+                 illust_style 은 삽화 그림체 (illust-style.js — 수채화 · 애니풍 · 유화, 기본 수채화). 문체와 따로다.
                  → GET /api/memoirs/{job_id} 를 몇 초마다 (running · done · failed)
                  409 busy 면 이미 만드는 작업(job_id)을 이어서 기다린다.
                  작업 번호는 이 브라우저에 기억한다 — 새로고침해도 이어서 기다린다 (v0.54 와 같다).

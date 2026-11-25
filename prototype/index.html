@@ -4577,7 +4577,7 @@ html.tone-warm-btn body:not(.ebook-mode) .primary:hover { background:#dca21d; bo
     const CONFIG = {
     // 화면 아래와 개발용 패널에 그대로 찍힌다. 「고친 게 반영이 안 된 것 같다」는
     // 대부분 예전 파일이 열려 있는 경우라서, 눈으로 확인할 자리를 만들어 둔다.
-    version: 'v1.13 · 2026-11-25 (자서전 만들기 「문체 선택」 화면에 삽화 그림체 — 수채화 · 연필담채화 · 유화 · 기본 수채화)',
+    version: 'v1.14 · 2026-11-25 (자서전 만들기 「문체 선택」 화면에 삽화 그림체 — 수채화 · 애니풍 · 유화 · 기본 수채화)',
 
     // 이 화면을 백엔드가 직접 서빙하면(web/ 폴더) 빈 문자열 그대로 둔다.
     // 다른 포트에서 열어 시험할 때만 'http://127.0.0.1:8010' 처럼 채운다.
@@ -4936,7 +4936,7 @@ html.tone-warm-btn body:not(.ebook-mode) .primary:hover { background:#dca21d; bo
     return res.json();
   }
 
-  // illustStyle — 삽화 그림체 (watercolor · pencil_wash · oil_painting · illust-style.js). 문체 style 과 따로 보낸다. 없으면 서버가 수채화
+  // illustStyle — 삽화 그림체 (watercolor · anime · oil_painting · illust-style.js). 문체 style 과 따로 보낸다. 없으면 서버가 수채화
   function memoirBody(req, style, illustStyle) {
     return JSON.stringify(Object.assign(req.exclude
       ? { elder_id: req.elderId, exclude_session_ids: req.exclude }
@@ -5469,7 +5469,7 @@ html.tone-warm-btn body:not(.ebook-mode) .primary:hover { background:#dca21d; bo
       if (ids.length < 3) return err(400, '이야기를 3개 이상 골라 주세요', 'bad_selection');
       // 삽화 그림체 — 실제 서버와 같게: 없으면 수채화, 모르는 값은 400 unsupported_illust_style
       const illust = body.illust_style === undefined ? 'watercolor' : body.illust_style;
-      if (!['watercolor', 'pencil_wash', 'oil_painting'].includes(illust)) return err(400, '지원하지 않는 삽화 그림체예요.', 'unsupported_illust_style');
+      if (!['watercolor', 'anime', 'oil_painting'].includes(illust)) return err(400, '지원하지 않는 삽화 그림체예요.', 'unsupported_illust_style');
       const job_id = 'demo-job-' + (++db.seq);
       db.jobs[job_id] = {ids, style: body.style || 'spoken', illust_style: illust, t0: Date.now(), cancelled: false}; save();
       return new Res(202, {job_id, status: 'running', stage: 'analysis', elapsed: 0, illust_style: illust});
@@ -7667,7 +7667,7 @@ renderRecent();renderQuestion();setInterviewMode('reading');show(location.hash.s
   'use strict';
   /* ═══════════════════════════════════════════════════════════════
      illust-style — 자서전 만들기 「문체 선택」 화면의 「삽화 그림체」 고르기 (2026-11-25)
-       · 수채화(watercolor · 기본) · 연필담채화(pencil_wash) · 유화(oil_painting) 셋 중 하나.
+       · 수채화(watercolor · 기본) · 애니풍(anime) · 유화(oil_painting) 셋 중 하나.
        · 고른 값은 POST /api/memoirs 본문의 illust_style 로 간다 (srv-memoir.js generate → api.memoirStart).
          고르지 않으면 수채화다 — 서버도 값이 없으면 수채화로 그린다. 모르는 값은 서버가 400 unsupported_illust_style.
        · 그 책의 모든 AI 삽화(사진이 없는 장)가 같은 그림체로 그려진다. 사진은 원본 그대로. 장마다 고르거나 승인하는 단계는 없다.
@@ -7676,7 +7676,7 @@ renderRecent();renderQuestion();setInterviewMode('reading');show(location.hash.s
      ═══════════════════════════════════════════════════════════════ */
   const LIST = [
     {id: 'watercolor', title: '수채화', note: '부드러운 번짐과 종이결, 따뜻하고 절제된 색'},
-    {id: 'pencil_wash', title: '연필담채화', note: '연필 선과 명암 위에 옅은 색을 더한 손그림'},
+    {id: 'anime', title: '애니풍', note: '깔끔한 선과 맑은 색, 애니메이션 영화 같은 그림'},
     {id: 'oil_painting', title: '유화', note: '붓 자국과 겹친 물감, 깊이 있는 색감'},
   ];
   const DEFAULT = 'watercolor';
@@ -7724,7 +7724,7 @@ renderRecent();renderQuestion();setInterviewMode('reading');show(location.hash.s
   /* ═══════════════════════════════════════════════════════════════
      srv-memoir — 자서전 만들기 · 책장 (시안 화면 + 서버)
        · 만들기: POST /api/memoirs {session_ids, style, illust_style} → 202 {job_id}
-                 illust_style 은 삽화 그림체 (illust-style.js — 수채화 · 연필담채화 · 유화, 기본 수채화). 문체와 따로다.
+                 illust_style 은 삽화 그림체 (illust-style.js — 수채화 · 애니풍 · 유화, 기본 수채화). 문체와 따로다.
                  → GET /api/memoirs/{job_id} 를 몇 초마다 (running · done · failed)
                  409 busy 면 이미 만드는 작업(job_id)을 이어서 기다린다.
                  작업 번호는 이 브라우저에 기억한다 — 새로고침해도 이어서 기다린다 (v0.54 와 같다).
