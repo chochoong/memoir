@@ -1,0 +1,12 @@
+/* illust-style — 「문체 선택」 화면의 삽화 그림체 고르기 (illust-style.js).
+   카드 모양 · 고른 표시는 문체 카드(.style-card · .style-check)를 그대로 쓴다 — 색 판(warm-tone · warm-accent)도 그대로 따른다. */
+.illust-style{margin-top:22px;padding:20px 24px}
+.illust-style-head{margin-bottom:12px}
+.illust-style-head .small-copy{margin:4px 0 0;line-height:1.6}
+.illust-style-options{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px}
+.illust-style-card{min-height:0;padding:16px 18px;gap:12px}
+.illust-style-card strong{font-size:18px}
+@media(max-width:760px){
+  .illust-style{padding:16px}
+  .illust-style-options{grid-template-columns:1fr;gap:10px}
+}

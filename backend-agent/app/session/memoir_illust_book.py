@@ -76,6 +76,7 @@ def prompt_hash() -> str:
 # scene  장면 재현 (scene_v5 · 이 파일의 choose) — 한 장면을 원문 그대로. 기록 · 견주기용으로 남긴다
 DEFAULT_POLICY = "theme"
 POLICY_IDS = {"theme": "chapter_theme_v2", "scene": "scene_v5"}
+SCENE_ART_STYLE = "watercolor"          # 장면 방식이 그리는 그림체 — 그림 양식 v1 하나 (그림체 선택은 주제 방식에만)
 CHECKS_VERSIONS = {"theme": "theme_checks_v2", "scene": "scene_checks_v5"}
 
 
@@ -95,15 +96,21 @@ def policy_of(selection: dict | None) -> str:
     return "theme" if str((selection or {}).get("policy") or "").startswith("chapter_theme") else "scene"
 
 
-def policy_files(policy: str) -> dict:
-    """그 방식의 지시문 · 그림 양식 파일과 해시 — 결과에 남겨 다른 방식의 결과와 섞이지 않게 한다."""
+def policy_files(policy: str, art_style: str | None = None) -> dict:
+    """
+    그 방식의 지시문 · 그림 양식 파일과 해시 — 결과에 남겨 다른 방식의 결과와 섞이지 않게 한다.
+    주제 방식은 그림체(art_style · 없으면 수채화)의 파일 · 해시도 함께. 장면 방식(scene_v5)은 그림 양식 v1(수채화)만 그린다.
+    """
     if check_policy(policy) == "theme":
         t = _theme()
+        art = t.stored_art_style(art_style)
         return {"policy": policy, "policy_id": POLICY_IDS[policy], "checks_version": CHECKS_VERSIONS[policy],
                 "select_prompt": t.SELECT_FILE, "select_prompt_hash": t.prompt_hash(), "style": t.STYLE_FILE,
-                "style_hash": t.style_hash()}
+                "style_hash": t.style_hash(), "art_style": art, "art_style_file": t.ART_STYLES[art]["file"],
+                "art_style_hash": t.art_style_hash(art)}
     return {"policy": policy, "policy_id": POLICY_IDS[policy], "checks_version": CHECKS_VERSIONS[policy], "select_prompt": SELECT_FILE,
-            "select_prompt_hash": prompt_hash(), "style": il.STYLE_FILE, "style_hash": il.prompt_hashes().get(il.STYLE_FILE)}
+            "select_prompt_hash": prompt_hash(), "style": il.STYLE_FILE, "style_hash": il.prompt_hashes().get(il.STYLE_FILE),
+            "art_style": SCENE_ART_STYLE, "art_style_file": il.STYLE_FILE, "art_style_hash": il.prompt_hashes().get(il.STYLE_FILE)}
 
 
 def select_system(policy: str = DEFAULT_POLICY) -> str:
@@ -114,8 +121,17 @@ def select_user(data: dict, ident, policy: str = DEFAULT_POLICY) -> str:
     return _theme().theme_message(data, ident) if check_policy(policy) == "theme" else il.select_message(data, [ident])
 
 
-def choose_by(policy: str, data: dict, ident, reply) -> dict:
-    return _theme().choose_theme(data, ident, reply) if check_policy(policy) == "theme" else choose(data, ident, reply)
+def choose_by(policy: str, data: dict, ident, reply, art_style: str | None = None) -> dict:
+    """
+    방식대로 고른다. art_style 은 주제 방식의 그림 지시문에만 쓴다 (없으면 수채화).
+    장면 방식은 그림 양식 v1(수채화)만 그린다 — 다른 그림체를 달라고 하면 바꿔 그리지 않고 IllustError("art_style") 로 멈춘다.
+    """
+    if check_policy(policy) == "theme":
+        t = _theme()               # 모르는 그림체는 choose_theme 가 failed(art_style) 로 돌려준다 — 지시문에 넣지 않는다
+        return t.choose_theme(data, ident, reply, t.DEFAULT_ART_STYLE if art_style in (None, "") else art_style)
+    if art_style not in (None, "", SCENE_ART_STYLE):
+        raise il.IllustError("art_style", f"장면 방식(scene_v5)은 수채화만 그린다 — 받은 그림체 {art_style!r}")
+    return choose(data, ident, reply)
 
 
 # ---------------------------------------------------------------- 목차와 사진

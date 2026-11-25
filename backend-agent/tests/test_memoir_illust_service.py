@@ -250,11 +250,14 @@ def test_keep_starts_illustrations_for_a_ready_memoir_only(monkeypatch):
     async def save_memoir(rec):
         return None
     monkeypatch.setattr(store, "save_memoir", save_memoir)
-    monkeypatch.setattr(svc, "schedule", lambda mid, uid: started.append((mid, uid)))
+    # 2026-11-25 — keep 이 삽화 그림체(illust_style)도 넘긴다. 넘기지 않으면 None (삽화 쪽에서 수채화)
+    monkeypatch.setattr(svc, "schedule", lambda mid, uid, art=None: started.append((mid, uid, art)))
     mid = asyncio.run(memoir_jobs.keep({"status": "ready", "title": "t"}, ["s"], ME, "essay"))
-    assert started == [(mid, ME)]
+    assert started == [(mid, ME, None)]
     asyncio.run(memoir_jobs.keep({"status": "insufficient_material", "title": ""}, ["s"], ME, "essay"))
     assert len(started) == 1
+    mid2 = asyncio.run(memoir_jobs.keep({"status": "ready", "title": "t"}, ["s"], ME, "essay", "oil_painting"))
+    assert started[-1] == (mid2, ME, "oil_painting")
 
 
 def test_routes_show_figures_and_serve_the_image_only_to_the_owner(world):
@@ -284,8 +287,9 @@ def test_default_service_policy_is_chapter_theme_and_is_recorded_per_chapter(wor
     doc = run(calls)
     assert calls.policies == ["theme", "theme"]
     sel = doc["chapters"]["2"]["select"]
-    # v2 로 판이 바뀌었다 (지시문 v7 · 검사 theme_checks_v2) — 기본 방식이 장마다 기록된다는 뜻은 같다
-    assert sel["policy_id"] == "chapter_theme_v2" and sel["prompt_file"] == "1_목차주제_v7.md" and sel["mode"] == "THEME"
+    # v2 로 판이 바뀌었다 (검사 theme_checks_v2) — 기본 방식이 장마다 기록된다는 뜻은 같다.
+    # 2026-11-25 지시문만 v7 → v8 (수채화를 적지 않는다 · 그림체는 따로 고른다). 방식(policy_id)은 그대로다
+    assert sel["policy_id"] == "chapter_theme_v2" and sel["prompt_file"] == "1_목차주제_v8.md" and sel["mode"] == "THEME"
     assert sel["checks_version"] == "theme_checks_v2"
     assert doc["settings"]["policy_id"] == "chapter_theme_v2"
     assert all("[이 장의 주제]" in p and "watercolor" not in p for p, _ in calls.image)       # 주제 방식의 한국어 지시문

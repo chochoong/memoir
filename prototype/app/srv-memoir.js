@@ -2,7 +2,8 @@
   'use strict';
   /* ═══════════════════════════════════════════════════════════════
      srv-memoir — 자서전 만들기 · 책장 (시안 화면 + 서버)
-       · 만들기: POST /api/memoirs {session_ids, style} → 202 {job_id}
+       · 만들기: POST /api/memoirs {session_ids, style, illust_style} → 202 {job_id}
+                 illust_style 은 삽화 그림체 (illust-style.js — 수채화 · 연필담채화 · 유화, 기본 수채화). 문체와 따로다.
                  → GET /api/memoirs/{job_id} 를 몇 초마다 (running · done · failed)
                  409 busy 면 이미 만드는 작업(job_id)을 이어서 기다린다.
                  작업 번호는 이 브라우저에 기억한다 — 새로고침해도 이어서 기다린다 (v0.54 와 같다).
@@ -51,6 +52,7 @@
     too_much: '이야기가 너무 많아 한 번에 만들 수 없어요. 넣지 않을 엽서를 몇 장 빼 주세요.',
     job_not_found: '만들던 자서전을 찾을 수 없어요. 다시 만들어 주세요.',
     unsupported_style: '지금은 이 문체로 만들 수 없어요. 다른 문체를 골라 주세요.',
+    unsupported_illust_style: '지금은 이 그림체로 만들 수 없어요. 다른 삽화 그림체를 골라 주세요.',
     insufficient_material: '자서전에 담을 만큼 분명한 이야기가 모이지 않았어요. 엽서를 더 골라 주세요.',
     cancelled: '자서전 만들기를 그만두었어요.',
   };
@@ -160,13 +162,14 @@
     // 서버는 회차가 만들어진 순서로 엮는다. 화면도 같은 순서로 보낸다
     const ids = chosen.sort((a, b) => Date.parse(a.created_at) - Date.parse(b.created_at)).map((r) => r.session_id);
     const style = styles.some((s) => s.id === state.style) ? state.style : (styles[0] ? styles[0].id : 'essay');
+    const illustStyle = window.SrvIllustStyle ? window.SrvIllustStyle.value() : undefined;   // 없으면 서버가 수채화
     state.generating = true;
     stagePast = false; clock = null; shown = '';
     dialog.querySelector('#generation-stage').textContent = '자서전 만들기를 시작하고 있어요…';
     if (!dialog.open) dialog.showModal();
     let first;
     try {
-      first = await api.memoirStart({ids}, style);
+      first = await api.memoirStart({ids}, style, illustStyle);
     } catch (e) {
       if (e.status === 409 && e.code === 'busy' && e.body && e.body.job_id) {
         first = {job_id: e.body.job_id, status: 'running'};
@@ -177,7 +180,7 @@
         return;
       }
     }
-    job = {job_id: first.job_id, elderId: AUTH.elderId, style, title: state.pendingMemoirTitle || ''};
+    job = {job_id: first.job_id, elderId: AUTH.elderId, style, illustStyle, title: state.pendingMemoirTitle || ''};
     jobKeep(job);
     void wait(job, true);
   }

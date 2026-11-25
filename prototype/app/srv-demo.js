@@ -245,9 +245,12 @@
     if (path === '/memoirs' && method === 'POST') {
       const ids = body.session_ids || [];
       if (ids.length < 3) return err(400, '이야기를 3개 이상 골라 주세요', 'bad_selection');
+      // 삽화 그림체 — 실제 서버와 같게: 없으면 수채화, 모르는 값은 400 unsupported_illust_style
+      const illust = body.illust_style === undefined ? 'watercolor' : body.illust_style;
+      if (!['watercolor', 'pencil_wash', 'oil_painting'].includes(illust)) return err(400, '지원하지 않는 삽화 그림체예요.', 'unsupported_illust_style');
       const job_id = 'demo-job-' + (++db.seq);
-      db.jobs[job_id] = {ids, style: body.style || 'spoken', t0: Date.now(), cancelled: false}; save();
-      return new Res(202, {job_id, status: 'running', stage: 'analysis', elapsed: 0});
+      db.jobs[job_id] = {ids, style: body.style || 'spoken', illust_style: illust, t0: Date.now(), cancelled: false}; save();
+      return new Res(202, {job_id, status: 'running', stage: 'analysis', elapsed: 0, illust_style: illust});
     }
     if (path === '/memoirs/saved' && method === 'GET') {
       const rows = db.memoirs.filter((x) => !x.deleted && (!q.get('elder_id') || x.elder_id === q.get('elder_id')));

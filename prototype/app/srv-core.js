@@ -9,7 +9,7 @@
     const CONFIG = {
     // 화면 아래와 개발용 패널에 그대로 찍힌다. 「고친 게 반영이 안 된 것 같다」는
     // 대부분 예전 파일이 열려 있는 경우라서, 눈으로 확인할 자리를 만들어 둔다.
-    version: 'v1.12 · 2026-11-19 (노랑 v1.09 기준: 휴대폰 위쪽 로고 · 하단 탭 캡슐 바탕 없앰 · 로고 · 선택 밑줄 제거 · 하단 아이콘 채움 · 분류 버튼 높이 · 입력칸 안내 글)',
+    version: 'v1.13 · 2026-11-25 (자서전 만들기 「문체 선택」 화면에 삽화 그림체 — 수채화 · 연필담채화 · 유화 · 기본 수채화)',
 
     // 이 화면을 백엔드가 직접 서빙하면(web/ 폴더) 빈 문자열 그대로 둔다.
     // 다른 포트에서 열어 시험할 때만 'http://127.0.0.1:8010' 처럼 채운다.
@@ -368,10 +368,11 @@
     return res.json();
   }
 
-  function memoirBody(req, style) {
+  // illustStyle — 삽화 그림체 (watercolor · pencil_wash · oil_painting · illust-style.js). 문체 style 과 따로 보낸다. 없으면 서버가 수채화
+  function memoirBody(req, style, illustStyle) {
     return JSON.stringify(Object.assign(req.exclude
       ? { elder_id: req.elderId, exclude_session_ids: req.exclude }
-      : { [CONFIG.memoir.idsField]: req.ids }, style ? { style } : {}));
+      : { [CONFIG.memoir.idsField]: req.ids }, style ? { style } : {}, illustStyle ? { illust_style: illustStyle } : {}));
   }
 
   /** 로그인이 풀렸다 · 로그아웃했다. 화면 메모리를 통째로 비운다 — 다시 불러오기가 가장 확실하다. */
@@ -491,13 +492,13 @@
     // 화면 안내는 상태로만 고르고 detail 은 화면에 내지 않는다 (mmWhy).
     // 사용자 신원은 본문이 아니라 call() 이 붙인다 (dev 모드 X-User-Id · 로그인 모드 msid 쿠키).
     // 작업 방식 (PR #14) — 본문은 preview 와 같다. 202 {job_id, status, stage, run}
-    memoirStart: (req, style) => call(CONFIG.memoir.jobPath, { method: 'POST', body: memoirBody(req, style) }),
+    memoirStart: (req, style, illustStyle) => call(CONFIG.memoir.jobPath, { method: 'POST', body: memoirBody(req, style, illustStyle) }),
     memoirJob: (id) => call(`${CONFIG.memoir.jobPath}/${encodeURIComponent(id)}`),
     // GET /memoirs/latest (내 최근 작업) 는 쓰지 않는다 (태헌 10-28) — 작업 번호는 localStorage 로 기억한다
     memoirCancel: (id) => call(`${CONFIG.memoir.jobPath}/${encodeURIComponent(id)}`, { method: 'DELETE' }),
     // req = { ids } 또는 { elderId, exclude } (mmRequest 가 만든다)
-    memoirPreview: (req, signal, style) => call(CONFIG.memoir.path, {
-      method: 'POST', signal, body: memoirBody(req, style),
+    memoirPreview: (req, signal, style, illustStyle) => call(CONFIG.memoir.path, {
+      method: 'POST', signal, body: memoirBody(req, style, illustStyle),
     }),
 
     // 이 회차에 엽서가 있나. GET /postcard 는 JPEG 라 json() 으로 읽지 않는다.

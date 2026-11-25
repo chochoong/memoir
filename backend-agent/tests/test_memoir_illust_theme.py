@@ -69,9 +69,12 @@ def test_theme_v2_is_the_default_and_the_scene_policy_stays_separate():
     assert book.CHECKS_VERSIONS == {"theme": "theme_checks_v2", "scene": "scene_checks_v5"}
     assert book.select_system("theme") == th.select_prompt() != book.select_system("scene")
     files = book.policy_files("theme")
-    assert files["select_prompt"] == "1_목차주제_v7.md" and files["checks_version"] == "theme_checks_v2"
-    assert files["style"] == "2_그림양식_v2.md" and book.policy_files("scene")["select_prompt"] == book.SELECT_FILE
+    # 2026-11-25 — 지시문 v7 → v8 · 양식 v2 → v3(공통) + 그림체 파일. 방식 · 검사 판은 그대로다 (test_memoir_illust_art_style.py)
+    assert files["select_prompt"] == "1_목차주제_v8.md" and files["checks_version"] == "theme_checks_v2"
+    assert files["style"] == "2_그림양식_v3.md" and files["art_style"] == "watercolor"
+    assert book.policy_files("scene")["select_prompt"] == book.SELECT_FILE
     assert (il.PROMPTS / "1_목차주제_v6.md").is_file()                         # v1 의 지시문은 기록으로 남는다
+    assert (il.PROMPTS / "1_목차주제_v7.md").is_file() and (il.PROMPTS / "2_그림양식_v2.md").is_file()   # 앞선 판의 근거
     with pytest.raises(il.IllustError):
         book.check_policy("story")
 
@@ -178,8 +181,8 @@ def test_metaphorical_title_follows_the_plan_main():
 def test_prompt_is_korean_style_v2_and_keeps_plan_and_expression_apart():
     sel = pick("3")
     p = sel["prompt"]
-    blocks = th.style_blocks()
-    assert all(blocks[k] in p["text"] for k in blocks) and p["style_id"] == "watercolor-recall-v2" and p["language"] == "ko"
+    blocks = th.style_blocks() | th.art_style_blocks("watercolor")         # 공통 양식 v3 + 기본 그림체(수채화)
+    assert all(blocks[k] in p["text"] for k in blocks) and p["style_id"] == "watercolor-recall-v3" and p["language"] == "ko"
     assert "[이 장의 주제]" in p["text"] and "[그릴 것]" in p["text"] and len(p["text"]) <= il.PROMPT_MAX
     assert "특정 한 순간을 사실 그대로 재현한 그림이 아니다" in p["text"]
     assert [x["anchor"] for x in p["composition"]["from_plan"]] == ["떡볶이", "분식집", "창"]
@@ -246,7 +249,7 @@ def test_runner_uses_the_theme_v2_policy_by_default(tmp_path, monkeypatch):
     assert code == 0 and [k for k, r in items.items() if r["status"] == "inserted"] == [1, 2, 3, 4, 5, 6]
     assert all(r["mode"] == "THEME" for r in items.values())
     req = json.loads((out / "items" / "1" / "select_request.json").read_text(encoding="utf-8"))
-    assert req["policy_id"] == "chapter_theme_v2" and req["prompt_file"] == "1_목차주제_v7.md"
+    assert req["policy_id"] == "chapter_theme_v2" and req["prompt_file"] == "1_목차주제_v8.md"      # 11-25 v7 → v8
     # 다시 돌리면 부르지 않고 그대로 쓴다
     again = tool.process(json.loads(seed_path.read_text(encoding="utf-8")), out, select_for=None, image_call=None, mock=True,
                          image_model="mock")

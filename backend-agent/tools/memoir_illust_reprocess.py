@@ -15,6 +15,7 @@
 - 이름을 댄 장 가운데 실패한 장만. 사진 장 · 이미 넣은 삽화 · 보류 · 사진 정보를 모르는 장은 이름을 대도 그대로 둔다(까닭을 보인다).
 - 지금 판으로 이미 부른 장은 다시 표시하지 않는다. 판이 바뀌면(v1 → v2) 앞선 판으로 실패한 장은 한 번 다시 할 수 있다.
 - 앞선 기록 · 호출 수는 지우지 않는다 — 앞선 기록은 그 장의 history 에 옮겨 둔다.
+- 다시 처리하는 장은 그 책에 적힌 삽화 그림체(art_style)로 그린다. 그림체 칸이 없는 앞선 책은 수채화다. 그림체를 바꾸는 기능은 없다.
 - --memoir 는 앞부분만 줘도 된다. 둘 이상 걸리면 멈춘다.
 
 사진 다시 계산 (2026-11-24 — 회차 사진이 빠지던 규칙을 고친 뒤 이미 만든 책에)
@@ -82,7 +83,9 @@ async def main_async(args) -> int:
               for k, c in sorted(((doc or {}).get("chapters") or {}).items(), key=lambda x: int(x[0]))}
     eligible = svc.reprocess_targets(doc, pol)                       # 다시 할 수 있는 장 (이름을 대기 전)
     targets = svc.reprocess_targets(doc, pol, args.chapter) if args.chapter else []
-    plan = {"memoir_id": row["memoir_id"], "title": row["title"], "status": (doc or {}).get("status"), "chapters_now": states,
+    plan = {"memoir_id": row["memoir_id"], "title": row["title"], "status": (doc or {}).get("status"),
+            # 다시 처리하는 장도 그 책에 적힌 그림체로 그린다 (칸이 없는 앞선 책은 수채화)
+            "art_style": (doc or {}).get("art_style") or "watercolor (그림체 칸 없음 — 수채화로 본다)", "chapters_now": states,
             "to_policy": book.POLICY_IDS[pol], "eligible": [t["no"] for t in eligible], "requested": args.chapter or [],
             "targets": targets, "refused": svc.refused_chapters(doc, args.chapter or [], pol),
             "calls_expected": {"select": len(targets), "image": len(targets)},

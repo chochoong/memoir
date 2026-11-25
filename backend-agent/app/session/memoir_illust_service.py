@@ -33,6 +33,12 @@ prepare_reprocess 가 그 장만 「지금 판으로 다시」 로 표시하고(
 
 **사람이 확인한 것이 아니다.** automatic: true · human_reviewed: false 로 적는다. 화면에는 「AI 가 그린 그림」 으로 보인다.
 
+**삽화 그림체는 책마다 하나다 (2026-11-25).** 자서전을 만들 때 화면이 보낸 illust_style(watercolor 수채화 · pencil_wash
+연필담채화 · oil_painting 유화, 없으면 수채화)을 schedule → run 이 책 기록(doc.art_style)에 적고, 그 책의 모든 AI 삽화를 그
+그림체로 그린다. **다시 처리해도 책에 적힌 그림체를 쓴다** — 그림체 칸이 없는 책(그림체를 고르기 전에 만든 책)은 수채화다.
+장마다 선정 기록(select.art_style · art_style_hash)과 그림 기록(image.art_style · style_id)에도 남는다. 이미 저장한 그림은
+그림체가 무엇이든 다시 그리지 않는다. 사진 장은 그림체와 상관없이 원본 사진이다. 문체(memoir.style)와는 따로다.
+
 설정 (환경변수 — 함수 안에서 읽는다)
 
     MEMOIR_ILLUST                auto(기본) · off.  auto 는 GEMINI_API_KEY 가 있을 때만 돈다
@@ -55,7 +61,7 @@ import logging
 import os
 from datetime import datetime, timezone
 
-from . import memoir, memoir_illust as il, memoir_illust_book as book, photostore, store
+from . import memoir, memoir_illust as il, memoir_illust_book as book, memoir_illust_theme as th, photostore, store
 from .conf import env_str
 
 log = logging.getLogger("memoir.illust")
@@ -84,11 +90,28 @@ def policy() -> str:
     return book.check_policy(env_str("MEMOIR_ILLUST_POLICY", book.DEFAULT_POLICY).strip().lower() or book.DEFAULT_POLICY)
 
 
-def settings(pol: str | None = None) -> dict:
-    """지금 쓰는 모델 · 그림 설정과 방식(지시문 · 양식 파일과 해시). 결과에 남겨 어느 방식의 결과인지 가린다."""
+def settings(pol: str | None = None, art_style: str | None = None) -> dict:
+    """지금 쓰는 모델 · 그림 설정과 방식(지시문 · 양식 · 그림체 파일과 해시). 결과에 남겨 어느 방식의 결과인지 가린다."""
     return {"select_model": env_str("MEMOIR_ILLUST_SELECT_MODEL", DEFAULT_SELECT_MODEL),
             "image_model": env_str("MEMOIR_ILLUST_IMAGE_MODEL", DEFAULT_IMAGE_MODEL),
-            "size": IMAGE_SIZE, "aspect": IMAGE_ASPECT, **book.policy_files(pol or policy())}
+            "size": IMAGE_SIZE, "aspect": IMAGE_ASPECT, **book.policy_files(pol or policy(), art_style)}
+
+
+# 삽화 그림체 (memoir_illust_theme) — 라우트 · 작업은 이 이름으로 부른다
+ART_STYLES, DEFAULT_ART_STYLE = th.ART_STYLES, th.DEFAULT_ART_STYLE
+UnsupportedArtStyle, pick_art_style = th.UnsupportedArtStyle, th.pick_art_style
+ART_STYLE_CODE, ART_STYLE_SAYS = th.ART_STYLE_CODE, th.ART_STYLE_SAYS
+
+
+def book_art_style(doc: dict | None, requested: str | None = None) -> str:
+    """
+    그 책의 그림체. **기록이 있는 책은 기록이 정한다** — 다시 처리 · 이어서 처리해도 같은 그림체이고, 그림체 칸이 없는 앞선 책
+    (그림체를 고르기 전에 만든 책)은 수채화다. requested(화면이 고른 값)는 기록이 없는 새 책에만 쓴다 — 없으면 수채화.
+    모르는 값은 UnsupportedArtStyle — 다른 그림체로 바꿔 그리지 않는다.
+    """
+    if doc:
+        return th.stored_art_style(doc.get("art_style"))
+    return th.pick_art_style(requested)
 
 
 def _now() -> str:
@@ -319,10 +342,11 @@ async def build_input(rec: dict, user_id: str) -> tuple[dict, list[dict]]:
 
 # ---------------------------------------------------------------- 상태 문서
 
-def new_doc() -> dict:
+def new_doc(art_style: str | None = None) -> dict:
+    art = th.pick_art_style(art_style)
     return {"schema": SCHEMA, "status": RUNNING, "automatic": True, "ai_generated_images": True,
-            "human_reviewed": False, "user_selected": False, "user_approved": False,
-            "started_at": _now(), "finished_at": None, "settings": settings(),
+            "human_reviewed": False, "user_selected": False, "user_approved": False, "art_style": art,
+            "started_at": _now(), "finished_at": None, "settings": settings(art_style=art),
             "calls": {"select": 0, "image": 0}, "chapters": {}, "unplaced_photos": [], "error": None}
 
 
@@ -343,11 +367,14 @@ def running(memoir_id: str) -> bool:
     return t is not None and not t.done()
 
 
-def schedule(memoir_id: str | None, user_id: str) -> asyncio.Task | None:
-    """자서전이 저장된 자리(memoir_jobs.keep)에서 부른다. 꺼져 있거나 이미 돌고 있으면 아무것도 하지 않는다."""
+def schedule(memoir_id: str | None, user_id: str, art_style: str | None = None) -> asyncio.Task | None:
+    """
+    자서전이 저장된 자리(memoir_jobs.keep)에서 부른다. 꺼져 있거나 이미 돌고 있으면 아무것도 하지 않는다.
+    art_style 은 새 책의 그림체(화면이 고른 값). 이미 기록이 있는 책은 기록의 그림체를 쓴다 (book_art_style).
+    """
     if not memoir_id or not enabled() or running(memoir_id):
         return None
-    task = asyncio.create_task(_guarded(memoir_id, user_id))
+    task = asyncio.create_task(_guarded(memoir_id, user_id, art_style))
     _RUNNING[memoir_id] = task
     task.add_done_callback(lambda t: _RUNNING.pop(memoir_id, None) if _RUNNING.get(memoir_id) is t else None)
     return task
@@ -446,9 +473,9 @@ async def prepare_reprocess(memoir_id: str, user_id: str, pol: str | None = None
             "calls_expected": {"select": len(targets), "image": len(targets)}}
 
 
-async def _guarded(memoir_id: str, user_id: str) -> None:
+async def _guarded(memoir_id: str, user_id: str, art_style: str | None = None) -> None:
     try:
-        await run(memoir_id, user_id)
+        await run(memoir_id, user_id, art_style=art_style)
     except Exception as e:                                    # noqa: BLE001 — 삽화가 서버를 넘어뜨리지 않는다
         log.exception("삽화 %s 예상 못 한 오류 (%s)", memoir_id[:10], type(e).__name__)
 
@@ -513,10 +540,10 @@ async def refresh_photos(memoir_id: str, user_id: str, apply: bool = False) -> d
             "uncertain_chapters": data["photo_placement"]["uncertain_chapters"], "calls": 0}
 
 
-async def run(memoir_id: str, user_id: str, *, select_call=None, image_call=None) -> dict | None:
+async def run(memoir_id: str, user_id: str, *, select_call=None, image_call=None, art_style: str | None = None) -> dict | None:
     """
     한 권을 장마다 처리한다. 장 하나의 실패가 다른 장을 막지 않는다. 상태는 단계마다 DB 에 적는다.
-    돌려주는 것은 마지막 상태 문서 (자서전이 없으면 None).
+    돌려주는 것은 마지막 상태 문서 (자서전이 없으면 None). art_style 은 새 책의 그림체 — 기록이 있는 책은 기록의 것을 쓴다.
     """
     select_call = select_call or SELECT_CALL
     image_call = image_call or IMAGE_CALL
@@ -524,8 +551,19 @@ async def run(memoir_id: str, user_id: str, *, select_call=None, image_call=None
     if rec is None:
         return None
     result = rec["result"] or {}
-    doc = rec.get("illustrations") or new_doc()
+    before = rec.get("illustrations")
+    doc = before or new_doc()
     doc.setdefault("calls", {"select": 0, "image": 0})
+    try:
+        art = book_art_style(before, art_style)
+    except th.UnsupportedArtStyle:
+        doc.update(status=BROKEN, error="art_style_unsupported", finished_at=_now())
+        await _save(memoir_id, user_id, doc)
+        log.warning("삽화 %s 모르는 그림체 — 처리하지 않는다", memoir_id[:10])
+        return doc
+    if before is not None and before.get("art_style") in (None, ""):
+        doc["art_style_note"] = "그림체를 고르기 전에 만든 책 — 수채화로 본다"
+    doc["art_style"] = art
     if result.get("status") != memoir.READY or not result.get("chapters"):
         doc.update(status=BROKEN, error="memoir_not_ready", finished_at=_now())
         await _save(memoir_id, user_id, doc)
@@ -542,7 +580,7 @@ async def run(memoir_id: str, user_id: str, *, select_call=None, image_call=None
     doc["status"], doc["error"], doc["unplaced_photos"] = RUNNING, None, unplaced
     # 새로 부르는 장은 지금 설정(방식 · 지시문)으로 한다. 앞선 설정은 지우지 않고 settings_history 에 남긴다 — 장마다 쓴 방식은
     # 그 장의 select 기록(policy · prompt_hash)에 따로 있다
-    cfg = settings()
+    cfg = settings(art_style=art)
     if doc.get("settings") and doc["settings"] != cfg:
         doc.setdefault("settings_history", []).append({**doc["settings"], "replaced_at": _now()})
     doc["settings"] = cfg
@@ -595,12 +633,18 @@ async def _chapter(data, it, ch, doc, memoir_id, user_id, cfg, select_call, imag
             ch.update(state=FAILED, failure=["select_attempt_without_result"])
             return
         pol = ch.get("policy") or cfg["policy"]
-        files = book.policy_files(pol)
+        art = book_art_style(doc)            # 책에 적힌 그림체 (cfg 의 art_style 은 그 방식이 그리는 것 — 장면 방식은 늘 수채화)
+        if book.check_policy(pol) == "scene" and art != book.SCENE_ART_STYLE:
+            # 장면 방식은 수채화(그림 양식 v1)만 그린다 — 고른 그림체와 다른 그림을 넣지 않는다. 부르기 전에 멈춘다
+            ch.update(state=FAILED, failure=["art_style_not_in_policy"])
+            return
+        files = book.policy_files(pol, art)
         system, user = book.select_system(pol), book.select_user(data, it["ident"], pol)
         ch["policy"] = pol
         ch["select"] = sel_rec = {"attempted_at": _now(), "model": cfg["select_model"], "policy": pol,
                                   "policy_id": files["policy_id"], "prompt_file": files["select_prompt"],
                                   "prompt_hash": files["select_prompt_hash"], "style_hash": files["style_hash"],
+                                  "art_style": files["art_style"], "art_style_hash": files["art_style_hash"],
                                   "checks_version": files["checks_version"]}
         ch["state"] = "selecting"
         doc["calls"]["select"] += 1
@@ -615,7 +659,7 @@ async def _chapter(data, it, ch, doc, memoir_id, user_id, cfg, select_call, imag
         text = reply["text"] if isinstance(reply, dict) else str(reply)
         sel_rec.update(finished_at=_now(), usage=(reply or {}).get("usage") if isinstance(reply, dict) else None,
                        model_version=(reply or {}).get("model_version") if isinstance(reply, dict) else None)
-        selection = await asyncio.to_thread(book.choose_by, pol, data, it["ident"], text)
+        selection = await asyncio.to_thread(book.choose_by, pol, data, it["ident"], text, art)
         sel_rec["selection"] = selection
     sel_rec["status"] = selection["status"]
     if selection["status"] != "selected":
@@ -629,7 +673,10 @@ async def _chapter(data, it, ch, doc, memoir_id, user_id, cfg, select_call, imag
         ch.update(state=FAILED, failure=["image_attempt_without_result"])
         return
     prompt = selection["prompt"]["text"]
+    # 그 지시문에 실제로 들어간 그림체 — 그림체를 고르기 전의 선정(주제 v2 양식 · 장면 v1 양식)은 수채화다
     ch["image"] = img_rec = {"attempted_at": _now(), "model": cfg["image_model"], "size": cfg["size"], "aspect": cfg["aspect"],
+                             "art_style": selection["prompt"].get("art_style") or th.DEFAULT_ART_STYLE,
+                             "style_id": selection["prompt"].get("style_id"),
                              "prompt_sha256": hashlib.sha256(prompt.encode("utf-8")).hexdigest()}
     ch["state"] = "drawing"
     doc["calls"]["image"] += 1
@@ -679,8 +726,10 @@ def view(memoir_id: str, doc: dict | None) -> dict:
     """
     화면용 — 저장 키 · 지시문 · 원문은 싣지 않는다. 그림은 이 서버의 주소로만 나간다 (photostore 머리와 같은 까닭).
 
-        status    off(꺼짐) · not_started · running · done · partial · failed
-        chapters  [{no, state, figures: [{kind: photo|illustration, url, after_paragraph, width, height, ai_generated, caption}]}]
+        status     off(꺼짐) · not_started · running · done · partial · failed
+        chapters   [{no, state, art_style, figures: [{kind: photo|illustration, url, after_paragraph, width, height, ai_generated,
+                     caption, art_style(삽화만)}]}]
+        art_style  {id: watercolor | pencil_wash | oil_painting, label: 수채화 | 연필담채화 | 유화} — 그 책의 그림체
     """
     if not doc:
         return {"status": "not_started" if enabled() else "off", "automatic": True, "chapters": []}
@@ -690,14 +739,17 @@ def view(memoir_id: str, doc: dict | None) -> dict:
                  "width": p.get("width"), "height": p.get("height"), "ai_generated": False, "caption": None}
                 for p in ch.get("photos") or []] if ch.get("state") == PHOTO else []
         img = ch.get("image") or {}
+        # 그 장 그림의 그림체 — 그림 기록에 없으면(그림체를 고르기 전의 그림) 수채화. 그림을 부르지 않은 장은 None
+        drawn_style = (img.get("art_style") or th.DEFAULT_ART_STYLE) if img.get("storage_key") else None
         if ch.get("state") == ILLUSTRATED and img.get("storage_key"):
             figs.append({"kind": "illustration",
                          "url": f"/api/memoirs/saved/{memoir_id}/illustrations/{key}?v={img['sha256'][:12]}",
                          "after_paragraph": (ch.get("insertion") or {}).get("after_paragraph"),
                          "width": img.get("width"), "height": img.get("height"), "ai_generated": True,
-                         "caption": "AI가 그린 그림", "scene_title": (ch.get("select") or {}).get("scene_title")})
+                         "caption": "AI가 그린 그림", "scene_title": (ch.get("select") or {}).get("scene_title"),
+                         "art_style": drawn_style})
         chapters.append({"no": int(key), "state": ch.get("state"), "figures": figs, "failure": ch.get("failure"),
-                         "photo_state": ch.get("photo_state"),
+                         "photo_state": ch.get("photo_state"), "art_style": drawn_style,
                          # 그 장의 그림을 고른 방식 — 앞선 방식의 결과를 새 방식의 결과처럼 보이지 않게 함께 낸다
                          "policy": _policy_id_of(ch) if ch.get("select") else None})
     # 회차에 붙였지만 어느 장에도 놓지 못한 사진 — 조용히 사라지지 않게 까닭과 함께 낸다 (화면이 따로 보여 줄 수 있다)
@@ -706,9 +758,11 @@ def view(memoir_id: str, doc: dict | None) -> dict:
                  "detail": UNPLACED_DETAIL.get(u.get("reason"), u.get("reason")),
                  "url": f"/api/photos/{u['photo_id']}" if u.get("reason") not in UNAVAILABLE and u.get("photo_id") else None}
                 for u in doc.get("unplaced_photos") or []]
+    art = doc.get("art_style") or th.DEFAULT_ART_STYLE                # 그림체 칸이 없는 책은 수채화
     return {"status": doc.get("status"), "automatic": True, "human_reviewed": False,
             "policy": (doc.get("settings") or {}).get("policy_id") or book.POLICY_IDS["scene"], "chapters": chapters,
-            "unplaced_photos": unplaced}
+            "unplaced_photos": unplaced,
+            "art_style": {"id": art, "label": (th.ART_STYLES.get(art) or {}).get("label")}}
 
 
 def image_record(doc: dict | None, no: str) -> dict | None:

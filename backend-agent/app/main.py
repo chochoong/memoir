@@ -956,6 +956,19 @@ def _unsupported_style() -> JSONResponse:
     return JSONResponse({"detail": styles.SAYS, "code": styles.CODE}, status_code=400)
 
 
+def _illust_style(body: dict) -> str | JSONResponse:
+    """
+    자서전 본문의 illust_style — 삽화 그림체 (watercolor 수채화 · pencil_wash 연필담채화 · oil_painting 유화).
+    **키가 없을 때만** 수채화다. 모르는 값은 400 {code: unsupported_illust_style} — 다른 그림체로 바꿔 그리지 않는다.
+    문체 style 과 따로 받는다 (style 을 덮어쓰지 않는다).
+    """
+    try:
+        return memoir_illust_service.pick_art_style(body.get("illust_style"))
+    except memoir_illust_service.UnsupportedArtStyle:
+        return JSONResponse({"detail": memoir_illust_service.ART_STYLE_SAYS, "code": memoir_illust_service.ART_STYLE_CODE},
+                            status_code=400)
+
+
 @app.get("/api/sessions/{session_id}/postcard")
 async def get_postcard(session_id: str, request: Request, who: str = Depends(auth.current_user)):
     """
@@ -1028,6 +1041,7 @@ async def memoir_preview(request: Request, who: str = Depends(auth.current_user)
     본문은 `{"session_ids": [...], "style": ...}` (고른 것) 이나
     `{"elder_id": ..., "exclude_session_ids": [...], "style": ...}` (화자의 전부에서 뺄 것 ·
     상한 없음) 다. exclude_session_ids 칸이 있으면 뒤의 것이다. style 은 없으면 구어체다.
+    illust_style(삽화 그림체 — watercolor · pencil_wash · oil_painting)은 없으면 수채화이고, 모르는 값은 400 unsupported_illust_style.
     응답의 run.session_ids 는 실제로 쓴 회차 전부다.
     누구의 요청인지는 로그인으로 안다.
     본문을 pydantic 으로 받지 않는 것은 모양이 틀렸을 때 FastAPI 가 422 를
@@ -1046,6 +1060,9 @@ async def memoir_preview(request: Request, who: str = Depends(auth.current_user)
         chosen = styles.pick(body.get("style"), styles.MEMOIR)
     except styles.UnsupportedStyle:
         return _unsupported_style()
+    illust_style = _illust_style(body)
+    if isinstance(illust_style, JSONResponse):
+        return illust_style
     try:
         if "exclude_session_ids" in body:
             out = await memoir.preview_all(body.get("elder_id"), body["exclude_session_ids"], who, chosen)
@@ -1055,7 +1072,8 @@ async def memoir_preview(request: Request, who: str = Depends(auth.current_user)
         status, code, detail = _memoir_failure(e)
         return JSONResponse({"detail": detail, "code": code}, status_code=status)
     ids = ((out.get("run") or {}).get("session_ids")) or []
-    return {**out, "memoir_id": await memoir_jobs.keep(out, ids, who, chosen)}
+    # 응답 모양은 그대로다 (다섯 키 + style + run + memoir_id) — 그림체는 저장 뒤 삽화 처리에만 간다
+    return {**out, "memoir_id": await memoir_jobs.keep(out, ids, who, chosen, illust_style)}
 
 
 async def _memoir_body(request: Request) -> dict:
@@ -1099,6 +1117,9 @@ async def memoir_start(request: Request, who: str = Depends(auth.current_user)):
         chosen = styles.pick(body.get("style"), styles.MEMOIR)
     except styles.UnsupportedStyle:
         return _unsupported_style()
+    illust_style = _illust_style(body)
+    if isinstance(illust_style, JSONResponse):
+        return illust_style
     busy = memoir_jobs.running(who)
     if busy is not None:
         return JSONResponse({"detail": "자서전을 만들고 있어요. 다 만들어지면 볼 수 있어요.", "code": "busy",
@@ -1109,7 +1130,7 @@ async def memoir_start(request: Request, who: str = Depends(auth.current_user)):
     except memoir.MemoirError as e:
         status, code, detail = _memoir_failure(e)
         return JSONResponse({"detail": detail, "code": code}, status_code=status)
-    job = await memoir_jobs.start(recs, ids, who, chosen)
+    job = await memoir_jobs.start(recs, ids, who, chosen, illust_style)
     return JSONResponse(_memoir_job_view(job), status_code=202)
 
 
@@ -1235,7 +1256,7 @@ async def memoir_job_cancel(job_id: str, who: str = Depends(auth.current_user)):
 
 
 def _memoir_job_view(job: memoir_jobs.Job) -> dict:
-    out = {"job_id": job.job_id, "status": job.status, "style": job.style,
+    out = {"job_id": job.job_id, "status": job.status, "style": job.style, "illust_style": job.illust_style,
            "run": {"session_ids": job.ids}, "elapsed": memoir_jobs.elapsed(job)}
     if job.status == memoir_jobs.RUNNING:
         out.update(stage=job.stage, chapter=job.chapter, chapters=job.chapters)

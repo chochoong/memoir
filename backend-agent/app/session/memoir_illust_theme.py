@@ -9,14 +9,20 @@
 
 주제 방식의 흐름 — 장 전체 읽기 → 중심 주제와 분위기 → 대표 소재와 구도 → 한국어 그림 지시문 → 생성 · 저장 · 삽입.
 
-    theme_message       제목 + 장 본문 전체(문단 번호) + 그 장의 원문 말씀 → 모델 (지시문 1_목차주제_v7)
+    theme_message       제목 + 장 본문 전체(문단 번호) + 그 장의 원문 말씀 → 모델 (지시문 1_목차주제_v8)
     parse_plan          모델의 계획 — 주제 · 분위기 · 뒷받침 내용 · 그릴 소재 · 구도. 모양이 틀리면 model_output, 비었으면 empty_plan
     theme_checks        응답 모양 · 주제와 소재가 있는가 · 그림 지시문이 조립되는가만 본다
-    build_theme_prompt  계획의 소재 · 구도와 고정 양식(2_그림양식_v2)으로 한국어 그림 지시문을 조립한다
+    build_theme_prompt  계획의 소재 · 구도 + 공통 양식(2_그림양식_v3) + 그 책의 그림체 하나로 한국어 그림 지시문을 조립한다
     choose_theme        위를 묶어 memoir_illust_book.choose 와 같은 모양의 결과를 낸다. 넣을 자리는 장의 첫 문단 뒤다
 
+**그림체는 그림 지시문의 표현 양식일 뿐이다 (2026-11-25).** 책마다 하나(수채화 watercolor · 연필담채화 pencil_wash ·
+유화 oil_painting, 기본 수채화)를 화면에서 고르고, 그 책의 모든 AI 삽화가 같은 그림체로 그려진다. 계획(주제 · 소재 · 구도)을
+고르는 지시문 v8 에는 그림체를 알리지 않는다 — 같은 장은 그림체가 달라도 같은 계획이고, 그림 지시문의 [그림체] ·
+[이 그림체에서 피할 것] 두 블록만 다르다. 그림체 때문에 원문에 없는 사건 · 인물 관계를 더하지 않는다(공통 양식 그대로).
+자서전 문체(memoir.style · spoken · essay …)와는 따로다.
+
 **뜻은 모델이 판단한다 — 코드는 낱말로 막지 않는다 (v2).** 본문의 실제 경험과 부정 · 가정 · 희망으로 말한 일을 가리는 것,
-본문과 반대되는 경험이나 새 사건을 만들지 않는 것은 지시문 v7 이 모델에게 맡긴다. 코드는 「안 · 못 · 없」 같은 낱말 · 반복 횟수 ·
+본문과 반대되는 경험이나 새 사건을 만들지 않는 것은 지시문 v7 · v8 이 모델에게 맡긴다. 코드는 「안 · 못 · 없」 같은 낱말 · 반복 횟수 ·
 짧은 인용 · 참여 인물 · 관계 낱말로 소재를 빼거나 생성을 막지 않는다. 그래서 코드는 그 판단을 검증했다고 적지 않는다 —
 결과의 verdict 에 한 검사와 하지 않은 검사(뜻)를 그대로 적고, human 은 not_reviewed 그대로다.
 
@@ -37,13 +43,65 @@ from . import memoir_illust as il
 POLICY = "chapter_theme_v2"
 CHECKS_VERSION = "theme_checks_v2"
 MODE = "THEME"
-SELECT_FILE = "1_목차주제_v7.md"           # v6 은 chapter_theme_v1 의 기록으로 남긴다
-STYLE_FILE = "2_그림양식_v2.md"
-STYLE_ID = "watercolor-recall-v2"
+SELECT_FILE = "1_목차주제_v8.md"           # v7(수채화를 적었다) · v6(chapter_theme_v1) 은 그 판의 기록으로 남긴다
+STYLE_FILE = "2_그림양식_v3.md"            # 공통 양식 — 그림체와 상관없는 부분. v2(수채화 고정)는 그 판의 기록으로 남긴다
+STYLE_VERSION = "recall-v3"                 # 그림 지시문의 style_id = <그림체>-recall-v3
 KINDS = ("object", "place", "activity", "person", "nature")
 MAX_SUBJECTS, MAX_MAIN, MAX_SUB = 6, 3, 4
 TEXT_MAX, THEME_MAX, SHORT_MAX, MOOD_MAX, PERIOD_MAX, COMPOSITION_MAX = 40, 120, 30, 40, 30, 220
-DEFAULT_COMPOSITION = "중심 소재를 화면 가운데에 두고, 둘레는 이 장의 분위기에 맞게 여백을 두어 옅게 풀어 준다"
+# 모델이 구도를 적지 않았을 때. 그림체와 상관없게 적는다 (v2 의 「옅게 풀어 준다」 는 수채 표현이라 수채화 그림체로 옮겼다)
+DEFAULT_COMPOSITION = "중심 소재를 화면 가운데에 두고, 둘레는 이 장의 분위기에 맞게 여백을 둔다"
+
+# 삽화 그림체 — 책마다 하나. 화면 · API 의 illust_style 과 같은 식별자다. 문체(style)와 따로다
+ART_STYLES = {
+    "watercolor": {"label": "수채화", "file": "2_그림체_수채화_v1.md"},
+    "pencil_wash": {"label": "연필담채화", "file": "2_그림체_연필담채화_v1.md"},
+    "oil_painting": {"label": "유화", "file": "2_그림체_유화_v1.md"},
+}
+DEFAULT_ART_STYLE = "watercolor"            # 고르지 않았을 때 · 그림체를 고르기 전에 만든 책
+ART_STYLE_CODE = "unsupported_illust_style"
+ART_STYLE_SAYS = "지원하지 않는 삽화 그림체예요."
+
+
+class UnsupportedArtStyle(ValueError):
+    """모르는 그림체. 라우트는 400 {code: unsupported_illust_style} 로 바꾼다 — 다른 그림체로 바꿔 그리지 않는다."""
+
+
+def pick_art_style(v) -> str:
+    """
+    화면이 보낸 illust_style. **키가 없을 때(None)만** 기본(수채화)이다 — 빈 문자열 · 대소문자만 다른 값 · 숫자 · 모르는 값은
+    거절한다 (문체 style.pick 과 같은 규칙). 받은 문자열을 지시문에 넣지 않는다 — 지시문에는 ART_STYLES 의 파일만 들어간다.
+    """
+    if v is None:
+        return DEFAULT_ART_STYLE
+    if not isinstance(v, str) or v not in ART_STYLES:
+        raise UnsupportedArtStyle(f"illust_style={v!r}")
+    return v
+
+
+def stored_art_style(v) -> str:
+    """저장된 책의 그림체. 값이 없으면(그림체를 고르기 전에 만든 책) 수채화다. 모르는 값은 거절한다."""
+    return DEFAULT_ART_STYLE if v in (None, "") else pick_art_style(v)
+
+
+def art_style_hash(art: str) -> str:
+    return _file_hash(ART_STYLES[pick_art_style(art)]["file"])
+
+
+def art_style_blocks(art: str) -> dict[str, str]:
+    """그 그림체의 [그림체] · [이 그림체에서 피할 것] 블록."""
+    name = ART_STYLES[pick_art_style(art)]["file"]
+    b = il._blocks(il.PROMPTS / name)
+    missing = [n for n in ("1", "2") if not b.get(n)]
+    if missing:
+        raise il.IllustError("prompt_file", f"{name} 에 §{' · §'.join(missing)} 블록이 없다")
+    return {"medium": b["1"], "avoid": b["2"]}
+
+
+def art_style_info(art: str) -> dict:
+    """책 · 장 기록에 남기는 그림체 — 식별자 · 화면 이름 · 파일 · 해시."""
+    art = pick_art_style(art)
+    return {"id": art, "label": ART_STYLES[art]["label"], "file": ART_STYLES[art]["file"], "hash": art_style_hash(art)}
 
 # 참고 정보(anchor 가 본문 어디에 나오는가)를 셀 때 낱말 뒤에 붙어도 같은 낱말로 보는 조사 · 서술격 어미. 판정에는 쓰지 않는다
 _PARTICLES = sorted("""은 는 이 가 을 를 에 에서 에게 께 께서 한테 의 와 과 도 만 로 으로 랑 이랑 하고 까지 부터 처럼 보다 마다
@@ -234,9 +292,18 @@ def theme_checks(data: dict, ident, plan: dict) -> dict:
 
 # ---------------------------------------------------------------- 그림 지시문 · 자리
 
-def build_theme_prompt(chk: dict) -> dict:
-    """계획의 주제 · 소재 · 구도와 고정 양식(v2)으로 조립한다. 본문에 없다고 모델이 적은 것(not_in_story)은 지시문에 넣지 않는다."""
+def build_theme_prompt(chk: dict, art_style: str = DEFAULT_ART_STYLE) -> dict:
+    """
+    계획의 주제 · 소재 · 구도 + 공통 양식(v3) + 그 책의 그림체 하나로 조립한다. 본문에 없다고 모델이 적은 것(not_in_story)은 지시문에
+    넣지 않는다. 순서 — 공통 양식 → 그림체 → 이 장의 주제 · 그릴 것 → 인물 표현 → 넣지 않는 것 → 이 그림체에서 피할 것.
+    그림체가 달라도 주제 · 그릴 것 블록(scene_block)은 같다. 모르는 그림체는 IllustError("art_style") — 지시문에 넣지 않는다.
+    """
+    try:
+        art = pick_art_style(art_style)
+    except UnsupportedArtStyle as e:
+        raise il.IllustError("art_style", f"모르는 그림체다: {art_style!r} (쓸 수 있는 값: {', '.join(ART_STYLES)})") from e
     blocks = style_blocks()
+    medium = art_style_blocks(art)
     main, sub = chk["main"], chk["sub"]
     theme = chk["theme_short"] + (f" — {chk['theme']}" if chk["theme"] and chk["theme"] != chk["theme_short"] else "")
     about = [f"- 주제: {theme}", f"- 분위기: {chk['mood'] or '차분하고 따뜻하게'}",
@@ -250,12 +317,14 @@ def build_theme_prompt(chk: dict) -> dict:
                 if any(s["kind"] == "person" for s in main + sub)
                 else "- 인물: 넣지 않아도 된다. 넣는다면 멀리서 본 작은 뒷모습으로만")
     block = "[이 장의 주제]\n" + "\n".join(about) + "\n\n[그릴 것]\n" + "\n".join(draw)
-    text = "\n\n".join([blocks["style"], block, blocks["people"], blocks["negative"]])
+    text = "\n\n".join([blocks["style"], medium["medium"], block, blocks["people"], blocks["negative"], medium["avoid"]])
     if len(text) > il.PROMPT_MAX and sub:                      # 길면 보조 소재부터 줄인다
-        return build_theme_prompt({**chk, "sub": sub[:-1]})
+        return build_theme_prompt({**chk, "sub": sub[:-1]}, art)
     if len(text) > il.PROMPT_MAX:
         raise il.IllustError("prompt_too_long", f"그림 지시문이 {len(text)}자 — 상한 {il.PROMPT_MAX}자")
-    return {"style_id": STYLE_ID, "language": "ko", "policy": POLICY, "text": text, "scene_block": block,
+    return {"style_id": f"{art}-{STYLE_VERSION}", "art_style": art, "art_style_label": ART_STYLES[art]["label"],
+            "art_style_file": ART_STYLES[art]["file"], "art_style_hash": art_style_hash(art), "style_file": STYLE_FILE,
+            "language": "ko", "policy": POLICY, "text": text, "scene_block": block,
             "elements_used": [s["text"] for s in main + sub],
             "composition": {"main": [s["text"] for s in main], "sub": [s["text"] for s in sub],
                             "layout": chk["composition"] or DEFAULT_COMPOSITION,
@@ -274,10 +343,14 @@ def theme_placement(data: dict, ident) -> dict:
             "sentence_index": None, "sentence_count": None, "sentence_anchor": None}
 
 
-def choose_theme(data: dict, ident, reply) -> dict:
-    """목차 한 장의 주제 그림 — memoir_illust_book.choose 와 같은 모양 (status · mode · scene · prompt · placement …)."""
+def choose_theme(data: dict, ident, reply, art_style: str = DEFAULT_ART_STYLE) -> dict:
+    """
+    목차 한 장의 주제 그림 — memoir_illust_book.choose 와 같은 모양 (status · mode · scene · prompt · placement …).
+    art_style 은 그림 지시문에만 쓴다 — 계획을 읽고 고르는 일은 그림체와 상관없이 같다.
+    """
     ch = _chapter(data, ident)
-    base = {"policy": POLICY, "checks_version": CHECKS_VERSION, "mode": MODE, "automatic": True, "human": "not_reviewed"}
+    base = {"policy": POLICY, "checks_version": CHECKS_VERSION, "mode": MODE, "automatic": True, "human": "not_reviewed",
+            "art_style": art_style}
     verdict = {"policy": POLICY, "checks_version": CHECKS_VERSION, "checked": THEME_CHECKED, "not_checked": THEME_NOT_CHECKED,
                "meaning_verified_by_code": False}
     try:
@@ -287,7 +360,7 @@ def choose_theme(data: dict, ident, reply) -> dict:
                 "verdict": {**verdict, "accept": False, "blocking": [e.kind]}}
     chk = theme_checks(data, ident, plan)
     try:
-        prompt = build_theme_prompt(chk)
+        prompt = build_theme_prompt(chk, art_style)
     except il.IllustError as e:
         return {**base, "status": "failed", "reasons": [e.kind], "detail": e.message, "theme": chk, "tried": [],
                 "verdict": {**verdict, "accept": False, "blocking": [e.kind]}}
