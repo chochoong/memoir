@@ -1,8 +1,8 @@
 # 9-C1 — 완성된 자서전의 사진 넣기 · 옮기기 · 빼기 (API 계약)
 
 - 작성: 2026-11-25 · 근거: 업무지시서 「자서전 사진 추가·이동·삭제」 (11/25)
-- 코드: `app/session/memoir_photos.py` · `app/main.py` (자서전 사진 절) · `app/migrations/018_memoir_photo_placement.sql`
-- 시험: `tests/test_memoir_photos.py` (업무지시서 7절 완료 기준 C1~C7)
+- 코드: `app/session/memoir_photos.py` · `app/main.py` (자서전 사진 절) · `app/migrations/018_memoir_photo_placement.sql` · `020_photo_placement_sessions.sql` (11/26 보완)
+- 시험: `tests/test_memoir_photos.py` (업무지시서 7절 완료 기준 C1~C7 · 배치 id 회귀) · `tests/test_memoir_photos_db.py` (실제 Postgres)
 
 ## 정한 것
 
@@ -38,6 +38,8 @@
 ```
 
 - `origin`: `auto` 자동으로 놓인 회차 사진 · `manual` 사용자가 넣은 사진 · `ai` AI 삽화.
+- `placement_id` 는 **책마다 다르다** — 같은 인터뷰로 만든 두 책의 같은 사진도 id 가 달라 서로 영향이 없다. 자동 사진의 id 는
+  재처리로 회차 묶음이 바뀌어도 그대로다 (11/26 보완, 020). 화면은 늘 응답에 온 id 를 그대로 쓰면 된다.
 - 한 장 안의 figures 는 **이미 정렬돼 있다** — 같은 문단이면 배열 순서대로 쌓으면 된다. 화면과 PDF(`window.print`)가 같은 배열을 쓰면 순서가 같다.
 - 사진을 손대지 않은 책은 예전과 같은 figures 에 칸 4개만 더해진다.
 - 사용자가 다시 넣은 사진은 `unplaced_photos` 에서 빠진다.

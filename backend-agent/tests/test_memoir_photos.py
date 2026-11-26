@@ -54,8 +54,10 @@ class Book:
             if old is not None and (old["memoir_id"], old["user_id"]) != (rec["memoir_id"], rec["user_id"]):
                 return None
             row = {**(old or {"created_at": f"t{next(clock):05d}"}), **rec, "photo_id": str(rec["photo_id"])}
-            if old is not None:                                       # 고칠 때는 자리 · 순서 · 숨김만 (DB 와 같다)
-                row = {**old, **{k: rec[k] for k in ("chapter_no", "after_paragraph", "display_order", "hidden")}}
+            if old is not None:                                       # 고칠 때는 자리 · 순서 · 숨김 · 회차만 (DB 와 같다)
+                row = {**old, **{k: rec[k] for k in ("chapter_no", "after_paragraph", "display_order", "hidden")},
+                       "sessions": rec.get("sessions") or old.get("sessions"),
+                       "anchor_session": old.get("anchor_session") or rec.get("anchor_session")}
             self.rows[rec["placement_id"]] = row
             return copy.deepcopy(row)
 
@@ -282,6 +284,93 @@ def test_final_photos_order_is_paragraph_then_display_order_then_creation():
              "display_order": 0, "hidden": False, "created_at": "t1"},
             {"placement_id": "p_c", "origin": "manual", "photo_id": P3, "chapter_no": 1, "after_paragraph": None,
              "display_order": 0, "hidden": False, "created_at": "t0"}]
-    assert [p["placement_id"] for p in mp.final_photos(None, rows)] == ["p_a", "p_b", "p_c"]
-    assert mp.auto_id(P1, "A") == mp.auto_id(P1, "A") != mp.auto_id(P1, "B")
+    assert [p["placement_id"] for p in mp.final_photos(None, rows, MID)] == ["p_a", "p_b", "p_c"]
+    assert mp.auto_id(MID, P1, "A") == mp.auto_id(MID, P1, "A") != mp.auto_id(MID, P1, "B")
+    assert mp.auto_id(MID, P1, "A") != mp.auto_id("m_other", P1, "A")                       # 책마다 다르다
     assert mp.manual_id(MID, ME, "r") == mp.manual_id(MID, ME, "r") != mp.manual_id(MID, OTHER, "r")
+
+
+# ---------------------------------------------------------------- 11/26 검토 보완 — 책마다 따로 · 회차 묶음이 바뀌어도 유지
+
+MID_B = "m_" + "d" * 32
+
+
+def _second_book(monkeypatch, book):
+    """같은 인터뷰(같은 회차 · 같은 사진)로 만든 두 번째 책."""
+    first = store.load_memoir
+
+    async def load_memoir(mid, uid):
+        if mid == MID_B and uid == ME:
+            return {**copy.deepcopy(book.db.row), "memoir_id": MID_B}
+        return await first(mid, uid)
+    monkeypatch.setattr(store, "load_memoir", load_memoir)
+
+
+def _figs(c, mid, no):
+    v = c.get(f"/api/memoirs/saved/{mid}/illustrations", headers=ME_H).json()
+    ch = next((x for x in v["chapters"] if x["no"] == no), {"figures": []})
+    return [(f["photo_id"], f["after_paragraph"], f["placement_id"]) for f in ch["figures"] if f["kind"] == "photo"]
+
+
+def test_two_books_from_the_same_interview_are_edited_independently(env, monkeypatch):
+    book, c = env
+    _second_book(monkeypatch, book)
+    a_id, b_id = _figs(c, MID, 1)[0][2], _figs(c, MID_B, 1)[0][2]
+    assert a_id != b_id                                                                     # 같은 사진 · 회차라도 책마다 다른 id
+    assert c.patch(f"/api/memoirs/saved/{MID}/photos/{a_id}", json={"after_paragraph": 1}, headers=ME_H).status_code == 200
+    r = c.delete(f"/api/memoirs/saved/{MID_B}/photos/{b_id}", headers=ME_H)
+    assert r.status_code == 204                                                             # 앞선 판에서는 404 였다
+    assert [x[:2] for x in _figs(c, MID, 1)] == [(P1, 1)] and _figs(c, MID_B, 1) == []
+    assert c.patch(f"/api/memoirs/saved/{MID_B}/photos/{a_id}", json={"after_paragraph": 1}, headers=ME_H).status_code == 404
+
+
+def _regroup(book, sessions, chapter="1"):
+    book.db.row["illustrations"]["chapters"][chapter]["photos"][0]["sessions"] = sessions
+
+
+def test_removed_auto_photo_stays_removed_when_its_session_group_changes(env):
+    book, c = env
+    _regroup(book, ["A", "B"])
+    pid = auto_pid(c)
+    assert c.delete(f"/api/memoirs/saved/{MID}/photos/{pid}", headers=ME_H).status_code == 204
+    for group in (["B"], ["A"], ["B", "C"]):                                                 # 처음 회차가 빠져도 · 남아도 · 새 회차가 더해져도
+        _regroup(book, group)
+        assert photos_of(c, 1) == [], group
+    _regroup(book, ["Z"])                                                                   # 회차가 하나도 이어지지 않으면 다른 사진 자리다
+    assert photos_of(c, 1) == [(P1, 0, "auto")]
+
+
+def test_moved_auto_photo_keeps_its_place_and_id_when_its_session_group_changes(env):
+    book, c = env
+    _regroup(book, ["A", "B"])
+    pid = auto_pid(c)
+    assert c.patch(f"/api/memoirs/saved/{MID}/photos/{pid}", json={"chapter_no": 2, "after_paragraph": 2},
+                   headers=ME_H).status_code == 200
+    _regroup(book, ["B"])
+    got = [f for f in figs(c, 2) if f["kind"] == "photo"]
+    assert [(f["photo_id"], f["after_paragraph"], f["placement_id"]) for f in got] == [(P1, 2, pid)]
+    assert photos_of(c, 1) == []
+    assert c.patch(f"/api/memoirs/saved/{MID}/photos/{pid}", json={"after_paragraph": 0}, headers=ME_H).status_code == 200
+
+
+def test_hiding_one_auto_photo_does_not_hide_the_same_file_placed_elsewhere(env):
+    book, c = env
+    doc = book.db.row["illustrations"]
+    doc["chapters"]["2"] = {**copy.deepcopy(doc["chapters"]["1"]), "no": 2}                 # 같은 사진을 다른 회차가 2장에
+    doc["chapters"]["2"]["photos"][0].update(sessions=["B"], session_id="B")
+    _regroup(book, ["A"])
+    one = next(f["placement_id"] for f in figs(c, 1) if f["kind"] == "photo")
+    assert c.delete(f"/api/memoirs/saved/{MID}/photos/{one}", headers=ME_H).status_code == 204
+    assert photos_of(c, 1) == [] and photos_of(c, 2) == [(P1, 0, "auto")]
+
+
+def test_records_saved_with_the_first_version_id_are_still_found(env):
+    book, c = env
+    old_id = mp.legacy_auto_id(P1, "A")                                                     # 11/25 판 — 책 없이 · 회차 없이 저장된 기록
+    book.rows[old_id] = {"placement_id": old_id, "memoir_id": MID, "user_id": ME, "photo_id": P1, "origin": "auto",
+                         "chapter_no": 1, "after_paragraph": 0, "display_order": 0, "hidden": True, "width": 800,
+                         "height": 600, "sessions": None, "anchor_session": None, "created_at": "t00000"}
+    assert photos_of(c, 1) == []                                                            # 뺀 상태가 그대로
+    book.rows[old_id]["hidden"] = False
+    book.rows[old_id]["after_paragraph"] = 1
+    assert [x[1:] for x in _figs(c, MID, 1)] == [(1, old_id)]

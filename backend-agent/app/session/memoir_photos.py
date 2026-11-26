@@ -38,7 +38,16 @@ class PlacementError(Exception):
         self.status, self.code, self.detail = status, code, detail
 
 
-def auto_id(photo_id: str, session_id: str) -> str:
+def auto_id(memoir_id: str, photo_id: str, session_id: str) -> str:
+    """
+    자동 사진의 배치 id — **책마다 다르다** (같은 인터뷰로 만든 두 책이 서로의 기록을 건드리지 않게).
+    처음 만들 때의 회차(anchor)로 정해지고, 그 뒤 회차 묶음이 바뀌어도 id 는 그대로다 (match_auto 참조).
+    """
+    return "a_" + hashlib.sha256(f"{memoir_id}|{photo_id}|{session_id}".encode()).hexdigest()[:24]
+
+
+def legacy_auto_id(photo_id: str, session_id: str) -> str:
+    """2026-11-25 첫 판의 id (책이 빠져 있었다) — 그때 저장된 기록을 계속 찾기 위해서만 쓴다."""
     return "a_" + hashlib.sha256(f"{photo_id}|{session_id}".encode()).hexdigest()[:24]
 
 
@@ -84,7 +93,7 @@ def check_position(result: dict | None, chapter_no, after_paragraph) -> tuple[in
 
 # ---------------------------------------------------------------- 최종 배치
 
-def auto_photos(doc: dict | None) -> list[dict]:
+def auto_photos(doc: dict | None, memoir_id: str) -> list[dict]:
     """자동 배치가 화면에 내던 사진 (사진 장의 photos) — 지금까지의 view 와 같은 조건 · 같은 순서."""
     out = []
     for key, ch in sorted(((doc or {}).get("chapters") or {}).items(), key=lambda x: int(x[0])):
@@ -92,37 +101,90 @@ def auto_photos(doc: dict | None) -> list[dict]:
             continue
         for i, p in enumerate(ch.get("photos") or []):
             sessions = sorted(p.get("sessions") or ([p["session_id"]] if p.get("session_id") else []))
-            out.append({"placement_id": auto_id(p["photo_id"], sessions[0] if sessions else ""), "origin": "auto",
-                        "photo_id": p["photo_id"], "chapter_no": int(key), "after_paragraph": p.get("after_paragraph"),
+            out.append({"placement_id": auto_id(memoir_id, p["photo_id"], sessions[0] if sessions else ""), "origin": "auto",
+                        "photo_id": p["photo_id"], "sessions": sessions, "anchor_session": sessions[0] if sessions else None,
+                        "chapter_no": int(key), "after_paragraph": p.get("after_paragraph"),
                         "display_order": i, "width": p.get("width"), "height": p.get("height"), "_seq": (0, "", i)})
     return out
 
 
-def final_photos(doc: dict | None, rows: list[dict]) -> list[dict]:
+def match_auto(entries: list[dict], rows: list[dict]) -> tuple[dict[int, dict], list[dict]]:
+    """
+    저장된 자동 사진 기록(auto 행) ↔ 지금의 자동 사진. ({자동 사진 번호: 행}, 짝이 없는 행).
+
+    같은 책 · 같은 사진이고 **회차가 이어지면** 같은 사진으로 본다 — 회차 묶음이 [A, B] → [B] 처럼 바뀌어도
+    사용자가 옮긴 자리 · 뺀 상태가 남는다. 한 사진의 자동 사진들은 회차가 서로 겹치지 않으므로(회차 하나는 한 곳에만
+    놓인다) 다른 장에 따로 놓인 같은 사진은 함께 숨겨지지 않는다. 짝을 찾는 순서:
+        ① 행을 만들 때의 회차(anchor_session)가 들어 있는 자동 사진
+        ② 첫 판의 id(legacy_auto_id — 책 없이 (사진, 회차))가 맞는 자동 사진 — 그때 저장된 기록
+        ③ 행에 적힌 회차(sessions)와 가장 많이 겹치는 자동 사진
+    자동 사진 하나에는 행 하나만 짝짓는다.
+    """
+    autos = [r for r in rows if r["origin"] == "auto"]
+    got: dict[int, dict] = {}
+    used: set[str] = set()
+
+    def take(r, pick):
+        for i, a in enumerate(entries):
+            if i not in got and a["photo_id"] == r["photo_id"] and pick(a):
+                got[i] = r
+                used.add(r["placement_id"])
+                return True
+        return False
+
+    for r in autos:
+        if r.get("anchor_session"):
+            take(r, lambda a, s=r["anchor_session"]: s in a["sessions"])
+    for r in autos:
+        if r["placement_id"] not in used and not r.get("anchor_session"):
+            take(r, lambda a, pid=r["placement_id"]: any(legacy_auto_id(a["photo_id"], s) == pid for s in a["sessions"]))
+    for r in autos:
+        if r["placement_id"] in used or not r.get("sessions"):
+            continue
+        mine = set(r["sessions"])
+        best = max(((len(mine & set(a["sessions"])), i) for i, a in enumerate(entries)
+                    if i not in got and a["photo_id"] == r["photo_id"] and mine & set(a["sessions"])), default=None)
+        if best is not None:
+            got[best[1]] = r
+            used.add(r["placement_id"])
+    return got, [r for r in autos if r["placement_id"] not in used]
+
+
+def final_photos(doc: dict | None, rows: list[dict], memoir_id: str) -> list[dict]:
     """자동 사진 + 사용자 선택 → 지금 책에 보이는 사진 (빠진 것 · 자리 없는 것 제외)."""
-    auto = {a["placement_id"]: a for a in auto_photos(doc)}
+    entries = auto_photos(doc, memoir_id)
+    got, orphans = match_auto(entries, rows)
     out = []
+    for i, a in enumerate(entries):
+        r = got.get(i)
+        if r is None:                                           # 손대지 않은 자동 사진
+            out.append(a)
+            continue
+        if r.get("hidden"):
+            continue
+        a = {**a, "placement_id": r["placement_id"], "anchor_session": r.get("anchor_session") or a["anchor_session"]}
+        if r.get("chapter_no") is not None:
+            a.update(chapter_no=r["chapter_no"], after_paragraph=r.get("after_paragraph"),
+                     display_order=r.get("display_order") or 0, edited=True)
+        out.append(a)
+    shown = {a["photo_id"] for a in entries}
+    for r in orphans:
+        # 재처리로 자동 배치에서 사라졌어도 사용자가 옮겨 둔 자리는 지킨다 — 같은 사진이 다른 자동 자리로 이미 보이면 겹쳐 내지 않는다
+        if not r.get("hidden") and r.get("chapter_no") is not None and r["photo_id"] not in shown:
+            out.append({"placement_id": r["placement_id"], "origin": "auto", "photo_id": r["photo_id"],
+                        "sessions": r.get("sessions") or [], "anchor_session": r.get("anchor_session"),
+                        "chapter_no": r["chapter_no"], "after_paragraph": r.get("after_paragraph"),
+                        "display_order": r.get("display_order") or 0, "width": r.get("width"), "height": r.get("height"),
+                        "edited": True, "_seq": (1, str(r.get("created_at") or ""), r["placement_id"])})
     for r in rows:
+        if r["origin"] != "manual":
+            continue
         seq = (1, str(r.get("created_at") or ""), r["placement_id"])
-        if r["origin"] == "auto":
-            a = auto.pop(r["placement_id"], None)
-            if r.get("hidden"):
-                continue
-            base = a or {"placement_id": r["placement_id"], "origin": "auto", "photo_id": r["photo_id"],
-                         "width": r.get("width"), "height": r.get("height"), "_seq": seq}
-            # 재처리로 자동 배치에서 사라졌어도 사용자가 옮겨 둔 자리는 지킨다
-            if r.get("chapter_no") is None:
-                if a is not None:
-                    out.append(a)
-                continue
-            out.append({**base, "chapter_no": r["chapter_no"], "after_paragraph": r.get("after_paragraph"),
-                        "display_order": r.get("display_order") or 0, "edited": True})
-        elif not r.get("hidden") and r.get("chapter_no") is not None:
+        if not r.get("hidden") and r.get("chapter_no") is not None:
             out.append({"placement_id": r["placement_id"], "origin": "manual", "photo_id": r["photo_id"],
                         "chapter_no": r["chapter_no"], "after_paragraph": r.get("after_paragraph"),
                         "display_order": r.get("display_order") or 0, "width": r.get("width"), "height": r.get("height"),
                         "_seq": seq})
-    out.extend(auto.values())                                   # 손대지 않은 자동 사진
     return sorted(out, key=_order)
 
 
@@ -152,7 +214,7 @@ def merged_view(memoir_id: str, doc: dict | None, result: dict | None, rows: lis
     AI 삽화 figure 는 origin = "ai", placement_id = None (이번 범위에서 옮기거나 빼지 않는다).
     """
     v = svc.view(memoir_id, doc)
-    photos = final_photos(doc, rows)
+    photos = final_photos(doc, rows, memoir_id)
     if not rows and not photos:
         return v
     by_no = {c["no"]: c for c in v["chapters"]}

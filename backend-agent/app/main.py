@@ -1288,7 +1288,7 @@ async def memoir_photo_add(memoir_id: str, request: Request, chapter_no: int | N
             raise HTTPException(503, "지금은 사진을 저장하지 못했습니다") from e
         # 분석(photo.analyze_later)을 걸지 않는다 — 책에 넣는 사진은 질문에 쓰지 않는다 (유료 호출 0)
 
-    now = memoir_photos.final_photos(rec.get("illustrations"), rows)
+    now = memoir_photos.final_photos(rec.get("illustrations"), rows, rec["memoir_id"])
     try:
         row = await store.save_photo_placement({
             "placement_id": pid, "memoir_id": rec["memoir_id"], "user_id": who, "photo_id": pic["photo_id"],
@@ -1311,7 +1311,7 @@ async def memoir_photo_add(memoir_id: str, request: Request, chapter_no: int | N
 
 def _target(rec: dict, rows: list[dict], placement_id: str) -> dict | None:
     """옮기거나 뺄 사진 — 지금 책에 보이는 것만 (자동 · 옮겨 둔 자동 · 넣은 사진). 뺀 사진은 없다(404)."""
-    return next((p for p in memoir_photos.final_photos(rec.get("illustrations"), rows)
+    return next((p for p in memoir_photos.final_photos(rec.get("illustrations"), rows, rec["memoir_id"])
                  if p["placement_id"] == placement_id), None)
 
 
@@ -1340,12 +1340,13 @@ async def memoir_photo_move(memoir_id: str, placement_id: str, request: Request,
     except memoir_photos.PlacementError as e:
         return _placement_failure(e)
     if order is None:
-        now = memoir_photos.final_photos(rec.get("illustrations"), rows)
+        now = memoir_photos.final_photos(rec.get("illustrations"), rows, rec["memoir_id"])
         same = (no, ap) == (cur.get("chapter_no"), cur.get("after_paragraph"))
         order = (cur.get("display_order") or 0) if same else memoir_photos.next_order(now, no, ap, skip=placement_id)
     row = await _read(store.save_photo_placement({
         "placement_id": cur["placement_id"], "memoir_id": rec["memoir_id"], "user_id": who, "photo_id": cur["photo_id"],
         "origin": cur["origin"], "chapter_no": no, "after_paragraph": ap, "display_order": order, "hidden": False,
+        "sessions": cur.get("sessions"), "anchor_session": cur.get("anchor_session"),
         "width": cur.get("width"), "height": cur.get("height")}))
     if row is None:
         return _placement_gone()
@@ -1371,6 +1372,7 @@ async def memoir_photo_remove(memoir_id: str, placement_id: str, who: str = Depe
         ok = await _read(store.save_photo_placement({
             "placement_id": cur["placement_id"], "memoir_id": rec["memoir_id"], "user_id": who,
             "photo_id": cur["photo_id"], "origin": "auto", "chapter_no": cur.get("chapter_no"),
+            "sessions": cur.get("sessions"), "anchor_session": cur.get("anchor_session"),
             "after_paragraph": cur.get("after_paragraph"), "display_order": cur.get("display_order") or 0,
             "hidden": True, "width": cur.get("width"), "height": cur.get("height")})) is not None
     if not ok:
