@@ -35,7 +35,7 @@ from pydantic import BaseModel, Field
 
 from app.session import controller as sc
 from app.session import (auth, limits, link, memoir, memoir_illust_service, memoir_jobs, memoir_photos, photo, photostore,
-                         postcard, prompt, share, store, stt, tts, words)
+                         postcard, prompt, share, store, stt, tts, voice_message, words)
 from app.session import style as styles
 from app.session.conf import env_flag, env_int, env_str
 from app.session.machine import State, TransitionError
@@ -120,8 +120,10 @@ async def lifespan(app: FastAPI):
     asyncio.create_task(stt.warmup())
     asyncio.create_task(tts.warmup())
     sweeper = asyncio.create_task(sc.sweep_forever())
+    voice_sweeper = asyncio.create_task(voice_message.sweep_forever())
     yield
     sweeper.cancel()
+    voice_sweeper.cancel()
     await stt.aclose()
     await tts.aclose()
     await store.close_pool()
@@ -1377,6 +1379,197 @@ async def memoir_photo_remove(memoir_id: str, placement_id: str, who: str = Depe
     return Response(status_code=204)
 
 
+# ---------------------------------------------------------------- 가족 음성편지 (019)
+#
+# voice_message.py 머리 참조. 실패는 {detail, code}:
+#   400 request_id_required · bad_revision · 404 memoir_not_found · upload_not_found · message_not_found
+#   409 revision_conflict {revision} · upload_in_use · upload_attached · 410 upload_expired
+#   413 너무 큼 · 415 unsupported_audio · 422 too_long · too_short · 503 voice_unavailable · voice_busy
+
+def _voice_failure(e: voice_message.VoiceError) -> JSONResponse:
+    return JSONResponse({"detail": e.detail, "code": e.code}, status_code=e.status)
+
+
+def _voice_json(status: int, code: str, detail: str, **more) -> JSONResponse:
+    return JSONResponse({"detail": detail, "code": code, **more}, status_code=status)
+
+
+def _request_id(raw) -> str | None:
+    s = str(raw or "").strip()
+    return s[:128] if s else None
+
+
+def _ranged(data: bytes, mime: str, request: Request, etag: str, cache: str) -> Response:
+    """
+    음성 바이트 — Range 한 구간을 받는다 (206). 아이폰 사파리의 <audio> 는 Range 를 지원하지 않는 서버의 음성을
+    재생하지 않거나 넘겨 듣기를 못 한다. 여러 구간 요청은 전체(200)로 답한다.
+    """
+    head = {"Accept-Ranges": "bytes", "ETag": etag, "Cache-Control": cache}
+    if request.headers.get("if-none-match") == etag:
+        return Response(status_code=304, headers=head)
+    rng, n = (request.headers.get("range") or "").strip(), len(data)
+    if rng.startswith("bytes=") and "," not in rng:
+        a, _, b = rng[6:].partition("-")
+        try:
+            if a == "":                                   # 끝에서 몇 바이트
+                start, end = max(0, n - int(b)), n - 1
+            else:
+                start, end = int(a), min(int(b), n - 1) if b else n - 1
+        except ValueError:
+            start = end = -1
+        if not (0 <= start <= end < n):
+            return Response(status_code=416, headers={**head, "Content-Range": f"bytes */{n}"})
+        return Response(content=data[start:end + 1], status_code=206, media_type=mime,
+                        headers={**head, "Content-Range": f"bytes {start}-{end}/{n}"})
+    return Response(content=data, media_type=mime, headers=head)
+
+
+async def _voice_bytes(up: dict, request: Request, cache: str) -> Response:
+    try:
+        data = await photostore.current().get(up["play_key"])
+    except photostore.PhotoMissing as e:
+        log.error("음성편지 바이트가 없다 %s", up["upload_id"][:11])
+        raise HTTPException(404, "음성편지를 찾을 수 없어요") from e
+    except photostore.PhotoStoreError as e:
+        raise HTTPException(503, "지금은 음성편지를 불러오지 못했어요") from e
+    return _ranged(data, up["play_mime"], request, f'"{up["sha256"][:32]}"', cache)
+
+
+@app.post("/api/voice-message-uploads", status_code=201)
+async def voice_upload(request: Request, who: str = Depends(auth.current_user)):
+    """
+    ② 임시 업로드. 본문 = 녹음 원본 바이트 그대로 (webm · mp4), 머리 X-Request-ID 필수.
+    → 201 {upload_id, state: "uploaded", duration_ms, mime, size_bytes, expires_at}. **저장 완료가 아니다** — 책에 연결해야 한다.
+    같은 X-Request-ID 로 다시 보내면 새로 만들지 않고 처음 것을 돌려준다(200). 새 녹음은 새 id.
+    """
+    rid = _request_id(request.headers.get("x-request-id"))
+    if rid is None:
+        return _voice_json(400, "request_id_required", "X-Request-ID 가 필요해요")
+    old = await _read(store.find_voice_upload(who, rid))
+    if old is not None:
+        if old["state"] != "uploaded" and old["state"] != "attached":
+            return _voice_json(410, "upload_expired", "올린 음성의 보관 기한이 지났어요. 새로 저장해 주세요")
+        return JSONResponse(jsonable_encoder(voice_message.upload_view(old)), status_code=200)
+    data = await _body_capped(request, voice_message.max_bytes())
+    try:
+        prep = await voice_message.process(data)
+    except voice_message.VoiceError as e:
+        return _voice_failure(e)
+    uid = voice_message.new_upload_id()
+    key, play_key = voice_message.keys(uid, prep.kind)
+    ps = photostore.current()
+    try:
+        await ps.put(key, prep.data, prep.mime)
+        await ps.put(play_key, prep.play, voice_message.PLAY_MIME)
+    except photostore.PhotoStoreError as e:
+        raise HTTPException(503, "지금은 음성편지를 저장하지 못했어요") from e
+
+    async def undo():
+        for k in (key, play_key):
+            try:
+                await ps.delete(k)
+            except Exception as e2:                              # noqa: BLE001
+                log.error("음성편지 바이트 되돌리기 실패 %s (%s)", uid[:11], type(e2).__name__)
+    try:
+        rec = await store.save_voice_upload({
+            "upload_id": uid, "user_id": who, "request_id": rid, "mime": prep.mime, "size_bytes": len(prep.data),
+            "duration_ms": prep.duration_ms, "sha256": prep.sha256, "storage_key": key, "play_key": play_key,
+            "play_mime": voice_message.PLAY_MIME, "play_bytes": len(prep.play), "expires_at": voice_message.expires_at()})
+    except store.StoreUnavailable as e:
+        await undo()
+        raise HTTPException(503, "지금은 음성편지를 저장하지 못했어요") from e
+    if rec["upload_id"] != uid:                                  # 같은 요청이 동시에 두 번 — 앞선 것이 이겼다
+        await undo()
+        return JSONResponse(jsonable_encoder(voice_message.upload_view(rec)), status_code=200)
+    log.info("음성편지 업로드 %s — %s %.1f초 %dKB", uid[:11], prep.kind, prep.duration_ms / 1000, len(prep.data) // 1024)
+    return JSONResponse(jsonable_encoder(voice_message.upload_view(rec)), status_code=201)
+
+
+@app.delete("/api/voice-message-uploads/{upload_id}", status_code=204)
+async def voice_upload_discard(upload_id: str, who: str = Depends(auth.current_user)):
+    """버린 임시 업로드 (재녹음 · 취소). 책에 연결된 파일은 여기서 지우지 않는다 (409 upload_attached)."""
+    got = await _read(store.discard_voice_upload(upload_id[:64], who))
+    if got == "not_found":
+        return _voice_json(404, "upload_not_found", "올린 음성을 찾을 수 없어요")
+    if got == "attached":
+        return _voice_json(409, "upload_attached", "책에 연결된 음성이에요. 책에서 지워 주세요")
+    return Response(status_code=204)                             # ok · 이미 정리된 것 (다시 눌러도 같다)
+
+
+async def _my_memoir_or_none(memoir_id: str, who: str) -> dict | None:
+    return await _read(store.load_memoir(memoir_id[:64], who))
+
+
+@app.get("/api/memoirs/saved/{memoir_id}/voice-message")
+async def voice_message_get(memoir_id: str, who: str = Depends(auth.current_user)):
+    """{revision, message} — 없으면 message=null. 있으면 {message_id, state: "ready", duration_ms, mime, playback_url}."""
+    rec = await _my_memoir_or_none(memoir_id, who)
+    if rec is None:
+        return _memoir_gone()
+    cur = await _read(store.load_memoir_voice(rec["memoir_id"], who))
+    return JSONResponse(jsonable_encoder(voice_message.message_view(rec["memoir_id"], cur)), headers=_NO_STORE)
+
+
+@app.put("/api/memoirs/saved/{memoir_id}/voice-message")
+async def voice_message_put(memoir_id: str, request: Request, who: str = Depends(auth.current_user)):
+    """
+    ④ 책에 연결 (있던 메시지는 교체). 본문 {upload_id, request_id, expected_revision}. 성공 응답은 GET 과 같다 —
+    message.state = "ready" 가 저장 완료다. revision 이 다르면 409 revision_conflict (다시 읽고 고른다).
+    새 연결이 성공하기 전에는 있던 메시지가 그대로 재생된다.
+    """
+    rec = await _my_memoir_or_none(memoir_id, who)
+    if rec is None:
+        return _memoir_gone()
+    body = await _json_small(request)
+    rid, uid, rev = _request_id(body.get("request_id")), str(body.get("upload_id") or "")[:64], body.get("expected_revision")
+    if rid is None:
+        return _voice_json(400, "request_id_required", "request_id 가 필요해요")
+    if isinstance(rev, bool) or not isinstance(rev, int) or rev < 0:
+        return _voice_json(400, "bad_revision", "expected_revision 은 0 이상의 숫자여야 해요")
+    got, now_rev = await _read(store.attach_voice(rec["memoir_id"], who, uid, rid, rev))
+    if got == "conflict":
+        return _voice_json(409, "revision_conflict", "다른 곳에서 음성편지가 바뀌었어요. 다시 불러와 주세요", revision=now_rev)
+    if got == "memoir_not_found":
+        return _memoir_gone()
+    if got == "upload_not_found":
+        return _voice_json(404, "upload_not_found", "올린 음성을 찾을 수 없어요")
+    if got == "upload_in_use":
+        return _voice_json(409, "upload_in_use", "이미 다른 책에 연결된 음성이에요")
+    if got == "upload_expired":
+        return _voice_json(410, "upload_expired", "올린 음성의 보관 기한이 지났어요. 새로 저장해 주세요")
+    if got == "ok":
+        log.info("음성편지 연결 %s — %s", rec["memoir_id"][:10], uid[:11])
+    cur = await _read(store.load_memoir_voice(rec["memoir_id"], who))
+    return JSONResponse(jsonable_encoder(voice_message.message_view(rec["memoir_id"], cur)), headers=_NO_STORE)
+
+
+@app.delete("/api/memoirs/saved/{memoir_id}/voice-message", status_code=204)
+async def voice_message_delete(memoir_id: str, expected_revision: int | None = None,
+                               who: str = Depends(auth.current_user)):
+    """?expected_revision=값. 성공 204. 파일은 참조가 끊긴 뒤 정리 작업이 지운다."""
+    if expected_revision is None or expected_revision < 0:
+        return _voice_json(400, "bad_revision", "expected_revision 이 필요해요")
+    got, now_rev = await _read(store.detach_voice(memoir_id[:64], who, expected_revision))
+    if got == "memoir_not_found":
+        return _memoir_gone()
+    if got == "conflict":
+        return _voice_json(409, "revision_conflict", "다른 곳에서 음성편지가 바뀌었어요. 다시 불러와 주세요", revision=now_rev)
+    if got == "no_message":
+        return _voice_json(404, "message_not_found", "음성편지가 없어요")
+    log.info("음성편지 지움 %s", memoir_id[:10])
+    return Response(status_code=204)
+
+
+@app.get("/api/memoirs/saved/{memoir_id}/voice-message/audio")
+async def voice_message_audio(memoir_id: str, request: Request, who: str = Depends(auth.current_user)):
+    """책 주인의 재생 (로그인 쿠키). Range 206. 메시지가 없거나 남의 책이면 404."""
+    rec = await _my_memoir_or_none(memoir_id, who)
+    cur = await _read(store.load_memoir_voice(rec["memoir_id"], who)) if rec else None
+    if not cur or not cur.get("upload"):
+        raise HTTPException(404, "음성편지를 찾을 수 없어요")
+    return await _voice_bytes(cur["upload"], request, f"private, max-age={photo.cache_seconds()}")
+
+
 @app.delete("/api/memoirs/saved/{memoir_id}")
 async def delete_saved_memoir(memoir_id: str, who: str = Depends(auth.current_user)):
     """지운다 (목록 · 읽기에서 빠진다). 없거나 남의 것이거나 이미 지웠으면 404."""
@@ -1565,6 +1758,9 @@ async def create_share(request: Request, who: str = Depends(auth.current_user)):
         raise share.bad("책 id 가 틀려요")
     book = share.clean_book(body.get("book"))
     rec, token = await share.issue(who, book_id, book)
+    if book_id.startswith("m_"):
+        # 저장된 자서전에서 낸 공유 — 받은 사람이 그 책의 지금 음성편지를 듣게 원본을 단다 (소유 · 지우지 않은 책만)
+        await share.read(store.set_share_source(rec["share_id"], who, book_id))
     return {**share.summary({**rec, "created_at": None, "revoked_at": None}),
             "token": token, "url": f"{PUBLIC_ORIGIN}{share.PATH}#{token}"}
 
@@ -1593,8 +1789,35 @@ async def shared_book(request: Request):
     바꾸지 않는다. 모르는 토큰 404 invalid_share, 끈 공유 410 share_revoked (책을 싣지 않는다).
     """
     rec = await share.by_token(request.headers.get(share.HEADER))
-    return JSONResponse(jsonable_encoder({"book": rec["book"], "shared_at": rec["created_at"]}),
+    voice = None
+    if rec.get("source_memoir_id"):
+        cur = await share.read(store.load_memoir_voice(rec["source_memoir_id"], rec["user_id"]))
+        voice = voice_message.shared_view(rec["share_id"], cur)
+    return JSONResponse(jsonable_encoder({"book": rec["book"], "shared_at": rec["created_at"], "voice_message": voice}),
                         headers=_NO_STORE)
+
+
+@app.get("/api/b/voice")
+async def shared_voice(request: Request, s: str = "", m: str = "", e: int = 0, k: str = ""):
+    """
+    공유받은 사람의 음성편지 재생 — /api/b 가 준 서명 주소 (헤더를 못 붙이는 <audio src> 용). 로그인 없음.
+    매번 다시 본다: 서명 · 만료(410 url_expired → /api/b 를 다시 읽는다) · 공유가 꺼졌는지(410) · 그 메시지가 아직 그 책의 것인지.
+    """
+    if not voice_message.check_url(s[:64], m[:64], e, k[:64]):
+        return JSONResponse({"detail": "재생 주소가 만료됐어요. 책을 다시 열어 주세요", "code": "url_expired"},
+                            status_code=410, headers=_NO_STORE)
+    rec = await share.read(store.load_share_by_id(s[:64]))
+    if rec is None:
+        raise HTTPException(404, "공유를 찾을 수 없어요")
+    if rec["revoked_at"] is not None:
+        return JSONResponse({"detail": "공유가 꺼졌어요", "code": "share_revoked"}, status_code=410, headers=_NO_STORE)
+    cur = (await share.read(store.load_memoir_voice(rec["source_memoir_id"], rec["user_id"]))
+           if rec.get("source_memoir_id") else None)
+    up = (cur or {}).get("upload")
+    if not up or up["upload_id"] != m:
+        return JSONResponse({"detail": "음성편지가 바뀌었거나 지워졌어요", "code": "message_gone"},
+                            status_code=410, headers=_NO_STORE)
+    return await _voice_bytes(up, request, "no-store")
 
 
 @app.get(share.PATH, include_in_schema=False)

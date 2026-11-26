@@ -57,7 +57,9 @@ KEY_OK = re.compile(
     r"^(photos/\d{4}/\d{2}/[0-9a-f-]{36}/[a-z]+"
     r"|postcards/\d{4}/\d{2}/[0-9a-f-]{36}/[0-9a-f]{16}"
     # 자서전 삽화 (memoir_illust_service.py) — 책 · 장 번호 · 바이트 해시
-    r"|illusts/\d{4}/\d{2}/m_[0-9a-f]{32}/c\d{1,3}-[0-9a-f]{16})\.(jpg|png|webp)$")
+    r"|illusts/\d{4}/\d{2}/m_[0-9a-f]{32}/c\d{1,3}-[0-9a-f]{16})\.(jpg|png|webp)$"
+    # 가족 음성편지 (voice_message.py, 019) — 원본(webm · m4a)과 재생용 사본(play.m4a)
+    r"|^voice/\d{4}/\d{2}/vu_[0-9a-f]{32}/(original|play)\.(webm|m4a)$")
 
 EXT = {"image/jpeg": "jpg", "image/png": "png", "image/webp": "webp"}
 

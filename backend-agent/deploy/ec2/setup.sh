@@ -34,6 +34,8 @@ sudo apt-get update -y
 sudo apt-get install -y git python3 python3-venv python3-pip curl
 # 엽서 한글 글꼴 — 없으면 엽서가 503 (postcard.FONT_CANDIDATES 의 NotoSerifCJK-Regular.ttc)
 sudo apt-get install -y fonts-noto-cjk
+# 가족 음성편지 — 길이 측정 · 재생용 AAC 사본 (voice_message.py). 없으면 음성편지 업로드가 503 voice_unavailable
+sudo apt-get install -y ffmpeg
 python3 --version
 
 say "2. 코드 ($BRANCH)"
