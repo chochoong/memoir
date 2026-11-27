@@ -9,7 +9,7 @@
     const CONFIG = {
     // 화면 아래와 개발용 패널에 그대로 찍힌다. 「고친 게 반영이 안 된 것 같다」는
     // 대부분 예전 파일이 열려 있는 경우라서, 눈으로 확인할 자리를 만들어 둔다.
-    version: 'v1.14 · 2026-11-25 (자서전 만들기 「문체 선택」 화면에 삽화 그림체 — 수채화 · 애니풍 · 유화 · 기본 수채화)',
+    version: 'v1.27 · 2026-11-27 (develop d7403d4 기준 · 가족 음성편지 · 끄는 동안 탭 실선 테두리 · 예시 자서전 미리 넣기(?sample=1) · 사진 편집 PC 왼쪽 목차 · 휴대폰 알약 탭 · 끌 때 커지는 탭 · 장 탭을 머리 바로 아래 고정 · 탭에 놓으면 그 장 맨 앞 · 되돌리기 · 사진 끌어서 옮기기 · 사진 편집 단추 평평한 노랑 · 뒤 탭 = 테두리 색 · 장 탭 서류철 모양 · 휴대폰 탭 제목 생략 · 자서전 사진 편집 — 서버 계약 9-C1 연결 / 첫 화면 최근 이야기 색 / 책에 넣지 못한 사진 안내 / PC 책 읽기 잔무늬 제거)',
 
     // 이 화면을 백엔드가 직접 서빙하면(web/ 폴더) 빈 문자열 그대로 둔다.
     // 다른 포트에서 열어 시험할 때만 'http://127.0.0.1:8010' 처럼 채운다.
@@ -121,6 +121,13 @@
     // POST /api/memoirs/preview 에 엽서 3~5장을 보내고, 다 쓸 때까지 한 번 기다린다.
     // 서버에 붙었다 (main 66acce1 · backend-agent/app/session/memoir.py). 실패 문구는
     // 서버의 _MEMOIR_SAYS 와 같다.
+    // 가족 음성편지 (10-C1): 최대 300초 · 8MB · webm(Opus) / mp4(AAC). 길이 · 크기 · 형식은 서버가 다시 잰다.
+    voice: {
+      maxSec: 300,
+      warnSec: 30,          // 끝나기 30초 전 안내 (지시서 「UI 제안」 — 화면 검토에서 합의, false 로 끄기)
+      maxBytes: 8 * 1024 * 1024,
+      mimes: ['audio/webm;codecs=opus', 'audio/webm', 'audio/mp4;codecs=mp4a.40.2', 'audio/mp4'],
+    },
     memoir: {
       path: '/memoirs/preview',
       // 엽서가 있는 회차의 session_id(UUID) 를 담는다 (C1 v1.1). 엽서는 회차당 한
@@ -468,6 +475,44 @@
       call(`/photos${sessionId ? '?session_id=' + encodeURIComponent(sessionId) : ''}`, {
         method: 'POST', body: bytes, headers: { 'Content-Type': mime || 'application/octet-stream' },
       }),
+    // ── 자서전 사진 편집 (photo-edit.js) — 서버 계약 9-C1 (backend-agent 86cd502 · app/session/memoir_photos.py) ──
+    //   넣기 ① 새 사진: POST /memoirs/saved/{id}/photos?chapter_no=&after_paragraph=[&display_order=][&request_id=]
+    //                  본문 = 사진 바이트 그대로 (POST /api/photos 와 같다 · multipart 아님)
+    //   넣기 ② 내 사진(책에 넣지 못한 사진 · 뺀 사진): 같은 주소에 JSON {photo_id, chapter_no, after_paragraph, display_order?, request_id?}
+    //        → 201 {placement} · 같은 request_id 를 다시 보내면 200 과 같은 placement (한 장만 들어간다)
+    //   옮기기: PATCH /memoirs/saved/{id}/photos/{placement_id}  {chapter_no?, after_paragraph?, display_order?} → 200 {placement}
+    //   빼기:   DELETE /memoirs/saved/{id}/photos/{placement_id} → 204 (이 책에서만 · 엽서 · 사진 파일은 그대로)
+    //   화면은 응답 본문에 기대지 않고, 성공하면 GET …/illustrations 를 다시 받아 그린다.
+    memoirPhotoAdd: (memoirId, {file, photoId, chapterNo, afterParagraph, displayOrder, requestId}) => {
+      const at = { chapter_no: chapterNo, after_paragraph: afterParagraph };
+      if (Number.isInteger(displayOrder)) at.display_order = displayOrder;
+      if (requestId) at.request_id = String(requestId);
+      const base = `/memoirs/saved/${encodeURIComponent(memoirId)}/photos`;
+      if (file) {
+        const q = Object.entries(at).map(([k, v]) => `${k}=${encodeURIComponent(v)}`).join('&');
+        return call(`${base}?${q}`, { method: 'POST', body: file, headers: { 'Content-Type': file.type || 'application/octet-stream' } });
+      }
+      return call(base, { method: 'POST', body: JSON.stringify(Object.assign({ photo_id: photoId }, at)) });
+    },
+    memoirPhotoMove: (memoirId, placementId, {chapterNo, afterParagraph, displayOrder}) =>
+      call(`/memoirs/saved/${encodeURIComponent(memoirId)}/photos/${encodeURIComponent(placementId)}`, {
+        method: 'PATCH', body: JSON.stringify(Object.assign({ chapter_no: chapterNo, after_paragraph: afterParagraph }, Number.isInteger(displayOrder) ? { display_order: displayOrder } : {})),
+      }),
+    memoirPhotoDelete: (memoirId, placementId) =>
+      call(`/memoirs/saved/${encodeURIComponent(memoirId)}/photos/${encodeURIComponent(placementId)}`, { method: 'DELETE' }),
+    // ── 가족 음성편지 (10-C1 · develop 1dffd3b 019) ──
+    // ② 임시 업로드: 녹음 원본 바이트 그대로 + X-Request-ID(같은 녹음의 재시도는 같은 id) → {upload_id, state: 'uploaded', …}
+    //    uploaded 는 저장 완료가 아니다. ④ 책 연결의 message.state === 'ready' 만 저장 완료.
+    voiceUpload: (blob, requestId) => call('/voice-message-uploads', {
+      method: 'POST', body: blob, headers: { 'Content-Type': blob.type || 'application/octet-stream', 'X-Request-ID': String(requestId) },
+    }),
+    voiceDiscard: (uploadId) => call(`/voice-message-uploads/${encodeURIComponent(uploadId)}`, { method: 'DELETE' }),
+    voiceGet: (memoirId) => call(`/memoirs/saved/${encodeURIComponent(memoirId)}/voice-message`),
+    voiceLink: (memoirId, {uploadId, requestId, expectedRevision}) => call(`/memoirs/saved/${encodeURIComponent(memoirId)}/voice-message`, {
+      method: 'PUT', body: JSON.stringify({ upload_id: uploadId, request_id: String(requestId), expected_revision: expectedRevision }),
+    }),
+    voiceDelete: (memoirId, expectedRevision) =>
+      call(`/memoirs/saved/${encodeURIComponent(memoirId)}/voice-message?expected_revision=${encodeURIComponent(expectedRevision)}`, { method: 'DELETE' }),
     // <img src> 에 그대로 넣는 주소. 서버 응답의 url 과 같은 모양이다.
     photoUrl: (photoId) => `${CONFIG.apiBase}/api/photos/${photoId}`,
 

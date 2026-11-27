@@ -1,0 +1,59 @@
+/* voice-letter — 가족 음성편지 (업무지시서 11/26). 흰색 · 오프화이트 · 노란 강조, 큰 글씨 · 큰 단추.
+   상태는 색만으로 구분하지 않는다 — 「녹음 중」 「아직 저장되지 않았습니다」 「책에 저장 완료」 글자를 늘 함께 쓴다. */
+.vl-box { text-align: left; margin: 18px 0 4px; padding: 18px 18px 16px; border: 1.5px solid #EDE1C6; border-radius: 16px; background: #FFFDF8; }
+.vl-title { display: flex; align-items: center; gap: 8px; margin: 0 0 8px; font-size: 19px; font-weight: 800; color: #26211B; }
+.vl-title .icon { width: 22px; height: 22px; color: #B8860B; }
+.vl-title small { margin-left: 4px; padding: 1px 8px; border-radius: 8px; background: #F3ECE0; color: #6F665B; font-size: 13px; font-weight: 700; }
+.vl-lead { margin: 0 0 12px; font-size: 16px; line-height: 1.65; color: #3d362f; }
+.vl-help { margin: 8px 0 0; font-size: 14px; line-height: 1.6; color: #6F665B; }
+.vl-len { margin: 4px 0 12px; font-size: 16px; color: #4E463D; }
+.vl-note { margin: -4px 0 12px; padding: 10px 12px; border-radius: 10px; background: #FFF8E6; font-size: 15px; line-height: 1.6; color: #5b4510; }
+.vl-warn { margin: 0 0 10px; padding: 10px 12px; border-radius: 10px; background: #FBE8E3; color: #8A2F24; font-size: 16px; font-weight: 700; line-height: 1.55; }
+.vl-big { width: 100%; min-height: 64px; font-size: 19px; font-weight: 800; gap: 10px; }
+.vl-big .icon { width: 24px; height: 24px; }
+.vl-row { display: flex; flex-wrap: wrap; gap: 10px; }
+.vl-btn { flex: 1 1 140px; min-height: 56px; font-size: 17px; font-weight: 700; gap: 8px; }
+.vl-btn .icon { width: 20px; height: 20px; }
+.vl-rec { display: flex; align-items: center; gap: 10px; margin: 2px 0 12px; font-size: 20px; color: #26211B; }
+.vl-rec b { font-weight: 800; }
+.vl-time { margin-left: auto; font-variant-numeric: tabular-nums; font-size: 22px; font-weight: 800; letter-spacing: .02em; }
+.vl-dot { width: 14px; height: 14px; border-radius: 50%; background: #C8372D; box-shadow: 0 0 0 0 #C8372D66; animation: vl-pulse 1.4s ease-out infinite; }
+@keyframes vl-pulse { 0% { box-shadow: 0 0 0 0 #C8372D66; } 100% { box-shadow: 0 0 0 10px #C8372D00; } }
+@media (prefers-reduced-motion: reduce) { .vl-dot { animation: none; } }
+.vl-unsaved { display: flex; align-items: center; gap: 6px; margin: 0 0 10px; padding: 8px 12px; border: 1.5px dashed #D9A62E; border-radius: 10px; background: #FFF8E6; color: #6b5212; font-size: 16px; }
+.vl-unsaved .icon { width: 18px; height: 18px; }
+.vl-done { display: flex; align-items: center; gap: 8px; margin: 0 0 10px; padding: 10px 12px; border-radius: 10px; background: #E9F3E6; color: #23502A; font-size: 17px; }
+.vl-done .icon { width: 22px; height: 22px; stroke-width: 2.4; }
+.vl-box .sp-spin { display: inline-block; vertical-align: -2px; margin-right: 6px; }
+/* 진행 창 */
+#generation-dialog .vl-gen-done { margin: 10px 0 0; padding: 12px 14px; border-radius: 12px; background: #FDF0CF; text-align: left; font-size: 15.5px; line-height: 1.6; }
+#generation-dialog .vl-gen-done .button { width: 100%; margin-top: 10px; min-height: 52px; font-size: 16px; }
+#generation-dialog:has(.vl-box[data-phase="recording"]) [data-gen="hide"], #generation-dialog:has(.vl-box[data-phase="asking"]) [data-gen="hide"] { opacity: .5; }
+/* 책 음성 남기기 · 바꾸기 창 */
+.vl-dialog { width: min(560px, calc(100vw - 24px)); }
+.vl-dialog h2 { font-size: 24px; margin: 4px 40px 6px 0; }
+.vl-dialog-note { margin: 0; font-size: 15px; color: #6F665B; line-height: 1.6; }
+/* 전자책 마지막 쪽 */
+.ebook-voice { padding: 22px 20px 24px; border: 1.5px solid #EDE1C6; border-radius: 18px; background: #FFFDF8; text-align: center; }
+.ebook-voice h2 { margin-bottom: 10px; }
+.ebook-voice .ebv-lead { font-size: 17px; line-height: 1.7; color: #4E463D; text-indent: 0; }
+.ebook-voice .ebv-len { margin: 6px 0 14px; font-size: 17px; text-indent: 0; }
+.ebook-voice .ebv-play { width: 100%; max-width: 420px; min-height: 64px; font-size: 19px; font-weight: 800; gap: 10px; }
+.ebook-voice .ebv-play .icon { width: 24px; height: 24px; }
+.ebook-voice .ebv-pos { min-height: 1.6em; margin: 8px 0 0; font-variant-numeric: tabular-nums; font-size: 16px; color: #6F665B; text-indent: 0; }
+.ebook-voice .ebv-tools { display: flex; flex-wrap: wrap; justify-content: center; gap: 10px; margin-top: 14px; }
+.ebook-voice .ebv-btn { min-height: 52px; font-size: 16px; gap: 6px; font-family: var(--sans); }
+.ebook-voice .ebv-btn .icon { width: 18px; height: 18px; }
+.ebook-voice .ebv-del { color: #A23B2C; }
+body.ebook-mode .ebook-voice p { font-family: var(--sans); }
+@media (max-width: 760px) {
+  .vl-box { padding: 16px 14px 14px; }
+  .vl-btn { flex-basis: 100%; }
+  .ebook-voice { padding: 18px 14px 20px; }
+}
+/* 주 단추는 어디서 열든 평평한 노랑 (읽기 화면 ebook-mode 의 겨자색 그라데이션 규칙을 덮는다 — v1.20 사진 편집과 같은 처리) */
+.vl-box .button.primary, .vl-dialog .button.primary, .ebook-voice .button.primary { background: #F5B420; border-color: #F5B420; color: #2B2100; box-shadow: 0 4px 12px #936c1333; }
+.vl-box .button.primary:hover, .vl-dialog .button.primary:hover, .ebook-voice .button.primary:hover { background: #DCA21D; border-color: #DCA21D; color: #2B2100; }
+.vl-box .button.primary .icon, .vl-dialog .button.primary .icon, .ebook-voice .button.primary .icon { color: #2B2100; }
+.vl-box .button.outline, .vl-dialog .button.outline, .ebook-voice .button.outline { background: #FFFDF8; border: 1.5px solid #DCCBA8; color: #5b4510; }
+.ebook-voice .ebv-del { color: #A23B2C; border-color: #E8C3BB; }

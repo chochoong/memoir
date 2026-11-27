@@ -1,0 +1,28 @@
+/* book-unplaced — 「책에 넣지 못한 사진」 독서 메뉴 단추 · 창 (v1.14) */
+body .ebook-toolbar #ebook-unplaced { position: relative; color: #8a6410; }
+body .ebook-toolbar #ebook-unplaced span { white-space: nowrap; }
+body .ebook-toolbar #ebook-unplaced .bu-count { display: inline-grid; place-items: center; min-width: 20px; height: 20px; padding: 0 6px; margin-left: 3px; border-radius: 10px; background: #F5B420; color: #2b2100; font-size: 12px; font-weight: 700; line-height: 1; vertical-align: 1px; }
+body.ebook-mode[data-reader-theme="night"] .ebook-toolbar #ebook-unplaced { color: #f0c870; }
+body.share-guest-view #ebook-unplaced { display: none !important; }
+@media (max-width: 760px) {
+  body .ebook-toolbar #ebook-unplaced .bu-word { display: none; }
+}
+
+.review-dialog.unplaced-dialog { width: min(560px, calc(100vw - 32px)); max-height: min(86vh, 760px); overflow: auto; }
+.unplaced-dialog .bu-lead { margin: 6px 0 14px; color: #6F665B; line-height: 1.65; word-break: keep-all; }
+.unplaced-dialog .bu-list { list-style: none; margin: 0 0 18px; padding: 0; display: grid; gap: 12px; }
+.unplaced-dialog .bu-item { display: grid; grid-template-columns: 112px 1fr; gap: 16px; align-items: start; padding: 14px; border: 1px solid #E3D9C8; border-radius: 14px; background: #FFFDF8; }
+.unplaced-dialog .bu-thumb { display: grid; place-items: center; width: 112px; aspect-ratio: 1; border-radius: 10px; overflow: hidden; background: #F3ECE0; border: 1px solid #E3D9C8; }
+.unplaced-dialog .bu-thumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.unplaced-dialog .bu-thumb.is-empty .icon { width: 34px; height: 34px; color: #B8A88E; }
+.unplaced-dialog .bu-text strong { display: block; font-size: 17px; color: #26211B; line-height: 1.45; word-break: keep-all; }
+.unplaced-dialog .bu-text p { margin: 6px 0 0; font-size: 15px; line-height: 1.65; color: #4E463D; word-break: keep-all; }
+.unplaced-dialog .bu-text .bu-tip { color: #8a6410; }
+.unplaced-dialog .bu-save { margin-top: 10px; }
+.unplaced-dialog .dialog-actions { display: flex; justify-content: flex-end; }
+@media (max-width: 520px) {
+  .unplaced-dialog .bu-item { grid-template-columns: 76px 1fr; gap: 12px; padding: 12px; }
+  .unplaced-dialog .bu-thumb { width: 76px; }
+  .unplaced-dialog .bu-text strong { font-size: 16px; }
+}
+body .ebook-toolbar #ebook-unplaced .bu-count:empty { display: none; }

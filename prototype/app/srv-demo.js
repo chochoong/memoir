@@ -65,7 +65,120 @@
     return null;
   }
   const save = () => { try { localStorage.setItem(KEY, JSON.stringify(db)); } catch (_) {} };
+  // ?demo=1&sample=1 — 보여 주기용: 열자마자 로그인돼 있고 책장에 예시 자서전 한 권 (v1.24).
+  //   엽서 네 장(사진 붙은 「우리 가족의 첫 소풍」 포함)으로 만든 책 — 사진 · AI 그림 · 사진 편집을 바로 볼 수 있다.
+  //   이 브라우저에 자서전이 하나도 없을 때만 넣는다(이미 있으면 그대로). 「처음 상태로」로 지우고 다시 열면 다시 들어간다.
+  if (Srv.QS.get('sample')) {
+    db.logged = true;
+    if (!db.memoirs.some((x) => !x.deleted)) {
+      const ids = db.sessions.filter((x) => !x.deleted && x.postcard && x.postcard.text).sort((a, b) => Date.parse(a.created_at) - Date.parse(b.created_at)).map((x) => x.session_id);
+      if (ids.length >= 3) {
+        const result = memoirResult(ids, 'essay');
+        db.memoirs.push({memoir_id: 'demo-m' + (++db.seq), elder_id: 'demo-e1', session_ids: ids, style: 'essay', engine: 'demo', status: 'ready', title: result.title, created_at: now(), result, sample: true});
+      }
+    }
+  }
   save();
+
+  // ── 가족 음성편지 (10-C1 흉내 · develop 1dffd3b 019) ──
+  //   업로드: 바이트 그대로 + X-Request-ID(같은 id = 같은 업로드 200) → 201 {upload_id, state: 'uploaded', duration_ms, mime, size_bytes, expires_at, memoir_id}
+  //   길이는 브라우저가 소리를 풀어 실제로 잰다(서버의 ffprobe 대신). 300초 + 2초 넘으면 422 too_long, 0.5초 미만 422 too_short,
+  //   8MB 넘으면 413, 풀 수 없으면 415. 책 연결 PUT {upload_id, request_id, expected_revision} → {revision, message} — revision 이 다르면 409.
+  //   음성 바이트는 이 탭 메모리 + (작으면) 이 브라우저에. 시험용 실패: localStorage 'demo.failVoice' =
+  //     UPLOAD(503 한 번) · UPLOAD-after-save(저장은 되고 응답만 503) · LINK(503) · LINK-expired(410) · LINK-conflict(409) · DELETE(503)
+  const VOICE_KEY = 'memoir.demo.voice.';
+  const voices = new Map();
+  const ups = () => (db.voiceUploads = db.voiceUploads || {});   // db 가 「처음 상태로」 등으로 바뀌어도
+  async function keepVoice(id, blob) {
+    voices.set(id, blob);
+    if (blob.size < 2.5 * 1024 * 1024) {
+      try { const url = await new Promise((r) => { const f = new FileReader(); f.onload = () => r(f.result); f.readAsDataURL(blob); }); localStorage.setItem(VOICE_KEY + id, url); } catch (_) { /* 꽉 차면 이 탭에서만 */ }
+    }
+  }
+  async function voiceBlob(id) {
+    if (voices.has(id)) return voices.get(id);
+    try { const url = localStorage.getItem(VOICE_KEY + id); if (url) { const b = await (await fetch(url)).blob(); voices.set(id, b); return b; } } catch (_) {}
+    return null;
+  }
+  async function measureMs(blob) {
+    const Ctx = window.OfflineAudioContext || window.webkitOfflineAudioContext;
+    if (!Ctx) return null;
+    try { const buf = await new Ctx(1, 44100, 44100).decodeAudioData(await blob.arrayBuffer()); return Math.round(buf.duration * 1000); } catch (_) { return null; }
+  }
+  const failVoice = (what) => { try { const v = localStorage.getItem('demo.failVoice'); if (v && v.startsWith(what)) { localStorage.removeItem('demo.failVoice'); return v; } } catch (_) {} return ''; };
+  const upView = (u) => ({upload_id: u.upload_id, state: u.state, duration_ms: u.duration_ms, mime: u.mime, size_bytes: u.size_bytes, expires_at: u.expires_at, memoir_id: u.memoir_id || null});
+  const msgView = (x) => {
+    const v = x.voice;
+    const message = v ? {message_id: v.upload_id, state: 'ready', duration_ms: v.duration_ms, mime: 'audio/mp4', created_at: v.created_at,
+      playback_url: `/api/memoirs/saved/${x.memoir_id}/voice-message/audio?v=${v.upload_id}`} : null;
+    return {revision: x.voiceRev || 0, message};
+  };
+  async function voiceRoute(method, path, q, body) {
+    let m;
+    if (path === '/voice-message-uploads' && method === 'POST') {
+      await sleep(700);
+      const rid = String(headersRid || '').trim();
+      if (!rid) return err(400, 'X-Request-ID 가 필요해요', 'request_id_required');
+      const old = Object.values(ups()).find((u) => u.request_id === rid);
+      if (old) return old.state === 'uploaded' || old.state === 'attached' ? ok(upView(old)) : err(410, '올린 음성의 보관 기한이 지났어요. 새로 저장해 주세요', 'upload_expired');
+      const blob = body instanceof Blob ? body : new Blob([body], {type: headersMime});
+      if (blob.size > 8 * 1024 * 1024) return new Res(413, {detail: '음성이 너무 커요'});
+      const fail = failVoice('UPLOAD');
+      if (fail === 'UPLOAD') return err(503, '지금은 음성편지를 저장하지 못했어요');
+      const ms = await measureMs(blob);
+      if (ms === null) return err(415, '음성 파일을 읽지 못했어요', 'unsupported_audio');
+      if (ms > 302000) return err(422, '음성편지는 5분까지예요', 'too_long');
+      if (ms < 500) return err(422, '녹음이 너무 짧아요', 'too_short');
+      const id = 'vu_demo' + (++db.seq) + Date.now().toString(36);
+      const u = {upload_id: id, request_id: rid, state: 'uploaded', duration_ms: Math.min(ms, 300000), mime: /mp4/.test(blob.type) ? 'audio/mp4' : 'audio/webm',
+        size_bytes: blob.size, expires_at: new Date(Date.now() + 24 * 3600e3).toISOString(), memoir_id: null};
+      ups()[id] = u; await keepVoice(id, blob); save();
+      if (fail === 'UPLOAD-after-save') return err(503, '연결이 잠시 끊겼어요');
+      return made(upView(u));
+    }
+    if ((m = path.match(/^\/voice-message-uploads\/([^/]+)$/)) && method === 'DELETE') {
+      const u = ups()[m[1]];
+      if (!u) return err(404, '올린 음성을 찾을 수 없어요', 'upload_not_found');
+      if (u.state === 'attached') return err(409, '책에 연결된 음성이에요. 책에서 지워 주세요', 'upload_attached');
+      u.state = 'discarded'; save(); return new Res(204, null);
+    }
+    if (!(m = path.match(/^\/memoirs\/saved\/([^/]+)\/voice-message(\/audio)?$/))) return null;
+    const x = db.memoirs.find((y) => y.memoir_id === m[1] && !y.deleted);
+    if (!x) return err(404, '자서전을 찾을 수 없어요', 'memoir_not_found');
+    if (m[2]) { const b = x.voice && await voiceBlob(x.voice.upload_id); return b ? new Res(200, b) : err(404, '음성편지를 찾을 수 없어요'); }
+    if (method === 'GET') return ok(msgView(x));
+    if (method === 'PUT') {
+      await sleep(500);
+      const rid = String(body.request_id || '').trim(), rev = body.expected_revision, u = ups()[String(body.upload_id || '')];
+      if (!rid) return err(400, 'request_id 가 필요해요', 'request_id_required');
+      if (!Number.isInteger(rev) || rev < 0) return err(400, 'expected_revision 은 0 이상의 숫자여야 해요', 'bad_revision');
+      x.voiceReqs = x.voiceReqs || {};
+      if (x.voiceReqs[rid]) return ok(msgView(x));                       // 같은 연결 요청의 재시도
+      const fail = failVoice('LINK');
+      if (fail === 'LINK') return err(503, '지금은 음성편지를 저장하지 못했어요');
+      if (fail === 'LINK-conflict') { x.voiceRev = (x.voiceRev || 0) + 1; save(); return new Res(409, {detail: '다른 곳에서 음성편지가 바뀌었어요. 다시 불러와 주세요', code: 'revision_conflict', revision: x.voiceRev}); }
+      if (rev !== (x.voiceRev || 0)) return new Res(409, {detail: '다른 곳에서 음성편지가 바뀌었어요. 다시 불러와 주세요', code: 'revision_conflict', revision: x.voiceRev || 0});
+      if (!u) return err(404, '올린 음성을 찾을 수 없어요', 'upload_not_found');
+      if (fail === 'LINK-expired' || u.state === 'discarded' || u.state === 'expired') { u.state = 'expired'; save(); return err(410, '올린 음성의 보관 기한이 지났어요. 새로 저장해 주세요', 'upload_expired'); }
+      if (u.state === 'attached' && u.memoir_id !== x.memoir_id) return err(409, '이미 다른 책에 연결된 음성이에요', 'upload_in_use');
+      if (x.voice && x.voice.upload_id !== u.upload_id) { const old = ups()[x.voice.upload_id]; if (old) old.state = 'discarded'; }
+      u.state = 'attached'; u.memoir_id = x.memoir_id;
+      x.voice = {upload_id: u.upload_id, duration_ms: u.duration_ms, created_at: now()};
+      x.voiceRev = (x.voiceRev || 0) + 1; x.voiceReqs[rid] = true; save();
+      return ok(msgView(x));
+    }
+    if (method === 'DELETE') {
+      const rev = Number(q.get('expected_revision'));
+      if (!Number.isInteger(rev) || rev < 0) return err(400, 'expected_revision 이 필요해요', 'bad_revision');
+      if (failVoice('DELETE')) return err(503, '지금은 음성편지를 지우지 못했어요');
+      if (rev !== (x.voiceRev || 0)) return new Res(409, {detail: '다른 곳에서 음성편지가 바뀌었어요. 다시 불러와 주세요', code: 'revision_conflict', revision: x.voiceRev || 0});
+      if (!x.voice) return err(404, '음성편지가 없어요', 'message_not_found');
+      const old = ups()[x.voice.upload_id]; if (old) old.state = 'discarded';
+      x.voice = null; x.voiceRev = (x.voiceRev || 0) + 1; save();
+      return new Res(204, null);
+    }
+    return err(405, '지원하지 않는 요청이에요.');
+  }
 
   // ── 어르신 링크 예시 (?demo=elder#토큰) ──
   if (mode === 'elder') {
@@ -124,7 +237,7 @@
 
   // ── 가짜 서버 ──
   const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
-  let headersMime = '';
+  let headersMime = '', headersRid = '';
   class Res { constructor(status, body) { this.status = status; this.body = body; } }
   const ok = (b) => new Res(200, b), made = (b) => new Res(201, b), err = (s, detail, code) => new Res(s, {detail, code});
   const said = (s) => s.fragments.some((f) => f.idx > 0 && String(f.answer || '').trim());
@@ -138,16 +251,110 @@
   }
   // 자서전 속 사진 · 삽화 (예시) — 장마다 그 회차의 사진을 첫 문단 뒤에. 사진 없는 첫 장에는 예시 삽화 한 장(「AI가 그린 그림」 모양 보기용)
   const DEMO_ILLUST = `<svg xmlns="http://www.w3.org/2000/svg" width="1250" height="1000" viewBox="0 0 1250 1000"><rect width="1250" height="1000" fill="#f3ead9"/><circle cx="1010" cy="190" r="80" fill="#f6d9a0"/><path d="M0 700Q300 600 640 680T1250 650V1000H0Z" fill="#c9d3a8"/><rect x="590" y="360" width="70" height="360" rx="20" fill="#7b5a3f"/><circle cx="625" cy="320" r="210" fill="#8fae6f"/><circle cx="470" cy="400" r="140" fill="#9cbb7b"/><circle cx="790" cy="400" r="150" fill="#86a766"/><g fill="#5d4a3d"><circle cx="420" cy="690" r="22"/><circle cx="500" cy="700" r="20"/><circle cx="820" cy="690" r="22"/></g><rect x="402" y="710" width="36" height="70" rx="14" fill="#c46a5a"/><rect x="483" y="718" width="34" height="62" rx="14" fill="#5f86a8"/><rect x="802" y="710" width="36" height="70" rx="14" fill="#d9a441"/></svg>`;
-  function demoIllust(x) {
+  // 자서전 사진 · 그림 자리 — 서버 계약 9-C1 (backend-agent 86cd502 · memoir_photos.py) 과 같은 모양으로 흉내 낸다.
+  //   사진 배치(placement): auto(a_… 자동으로 놓인 회차 사진) · manual(p_… 사용자가 넣은 사진). AI 삽화는 origin ai · placement_id null — 옮기거나 빼지 않는다.
+  //   같은 문단: 사진은 display_order → 넣은 순서, AI 삽화는 사진들 뒤. 넣은 사진은 책 한 권에 30장까지.
+  const PHOTOS_MAX = 30;
+  function initPlacements(x) {
     const ids = (x.session_ids || (x.result && x.result.run && x.result.run.session_ids) || []);
     const chosen = ids.map((id) => db.sessions.find((s) => s.session_id === id)).filter(Boolean).sort((a, b) => Date.parse(a.created_at) - Date.parse(b.created_at));
     let drew = false;
-    const chapters = chosen.map((s, i) => {
-      if (s.photo_id) return {no: i + 1, state: 'photo', figures: [{kind: 'photo', url: `/api/photos/${s.photo_id}`, after_paragraph: 0, width: s.photo_id === SEED_PHOTO ? 1200 : null, height: s.photo_id === SEED_PHOTO ? 900 : null, ai_generated: false, caption: null}]};
-      if (!drew) { drew = true; return {no: i + 1, state: 'illustrated', figures: [{kind: 'illustration', url: `/api/memoirs/saved/${x.memoir_id}/illustrations/${i + 1}?v=demo`, after_paragraph: 0, width: 1250, height: 1000, ai_generated: true, caption: 'AI가 그린 그림'}]}; }
-      return {no: i + 1, state: 'none', figures: []};
+    // ?demo=1&unplaced=1 — 「책에 넣지 못한 사진」 안내를 보려고: 사진 붙은 첫 회차의 사진을 놓지 못한 것으로, 올리다 끊긴 사진 하나를 더
+    const unplacedDemo = Srv.QS.get('unplaced') ? chosen.find((s) => s.photo_id) : null;
+    x.unplaced = unplacedDemo ? [
+      {photo_id: unplacedDemo.photo_id, session_id: unplacedDemo.session_id, reason: 'session_not_cited', chapters: [], url: `/api/photos/${unplacedDemo.photo_id}`},
+      {photo_id: 'demo-broken-photo', session_id: unplacedDemo.session_id, reason: 'photo_not_stored', chapters: [], url: null},
+    ] : [];
+    x.placements = []; x.ai = []; x.reqs = {};
+    chosen.forEach((s, i) => {
+      if (s.photo_id && s !== unplacedDemo) x.placements.push({placement_id: 'a_' + (++db.seq), origin: 'auto', photo_id: s.photo_id, chapter_no: i + 1, after_paragraph: 0, display_order: 0, seq: db.seq, width: s.photo_id === SEED_PHOTO ? 1200 : null, height: s.photo_id === SEED_PHOTO ? 900 : null});
+      else if (!drew) { drew = true; x.ai.push({chapter_no: i + 1, after_paragraph: 0, url: `/api/memoirs/saved/${x.memoir_id}/illustrations/${i + 1}?v=demo`}); }
     });
-    return {status: 'done', automatic: true, human_reviewed: false, chapters};
+    save();
+  }
+  const plOut = (pl) => ({placement_id: pl.placement_id, origin: pl.origin, photo_id: pl.photo_id, url: `/api/photos/${pl.photo_id}`, chapter_no: pl.chapter_no, after_paragraph: pl.after_paragraph, display_order: pl.display_order, width: pl.width, height: pl.height});
+  function demoIllust(x) {
+    if (!x.placements || !x.ai) initPlacements(x);
+    const n = (x.result && x.result.chapters || []).length;
+    const chapters = Array.from({length: n}, (_, i) => {
+      const no = i + 1;
+      const photos = x.placements.filter((pl) => pl.chapter_no === no).map((pl) => ({at: pl.after_paragraph, k: 0, o: pl.display_order, q: pl.seq,
+        f: {kind: 'photo', url: `/api/photos/${pl.photo_id}`, after_paragraph: pl.after_paragraph, width: pl.width, height: pl.height, ai_generated: false, caption: null,
+          placement_id: pl.placement_id, origin: pl.origin, display_order: pl.display_order, photo_id: pl.photo_id}}));
+      const ai = x.ai.filter((a) => a.chapter_no === no).map((a) => ({at: a.after_paragraph, k: 1, o: 0, q: 0,
+        f: {kind: 'illustration', url: a.url, after_paragraph: a.after_paragraph, width: 1250, height: 1000, ai_generated: true, caption: 'AI가 그린 그림',
+          placement_id: null, origin: 'ai', display_order: null}}));
+      const figs = [...photos, ...ai].sort((a, b) => a.at - b.at || a.k - b.k || a.o - b.o || a.q - b.q).map((x) => x.f);
+      return {no, state: photos.length ? 'photo' : ai.length ? 'illustrated' : 'none', figures: figs};
+    });
+    return {status: 'done', automatic: true, human_reviewed: false, chapters, unplaced_photos: x.unplaced || []};
+  }
+  // 자리 검사 — 서버와 같은 갈래 (bad_position · no_such_chapter · no_such_paragraph)
+  function badSpot(x, ch, para, order) {
+    const num = (v) => v === undefined || v === null || v === '' ? NaN : Number(v);
+    const c = num(ch), p = num(para);
+    if (!Number.isInteger(c) || !Number.isInteger(p) || (order !== undefined && order !== null && !Number.isInteger(num(order)))) return err(422, '사진을 넣을 자리가 올바르지 않아요.', 'bad_position');
+    const chap = (x.result && x.result.chapters || [])[c - 1];
+    if (!chap || c < 1) return err(422, '자서전에 없는 장이에요.', 'no_such_chapter');
+    if (p < 0 || p >= (chap.paragraphs || []).length) return err(422, '그 장에 없는 문단이에요.', 'no_such_paragraph');
+    return null;
+  }
+  const endOrder = (x, ch, para, skip) => Math.max(-1, ...x.placements.filter((pl) => pl.chapter_no === ch && pl.after_paragraph === para && pl !== skip).map((pl) => pl.display_order)) + 1;
+  // 시험용 실패: localStorage 'demo.failPhotoEdit' = POST · PATCH · DELETE 중 하나면 그 요청 한 번을 503 으로.
+  // 'POST-after-save' 면 저장은 하고 응답만 503 (응답이 끊긴 경우 — request_id 로 다시 보내도 한 장만 들어가야 한다)
+  function failMode(method) { try { const v = localStorage.getItem('demo.failPhotoEdit'); if (v && v.startsWith(method)) { localStorage.removeItem('demo.failPhotoEdit'); return v; } } catch (_) {} return ''; }
+  async function photoEdit(method, x, pid, body, q) {
+    await sleep(500);
+    const fm = failMode(method);
+    if (fm === method) return err(503, '잠시 저장하지 못했어요. 다시 시도해 주세요.');
+    if (!x.placements || !x.ai) initPlacements(x);
+    if (method === 'POST' && !pid) {
+      const raw = body instanceof ArrayBuffer || ArrayBuffer.isView(body) || body instanceof Blob;
+      const at = raw ? {chapter_no: q.get('chapter_no'), after_paragraph: q.get('after_paragraph'), display_order: q.get('display_order') ?? undefined, request_id: q.get('request_id')}
+        : {chapter_no: body.chapter_no, after_paragraph: body.after_paragraph, display_order: body.display_order, request_id: body.request_id};
+      const bad = badSpot(x, at.chapter_no, at.after_paragraph, at.display_order); if (bad) return bad;
+      const ch = Number(at.chapter_no), para = Number(at.after_paragraph);
+      if (at.request_id && x.reqs[at.request_id]) { const again = x.placements.find((pl) => pl.placement_id === x.reqs[at.request_id]); if (again) return ok({placement: plOut(again)}); }
+      if (x.placements.filter((pl) => pl.origin === 'manual').length >= PHOTOS_MAX) return err(422, `한 권에 넣을 수 있는 사진은 ${PHOTOS_MAX}장까지예요.`, 'too_many_photos');
+      let photoId, w = null, h = null;
+      if (raw) {
+        const blob = body instanceof Blob ? body : new Blob([body], {type: headersMime});
+        if (blob.size > 20 * 1048576) return err(413, '사진이 너무 커요.');
+        if (!/^image\//.test(headersMime || blob.type || '')) return err(400, '사진 파일이 아니에요.');
+        photoId = 'demo-ph' + (++db.seq) + '-' + Date.now().toString(36);
+        await keepPhoto(photoId, await blob.arrayBuffer(), headersMime);
+        try { const bmp = await createImageBitmap(blob); w = bmp.width; h = bmp.height; } catch (_) {}
+      } else {
+        const id = String(body.photo_id || '');
+        const known = (x.unplaced || []).find((u) => u.photo_id === id) || db.sessions.find((s) => s.photo_id === id);
+        if (!id || !known) return err(404, '사진을 찾을 수 없어요.', 'photo_not_found');
+        if (known.reason === 'photo_not_stored') return err(422, '아직 저장되지 않은 사진이에요.', 'photo_not_stored');
+        photoId = id;
+      }
+      const pl = {placement_id: 'p_' + (++db.seq), origin: 'manual', photo_id: photoId, chapter_no: ch, after_paragraph: para,
+        display_order: at.display_order !== undefined && at.display_order !== null && at.display_order !== '' ? Number(at.display_order) : endOrder(x, ch, para), seq: db.seq, width: w, height: h};
+      x.placements.push(pl);
+      if (at.request_id) x.reqs[at.request_id] = pl.placement_id;
+      x.unplaced = (x.unplaced || []).filter((u) => u.photo_id !== photoId);
+      save();
+      if (fm === 'POST-after-save') return err(503, '잠시 저장하지 못했어요. 다시 시도해 주세요.');
+      return made({placement: plOut(pl)});
+    }
+    const pl = x.placements.find((y) => y.placement_id === pid);
+    if (!pl) return err(404, '그 사진을 찾을 수 없어요.', 'placement_not_found');
+    if (method === 'PATCH') {
+      const moving = 'chapter_no' in body || 'after_paragraph' in body;
+      const ch = 'chapter_no' in body ? body.chapter_no : pl.chapter_no, para = 'after_paragraph' in body ? body.after_paragraph : pl.after_paragraph;
+      const bad = badSpot(x, ch, para, body.display_order); if (bad) return bad;
+      const nc = Number(ch), np = Number(para);
+      const changed = nc !== pl.chapter_no || np !== pl.after_paragraph;
+      pl.chapter_no = nc; pl.after_paragraph = np;
+      if (Number.isInteger(body.display_order)) pl.display_order = body.display_order;
+      else if (moving && changed) { pl.display_order = endOrder(x, nc, np, pl); pl.seq = ++db.seq; }
+      save(); return ok({placement: plOut(pl)});
+    }
+    if (method === 'DELETE') { x.placements = x.placements.filter((y) => y !== pl); save(); return new Res(204, null); }
+    return err(405, '지원하지 않는 요청이에요.');
   }
   function memoirResult(ids, style) {
     const chosen = ids.map((id) => db.sessions.find((s) => s.session_id === id)).filter(Boolean)
@@ -256,6 +463,13 @@
       const rows = db.memoirs.filter((x) => !x.deleted && (!q.get('elder_id') || x.elder_id === q.get('elder_id')));
       return ok({memoirs: rows.slice().reverse().map(({result, deleted, ...r}) => r)});
     }
+    // 가족 음성편지 (10-C1 흉내) — voiceRoute 가 맡으면 그 답을 쓴다
+    { const v = await voiceRoute(method, path, q, body); if (v) return v; }
+    if ((m = path.match(/^\/memoirs\/saved\/([^/]+)\/photos(?:\/([^/]+))?$/))) {
+      const x = db.memoirs.find((y) => y.memoir_id === m[1] && !y.deleted);
+      if (!x) return err(404, '자서전을 찾을 수 없어요', 'memoir_not_found');
+      return photoEdit(method, x, m[2] || null, body, q);
+    }
     if ((m = path.match(/^\/memoirs\/saved\/([^/]+)\/illustrations(?:\/(\d+))?$/))) {
       const x = db.memoirs.find((y) => y.memoir_id === m[1] && !y.deleted);
       if (!x) return err(404, '자서전을 찾을 수 없어요', 'memoir_not_found');
@@ -347,6 +561,7 @@
     if (typeof body === 'string') { try { body = JSON.parse(body); } catch (_) { body = {}; } }
     if (init.signal && init.signal.aborted) throw new DOMException('Aborted', 'AbortError');
     headersMime = (init.headers && (init.headers['Content-Type'] || init.headers['content-type'])) || '';
+    headersRid = (init.headers && (init.headers['X-Request-ID'] || init.headers['x-request-id'])) || '';
     const r = await handle(method, u.pathname, u.searchParams, body || {});
     if (r.status === 204) return new Response(null, {status: 204});
     if (r.body instanceof Blob) return new Response(r.body, {status: r.status, headers: {'Content-Type': r.body.type || 'application/octet-stream'}});
