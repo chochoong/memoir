@@ -8,7 +8,7 @@
 <title>나의 자서전 — 내말쌈</title>
 <!--
   자서전 공유 링크로 여는 읽기 화면 (/b#<토큰> · share.py).
-  로그인 · 녹음 없이 읽기만 한다. 토큰은 # 뒤라 서버로 가지 않는다 — 읽어서 헤더로만 보내고
+  로그인 · 녹음 없이 읽기만 한다. 책에 가족 음성편지가 있으면 맨 끝에 「음성편지 듣기」(듣기만). 토큰은 # 뒤라 서버로 가지 않는다 — 읽어서 헤더로만 보내고
   주소창에서 지운다. **글은 textContent 로만 넣는다** (자녀가 보낸 글이라 HTML 로 읽지 않는다).
 -->
 <style>
@@ -50,8 +50,21 @@
     font: inherit; font-size: 15px; color: var(--ink); background: var(--paper);
     border: 1px solid var(--line); border-radius: 999px; padding: 6px 14px; cursor: pointer;
   }
+  /* 가족 음성편지 — 어르신 · 가족이 누르기 쉽게 크게 */
+  .voice { margin-top: 56px; padding-top: 32px; border-top: 1px solid var(--line); text-align: center; }
+  .voice h2 { margin-bottom: 6px; }
+  .vmeta, .vtime { margin: 0 0 14px; color: var(--soft); font-size: 17px; }
+  .vtime { margin: 12px 0 0; font-variant-numeric: tabular-nums; min-height: 1.9em; }
+  .vbtn {
+    font: inherit; font-size: 22px; font-weight: bold; line-height: 1.3;
+    width: 100%; max-width: 360px; min-height: 68px; padding: 14px 24px;
+    color: var(--paper); background: var(--accent); border: 0; border-radius: 999px; cursor: pointer;
+  }
+  .vbtn:focus-visible { outline: 3px solid var(--ink); outline-offset: 3px; }
+  .vbtn:disabled { opacity: .7; cursor: default; }
+  .vstate { margin: 8px 0 0; font-size: 18px; min-height: 1.9em; word-break: keep-all; }
   @media print {
-    body { background: #fff; } .tools, footer { display: none; } .book { border: 0; padding: 0; }
+    body { background: #fff; } .tools, footer, .voice { display: none; } .book { border: 0; padding: 0; }
   }
 </style>
 </head>
@@ -79,7 +92,119 @@
   const msg = (head, body) => { const m = el('div', 'msg'); m.append(el('strong', '', head), document.createTextNode(body)); root.replaceChildren(m); };
   const longDate = s => { const d = new Date(s); return isNaN(d) ? '' : `${d.getFullYear()}년 ${d.getMonth() + 1}월 ${d.getDate()}일`; };
 
-  function render(book, sharedAt) {
+  // 서버 시계 − 이 기기 시계 (ms). 재생 주소 만료를 기기 시계가 틀려도 맞게 판단하려고
+  let skew = 0;
+  const fetchBook = () => fetch('/api/b', { headers: { 'X-Share-Token': tok }, credentials: 'omit', cache: 'no-store' })
+    .then(r => { const t = Date.parse(r.headers.get('Date') || ''); if (!isNaN(t)) skew = t - Date.now(); return r; });
+
+  // ── 가족 음성편지 (서버 계약 10-C1) ──────────────────────────────────────────
+  // · 자동재생 없음. 누르기 전에는 소리를 받지 않는다 (preload none · 누를 때 src).
+  // · playback_url 은 10분짜리 서명 주소 — 만료 1분 전에 /api/b 를 미리 다시 읽어 둔다
+  //   (아이폰은 누른 순간에 바로 play() 해야 소리가 나서, 누른 뒤 기다리지 않게).
+  //   누를 때 그래도 만료가 가까우면 다시 읽고, 재생이 실패하면(/api/b/voice 410) 다시 읽어 지금 상태에 맞춘다.
+  // · 서버는 늘 AAC(m4a) 사본을 준다 — 아이폰 Safari 도 재생된다.
+  const fmtLen = ms => { const s = Math.max(1, Math.round((ms || 0) / 1000)), m = Math.floor(s / 60), r = s % 60; return m ? (r ? `${m}분 ${r}초` : `${m}분`) : `${r}초`; };
+  const clock = s => { s = Math.max(0, Math.floor(s || 0)); return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`; };
+
+  function voiceBox(first) {
+    let v = first, dead = false, busy = false, retried = false, resumeAt = 0, timer = 0, srcMid = '', srcUrl = '';
+    const box = el('section', 'voice'); box.setAttribute('aria-label', '음성편지');
+    const meta = el('p', 'vmeta'), btn = el('button', 'vbtn'), time = el('p', 'vtime'), state = el('p', 'vstate');
+    btn.type = 'button'; state.setAttribute('role', 'status'); state.setAttribute('aria-live', 'polite');
+    const audio = document.createElement('audio'); audio.preload = 'none';
+    box.append(el('h2', '', '음성편지'), meta, btn, time, state, audio);
+
+    const left = () => (Date.parse(v.url_expires_at) || 0) - (Date.now() + skew);
+    const showMeta = () => { meta.textContent = `가족이 남긴 목소리 · ${fmtLen(v.duration_ms)}`; };
+    const label = () => {
+      if (dead) return;
+      btn.disabled = busy;
+      btn.textContent = busy ? '불러오는 중…' : !audio.paused ? '❚❚ 잠시 멈추기'
+        : srcMid && audio.ended ? '▶ 다시 듣기' : srcMid && audio.currentTime > 0 ? '▶ 이어 듣기' : '▶ 음성편지 듣기';
+    };
+    const tick = () => {
+      const total = isFinite(audio.duration) && audio.duration > 0 ? audio.duration : (v.duration_ms || 0) / 1000;
+      time.textContent = srcMid ? `${clock(audio.currentTime)} / ${clock(total)}` : '';
+    };
+    const stop = text => {
+      dead = true; clearTimeout(timer); srcUrl = ''; srcMid = '';
+      audio.pause(); audio.removeAttribute('src'); audio.load();
+      btn.hidden = true; meta.textContent = ''; time.textContent = ''; state.textContent = text;
+    };
+
+    // /api/b 를 다시 읽어 지금 상태에 맞춘다. true = 같은 음성편지를 들을 수 있다
+    async function refresh() {
+      const r = await fetchBook();
+      if (r.status === 410) { stop('공유가 꺼져 들을 수 없어요'); return false; }
+      if (r.status === 404) { stop('열 수 없는 링크예요'); return false; }
+      if (!r.ok) throw new Error(String(r.status));
+      const nv = (await r.json()).voice_message;
+      if (!nv) { stop('음성편지가 지워졌어요'); return false; }
+      const changed = nv.message_id !== v.message_id;
+      v = nv; schedule();
+      if (changed) {
+        audio.pause(); srcMid = ''; srcUrl = ''; resumeAt = 0;
+        showMeta(); tick(); label();
+        state.textContent = '새 음성편지로 바뀌었어요. 단추를 눌러 들어 주세요.';
+        return false;
+      }
+      return true;
+    }
+    // 만료 1분 전에 미리 새 주소를 받아 둔다 — 듣는 중 · 화면이 가려진 동안은 미룬다
+    function schedule() {
+      clearTimeout(timer);
+      if (dead) return;
+      timer = setTimeout(() => {
+        if (document.hidden || !audio.paused || busy) return schedule();
+        refresh().catch(() => {});
+      }, Math.max(15000, left() - 60000));
+    }
+    document.addEventListener('visibilitychange', () => {
+      if (!document.hidden && !dead && !busy && audio.paused && left() < 60000) refresh().catch(() => {});
+    });
+
+    function start(at) {
+      if (srcUrl !== v.playback_url) {
+        resumeAt = at != null ? at : (srcMid === v.message_id && !audio.ended ? audio.currentTime : 0);
+        srcMid = v.message_id; srcUrl = v.playback_url; audio.src = srcUrl;
+      }
+      const p = audio.play();
+      if (p && p.catch) p.catch(e => { if (e && e.name === 'NotAllowedError') { state.textContent = '단추를 한 번 더 눌러 주세요.'; label(); } });
+    }
+
+    btn.addEventListener('click', async () => {
+      if (dead || busy) return;
+      if (!audio.paused) { audio.pause(); return; }
+      state.textContent = ''; retried = false;
+      if (left() < 60000) {
+        busy = true; label();
+        try { if (!(await refresh())) return; }
+        catch (_) { state.textContent = '지금은 들을 수 없어요. 인터넷 연결을 확인하고 다시 눌러 주세요.'; return; }
+        finally { busy = false; label(); }
+      }
+      start();
+    });
+
+    audio.addEventListener('loadedmetadata', () => { if (resumeAt > 0) { try { audio.currentTime = resumeAt; } catch (_) {} } resumeAt = 0; tick(); });
+    audio.addEventListener('playing', () => { retried = false; state.textContent = ''; label(); });
+    ['play', 'pause', 'ended'].forEach(n => audio.addEventListener(n, label));
+    ['timeupdate', 'durationchange'].forEach(n => audio.addEventListener(n, tick));
+    audio.addEventListener('error', async () => {
+      if (dead || !srcUrl) return;                    // 지운 src 의 오류는 무시
+      const at = audio.currentTime || resumeAt;
+      srcUrl = '';                                    // 다음에는 새 주소로
+      if (retried) { state.textContent = '지금은 들을 수 없어요. 잠시 뒤 다시 눌러 주세요.'; label(); return; }
+      retried = true; busy = true; label();
+      try { if (await refresh()) { busy = false; start(at); } }
+      catch (_) { state.textContent = '지금은 들을 수 없어요. 인터넷 연결을 확인하고 다시 눌러 주세요.'; }
+      finally { busy = false; label(); }
+    });
+
+    showMeta(); label(); schedule();
+    return box;
+  }
+
+  function render(book, sharedAt, voice) {
     document.title = `${book.title} — 나의 자서전`;
     const b = el('article', 'book');
     b.append(el('p', 'kicker', '나의 자서전'), el('h1', '', book.title));
@@ -102,6 +227,7 @@
       (c.paras || []).forEach(p => s.append(el('p', 'para', (Array.isArray(p) ? p : [p]).join(' '))));
       b.append(s);
     });
+    if (voice && voice.playback_url) b.append(voiceBox(voice));   // 처음부터 없던 책에는 단추를 두지 않는다
     root.replaceChildren(b);
     document.getElementById('tools').hidden = false;
   }
@@ -113,13 +239,13 @@
   document.getElementById('smaller').onclick = () => { fs = Math.max(.85, +(fs - .15).toFixed(2)); applyFs(); };
 
   if (!tok) { msg('열 수 없는 링크예요', '보내 준 분께 링크를 다시 받아 주세요.'); return; }
-  fetch('/api/b', { headers: { 'X-Share-Token': tok }, credentials: 'omit', cache: 'no-store' })
+  fetchBook()
     .then(async r => {
       if (r.status === 410) return msg('공유가 꺼진 자서전이에요', '보내 준 분이 공유를 껐어요.');
       if (r.status === 404) return msg('열 수 없는 링크예요', '보내 준 분께 링크를 다시 받아 주세요.');
       if (!r.ok) return msg('지금은 열 수 없어요', '잠시 뒤에 다시 열어 주세요.');
       const d = await r.json();
-      render(d.book || {}, d.shared_at);
+      render(d.book || {}, d.shared_at, d.voice_message);
       applyFs();
     })
     .catch(() => msg('지금은 열 수 없어요', '인터넷 연결을 확인하고 다시 열어 주세요.'));

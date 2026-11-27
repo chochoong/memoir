@@ -207,3 +207,6 @@ def test_share_page_served(env):
     _, c = env
     r = c.get("/b")
     assert r.status_code == 200 and "X-Share-Token" in r.text and "noindex" in r.headers.get("x-robots-tag", "")
+    # 가족 음성편지 듣기 (10-C1) — 자동재생 없이 누를 때만 받는다
+    assert "voice_message" in r.text and "음성편지 듣기" in r.text
+    assert "autoplay" not in r.text and "preload = 'none'" in r.text and "innerHTML" not in r.text
