@@ -1,0 +1,13 @@
+# EC2 용 cloudflared 설정 — /etc/cloudflared/config.yml 로 둔다.
+# PC 의 %USERPROFILE%\.cloudflared\config.yml 과 같은 터널 · 같은 주소다. 경로만 Linux 로 바꾼다.
+# <터널-ID> 는 PC 의 config.yml 첫 줄(tunnel:)과 같은 값이다.
+
+tunnel: <터널-ID>
+credentials-file: /etc/cloudflared/<터널-ID>.json
+
+ingress:
+  - hostname: naemalssami.com
+    service: http://127.0.0.1:8010
+    originRequest:
+      connectTimeout: 10s
+  - service: http_status:404

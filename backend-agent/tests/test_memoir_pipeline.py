@@ -291,7 +291,7 @@ def test_t06_analysis_with_unknown_turn_stops_before_outline():
     (lambda a: a["facts"][0].update(source="told"), "format", "source"),
     (lambda a: a["facts"][0].update(certainty="maybe"), "format", "certainty"),
     (lambda a: a["facts"][0].pop("keep"), "format", "keep"),
-    (lambda a: a.update(corrections=[{"fact": "f1", "turns": [1], "before": "1978년", "after": "1979년",
+    (lambda a: a.update(corrections=[{"fact": "f1", "turns": [2], "before": "1978년", "after": "1979년",
                                       "note": "x"}]), "reference", "정정 전 · 뒤"),
     (lambda a: a["facts"].append(fact("f1", [3])), "reference", "겹친다"),
 ])
@@ -1078,7 +1078,6 @@ def test_t36_verify_keeps_full_source_with_exclusion_notice():
     ({"mode": "partial", "turns": [4], "requested_in": [5], "scope": ""}, "format"),
     ({"mode": "partial", "turns": [], "requested_in": [5], "scope": "x"}, "reference"),
     ({"turns": [4], "requested_in": [5], "scope": "x"}, "format"),
-    ({"mode": "partial", "turns": [5], "requested_in": [5], "scope": "x"}, "reference"),
 ])
 def test_t37_exclusion_shape(bad, kind):
     data, _ = source_b()

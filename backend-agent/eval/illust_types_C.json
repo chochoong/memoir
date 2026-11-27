@@ -1,0 +1,538 @@
+{
+ "schema_version": "illust-input-v1",
+ "set_id": "illust-types-C",
+ "synthetic": true,
+ "note": "완전히 가상의 화자. 목차 유형별 대표 그림 선정 검증용 합성 자료 (AI 작성, 2026-11-16). 실제 인터뷰가 아니다. 사진 없는 항목 8개(관계 · 행동 / 사물 / 풍경 — 짧은 글 · 비유 제목 · 장소 이름이 한 번씩만 / 비유 제목의 행동 / 중심 사건과 지나가는 사람 · 사물 / 공동 작업과 일하지 않은 사람), 사진이 놓인 항목 2개, 사진 정보가 없는 항목 1개. 사진 파일은 illust_book_photos_B/ 의 「TEST PHOTO」 시험용 그림을 빌려 쓴다.",
+ "memoir": {
+  "memoir_id": null,
+  "style": "essay",
+  "title": "지붕에서 김장까지",
+  "chapters": [
+   {
+    "no": 1,
+    "chapter_key": "c01",
+    "title": "아버지와 지붕을 고친 날",
+    "status": "ready",
+    "paragraphs": [
+     {
+      "sentences": [
+       {
+        "text": "그해 가을, 아버지와 나는 둘이서 지붕에 새 이엉을 얹었다.",
+        "turns": [
+         1
+        ]
+       },
+       {
+        "text": "아버지가 사다리 위에서 이엉을 받아 올리셨다.",
+        "turns": [
+         1
+        ]
+       },
+       {
+        "text": "나는 아래에서 이엉을 묶어 건네 드렸다.",
+        "turns": [
+         1
+        ]
+       }
+      ]
+     },
+     {
+      "sentences": [
+       {
+        "text": "옆집 할머니는 마당에서 구경만 하셨다.",
+        "turns": [
+         1
+        ]
+       },
+       {
+        "text": "해 질 녘에야 지붕이 노랗게 덮였다.",
+        "turns": [
+         1
+        ]
+       }
+      ]
+     }
+    ],
+    "photos": []
+   },
+   {
+    "no": 2,
+    "chapter_key": "c02",
+    "title": "할아버지의 괘종시계",
+    "status": "ready",
+    "paragraphs": [
+     {
+      "sentences": [
+       {
+        "text": "할아버지 방에는 괘종시계가 걸려 있었다.",
+        "turns": [
+         2
+        ]
+       },
+       {
+        "text": "할아버지는 밤마다 괘종시계의 태엽을 감으셨다.",
+        "turns": [
+         2
+        ]
+       }
+      ]
+     },
+     {
+      "sentences": [
+       {
+        "text": "괘종시계가 울리면 식구들은 잠자리에 들었다.",
+        "turns": [
+         2
+        ]
+       },
+       {
+        "text": "벽에는 달력도 붙어 있었다.",
+        "turns": [
+         2
+        ]
+       }
+      ]
+     }
+    ],
+    "photos": []
+   },
+   {
+    "no": 3,
+    "chapter_key": "c03",
+    "title": "보리밭",
+    "status": "ready",
+    "paragraphs": [
+     {
+      "sentences": [
+       {
+        "text": "봄이면 마을 앞 보리밭이 바람에 물결처럼 일렁였다.",
+        "turns": [
+         3
+        ]
+       },
+       {
+        "text": "종달새가 하늘 높이 울었다.",
+        "turns": [
+         3
+        ]
+       }
+      ]
+     }
+    ],
+    "photos": []
+   },
+   {
+    "no": 4,
+    "chapter_key": "c04",
+    "title": "그해 여름의 빛",
+    "status": "ready",
+    "paragraphs": [
+     {
+      "sentences": [
+       {
+        "text": "우리 집 앞에는 바다가 펼쳐져 있었다.",
+        "turns": [
+         4
+        ]
+       },
+       {
+        "text": "여름이면 바다가 햇빛에 반짝였다.",
+        "turns": [
+         4
+        ]
+       },
+       {
+        "text": "저녁에는 바다 위로 노을이 번졌다.",
+        "turns": [
+         4
+        ]
+       }
+      ]
+     }
+    ],
+    "photos": []
+   },
+   {
+    "no": 5,
+    "chapter_key": "c05",
+    "title": "물빛 저녁",
+    "status": "ready",
+    "paragraphs": [
+     {
+      "sentences": [
+       {
+        "text": "우리 집 앞에는 바다가 펼쳐져 있었다.",
+        "turns": [
+         5
+        ]
+       },
+       {
+        "text": "여름이면 물결이 햇빛에 반짝였다.",
+        "turns": [
+         5
+        ]
+       },
+       {
+        "text": "저녁에는 수평선 위로 노을이 번졌다.",
+        "turns": [
+         5
+        ]
+       }
+      ]
+     }
+    ],
+    "photos": []
+   },
+   {
+    "no": 6,
+    "chapter_key": "c06",
+    "title": "봄을 기다리던 손",
+    "status": "ready",
+    "paragraphs": [
+     {
+      "sentences": [
+       {
+        "text": "겨울이 오기 전, 어머니는 밤마다 털실로 내 스웨터를 뜨셨다.",
+        "turns": [
+         6
+        ]
+       },
+       {
+        "text": "어머니 손끝에서 빨간 털실이 조금씩 옷이 되어 갔다.",
+        "turns": [
+         6
+        ]
+       }
+      ]
+     },
+     {
+      "sentences": [
+       {
+        "text": "나는 옆에서 털실 뭉치를 감아 드렸다.",
+        "turns": [
+         6
+        ]
+       },
+       {
+        "text": "라디오에서는 노래가 흘러나왔다.",
+        "turns": [
+         6
+        ]
+       }
+      ]
+     }
+    ],
+    "photos": []
+   },
+   {
+    "no": 7,
+    "chapter_key": "c07",
+    "title": "서울로 이사하던 날",
+    "status": "ready",
+    "paragraphs": [
+     {
+      "sentences": [
+       {
+        "text": "열두 살 되던 봄, 우리 식구는 서울로 이사를 했다.",
+        "turns": [
+         7
+        ]
+       },
+       {
+        "text": "아버지가 빌려 온 트럭에 이삿짐을 실었다.",
+        "turns": [
+         7
+        ]
+       },
+       {
+        "text": "나는 동생과 트럭 짐칸에 앉아 고개를 넘었다.",
+        "turns": [
+         7
+        ]
+       }
+      ]
+     },
+     {
+      "sentences": [
+       {
+        "text": "새집에 닿자 주인 할머니가 찻잔에 보리차를 따라 주셨다.",
+        "turns": [
+         7
+        ]
+       },
+       {
+        "text": "그날 본 서울 하늘은 뿌옜다.",
+        "turns": [
+         7
+        ]
+       }
+      ]
+     }
+    ],
+    "photos": []
+   },
+   {
+    "no": 8,
+    "chapter_key": "c08",
+    "title": "어머니와 김장하던 날",
+    "status": "ready",
+    "paragraphs": [
+     {
+      "sentences": [
+       {
+        "text": "초겨울이면 어머니와 나는 둘이서 배추로 김장을 했다.",
+        "turns": [
+         8
+        ]
+       },
+       {
+        "text": "어머니가 양념을 버무리시면 나는 배춧잎 사이에 속을 넣었다.",
+        "turns": [
+         8
+        ]
+       }
+      ]
+     },
+     {
+      "sentences": [
+       {
+        "text": "삼촌은 툇마루에 앉아 신문만 보셨다.",
+        "turns": [
+         8
+        ]
+       },
+       {
+        "text": "해가 지면 김장독을 마당에 묻었다.",
+        "turns": [
+         8
+        ]
+       }
+      ]
+     }
+    ],
+    "photos": []
+   },
+   {
+    "no": 9,
+    "chapter_key": "c09",
+    "title": "졸업식",
+    "status": "ready",
+    "paragraphs": [
+     {
+      "sentences": [
+       {
+        "text": "국민학교 졸업식 날이었다.",
+        "turns": [
+         9
+        ]
+       }
+      ]
+     },
+     {
+      "sentences": [
+       {
+        "text": "운동장에서 친구들과 사진을 찍었다.",
+        "turns": [
+         9
+        ]
+       }
+      ]
+     }
+    ],
+    "photos": [
+     {
+      "photo_id": "ph-c09",
+      "after_paragraph": 0,
+      "path": "illust_book_photos_B/ph-04a.jpg"
+     }
+    ]
+   },
+   {
+    "no": 10,
+    "chapter_key": "c10",
+    "title": "첫 월급",
+    "status": "ready",
+    "paragraphs": [
+     {
+      "sentences": [
+       {
+        "text": "첫 월급을 받던 날 어머니께 내복을 사 드렸다.",
+        "turns": [
+         10
+        ]
+       }
+      ]
+     }
+    ]
+   },
+   {
+    "no": 11,
+    "chapter_key": "c11",
+    "title": "군대 시절",
+    "status": "ready",
+    "paragraphs": [
+     {
+      "sentences": [
+       {
+        "text": "강원도에서 군 생활을 했다.",
+        "turns": [
+         11
+        ]
+       }
+      ]
+     },
+     {
+      "sentences": [
+       {
+        "text": "겨울에는 눈을 치우느라 바빴다.",
+        "turns": [
+         11
+        ]
+       }
+      ]
+     }
+    ]
+   }
+  ]
+ },
+ "source": {
+  "utterances": [
+   {
+    "turn": 1,
+    "session_id": "s-01",
+    "asked": "그때 이야기를 들려주세요.",
+    "elder": "그해 가을에 아버지랑 저랑 둘이서 지붕에 새 이엉을 얹었어요. 아버지가 사다리 위에서 이엉을 받아 올리셨어요. 저는 아래에서 이엉을 묶어서 건네 드렸어요. 옆집 할머니는 마당에서 구경만 하셨어요. 해 질 녘에야 지붕이 노랗게 덮였어요."
+   },
+   {
+    "turn": 2,
+    "session_id": "s-02",
+    "asked": "그때 이야기를 들려주세요.",
+    "elder": "할아버지 방에는 괘종시계가 걸려 있었어요. 할아버지는 밤마다 괘종시계 태엽을 감으셨어요. 괘종시계가 울리면 식구들은 잠자리에 들었어요. 벽에는 달력도 붙어 있었어요."
+   },
+   {
+    "turn": 3,
+    "session_id": "s-03",
+    "asked": "그때 이야기를 들려주세요.",
+    "elder": "봄이면 마을 앞 보리밭이 바람에 물결처럼 일렁였어요. 종달새가 하늘 높이 울었어요."
+   },
+   {
+    "turn": 4,
+    "session_id": "s-04",
+    "asked": "그때 이야기를 들려주세요.",
+    "elder": "우리 집 앞에는 바다가 펼쳐져 있었어요. 여름이면 바다가 햇빛에 반짝였어요. 저녁에는 바다 위로 노을이 번졌어요."
+   },
+   {
+    "turn": 5,
+    "session_id": "s-05",
+    "asked": "그때 이야기를 들려주세요.",
+    "elder": "우리 집 앞에는 바다가 펼쳐져 있었어요. 여름이면 물결이 햇빛에 반짝였어요. 저녁에는 수평선 위로 노을이 번졌어요."
+   },
+   {
+    "turn": 6,
+    "session_id": "s-06",
+    "asked": "그때 이야기를 들려주세요.",
+    "elder": "겨울이 오기 전에 어머니는 밤마다 털실로 제 스웨터를 뜨셨어요. 어머니 손끝에서 빨간 털실이 조금씩 옷이 되어 갔어요. 저는 옆에서 털실 뭉치를 감아 드렸어요. 라디오에서는 노래가 흘러나왔어요."
+   },
+   {
+    "turn": 7,
+    "session_id": "s-07",
+    "asked": "그때 이야기를 들려주세요.",
+    "elder": "열두 살 되던 봄에 우리 식구는 서울로 이사를 했어요. 아버지가 빌려 온 트럭에 이삿짐을 실었어요. 저는 동생이랑 트럭 짐칸에 앉아서 고개를 넘었어요. 새집에 닿으니까 주인 할머니가 찻잔에 보리차를 따라 주셨어요. 그날 본 서울 하늘은 뿌옜어요."
+   },
+   {
+    "turn": 8,
+    "session_id": "s-08",
+    "asked": "그때 이야기를 들려주세요.",
+    "elder": "초겨울이면 어머니랑 저랑 둘이서 배추로 김장을 했어요. 어머니가 양념을 버무리시면 저는 배춧잎 사이에 속을 넣었어요. 삼촌은 툇마루에 앉아서 신문만 보셨어요. 해가 지면 김장독을 마당에 묻었어요."
+   },
+   {
+    "turn": 9,
+    "session_id": "s-09",
+    "asked": "그때 이야기를 들려주세요.",
+    "elder": "국민학교 졸업식 날이었어요. 운동장에서 친구들이랑 사진을 찍었어요."
+   },
+   {
+    "turn": 10,
+    "session_id": "s-10",
+    "asked": "그때 이야기를 들려주세요.",
+    "elder": "첫 월급을 받던 날 어머니께 내복을 사 드렸어요."
+   },
+   {
+    "turn": 11,
+    "session_id": "s-11",
+    "asked": "그때 이야기를 들려주세요.",
+    "elder": "강원도에서 군 생활을 했어요. 겨울에는 눈을 치우느라 바빴어요."
+   }
+  ],
+  "turn_map": [
+   {
+    "global_turn": 1,
+    "session_id": "s-01",
+    "turn": 1
+   },
+   {
+    "global_turn": 2,
+    "session_id": "s-02",
+    "turn": 1
+   },
+   {
+    "global_turn": 3,
+    "session_id": "s-03",
+    "turn": 1
+   },
+   {
+    "global_turn": 4,
+    "session_id": "s-04",
+    "turn": 1
+   },
+   {
+    "global_turn": 5,
+    "session_id": "s-05",
+    "turn": 1
+   },
+   {
+    "global_turn": 6,
+    "session_id": "s-06",
+    "turn": 1
+   },
+   {
+    "global_turn": 7,
+    "session_id": "s-07",
+    "turn": 1
+   },
+   {
+    "global_turn": 8,
+    "session_id": "s-08",
+    "turn": 1
+   },
+   {
+    "global_turn": 9,
+    "session_id": "s-09",
+    "turn": 1
+   },
+   {
+    "global_turn": 10,
+    "session_id": "s-10",
+    "turn": 1
+   },
+   {
+    "global_turn": 11,
+    "session_id": "s-11",
+    "turn": 1
+   }
+  ]
+ },
+ "photos": [
+  {
+   "photo_id": "ph-c10",
+   "session_id": "s-10",
+   "turns": [],
+   "clues": null,
+   "chapter_keys": [
+    "c10"
+   ],
+   "after_paragraph": 0,
+   "path": "illust_book_photos_B/ph-09.jpg"
+  }
+ ]
+}

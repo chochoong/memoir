@@ -15,6 +15,9 @@ MEMOIR_JOB_KEEP_SECONDS (기본 1800) 동안 둔다. **다 쓴 자서전은 따�
 keep()) — 작업 응답의 memoir_id 로 /api/memoirs/saved/{memoir_id} 에서 다시 읽는다. 저장에
 실패해도 작업은 done 이다 (memoir_id 가 null).
 
+**삽화는 저장 뒤에 따로 돈다.** keep() 이 ready 자서전을 저장하면 memoir_illust_service.schedule 을 건다 —
+사진이 없는 장마다 그림 한 장. 작업은 기다리지 않고 done 이고, 삽화 상태는 memoir.illustrations (017) 에만 적는다.
+
 **한 사람에 하나씩.** 만드는 중인 작업이 있으면 새로 시작하지 않고 409 busy 와 그 job_id 를
 준다 — 같은 버튼을 두 번 눌러 모델 호출이 두 배로 나가지 않게. 재시도는 하지 않는다 (8P 0회).
 
@@ -59,6 +62,7 @@ class Job:
     chapters: int = 0
     result: dict | None = None
     memoir_id: str | None = None      # DB 에 남긴 자서전 (keep). 저장 못 했으면 None
+    illust_style: str = "watercolor"  # 삽화 그림체 (화면의 illust_style · 문체 style 과 따로). keep → 삽화 schedule 로 간다
     error: Exception | None = None
     started: float = field(default_factory=time.monotonic)
     finished: float | None = None
@@ -91,11 +95,15 @@ def get(job_id: str, user_id: str) -> Job | None:
     return job if job is not None and job.user_id == user_id else None
 
 
-async def start(recs: list[dict], ids: list[str], user_id: str, style: str) -> Job:
-    """collect 를 지난 회차로 작업을 연다. 만드는 중인 것이 있는지는 라우트가 먼저 본다."""
+async def start(recs: list[dict], ids: list[str], user_id: str, style: str, illust_style: str | None = None) -> Job:
+    """
+    collect 를 지난 회차로 작업을 연다. 만드는 중인 것이 있는지는 라우트가 먼저 본다.
+    illust_style 은 라우트가 검사한 삽화 그림체 (없으면 수채화) — 본문 생성에는 쓰지 않고 저장 뒤 삽화에만 간다.
+    """
     _sweep()
     job = Job(uuid.uuid4().hex, user_id, ids, style,
-              stage="analysis" if memoir.engine(user_id) == "pipeline" else "write")
+              stage="analysis" if memoir.engine(user_id) == "pipeline" else "write",
+              illust_style=illust_style or "watercolor")
 
     def progress(stage: str, chapter: int, chapters: int) -> None:
         job.stage, job.chapter, job.chapters = stage, chapter, chapters
@@ -103,7 +111,7 @@ async def start(recs: list[dict], ids: list[str], user_id: str, style: str) -> J
     async def work() -> None:
         try:
             job.result = await memoir.generate(recs, ids, user_id, style, progress)
-            job.memoir_id = await keep(job.result, ids, user_id, style)
+            job.memoir_id = await keep(job.result, ids, user_id, style, job.illust_style)
             job.status = DONE
         except asyncio.CancelledError:
             job.status, job.error = FAILED, Cancelled("그만두었다")
@@ -124,8 +132,11 @@ async def start(recs: list[dict], ids: list[str], user_id: str, style: str) -> J
     return job
 
 
-async def keep(result: dict, ids: list[str], user_id: str, style: str) -> str | None:
-    """다 쓴 자서전을 DB 에 남긴다 (013). memoir_id 를 돌려준다. **실패는 삼킨다** — 로그만."""
+async def keep(result: dict, ids: list[str], user_id: str, style: str, illust_style: str | None = None) -> str | None:
+    """
+    다 쓴 자서전을 DB 에 남긴다 (013). memoir_id 를 돌려준다. **실패는 삼킨다** — 로그만.
+    illust_style(삽화 그림체)은 삽화 처리에 넘겨 그 책의 삽화 기록(memoir.illustrations.art_style)에 남는다. style(문체)은 그대로다.
+    """
     if not store.enabled():
         return None
     mid = f"m_{uuid.uuid4().hex}"
@@ -139,6 +150,10 @@ async def keep(result: dict, ids: list[str], user_id: str, style: str) -> str | 
         log.error("자서전 저장 실패 (%s: %s)", type(e).__name__, str(e)[:120])
         return None
     log.info("자서전 저장 %s — 회차 %d개", mid, len(ids))
+    if result.get("status") == memoir.READY:
+        # 사진 없는 장의 삽화 — 뒤에서 따로 돈다. 작업(done)과 본문은 기다리지 않는다 (memoir_illust_service.py 머리)
+        from . import memoir_illust_service
+        memoir_illust_service.schedule(mid, user_id, illust_style)
     return mid
 
 

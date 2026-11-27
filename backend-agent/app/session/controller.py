@@ -226,6 +226,8 @@ class SessionController:
     elder_id: str | None = None
     # 어르신 링크(/api/i/start)로 연 회차. 같은 계정이 새 회차를 열 때 대신 닫지 않는다 (main._open_checks)
     via_link: bool = False
+    # 질문을 읽는 목소리 (tts.VOICES 의 키). 회차를 열 때 정하고 끝까지 같다.
+    voice: str = tts.DEFAULT_VOICE_KEY
     question_fn: QuestionFn = fixed_questions
     stt_fn: SttFn = stt.azure_transcribe
     tts_fn: TtsFn = tts.synthesize
@@ -254,6 +256,8 @@ class SessionController:
 
     _buffer: str = ""
     _audio: list[bytes] = field(default_factory=list)
+    # 전사를 끝내 못 한 소리 — 버리지 않고 비켜 둔다(_after_empty). 다음 발화 앞에 붙는다
+    _held_audio: list[bytes] = field(default_factory=list)
     _audio_mime: str = "audio/webm"
     _empty_streak: int = 0
     _pending: asyncio.Task | None = None
@@ -271,9 +275,14 @@ class SessionController:
 
     # ------------------------------------------------------------ 조회
 
+    def _voice_kw(self) -> dict:
+        # 기본 목소리면 넘기지 않는다 — 시험의 tts_fn · stream_fn 은 글자 하나만 받는다.
+        return {} if self.voice == tts.DEFAULT_VOICE_KEY else {"voice": self.voice}
+
     def snapshot(self) -> dict:
         return {
             "session_id": self.session_id,
+            "voice": self.voice,
             "state": self.machine.state.value,
             "turn": self.machine.turn,
             "max_turn": self.machine.max_turn,
@@ -511,6 +520,9 @@ class SessionController:
         self.touch()
         self.machine.fire(Event.SPEECH_RECEIVED)
         self._empty_streak = 0
+        if self._held_audio:                    # 비켜 둔 소리를 이 발화 앞에 붙여 한 번 더 옮긴다
+            self._audio[:0] = self._held_audio
+            self._held_audio = []
         if sum(len(c) for c in self._audio) + len(data) > MAX_AUDIO_BYTES:
             log.error("발화 오디오가 %dMB 를 넘었다 — 이 청크는 버린다",
                       MAX_AUDIO_BYTES // (1024 * 1024))
@@ -736,6 +748,10 @@ class SessionController:
         })
         self._buffer = ""
         self._audio.clear()
+        if self._held_audio:                    # 글로 턴이 끝났다 — 비켜 둔 소리는 더 붙일 데가 없다
+            log.info("비켜 둔 소리 %d바이트는 쓰지 않는다 — 이번 턴은 글로 남았다",
+                     sum(len(c) for c in self._held_audio))
+            self._held_audio = []
         # 지연 숫자를 기다리지 않고 바로 내린다. 어르신의 말을 잃지 않는 게 먼저다.
         await store.save_turn(self, self.fragments[-1])
         self.marks.saved_at = time.perf_counter()
@@ -781,9 +797,16 @@ class SessionController:
             버퍼에 뭔가 있다      전사가 실패한 것일 수 있다. MAX_EMPTY_RETRY 만큼
                                  다시 해 본다.
 
-        **버퍼는 비우지 않는다.** 전사에 실패한 것이라면 그 안에 어르신의 말씀이
-        들어 있다. 다음 발화가 뒤에 붙어 함께 전사되면서 한 번 더 기회를 얻는다.
-        크기는 MAX_AUDIO_BYTES 가 묶는다.
+        **소리는 버리지 않는다.** 전사에 실패한 것이라면 그 안에 어르신의 말씀이
+        들어 있다. 다시 시도를 멈출 때 _held_audio 로 비켜 두고, 다음 목소리 발화
+        앞에 붙여(audio_chunk) 함께 전사하며 한 번 더 기회를 얻는다. 크기는
+        MAX_AUDIO_BYTES 가 묶는다.
+
+        비켜 두는 까닭 — _audio 에 남겨 두면 snapshot 의 audio_bytes 가 0 이 되지
+        않고, 화면은 「앞의 소리가 처리되면 글을 보낸다」고 기다린다. 글쓰기로 바꾼
+        뒤에는 새 소리가 오지 않으니 영영 보내지 못했다 (운영 11-16: 「이야기 남기기」
+        버튼이 계속 돌았다). 글이 오면 그 글로 턴이 된다(_transcribe 는 소리가 없을
+        때 글을 쓴다).
         """
         self._empty_streak += 1
         has_buffer = bool(self._audio) or bool(self._buffer.strip())
@@ -794,6 +817,11 @@ class SessionController:
         if has_buffer:
             log.error("빈 전사 %d회 연속 — 재시도를 멈춘다. 다음 발화를 기다린다",
                       self._empty_streak)
+            if self._audio:
+                self._held_audio = self._audio[:]
+                self._audio.clear()
+                log.info("옮기지 못한 소리 %d바이트를 비켜 둔다 — 다음 목소리 발화 앞에 붙인다",
+                         sum(len(c) for c in self._held_audio))
         else:
             log.info("빈 전사 — 말씀이 없었다. 다음 발화를 기다린다")
 
@@ -883,7 +911,7 @@ class SessionController:
         if self.stream_fn:
             # 조각은 Speech 가 모으고, 여기서는 첫 소리가 온 시각만 적는다.
             # 그 순간부터 소리를 틀 수 있으니 낭독 칸은 거기까지다.
-            speech = self.stream_fn(q)
+            speech = self.stream_fn(q, **self._voice_kw())
             self._speech = speech
 
             async def first() -> None:
@@ -895,7 +923,7 @@ class SessionController:
 
         async def run() -> None:
             try:
-                self._question_audio = await self.tts_fn(q)
+                self._question_audio = await self.tts_fn(q, **self._voice_kw())
             except asyncio.CancelledError:
                 raise
             except Exception as e:                      # noqa: BLE001

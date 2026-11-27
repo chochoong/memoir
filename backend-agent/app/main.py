@@ -34,8 +34,8 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
 from app.session import controller as sc
-from app.session import (auth, limits, link, memoir, memoir_jobs, photo, photostore, postcard, prompt, share, store,
-                         stt, tts, words)
+from app.session import (auth, limits, link, memoir, memoir_illust_service, memoir_jobs, memoir_photos, photo, photostore,
+                         postcard, prompt, share, store, stt, tts, voice_message, words)
 from app.session import style as styles
 from app.session.conf import env_flag, env_int, env_str
 from app.session.machine import State, TransitionError
@@ -120,8 +120,10 @@ async def lifespan(app: FastAPI):
     asyncio.create_task(stt.warmup())
     asyncio.create_task(tts.warmup())
     sweeper = asyncio.create_task(sc.sweep_forever())
+    voice_sweeper = asyncio.create_task(voice_message.sweep_forever())
     yield
     sweeper.cancel()
+    voice_sweeper.cancel()
     await stt.aclose()
     await tts.aclose()
     await store.close_pool()
@@ -137,7 +139,9 @@ async def lifespan(app: FastAPI):
 #
 # 프로덕션에서 화면은 이 서버가 web/ 에서 직접 낸다. **같은 출처라 CORS 가 아예
 # 필요 없다** — 허용 목록이 비어 있는 것이 정상이다.
-PUBLIC_ORIGIN = env_str("PUBLIC_ORIGIN")
+# 끝의 / 는 뗀다 — 남으면 초대 · 공유 주소가 …com//i#… 가 되어 화면이 링크로 알아보지 못하고,
+# 브라우저가 보내는 Origin(끝에 / 없음)과도 글자가 달라진다.
+PUBLIC_ORIGIN = env_str("PUBLIC_ORIGIN").rstrip("/")
 _public = bool(PUBLIC_ORIGIN)
 _docs = "/docs" if (not _public or env_flag("DOCS")) else None
 
@@ -208,6 +212,9 @@ async def _auth_error(request: Request, e: auth.AuthError):
 
 # ---------------------------------------------------------------- 모델
 
+VoiceKey = Literal["default", "young"]
+
+
 class StartReq(BaseModel):
     title: str
     # 가족이 적은 설명. **어르신의 말씀이 아니다** — 0번 조각에 남지만 대화 기록에
@@ -226,6 +233,9 @@ class StartReq(BaseModel):
     # 누구의 이야기인가 (「누구의 이야기를 남길까요?」 에서 고른 화자). 이 자녀의 화자여야 한다.
     # 지금은 없어도 연다 — 화면이 보내기 전까지. 없으면 화자 미지정 회차가 된다.
     elder_id: str | None = Field(None, max_length=64)
+    # 질문을 읽는 목소리. default = 지금 목소리(Kore) · young = 젊고 밝은 목소리(Leda).
+    # 이름 목록은 tts.VOICES 와 같아야 한다 (tests/test_voice.py 가 본다). 모르는 이름은 422.
+    voice: VoiceKey = "default"
 
 
 class ElderAssignReq(BaseModel):
@@ -260,6 +270,7 @@ class LinkReq(BaseModel):
     theme: Literal["family", "self", "hobby"] | None = None
     topic: str = Field("", max_length=100)
     photo_id: str | None = Field(None, max_length=64)
+    voice: VoiceKey = "default"
 
 
 # ---------------------------------------------------------------- API
@@ -381,6 +392,49 @@ async def create_elder(req: ElderReq, who: str = Depends(auth.current_user)):
     return {"elder_id": e["elder_id"], "name": e["display_name"]}
 
 
+def _no_elder() -> JSONResponse:
+    # 없는 화자 · 남의 화자 · 이미 지운 화자를 가리지 않는다 — 남의 화자가 있는지 알려 주지 않는다.
+    return JSONResponse({"detail": "화자를 찾을 수 없어요", "code": "elder_not_found"},
+                        status_code=404)
+
+
+@app.patch("/api/elders/{elder_id}")
+async def rename_elder(elder_id: str, req: ElderReq, who: str = Depends(auth.current_user)):
+    """
+    화자 이름을 바꾼다. 기록은 이름이 아니라 elder_id 에 묶여 있어 그대로 따라온다.
+    같은 이름 막기는 하지 않는다 — 만들 때(POST)와 같다.
+    """
+    name = req.name.strip()
+    if not name:
+        raise HTTPException(422, "이름을 적어 주세요")
+    if not await _read(store.rename_elder(who, elder_id, name)):
+        return _no_elder()
+    log.info("화자 이름 바꿈 %s", elder_id)
+    return {"elder_id": elder_id, "name": name}
+
+
+@app.delete("/api/elders/{elder_id}")
+async def delete_elder(elder_id: str, who: str = Depends(auth.current_user)):
+    """
+    이 계정의 화자 목록에서 뺀다 (user_elder 한 줄). elder 줄 · 예전 기록은 남는다.
+
+    **기록이 하나라도 있으면 지우지 않는다 (409 has_records)** — 숨기지 않은 회차 ·
+    지우지 않은 자서전 · 아직 쓸 수 있는 링크. 실수로 엽서 · 자서전을 잃지 않게.
+
+    진행 중인 회차도 센다. 회차는 열 때 DB 에 적지만 그 쓰기는 실패를 삼키므로,
+    메모리에 떠 있는 회차를 DB 만 보고 놓칠 수 있다.
+    """
+    live = sum(1 for c in sc.live_sessions() if c.user_id == who and c.elder_id == elder_id)
+    got = await _read(store.unlink_elder(who, elder_id, live))
+    if got is None:
+        return _no_elder()
+    if not got["deleted"]:
+        return JSONResponse({"detail": "이 분의 이야기 기록이 남아 있어 지울 수 없어요",
+                             "code": "has_records", "records": got["records"]}, status_code=409)
+    log.info("화자 지움 %s", elder_id)
+    return {"elder_id": elder_id, "deleted": True}
+
+
 @app.post("/api/sessions")
 async def create_session(req: StartReq, request: Request,
                          who: str = Depends(auth.current_user)):
@@ -416,7 +470,7 @@ async def create_session(req: StartReq, request: Request,
     ctl = sc.put(sc.SessionController(
         user_id=who, title=req.title, pace=req.pace, max_turn=req.max_turn,
         photo_id=req.photo_id, theme=req.theme, topic=req.topic.strip(),
-        elder_id=req.elder_id,
+        elder_id=req.elder_id, voice=req.voice,
         question_fn=gemini_question, closed_fn=postcard.on_closed))
     await ctl.start(req.seed)
     if not req.elder_id:
@@ -904,6 +958,19 @@ def _unsupported_style() -> JSONResponse:
     return JSONResponse({"detail": styles.SAYS, "code": styles.CODE}, status_code=400)
 
 
+def _illust_style(body: dict) -> str | JSONResponse:
+    """
+    자서전 본문의 illust_style — 삽화 그림체 (watercolor 수채화 · anime 애니풍 · oil_painting 유화).
+    **키가 없을 때만** 수채화다. 모르는 값은 400 {code: unsupported_illust_style} — 다른 그림체로 바꿔 그리지 않는다.
+    문체 style 과 따로 받는다 (style 을 덮어쓰지 않는다).
+    """
+    try:
+        return memoir_illust_service.pick_art_style(body.get("illust_style"))
+    except memoir_illust_service.UnsupportedArtStyle:
+        return JSONResponse({"detail": memoir_illust_service.ART_STYLE_SAYS, "code": memoir_illust_service.ART_STYLE_CODE},
+                            status_code=400)
+
+
 @app.get("/api/sessions/{session_id}/postcard")
 async def get_postcard(session_id: str, request: Request, who: str = Depends(auth.current_user)):
     """
@@ -976,6 +1043,7 @@ async def memoir_preview(request: Request, who: str = Depends(auth.current_user)
     본문은 `{"session_ids": [...], "style": ...}` (고른 것) 이나
     `{"elder_id": ..., "exclude_session_ids": [...], "style": ...}` (화자의 전부에서 뺄 것 ·
     상한 없음) 다. exclude_session_ids 칸이 있으면 뒤의 것이다. style 은 없으면 구어체다.
+    illust_style(삽화 그림체 — watercolor · anime · oil_painting)은 없으면 수채화이고, 모르는 값은 400 unsupported_illust_style.
     응답의 run.session_ids 는 실제로 쓴 회차 전부다.
     누구의 요청인지는 로그인으로 안다.
     본문을 pydantic 으로 받지 않는 것은 모양이 틀렸을 때 FastAPI 가 422 를
@@ -994,6 +1062,9 @@ async def memoir_preview(request: Request, who: str = Depends(auth.current_user)
         chosen = styles.pick(body.get("style"), styles.MEMOIR)
     except styles.UnsupportedStyle:
         return _unsupported_style()
+    illust_style = _illust_style(body)
+    if isinstance(illust_style, JSONResponse):
+        return illust_style
     try:
         if "exclude_session_ids" in body:
             out = await memoir.preview_all(body.get("elder_id"), body["exclude_session_ids"], who, chosen)
@@ -1003,7 +1074,8 @@ async def memoir_preview(request: Request, who: str = Depends(auth.current_user)
         status, code, detail = _memoir_failure(e)
         return JSONResponse({"detail": detail, "code": code}, status_code=status)
     ids = ((out.get("run") or {}).get("session_ids")) or []
-    return {**out, "memoir_id": await memoir_jobs.keep(out, ids, who, chosen)}
+    # 응답 모양은 그대로다 (다섯 키 + style + run + memoir_id) — 그림체는 저장 뒤 삽화 처리에만 간다
+    return {**out, "memoir_id": await memoir_jobs.keep(out, ids, who, chosen, illust_style)}
 
 
 async def _memoir_body(request: Request) -> dict:
@@ -1047,6 +1119,9 @@ async def memoir_start(request: Request, who: str = Depends(auth.current_user)):
         chosen = styles.pick(body.get("style"), styles.MEMOIR)
     except styles.UnsupportedStyle:
         return _unsupported_style()
+    illust_style = _illust_style(body)
+    if isinstance(illust_style, JSONResponse):
+        return illust_style
     busy = memoir_jobs.running(who)
     if busy is not None:
         return JSONResponse({"detail": "자서전을 만들고 있어요. 다 만들어지면 볼 수 있어요.", "code": "busy",
@@ -1057,7 +1132,7 @@ async def memoir_start(request: Request, who: str = Depends(auth.current_user)):
     except memoir.MemoirError as e:
         status, code, detail = _memoir_failure(e)
         return JSONResponse({"detail": detail, "code": code}, status_code=status)
-    job = await memoir_jobs.start(recs, ids, who, chosen)
+    job = await memoir_jobs.start(recs, ids, who, chosen, illust_style)
     return JSONResponse(_memoir_job_view(job), status_code=202)
 
 
@@ -1080,11 +1155,421 @@ async def saved_memoirs(elder_id: str | None = None, limit: int = 50,
 
 @app.get("/api/memoirs/saved/{memoir_id}")
 async def saved_memoir(memoir_id: str, who: str = Depends(auth.current_user)):
-    """자서전 하나 — result 는 만들 때의 응답 그대로다. 없거나 남의 것이거나 지웠으면 404."""
+    """
+    자서전 하나 — result 는 만들 때의 응답 그대로다. 없거나 남의 것이거나 지웠으면 404.
+    illustrations 는 장별 사진 · 삽화 (memoir_illust_service.view — 저장 키 없이 이 서버의 주소만).
+    """
     rec = await _read(store.load_memoir(memoir_id[:64], who))
     if rec is None:
         return _memoir_gone()
-    return {k: v for k, v in rec.items() if k != "user_id"}
+    doc = rec.pop("illustrations", None)
+    memoir_illust_service.resume_if_stalled(rec["memoir_id"], who, doc)
+    rows = await _read(store.list_photo_placements(rec["memoir_id"], who))
+    return {**{k: v for k, v in rec.items() if k != "user_id"},
+            "illustrations": memoir_photos.merged_view(rec["memoir_id"], doc, rec.get("result"), rows)}
+
+
+@app.get("/api/memoirs/saved/{memoir_id}/illustrations")
+async def saved_memoir_illustrations(memoir_id: str, who: str = Depends(auth.current_user)):
+    """장별 사진 · 삽화만 — 화면이 삽화를 기다리는 동안 몇 초마다 부른다 (본문 없이 가볍게)."""
+    rec = await _read(store.load_memoir(memoir_id[:64], who))
+    if rec is None:
+        return _memoir_gone()
+    doc = rec.get("illustrations")
+    memoir_illust_service.resume_if_stalled(rec["memoir_id"], who, doc)
+    rows = await _read(store.list_photo_placements(rec["memoir_id"], who))
+    return memoir_photos.merged_view(rec["memoir_id"], doc, rec.get("result"), rows)
+
+
+@app.get("/api/memoirs/saved/{memoir_id}/illustrations/{chapter_no}")
+async def saved_memoir_illustration_image(memoir_id: str, chapter_no: int, request: Request,
+                                          who: str = Depends(auth.current_user)):
+    """삽화 한 장의 바이트. 책의 주인만 — 없거나 남의 것이면 404 (사진과 같은 까닭)."""
+    rec = await _read(store.load_memoir(memoir_id[:64], who))
+    img = memoir_illust_service.image_record(rec.get("illustrations") if rec else None, str(chapter_no))
+    if img is None:
+        raise HTTPException(404, "그림을 찾을 수 없습니다")
+    etag = f'"{img["sha256"][:32]}"'
+    if request.headers.get("if-none-match") == etag:
+        return Response(status_code=304, headers={"ETag": etag})
+    try:
+        data = await photostore.current().get(img["storage_key"])
+    except photostore.PhotoMissing as e:
+        log.error("삽화 바이트가 없다 %s %s장", memoir_id[:10], chapter_no)
+        raise HTTPException(404, "그림을 찾을 수 없습니다") from e
+    except photostore.PhotoStoreError as e:
+        raise HTTPException(503, "지금은 그림을 불러오지 못했습니다") from e
+    return Response(content=data, media_type=img.get("mime") or "image/jpeg",
+                    headers={"Cache-Control": f"private, max-age={photo.cache_seconds()}", "ETag": etag})
+
+
+# ---------------------------------------------------------------- 완성된 자서전의 사진 넣기 · 옮기기 · 빼기 (018)
+#
+# memoir_photos.py 머리 참조. 모델 · 그림 호출이 없다 — 넣은 사진도 분석하지 않는다.
+# 실패는 {detail, code} 다: 404 memoir_not_found · placement_not_found · photo_not_found,
+# 422 bad_position · no_such_chapter · no_such_paragraph · too_many_photos · photo_not_stored, 400 사진 형식, 503 저장 실패.
+
+def _placement_failure(e: memoir_photos.PlacementError) -> JSONResponse:
+    return JSONResponse({"detail": e.detail, "code": e.code}, status_code=e.status)
+
+
+def _placement_gone() -> JSONResponse:
+    return JSONResponse({"detail": "사진 배치를 찾을 수 없어요", "code": "placement_not_found"}, status_code=404)
+
+
+async def _json_small(request: Request) -> dict:
+    raw = await _body_capped(request, 16_384)
+    try:
+        body = json.loads(raw or b"{}")
+    except ValueError:
+        raise HTTPException(400, "JSON 본문을 읽지 못했습니다") from None
+    if not isinstance(body, dict):
+        raise HTTPException(400, "JSON 객체여야 합니다")
+    return body
+
+
+def _placement_out(p: dict) -> dict:
+    return {"placement_id": p["placement_id"], "origin": p["origin"], "photo_id": p["photo_id"],
+            "url": f"/api/photos/{p['photo_id']}", "chapter_no": p.get("chapter_no"),
+            "after_paragraph": p.get("after_paragraph"), "display_order": p.get("display_order") or 0,
+            "width": p.get("width"), "height": p.get("height")}
+
+
+@app.post("/api/memoirs/saved/{memoir_id}/photos", status_code=201)
+async def memoir_photo_add(memoir_id: str, request: Request, chapter_no: int | None = None,
+                           after_paragraph: int | None = None, display_order: int | None = None,
+                           request_id: str | None = None, who: str = Depends(auth.current_user)):
+    """
+    책의 한 문단 뒤에 사진을 넣는다. 두 가지 모양:
+        새 사진    본문 = 사진 바이트 그대로 (POST /api/photos 와 같다), 자리는 주소의 ?chapter_no=&after_paragraph=
+        내 사진    Content-Type: application/json  {photo_id, chapter_no, after_paragraph, display_order?, request_id?}
+                   — 이미 올린 내 사진(예: 책에서 뺀 회차 사진)을 다시 넣는다
+    display_order 가 없으면 그 문단 뒤 맨 끝. request_id 를 주면 같은 요청을 다시 보내도 한 장만 들어간다.
+    응답 201 {placement}. 원고 · 엽서 · 자동 배치는 바꾸지 않는다.
+    """
+    rec = await _read(store.load_memoir(memoir_id[:64], who))
+    if rec is None:
+        return _memoir_gone()
+    as_json = (request.headers.get("content-type") or "").split(";")[0].strip().lower() == "application/json"
+    body = await _json_small(request) if as_json else {}
+    if as_json:
+        chapter_no, after_paragraph = body.get("chapter_no"), body.get("after_paragraph")
+        display_order, request_id = body.get("display_order"), body.get("request_id")
+    try:
+        no, ap = memoir_photos.check_position(rec["result"], chapter_no, after_paragraph)
+        order = None if display_order is None else memoir_photos.as_int(display_order, "display_order")
+    except memoir_photos.PlacementError as e:
+        return _placement_failure(e)
+    rows = await _read(store.list_photo_placements(rec["memoir_id"], who))
+    pid = memoir_photos.manual_id(rec["memoir_id"], who, str(request_id)[:128] if request_id else None)
+    again = next((r for r in rows if r["placement_id"] == pid), None)
+    if again is not None:                                        # 같은 요청을 다시 보냈다 — 두 장을 만들지 않는다
+        return JSONResponse({"placement": jsonable_encoder(_placement_out(again))}, status_code=200)
+    if sum(1 for r in rows if r["origin"] == "manual") >= memoir_photos.max_photos():
+        return JSONResponse({"detail": f"책 한 권에 사진은 {memoir_photos.max_photos()}장까지 넣을 수 있어요",
+                             "code": "too_many_photos"}, status_code=422)
+
+    saved = None
+    if as_json:
+        pic = await _read(store.load_photo(str(body.get("photo_id") or "")))
+        if pic is None or pic["user_id"] != who:
+            return JSONResponse({"detail": "사진을 찾을 수 없어요", "code": "photo_not_found"}, status_code=404)
+        if pic["status"] != "stored":
+            return JSONResponse({"detail": "사진이 아직 저장되지 않았어요", "code": "photo_not_stored"}, status_code=422)
+    else:
+        data = await _body_capped(request, photostore.max_bytes())
+        try:
+            prepared = await photo.prepare(data)
+        except photo.PhotoRejected as e:
+            raise HTTPException(400, str(e)) from e
+        try:
+            pic = saved = await photo.save(prepared, user_id=who)
+        except (store.StoreUnavailable, photostore.PhotoStoreError) as e:
+            raise HTTPException(503, "지금은 사진을 저장하지 못했습니다") from e
+        # 분석(photo.analyze_later)을 걸지 않는다 — 책에 넣는 사진은 질문에 쓰지 않는다 (유료 호출 0)
+
+    now = memoir_photos.final_photos(rec.get("illustrations"), rows, rec["memoir_id"])
+    try:
+        row = await store.save_photo_placement({
+            "placement_id": pid, "memoir_id": rec["memoir_id"], "user_id": who, "photo_id": pic["photo_id"],
+            "origin": "manual", "chapter_no": no, "after_paragraph": ap,
+            "display_order": order if order is not None else memoir_photos.next_order(now, no, ap),
+            "hidden": False, "width": pic.get("width"), "height": pic.get("height")})
+    except store.StoreUnavailable as e:
+        if saved is not None:                                    # 방금 올린 사진은 되돌린다 (배치 없이 남는 사진을 만들지 않는다)
+            try:
+                await photostore.current().delete(saved["storage_key"])
+            except Exception as e2:                              # noqa: BLE001
+                log.error("자서전 사진 되돌리기 실패 %s (%s)", saved["photo_id"][:8], type(e2).__name__)
+            await store.delete_photo_row(saved["photo_id"])
+        raise HTTPException(503, "지금은 사진을 넣지 못했습니다") from e
+    if row is None:
+        return _placement_gone()
+    log.info("자서전 사진 넣기 %s — %s장 %s문단 뒤 · %s", rec["memoir_id"][:10], no, ap, "새 사진" if saved else "내 사진")
+    return JSONResponse({"placement": jsonable_encoder(_placement_out(row))}, status_code=201)
+
+
+def _target(rec: dict, rows: list[dict], placement_id: str) -> dict | None:
+    """옮기거나 뺄 사진 — 지금 책에 보이는 것만 (자동 · 옮겨 둔 자동 · 넣은 사진). 뺀 사진은 없다(404)."""
+    return next((p for p in memoir_photos.final_photos(rec.get("illustrations"), rows, rec["memoir_id"])
+                 if p["placement_id"] == placement_id), None)
+
+
+@app.patch("/api/memoirs/saved/{memoir_id}/photos/{placement_id}")
+async def memoir_photo_move(memoir_id: str, placement_id: str, request: Request,
+                            who: str = Depends(auth.current_user)):
+    """
+    사진을 옮긴다 — 자동으로 놓인 회차 사진(a_…)도, 넣은 사진(p_…)도. 본문 {chapter_no?, after_paragraph?, display_order?}.
+    자리를 바꾸고 display_order 를 안 주면 새 자리의 맨 끝. 자동 사진을 옮긴 자리는 재처리 뒤에도 지킨다.
+    """
+    rec = await _read(store.load_memoir(memoir_id[:64], who))
+    if rec is None:
+        return _memoir_gone()
+    body = await _json_small(request)
+    rows = await _read(store.list_photo_placements(rec["memoir_id"], who))
+    cur = _target(rec, rows, placement_id[:64])
+    if cur is None:
+        return _placement_gone()
+    try:
+        moving = "chapter_no" in body or "after_paragraph" in body
+        no, ap = (memoir_photos.check_position(rec["result"], body.get("chapter_no", cur.get("chapter_no")),
+                                               body.get("after_paragraph", cur.get("after_paragraph")))
+                  if moving else (cur.get("chapter_no"), cur.get("after_paragraph")))
+        given = body.get("display_order")
+        order = memoir_photos.as_int(given, "display_order") if given is not None else None
+    except memoir_photos.PlacementError as e:
+        return _placement_failure(e)
+    if order is None:
+        now = memoir_photos.final_photos(rec.get("illustrations"), rows, rec["memoir_id"])
+        same = (no, ap) == (cur.get("chapter_no"), cur.get("after_paragraph"))
+        order = (cur.get("display_order") or 0) if same else memoir_photos.next_order(now, no, ap, skip=placement_id)
+    row = await _read(store.save_photo_placement({
+        "placement_id": cur["placement_id"], "memoir_id": rec["memoir_id"], "user_id": who, "photo_id": cur["photo_id"],
+        "origin": cur["origin"], "chapter_no": no, "after_paragraph": ap, "display_order": order, "hidden": False,
+        "sessions": cur.get("sessions"), "anchor_session": cur.get("anchor_session"),
+        "width": cur.get("width"), "height": cur.get("height")}))
+    if row is None:
+        return _placement_gone()
+    return {"placement": _placement_out(row)}
+
+
+@app.delete("/api/memoirs/saved/{memoir_id}/photos/{placement_id}", status_code=204)
+async def memoir_photo_remove(memoir_id: str, placement_id: str, who: str = Depends(auth.current_user)):
+    """
+    책에서 사진을 뺀다 — 이 책에서만. 사진 파일 · 엽서 · 다른 책은 그대로다.
+    자동 사진은 「뺐다」 를 남긴다 (재처리 · 다시 열기에도 다시 나타나지 않는다). 다시 넣으려면 POST 의 JSON 모양으로.
+    """
+    rec = await _read(store.load_memoir(memoir_id[:64], who))
+    if rec is None:
+        return _memoir_gone()
+    rows = await _read(store.list_photo_placements(rec["memoir_id"], who))
+    cur = _target(rec, rows, placement_id[:64])
+    if cur is None:
+        return _placement_gone()
+    if cur["origin"] == "manual":
+        ok = await _read(store.delete_photo_placement(cur["placement_id"], rec["memoir_id"], who))
+    else:
+        ok = await _read(store.save_photo_placement({
+            "placement_id": cur["placement_id"], "memoir_id": rec["memoir_id"], "user_id": who,
+            "photo_id": cur["photo_id"], "origin": "auto", "chapter_no": cur.get("chapter_no"),
+            "sessions": cur.get("sessions"), "anchor_session": cur.get("anchor_session"),
+            "after_paragraph": cur.get("after_paragraph"), "display_order": cur.get("display_order") or 0,
+            "hidden": True, "width": cur.get("width"), "height": cur.get("height")})) is not None
+    if not ok:
+        return _placement_gone()
+    log.info("자서전 사진 빼기 %s — %s", rec["memoir_id"][:10], cur["origin"])
+    return Response(status_code=204)
+
+
+# ---------------------------------------------------------------- 가족 음성편지 (019)
+#
+# voice_message.py 머리 참조. 실패는 {detail, code}:
+#   400 request_id_required · bad_revision · 404 memoir_not_found · upload_not_found · message_not_found
+#   409 revision_conflict {revision} · upload_in_use · upload_attached · 410 upload_expired
+#   413 너무 큼 · 415 unsupported_audio · 422 too_long · too_short · 503 voice_unavailable · voice_busy
+
+def _voice_failure(e: voice_message.VoiceError) -> JSONResponse:
+    return JSONResponse({"detail": e.detail, "code": e.code}, status_code=e.status)
+
+
+def _voice_json(status: int, code: str, detail: str, **more) -> JSONResponse:
+    return JSONResponse({"detail": detail, "code": code, **more}, status_code=status)
+
+
+def _request_id(raw) -> str | None:
+    s = str(raw or "").strip()
+    return s[:128] if s else None
+
+
+def _ranged(data: bytes, mime: str, request: Request, etag: str, cache: str) -> Response:
+    """
+    음성 바이트 — Range 한 구간을 받는다 (206). 아이폰 사파리의 <audio> 는 Range 를 지원하지 않는 서버의 음성을
+    재생하지 않거나 넘겨 듣기를 못 한다. 여러 구간 요청은 전체(200)로 답한다.
+    """
+    head = {"Accept-Ranges": "bytes", "ETag": etag, "Cache-Control": cache}
+    if request.headers.get("if-none-match") == etag:
+        return Response(status_code=304, headers=head)
+    rng, n = (request.headers.get("range") or "").strip(), len(data)
+    if rng.startswith("bytes=") and "," not in rng:
+        a, _, b = rng[6:].partition("-")
+        try:
+            if a == "":                                   # 끝에서 몇 바이트
+                start, end = max(0, n - int(b)), n - 1
+            else:
+                start, end = int(a), min(int(b), n - 1) if b else n - 1
+        except ValueError:
+            start = end = -1
+        if not (0 <= start <= end < n):
+            return Response(status_code=416, headers={**head, "Content-Range": f"bytes */{n}"})
+        return Response(content=data[start:end + 1], status_code=206, media_type=mime,
+                        headers={**head, "Content-Range": f"bytes {start}-{end}/{n}"})
+    return Response(content=data, media_type=mime, headers=head)
+
+
+async def _voice_bytes(up: dict, request: Request, cache: str) -> Response:
+    try:
+        data = await photostore.current().get(up["play_key"])
+    except photostore.PhotoMissing as e:
+        log.error("음성편지 바이트가 없다 %s", up["upload_id"][:11])
+        raise HTTPException(404, "음성편지를 찾을 수 없어요") from e
+    except photostore.PhotoStoreError as e:
+        raise HTTPException(503, "지금은 음성편지를 불러오지 못했어요") from e
+    return _ranged(data, up["play_mime"], request, f'"{up["sha256"][:32]}"', cache)
+
+
+@app.post("/api/voice-message-uploads", status_code=201)
+async def voice_upload(request: Request, who: str = Depends(auth.current_user)):
+    """
+    ② 임시 업로드. 본문 = 녹음 원본 바이트 그대로 (webm · mp4), 머리 X-Request-ID 필수.
+    → 201 {upload_id, state: "uploaded", duration_ms, mime, size_bytes, expires_at}. **저장 완료가 아니다** — 책에 연결해야 한다.
+    같은 X-Request-ID 로 다시 보내면 새로 만들지 않고 처음 것을 돌려준다(200). 새 녹음은 새 id.
+    """
+    rid = _request_id(request.headers.get("x-request-id"))
+    if rid is None:
+        return _voice_json(400, "request_id_required", "X-Request-ID 가 필요해요")
+    old = await _read(store.find_voice_upload(who, rid))
+    if old is not None:
+        if old["state"] != "uploaded" and old["state"] != "attached":
+            return _voice_json(410, "upload_expired", "올린 음성의 보관 기한이 지났어요. 새로 저장해 주세요")
+        return JSONResponse(jsonable_encoder(voice_message.upload_view(old)), status_code=200)
+    data = await _body_capped(request, voice_message.max_bytes())
+    try:
+        prep = await voice_message.process(data)
+    except voice_message.VoiceError as e:
+        return _voice_failure(e)
+    uid = voice_message.new_upload_id()
+    key, play_key = voice_message.keys(uid, prep.kind)
+    ps = photostore.current()
+    try:
+        await ps.put(key, prep.data, prep.mime)
+        await ps.put(play_key, prep.play, voice_message.PLAY_MIME)
+    except photostore.PhotoStoreError as e:
+        raise HTTPException(503, "지금은 음성편지를 저장하지 못했어요") from e
+
+    async def undo():
+        for k in (key, play_key):
+            try:
+                await ps.delete(k)
+            except Exception as e2:                              # noqa: BLE001
+                log.error("음성편지 바이트 되돌리기 실패 %s (%s)", uid[:11], type(e2).__name__)
+    try:
+        rec = await store.save_voice_upload({
+            "upload_id": uid, "user_id": who, "request_id": rid, "mime": prep.mime, "size_bytes": len(prep.data),
+            "duration_ms": prep.duration_ms, "sha256": prep.sha256, "storage_key": key, "play_key": play_key,
+            "play_mime": voice_message.PLAY_MIME, "play_bytes": len(prep.play), "expires_at": voice_message.expires_at()})
+    except store.StoreUnavailable as e:
+        await undo()
+        raise HTTPException(503, "지금은 음성편지를 저장하지 못했어요") from e
+    if rec["upload_id"] != uid:                                  # 같은 요청이 동시에 두 번 — 앞선 것이 이겼다
+        await undo()
+        return JSONResponse(jsonable_encoder(voice_message.upload_view(rec)), status_code=200)
+    log.info("음성편지 업로드 %s — %s %.1f초 %dKB", uid[:11], prep.kind, prep.duration_ms / 1000, len(prep.data) // 1024)
+    return JSONResponse(jsonable_encoder(voice_message.upload_view(rec)), status_code=201)
+
+
+@app.delete("/api/voice-message-uploads/{upload_id}", status_code=204)
+async def voice_upload_discard(upload_id: str, who: str = Depends(auth.current_user)):
+    """버린 임시 업로드 (재녹음 · 취소). 책에 연결된 파일은 여기서 지우지 않는다 (409 upload_attached)."""
+    got = await _read(store.discard_voice_upload(upload_id[:64], who))
+    if got == "not_found":
+        return _voice_json(404, "upload_not_found", "올린 음성을 찾을 수 없어요")
+    if got == "attached":
+        return _voice_json(409, "upload_attached", "책에 연결된 음성이에요. 책에서 지워 주세요")
+    return Response(status_code=204)                             # ok · 이미 정리된 것 (다시 눌러도 같다)
+
+
+async def _my_memoir_or_none(memoir_id: str, who: str) -> dict | None:
+    return await _read(store.load_memoir(memoir_id[:64], who))
+
+
+@app.get("/api/memoirs/saved/{memoir_id}/voice-message")
+async def voice_message_get(memoir_id: str, who: str = Depends(auth.current_user)):
+    """{revision, message} — 없으면 message=null. 있으면 {message_id, state: "ready", duration_ms, mime, playback_url}."""
+    rec = await _my_memoir_or_none(memoir_id, who)
+    if rec is None:
+        return _memoir_gone()
+    cur = await _read(store.load_memoir_voice(rec["memoir_id"], who))
+    return JSONResponse(jsonable_encoder(voice_message.message_view(rec["memoir_id"], cur)), headers=_NO_STORE)
+
+
+@app.put("/api/memoirs/saved/{memoir_id}/voice-message")
+async def voice_message_put(memoir_id: str, request: Request, who: str = Depends(auth.current_user)):
+    """
+    ④ 책에 연결 (있던 메시지는 교체). 본문 {upload_id, request_id, expected_revision}. 성공 응답은 GET 과 같다 —
+    message.state = "ready" 가 저장 완료다. revision 이 다르면 409 revision_conflict (다시 읽고 고른다).
+    새 연결이 성공하기 전에는 있던 메시지가 그대로 재생된다.
+    """
+    rec = await _my_memoir_or_none(memoir_id, who)
+    if rec is None:
+        return _memoir_gone()
+    body = await _json_small(request)
+    rid, uid, rev = _request_id(body.get("request_id")), str(body.get("upload_id") or "")[:64], body.get("expected_revision")
+    if rid is None:
+        return _voice_json(400, "request_id_required", "request_id 가 필요해요")
+    if isinstance(rev, bool) or not isinstance(rev, int) or rev < 0:
+        return _voice_json(400, "bad_revision", "expected_revision 은 0 이상의 숫자여야 해요")
+    got, now_rev = await _read(store.attach_voice(rec["memoir_id"], who, uid, rid, rev))
+    if got == "conflict":
+        return _voice_json(409, "revision_conflict", "다른 곳에서 음성편지가 바뀌었어요. 다시 불러와 주세요", revision=now_rev)
+    if got == "memoir_not_found":
+        return _memoir_gone()
+    if got == "upload_not_found":
+        return _voice_json(404, "upload_not_found", "올린 음성을 찾을 수 없어요")
+    if got == "upload_in_use":
+        return _voice_json(409, "upload_in_use", "이미 다른 책에 연결된 음성이에요")
+    if got == "upload_expired":
+        return _voice_json(410, "upload_expired", "올린 음성의 보관 기한이 지났어요. 새로 저장해 주세요")
+    if got == "ok":
+        log.info("음성편지 연결 %s — %s", rec["memoir_id"][:10], uid[:11])
+    cur = await _read(store.load_memoir_voice(rec["memoir_id"], who))
+    return JSONResponse(jsonable_encoder(voice_message.message_view(rec["memoir_id"], cur)), headers=_NO_STORE)
+
+
+@app.delete("/api/memoirs/saved/{memoir_id}/voice-message", status_code=204)
+async def voice_message_delete(memoir_id: str, expected_revision: int | None = None,
+                               who: str = Depends(auth.current_user)):
+    """?expected_revision=값. 성공 204. 파일은 참조가 끊긴 뒤 정리 작업이 지운다."""
+    if expected_revision is None or expected_revision < 0:
+        return _voice_json(400, "bad_revision", "expected_revision 이 필요해요")
+    got, now_rev = await _read(store.detach_voice(memoir_id[:64], who, expected_revision))
+    if got == "memoir_not_found":
+        return _memoir_gone()
+    if got == "conflict":
+        return _voice_json(409, "revision_conflict", "다른 곳에서 음성편지가 바뀌었어요. 다시 불러와 주세요", revision=now_rev)
+    if got == "no_message":
+        return _voice_json(404, "message_not_found", "음성편지가 없어요")
+    log.info("음성편지 지움 %s", memoir_id[:10])
+    return Response(status_code=204)
+
+
+@app.get("/api/memoirs/saved/{memoir_id}/voice-message/audio")
+async def voice_message_audio(memoir_id: str, request: Request, who: str = Depends(auth.current_user)):
+    """책 주인의 재생 (로그인 쿠키). Range 206. 메시지가 없거나 남의 책이면 404."""
+    rec = await _my_memoir_or_none(memoir_id, who)
+    cur = await _read(store.load_memoir_voice(rec["memoir_id"], who)) if rec else None
+    if not cur or not cur.get("upload"):
+        raise HTTPException(404, "음성편지를 찾을 수 없어요")
+    return await _voice_bytes(cur["upload"], request, f"private, max-age={photo.cache_seconds()}")
 
 
 @app.delete("/api/memoirs/saved/{memoir_id}")
@@ -1144,7 +1629,7 @@ async def memoir_job_cancel(job_id: str, who: str = Depends(auth.current_user)):
 
 
 def _memoir_job_view(job: memoir_jobs.Job) -> dict:
-    out = {"job_id": job.job_id, "status": job.status, "style": job.style,
+    out = {"job_id": job.job_id, "status": job.status, "style": job.style, "illust_style": job.illust_style,
            "run": {"session_ids": job.ids}, "elapsed": memoir_jobs.elapsed(job)}
     if job.status == memoir_jobs.RUNNING:
         out.update(stage=job.stage, chapter=job.chapter, chapters=job.chapters)
@@ -1196,7 +1681,8 @@ async def create_link(req: LinkReq, who: str = Depends(auth.current_user)):
     topic = req.topic.strip()
     rec, raw = await link.issue(who, {
         "elder_id": req.elder_id, "title": req.title.strip() or topic or "인터뷰",
-        "seed": req.seed, "theme": req.theme, "topic": topic, "photo_id": req.photo_id})
+        "seed": req.seed, "theme": req.theme, "topic": topic, "photo_id": req.photo_id,
+        "voice": req.voice})
     return _issued(rec, raw)
 
 
@@ -1274,6 +1760,9 @@ async def create_share(request: Request, who: str = Depends(auth.current_user)):
         raise share.bad("책 id 가 틀려요")
     book = share.clean_book(body.get("book"))
     rec, token = await share.issue(who, book_id, book)
+    if book_id.startswith("m_"):
+        # 저장된 자서전에서 낸 공유 — 받은 사람이 그 책의 지금 음성편지를 듣게 원본을 단다 (소유 · 지우지 않은 책만)
+        await share.read(store.set_share_source(rec["share_id"], who, book_id))
     return {**share.summary({**rec, "created_at": None, "revoked_at": None}),
             "token": token, "url": f"{PUBLIC_ORIGIN}{share.PATH}#{token}"}
 
@@ -1302,8 +1791,35 @@ async def shared_book(request: Request):
     바꾸지 않는다. 모르는 토큰 404 invalid_share, 끈 공유 410 share_revoked (책을 싣지 않는다).
     """
     rec = await share.by_token(request.headers.get(share.HEADER))
-    return JSONResponse(jsonable_encoder({"book": rec["book"], "shared_at": rec["created_at"]}),
+    voice = None
+    if rec.get("source_memoir_id"):
+        cur = await share.read(store.load_memoir_voice(rec["source_memoir_id"], rec["user_id"]))
+        voice = voice_message.shared_view(rec["share_id"], cur)
+    return JSONResponse(jsonable_encoder({"book": rec["book"], "shared_at": rec["created_at"], "voice_message": voice}),
                         headers=_NO_STORE)
+
+
+@app.get("/api/b/voice")
+async def shared_voice(request: Request, s: str = "", m: str = "", e: int = 0, k: str = ""):
+    """
+    공유받은 사람의 음성편지 재생 — /api/b 가 준 서명 주소 (헤더를 못 붙이는 <audio src> 용). 로그인 없음.
+    매번 다시 본다: 서명 · 만료(410 url_expired → /api/b 를 다시 읽는다) · 공유가 꺼졌는지(410) · 그 메시지가 아직 그 책의 것인지.
+    """
+    if not voice_message.check_url(s[:64], m[:64], e, k[:64]):
+        return JSONResponse({"detail": "재생 주소가 만료됐어요. 책을 다시 열어 주세요", "code": "url_expired"},
+                            status_code=410, headers=_NO_STORE)
+    rec = await share.read(store.load_share_by_id(s[:64]))
+    if rec is None:
+        raise HTTPException(404, "공유를 찾을 수 없어요")
+    if rec["revoked_at"] is not None:
+        return JSONResponse({"detail": "공유가 꺼졌어요", "code": "share_revoked"}, status_code=410, headers=_NO_STORE)
+    cur = (await share.read(store.load_memoir_voice(rec["source_memoir_id"], rec["user_id"]))
+           if rec.get("source_memoir_id") else None)
+    up = (cur or {}).get("upload")
+    if not up or up["upload_id"] != m:
+        return JSONResponse({"detail": "음성편지가 바뀌었거나 지워졌어요", "code": "message_gone"},
+                            status_code=410, headers=_NO_STORE)
+    return await _voice_bytes(up, request, "no-store")
 
 
 @app.get(share.PATH, include_in_schema=False)
@@ -1382,7 +1898,8 @@ async def link_start(request: Request, body: LinkStartReq | None = None):
         ctl = sc.put(sc.SessionController(
             user_id=rec["user_id"], title=rec["title"], session_id=session_id,
             photo_id=rec["photo_id"], theme=rec["theme"], topic=picked or rec["topic"],
-            elder_id=rec["elder_id"], question_fn=gemini_question, closed_fn=link.on_closed, via_link=True))
+            elder_id=rec["elder_id"], voice=rec.get("voice") or "default",
+            question_fn=gemini_question, closed_fn=link.on_closed, via_link=True))
         # 다른 낱말을 고르셨으면 자녀의 시작 자료(seed)는 쓰지 않는다 — 다른 주제의 자료가
         # 0번 조각으로 들어가 질문을 그쪽으로 끌고 간다
         await ctl.start(picked if picked else rec["seed"])
@@ -1562,9 +2079,23 @@ async def _read(coro):
 # 실기기 확인 때 터널을 하나만 열면 되고, 같은 출처라 CORS 도 필요 없다.
 # 반드시 API 라우트 **뒤에** 마운트한다 — 앞에 두면 /api 까지 삼킨다.
 
-_web = Path(__file__).resolve().parents[1] / "web"
-if (_web / "index.html").exists():
-    app.mount("/assets", StaticFiles(directory=_web / "assets"), name="assets")
+#
+# WEB_INDEX — 화면 파일을 직접 고른다 (backend-agent 기준 상대 경로 또는 절대 경로).
+#   운영: WEB_INDEX=../prototype/index.html  → git pull/merge 만으로 화면이 바뀐다 (web/ 로 복사하지 않는다).
+#   비우면 예전대로 web/index.html.
+# **적었는데 파일이 없으면 서버를 켜지 않는다** — 예전 화면으로 조용히 떨어지면 어느 판이 나가는지 모른다.
+
+_root = Path(__file__).resolve().parents[1]
+_web = _root / "web"
+_web_index_env = env_str("WEB_INDEX").strip()
+_web_index = ((_root / _web_index_env) if not Path(_web_index_env).is_absolute() else Path(_web_index_env)).resolve() \
+    if _web_index_env else _web / "index.html"
+if _web_index_env and not _web_index.is_file():
+    raise RuntimeError(f"WEB_INDEX={_web_index_env!r} 파일이 없습니다 ({_web_index}) — 경로를 고치거나 비우세요")
+if _web_index.is_file():
+    log.info("화면 파일 — %s", _web_index)
+    if (_web / "assets").is_dir():
+        app.mount("/assets", StaticFiles(directory=_web / "assets"), name="assets")
 
     @app.get("/{full_path:path}", include_in_schema=False)
     async def spa(full_path: str):
@@ -1577,4 +2108,4 @@ if (_web / "index.html").exists():
         """
         if full_path.startswith("api/") or full_path == "api":
             raise HTTPException(404, "없는 API 경로입니다")
-        return FileResponse(_web / "index.html")
+        return FileResponse(_web_index)

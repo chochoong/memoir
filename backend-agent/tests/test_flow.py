@@ -207,8 +207,56 @@ def test_empty_loop():
     check("실패해도 회차는 살아 있다", ctl2.machine.state is State.LISTENING,
           f"state={ctl2.machine.state.value}")
     check("턴을 소모하지 않는다", ctl2.machine.turn == 0)
-    check("어르신의 말씀을 버리지 않는다", len(ctl2._audio) == 1,
-          "버퍼가 남아 다음 발화와 함께 한 번 더 기회를 얻는다")
+    check("어르신의 말씀을 버리지 않는다", len(ctl2._held_audio) == 1,
+          "비켜 둔 소리가 다음 발화와 함께 한 번 더 기회를 얻는다")
+    check("비켜 둔 소리는 기다릴 소리로 세지 않는다", ctl2.snapshot()["audio_bytes"] == 0,
+          "화면은 audio_bytes > 0 이면 글 보내기를 미룬다")
+
+
+def test_held_audio_does_not_block_text():
+    """
+    전사를 포기한 소리가 남아도 글 답변은 보낼 수 있어야 한다 (운영 11-16).
+
+    소리가 _audio 에 그대로 남으면 audio_bytes 가 0 이 되지 않고, 화면은 「앞의
+    소리가 처리되면 보낸다」며 「이야기 남기기」를 끝없이 기다렸다.
+    """
+    print("\n[10b] 옮기지 못한 소리가 글 답변을 막지 않는다")
+    heard = []
+
+    async def stt(audio, mime, hint):
+        heard.append(len(audio))
+        return "" if len(heard) <= 1 + MAX_EMPTY_RETRY else "목소리로 다시 말씀"
+
+    async def run(next_step):
+        ctl = SessionController(user_id="t", title="시험", pace="fast", stt_fn=stt)
+        ctl.timers.t1_seconds = 0.3
+        await ctl.start("씨앗")
+        await ctl.tts_done()
+        await ctl.audio_chunk(bytes(64), "audio/wav")
+        await asyncio.sleep(1.5)                 # 최초 + 재시도 → 포기
+        await next_step(ctl)
+        await asyncio.sleep(0.5)
+        return ctl
+
+    async def by_text(ctl):
+        await ctl.speech("글로 남긴 답")
+        await ctl.done_button()
+
+    heard.clear()
+    ctl = asyncio.run(run(by_text))
+    check("글이 턴이 된다", ctl.machine.turn == 1 and ctl.fragments[-1]["answer"] == "글로 남긴 답",
+          f"turn={ctl.machine.turn} · {ctl.fragments[-1].get('answer')!r}")
+    check("비켜 둔 소리는 정리된다", not ctl._held_audio and not ctl._audio)
+
+    async def by_voice(ctl):
+        await ctl.audio_chunk(bytes(32), "audio/wav")
+        await ctl.done_button()
+
+    heard.clear()
+    ctl = asyncio.run(run(by_voice))
+    check("다음 목소리는 비켜 둔 소리와 함께 옮긴다", heard and heard[-1] > heard[0],
+          f"전사 길이 {heard}")
+    check("목소리가 턴이 된다", ctl.machine.turn == 1 and ctl.fragments[-1]["answer"] == "목소리로 다시 말씀")
 
 
 def test_pcm_wrap():
@@ -628,6 +676,7 @@ def main() -> int:
     test_machine()
     test_controller()
     test_empty_loop()
+    test_held_audio_does_not_block_text()
     test_pcm_wrap()
     test_tts()
     test_done_button_race()

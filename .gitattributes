@@ -1,2 +1,7 @@
 # Unit 8P: reviewed fixture provenance hashes the original bytes.
 backend-agent/tests/data/v5_analysis_20261027T010241Z.json text eol=lf
+
+# EC2 세팅 파일은 Linux 에서 돈다 — 줄 끝을 LF 로 고정
+backend-agent/deploy/ec2/*.sh text eol=lf
+backend-agent/deploy/ec2/*.service text eol=lf
+backend-agent/deploy/ec2/*.yml text eol=lf

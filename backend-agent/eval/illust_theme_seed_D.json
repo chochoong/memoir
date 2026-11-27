@@ -1,0 +1,66 @@
+{
+ "schema_version": "illust-input-v1",
+ "set_id": "illust-theme-D",
+ "synthetic": true,
+ "note": "합성 자료 (AI 작성) — 목차 주제 삽화(chapter_theme_v1) 시험용. 실제 인물 · 원문이 아니다. 장마다 다른 표현 · 소재: 비유적 제목, 본문이 부정하는 소재, 문장 속 「못」, 본문에 없는 관계, 제목에만 있는 소재, 중심 소재 없음",
+ "memoir": {
+  "memoir_id": null, "style": "essay", "title": "계절이 지나간 자리",
+  "chapters": [
+   {"no": 1, "title": "바늘 끝에 걸린 겨울", "status": "ready", "photos": [],
+    "paragraphs": [
+     {"sentences": [{"text": "열 살쯤 되던 해부터 겨울이 오면 안방 구석의 재봉틀이 바빠졌다.", "turns": [1]},
+                    {"text": "해가 일찍 지는 저녁마다 재봉틀 바늘이 쉬지 않고 오르내렸다.", "turns": [1]}]},
+     {"sentences": [{"text": "구멍 난 소매와 해진 무릎을 하나씩 기웠다.", "turns": [1]},
+                    {"text": "실이 엉키면 바로 꿰지 못해 손끝이 시렸다.", "turns": [1]}]},
+     {"sentences": [{"text": "다 고친 옷을 개어 쌓아 두면 재봉틀 위로 백열등 불빛이 노랗게 내려앉았다.", "turns": [1]},
+                    {"text": "그 소리가 들리면 겨울이 깊어진 줄 알았다.", "turns": [1]}]}]},
+   {"no": 2, "title": "아르바이트를 고르던 해", "status": "ready", "photos": [],
+    "paragraphs": [
+     {"sentences": [{"text": "대학에 들어간 해에 나는 아르바이트를 찾아 동네를 돌았다.", "turns": [2]},
+                    {"text": "나는 카페에서 일한 적이 없다.", "turns": [2]}]},
+     {"sentences": [{"text": "대신 동네 서점에서 책을 정리하는 일을 얻었다.", "turns": [2]},
+                    {"text": "새 책이 들어오는 날이면 상자를 풀고 서가에 책을 꽂았다.", "turns": [2]}]},
+     {"sentences": [{"text": "서점 문을 닫을 무렵에는 계산대 위를 닦고 불을 껐다.", "turns": [2]},
+                    {"text": "책 냄새가 밴 손으로 집에 돌아왔다.", "turns": [2]}]}]},
+   {"no": 3, "title": "역 앞 분식집", "status": "ready", "photos": [],
+    "paragraphs": [
+     {"sentences": [{"text": "고등학교를 마친 겨울부터 역 앞 분식집에서 일했다.", "turns": [3]},
+                    {"text": "아침마다 떡볶이 국물을 끓이고 김밥을 말았다.", "turns": [3]}]},
+     {"sentences": [{"text": "떡볶이를 못 드시는 손님에게는 고춧가루 없는 국물로 따로 만들어 드렸다.", "turns": [3]}]},
+     {"sentences": [{"text": "저녁이 되면 분식집 창에 김이 서렸고, 나는 떡볶이 냄비를 저으며 퇴근하는 사람들을 맞았다.", "turns": [3]}]}]},
+   {"no": 4, "title": "낯선 항구", "status": "ready", "photos": [],
+    "paragraphs": [
+     {"sentences": [{"text": "스무 살 여름, 혼자 배를 타고 남쪽 섬으로 갔다.", "turns": [4]},
+                    {"text": "배가 항구를 떠나자 바닷바람이 얼굴에 부딪혔다.", "turns": [4]}]},
+     {"sentences": [{"text": "섬의 항구에는 그물을 손질하는 사람들이 있었다.", "turns": [4]},
+                    {"text": "나는 배낭을 내려놓고 한참 바다를 바라보았다.", "turns": [4]}]},
+     {"sentences": [{"text": "돌아오는 배에서 멀어지는 항구를 오래 보았다.", "turns": [4]}]}]},
+   {"no": 5, "title": "봄이 늦던 해", "status": "ready", "photos": [],
+    "paragraphs": [
+     {"sentences": [{"text": "그해에는 텃밭에 상추와 고추를 심었다.", "turns": [5]}]},
+     {"sentences": [{"text": "아침마다 텃밭에 물을 주고 잡초를 뽑았다.", "turns": [5]}]},
+     {"sentences": [{"text": "여름이 오자 텃밭이 초록으로 가득했다.", "turns": [5]}]}]},
+   {"no": 6, "title": "그날의 소리", "status": "ready", "photos": [],
+    "paragraphs": [
+     {"sentences": [{"text": "기억나는 것은 소리뿐이다.", "turns": [6]}]},
+     {"sentences": [{"text": "무슨 소리였는지는 잘 모르겠다.", "turns": [6]}]}]}
+  ]
+ },
+ "source": {
+  "utterances": [
+   {"turn": 1, "session_id": "d-01", "asked": "겨울밤 이야기를 들려주세요.", "elder": "겨울이면 재봉틀로 식구들 옷을 기웠어요. 열 살쯤부터 그랬어요."},
+   {"turn": 2, "session_id": "d-02", "asked": "처음 한 아르바이트는요?", "elder": "카페에서는 일한 적이 없어요. 동네 서점에서 책 정리를 했어요."},
+   {"turn": 3, "session_id": "d-03", "asked": "분식집 이야기를 해 주세요.", "elder": "역 앞 분식집에서 떡볶이를 만들었어요. 매운 걸 못 드시는 분께는 따로 해 드렸어요."},
+   {"turn": 4, "session_id": "d-04", "asked": "처음 혼자 간 여행은요?", "elder": "스무 살 여름에 혼자 배 타고 섬에 갔어요. 항구가 기억나요."},
+   {"turn": 5, "session_id": "d-05", "asked": "텃밭 이야기를 해 주세요.", "elder": "텃밭에 상추랑 고추를 심었어요."},
+   {"turn": 6, "session_id": "d-06", "asked": "그날 무엇이 기억나세요?", "elder": "소리만 기억나요."}
+  ],
+  "turn_map": [
+   {"global_turn": 1, "session_id": "d-01", "turn": 1}, {"global_turn": 2, "session_id": "d-02", "turn": 1},
+   {"global_turn": 3, "session_id": "d-03", "turn": 1}, {"global_turn": 4, "session_id": "d-04", "turn": 1},
+   {"global_turn": 5, "session_id": "d-05", "turn": 1}, {"global_turn": 6, "session_id": "d-06", "turn": 1}
+  ]
+ },
+ "photos": [],
+ "photo_placement": {"complete": true}
+}

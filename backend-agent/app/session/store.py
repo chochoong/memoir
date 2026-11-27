@@ -799,7 +799,7 @@ async def create_elder(user_id: str, display_name: str) -> dict:
 # 표는 010 이 만들었다. 권한을 정하는 함수라 계정 함수와 같이 실패를 삼키지 않는다.
 
 # token_hash 는 읽지 않는다. device_hash 는 「시작한 기기인가」를 대조하는 데만 쓰고 내보내지 않는다.
-_LINK_COLS = """link_id, user_id, elder_id, title, seed, theme, topic, picked_topic, photo_id, session_id,
+_LINK_COLS = """link_id, user_id, elder_id, title, seed, theme, topic, picked_topic, photo_id, voice, session_id,
                 device_hash, created_at, expires_at, revoked_at, started_at, ended_at"""
 
 
@@ -846,6 +846,72 @@ async def assign_elder(session_id: str, user_id: str, elder_id: str) -> str:
         raise StoreUnavailable("화자를 저장하지 못했습니다") from e
 
 
+async def rename_elder(user_id: str, elder_id: str, display_name: str) -> bool:
+    """
+    화자 이름을 바꾼다. 이 계정이 관리하는 화자가 아니면 False.
+
+    elder.display_name 한 칸만 바꾼다 — 기록은 이름이 아니라 elder_id 에 묶여 있다.
+    같은 화자를 관리하는 다른 자녀에게도 새 이름이 보인다 (같은 분이다).
+    """
+    async def run(con):
+        return await con.fetchval(
+            """
+            UPDATE elder e SET display_name = $3
+              FROM user_elder ue
+             WHERE ue.user_id = $1 AND ue.elder_id = $2 AND e.elder_id = ue.elder_id
+            RETURNING e.elder_id
+            """,
+            user_id, elder_id, display_name)
+    return bool(await _auth_write("화자 이름 바꾸기", run))
+
+
+# 「아직 쓸 수 있는 링크」 — 거두지도 끝나지도 않았고, 시작했거나 기한이 남은 것.
+_LINK_USABLE = ("revoked_at IS NULL AND ended_at IS NULL"
+                " AND (session_id IS NOT NULL OR expires_at > now())")
+
+
+async def unlink_elder(user_id: str, elder_id: str, live: int = 0) -> dict | None:
+    """
+    이 계정과 화자의 연결(user_elder 한 줄)을 끊는다.
+
+    None = 이 계정의 화자가 아니다. 돌려준 dict 의 "deleted" 가 False 면 **기록이 남아
+    끊지 않았다** — "records" 에 남은 수가 있다 (이 계정 것만 센다).
+
+    elder 줄은 남긴다. 다른 자녀가 같은 분을 관리할 수 있고, 예전 기록이 그 줄을 가리킨다.
+    끊긴 뒤에는 owns_elder 가 False 라 그 화자로 회차 · 링크 · 자서전을 새로 만들 수 없다.
+
+    live 는 부르는 쪽이 메모리에서 센 진행 중 회차 수다. DB 의 회차 수와 겹칠 수 있어
+    더하지 않고 큰 쪽을 쓴다.
+
+    세기와 지우기를 한 트랜잭션에서 하고, 처음에 user_elder 줄을 잠근다 — 그사이 다른
+    기기에서 이 화자로 회차를 여는 것(owns_elder 확인)과 엇갈리지 않게.
+    """
+    async def run(con):
+        async with con.transaction():
+            if not await con.fetchval(
+                    "SELECT 1 FROM user_elder WHERE user_id = $1 AND elder_id = $2 FOR UPDATE",
+                    user_id, elder_id):
+                return None
+            row = await con.fetchrow(
+                f"""
+                SELECT (SELECT count(*) FROM session
+                         WHERE user_id = $1 AND elder_id = $2 AND deleted_at IS NULL) AS sessions,
+                       (SELECT count(*) FROM memoir
+                         WHERE user_id = $1 AND elder_id = $2 AND deleted_at IS NULL) AS memoirs,
+                       (SELECT count(*) FROM interview_link
+                         WHERE user_id = $1 AND elder_id = $2 AND {_LINK_USABLE}) AS links
+                """,
+                user_id, elder_id)
+            records = {k: int(row[k]) for k in ("sessions", "memoirs", "links")}
+            records["sessions"] = max(records["sessions"], live)
+            if any(records.values()):
+                return {"deleted": False, "records": records}
+            await con.execute("DELETE FROM user_elder WHERE user_id = $1 AND elder_id = $2",
+                              user_id, elder_id)
+            return {"deleted": True, "records": records}
+    return await _auth_write("화자 지우기", run)
+
+
 async def owns_elder(user_id: str, elder_id: str) -> bool:
     async def run(con):
         return await con.fetchval(
@@ -858,11 +924,12 @@ async def create_link(rec: dict) -> None:
         await con.execute(
             """
             INSERT INTO interview_link (link_id, token_hash, user_id, elder_id, title, seed,
-                                        theme, topic, photo_id, expires_at)
-            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+                                        theme, topic, photo_id, expires_at, voice)
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
             """,
             rec["link_id"], rec["token_hash"], rec["user_id"], rec["elder_id"], rec["title"],
-            rec["seed"], rec["theme"], rec["topic"], _pid(rec["photo_id"]), rec["expires_at"])
+            rec["seed"], rec["theme"], rec["topic"], _pid(rec["photo_id"]), rec["expires_at"],
+            rec.get("voice") or "default")
     await _auth_write("링크 기록", run)
 
 
@@ -941,7 +1008,7 @@ async def revoke_link(link_id: str) -> None:
 # 자녀가 「링크로 공유」 를 누른 책 한 권. 링크 표와 같이 실패를 삼키지 않는다 —
 # 공유를 기록하지 못했으면 링크를 내주지 않는다.
 
-_SHARE_COLS = "share_id, user_id, book_id, title, book, created_at, revoked_at"
+_SHARE_COLS = "share_id, user_id, book_id, title, book, created_at, revoked_at, source_memoir_id"
 
 
 def _share_row(r: Any) -> dict:
@@ -1020,6 +1087,7 @@ def _memoir_row(r: Any, with_result: bool = False) -> dict:
     d["session_ids"] = [str(x) for x in (r["session_ids"] or [])]
     if with_result:
         d["result"] = _jsonb(r["result"])
+        d["illustrations"] = _jsonb(r["illustrations"]) if "illustrations" in r.keys() else None
     return d
 
 
@@ -1058,12 +1126,96 @@ async def load_memoir(memoir_id: str, user_id: str) -> dict | None:
     async def run(con):
         return await con.fetchrow(
             f"""
-            SELECT {_MEMOIR_COLS}, result FROM memoir
+            SELECT {_MEMOIR_COLS}, result, illustrations FROM memoir
              WHERE memoir_id = $1 AND user_id = $2 AND deleted_at IS NULL
             """,
             memoir_id, user_id)
     row = await _auth_write("자서전 읽기", run)
     return _memoir_row(row, with_result=True) if row else None
+
+
+async def save_memoir_illustrations(memoir_id: str, user_id: str, doc: dict) -> None:
+    """삽화 처리 상태를 적는다 (017). 원고(result)는 건드리지 않는다. 지운 책에는 적지 않는다."""
+    async def run(con):
+        await con.execute(
+            "UPDATE memoir SET illustrations = $3::jsonb WHERE memoir_id = $1 AND user_id = $2 AND deleted_at IS NULL",
+            memoir_id, user_id, json.dumps(doc, ensure_ascii=False, default=str))
+    await _auth_write("자서전 삽화 상태 저장", run)
+
+
+# ---------------------------------------------------------------- 자서전 사진 배치 (018)
+#
+# 사용자가 완성된 책에 넣거나 옮기거나 뺀 사진. 자동 배치(memoir.illustrations)와 따로 둔다 — memoir_photos.py 머리 참조.
+# 모든 쿼리에 memoir_id · user_id 를 함께 건다 — 남의 책 · 남의 배치는 「없음」 이다.
+
+_PLACEMENT_COLS = ("placement_id, memoir_id, user_id, photo_id, origin, chapter_no, after_paragraph, display_order, "
+                   "hidden, width, height, sessions, anchor_session, created_at, updated_at")
+
+
+def _placement_row(r: Any) -> dict:
+    d = {k: r[k] for k in ("placement_id", "memoir_id", "user_id", "origin", "chapter_no", "after_paragraph",
+                           "display_order", "hidden", "width", "height", "anchor_session", "created_at", "updated_at")}
+    d["sessions"] = [str(x) for x in (r["sessions"] or [])] or None
+    d["photo_id"] = str(r["photo_id"])
+    return d
+
+
+async def list_photo_placements(memoir_id: str, user_id: str) -> list[dict]:
+    """DB 를 열지 않은 서버(풀 없음)에는 배치가 있을 수 없다 — 빈 목록. 열린 DB 에서의 실패는 StoreUnavailable 이다."""
+    if _pool is None:
+        return []
+
+    async def run(con):
+        return await con.fetch(
+            f"""
+            SELECT {_PLACEMENT_COLS} FROM memoir_photo_placement
+             WHERE memoir_id = $1 AND user_id = $2
+             ORDER BY created_at, placement_id
+            """,
+            memoir_id, user_id)
+    return [_placement_row(r) for r in await _auth_write("자서전 사진 배치 읽기", run)]
+
+
+async def save_photo_placement(rec: dict) -> dict | None:
+    """
+    배치 한 줄을 넣거나 고친다 (placement_id 기준). 같은 id 가 **다른 책 · 다른 사람** 것이면 고치지 않고 None.
+    """
+    async def run(con):
+        return await con.fetchrow(
+            f"""
+            INSERT INTO memoir_photo_placement (placement_id, memoir_id, user_id, photo_id, origin, chapter_no,
+                                                after_paragraph, display_order, hidden, width, height, sessions,
+                                                anchor_session)
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
+            ON CONFLICT (placement_id) DO UPDATE
+               SET chapter_no = EXCLUDED.chapter_no, after_paragraph = EXCLUDED.after_paragraph,
+                   display_order = EXCLUDED.display_order, hidden = EXCLUDED.hidden,
+                   sessions = COALESCE(EXCLUDED.sessions, memoir_photo_placement.sessions),
+                   anchor_session = COALESCE(memoir_photo_placement.anchor_session, EXCLUDED.anchor_session),
+                   updated_at = now()
+             WHERE memoir_photo_placement.memoir_id = EXCLUDED.memoir_id
+               AND memoir_photo_placement.user_id = EXCLUDED.user_id
+            RETURNING {_PLACEMENT_COLS}
+            """,
+            rec["placement_id"], rec["memoir_id"], rec["user_id"], uuid.UUID(str(rec["photo_id"])), rec["origin"],
+            rec.get("chapter_no"), rec.get("after_paragraph"), int(rec.get("display_order") or 0),
+            bool(rec.get("hidden")), rec.get("width"), rec.get("height"),
+            list(rec["sessions"]) if rec.get("sessions") else None, rec.get("anchor_session"))
+    row = await _auth_write("자서전 사진 배치 저장", run)
+    return _placement_row(row) if row else None
+
+
+async def delete_photo_placement(placement_id: str, memoir_id: str, user_id: str) -> bool:
+    """사용자가 넣은 사진(manual)을 책에서 뺀다 — 행만 지운다. 사진 파일 · photo 행은 그대로다."""
+    async def run(con):
+        return await con.fetchval(
+            """
+            DELETE FROM memoir_photo_placement
+             WHERE placement_id = $1 AND memoir_id = $2 AND user_id = $3 AND origin = 'manual'
+            RETURNING placement_id
+            """,
+            placement_id, memoir_id, user_id)
+    return bool(await _auth_write("자서전 사진 배치 지우기", run))
 
 
 async def delete_memoir(memoir_id: str, user_id: str) -> bool:
@@ -1076,6 +1228,198 @@ async def delete_memoir(memoir_id: str, user_id: str) -> bool:
             """,
             memoir_id, user_id)
     return bool(await _auth_write("자서전 지우기", run))
+
+# ---------------------------------------------------------------- 가족 음성편지 (019)
+#
+# voice_message.py 머리 참조. 연결 · 교체 · 삭제는 **트랜잭션 하나**에서 memoir_voice 줄을 잠그고 한다 —
+# 한 책에 활성 메시지가 둘 생기지 않고, 늦게 온 요청이 앞선 삭제 · 교체를 되돌리지 못한다(revision).
+
+_VOICE_COLS = ("upload_id, user_id, request_id, state, mime, size_bytes, duration_ms, sha256, storage_key, play_key, "
+               "play_mime, play_bytes, memoir_id, created_at, expires_at, attached_at, released_at")
+
+
+def _voice_row(r: Any) -> dict | None:
+    return {k: r[k] for k in _VOICE_COLS.split(", ")} if r else None
+
+
+async def save_voice_upload(rec: dict) -> dict:
+    """
+    임시 업로드를 넣는다. 같은 (사용자, 요청 id) 가 이미 있으면 **넣지 않고 그 줄을 돌려준다** — 응답을 잃은 재시도.
+    돌려받은 줄의 upload_id 가 rec 과 다르면 부르는 쪽이 방금 올린 바이트를 지운다.
+    """
+    async def run(con):
+        row = await con.fetchrow(
+            f"""
+            INSERT INTO voice_upload (upload_id, user_id, request_id, mime, size_bytes, duration_ms, sha256, storage_key,
+                                      play_key, play_mime, play_bytes, expires_at)
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+            ON CONFLICT (user_id, request_id) DO NOTHING
+            RETURNING {_VOICE_COLS}
+            """,
+            rec["upload_id"], rec["user_id"], rec["request_id"], rec["mime"], rec["size_bytes"], rec["duration_ms"],
+            rec["sha256"], rec["storage_key"], rec["play_key"], rec["play_mime"], rec["play_bytes"], rec["expires_at"])
+        if row is None:
+            row = await con.fetchrow(f"SELECT {_VOICE_COLS} FROM voice_upload WHERE user_id = $1 AND request_id = $2",
+                                     rec["user_id"], rec["request_id"])
+        return row
+    return _voice_row(await _auth_write("음성편지 업로드 저장", run))
+
+
+async def find_voice_upload(user_id: str, request_id: str) -> dict | None:
+    async def run(con):
+        return await con.fetchrow(f"SELECT {_VOICE_COLS} FROM voice_upload WHERE user_id = $1 AND request_id = $2",
+                                  user_id, request_id)
+    return _voice_row(await _auth_write("음성편지 업로드 읽기", run))
+
+
+async def load_voice_upload(upload_id: str, user_id: str) -> dict | None:
+    async def run(con):
+        return await con.fetchrow(f"SELECT {_VOICE_COLS} FROM voice_upload WHERE upload_id = $1 AND user_id = $2",
+                                  upload_id, user_id)
+    return _voice_row(await _auth_write("음성편지 업로드 읽기", run))
+
+
+async def discard_voice_upload(upload_id: str, user_id: str) -> str:
+    """사용자가 버린 임시 업로드. 'ok' · 'not_found' · 'attached'(책에 연결된 파일은 여기서 지우지 않는다) · 'gone'."""
+    async def run(con):
+        async with con.transaction():
+            row = await con.fetchrow("SELECT state FROM voice_upload WHERE upload_id = $1 AND user_id = $2 FOR UPDATE",
+                                     upload_id, user_id)
+            if row is None:
+                return "not_found"
+            if row["state"] == "attached":
+                return "attached"
+            if row["state"] != "uploaded":
+                return "gone"
+            await con.execute("UPDATE voice_upload SET state = 'discarded', released_at = now() WHERE upload_id = $1",
+                              upload_id)
+            return "ok"
+    return await _auth_write("음성편지 업로드 버리기", run)
+
+
+async def load_memoir_voice(memoir_id: str, user_id: str) -> dict:
+    """{revision, last_request_id, upload: 연결된 파일 줄 | None}. 줄이 없으면 revision 0 · 메시지 없음."""
+    async def run(con):
+        v = await con.fetchrow("SELECT revision, upload_id, last_request_id FROM memoir_voice "
+                               "WHERE memoir_id = $1 AND user_id = $2", memoir_id, user_id)
+        up = None
+        if v is not None and v["upload_id"]:
+            up = await con.fetchrow(f"SELECT {_VOICE_COLS} FROM voice_upload WHERE upload_id = $1", v["upload_id"])
+        return v, up
+    v, up = await _auth_write("음성편지 읽기", run)
+    return {"revision": v["revision"] if v else 0, "last_request_id": v["last_request_id"] if v else None,
+            "upload": _voice_row(up)}
+
+
+async def attach_voice(memoir_id: str, user_id: str, upload_id: str, request_id: str,
+                       expected_revision: int) -> tuple[str, Any]:
+    """
+    임시 업로드를 책에 연결 (있던 메시지는 교체). 돌려주는 갈래:
+        ('ok' | 'same', None)       연결됨 · 같은 요청의 재시도라 이미 연결돼 있음
+        ('conflict', 지금 revision) expected_revision 이 지금과 다르다 — 화면이 다시 읽어야 한다
+        ('memoir_not_found' | 'upload_not_found' | 'upload_in_use' | 'upload_expired', None)
+    새 파일이 attached 가 되고 메시지가 그것을 가리키는 일, 앞 파일을 released 로 놓는 일이 한꺼번에 일어난다.
+    """
+    async def run(con):
+        async with con.transaction():
+            await con.execute(
+                """
+                INSERT INTO memoir_voice (memoir_id, user_id)
+                SELECT $1, $2 WHERE EXISTS (SELECT 1 FROM memoir WHERE memoir_id = $1 AND user_id = $2 AND deleted_at IS NULL)
+                ON CONFLICT (memoir_id) DO NOTHING
+                """, memoir_id, user_id)
+            v = await con.fetchrow("SELECT revision, upload_id, last_request_id FROM memoir_voice "
+                                   "WHERE memoir_id = $1 AND user_id = $2 FOR UPDATE", memoir_id, user_id)
+            if v is None:
+                return "memoir_not_found", None
+            if v["upload_id"] == upload_id and (v["last_request_id"] == request_id or v["revision"] == expected_revision + 1):
+                return "same", None
+            if v["revision"] != expected_revision:
+                return "conflict", v["revision"]
+            up = await con.fetchrow("SELECT state, memoir_id, expires_at < now() AS expired FROM voice_upload "
+                                    "WHERE upload_id = $1 AND user_id = $2 FOR UPDATE", upload_id, user_id)
+            if up is None:
+                return "upload_not_found", None
+            if up["state"] == "attached":
+                return "upload_in_use", None
+            if up["state"] != "uploaded" or up["expired"]:
+                return "upload_expired", None
+            await con.execute("UPDATE voice_upload SET state = 'attached', memoir_id = $2, attached_at = now() "
+                              "WHERE upload_id = $1", upload_id, memoir_id)
+            if v["upload_id"]:
+                await con.execute("UPDATE voice_upload SET state = 'released', released_at = now() "
+                                  "WHERE upload_id = $1 AND state = 'attached'", v["upload_id"])
+            await con.execute("UPDATE memoir_voice SET upload_id = $3, revision = revision + 1, last_request_id = $4, "
+                              "updated_at = now() WHERE memoir_id = $1 AND user_id = $2",
+                              memoir_id, user_id, upload_id, request_id)
+            return "ok", None
+    return await _auth_write("음성편지 연결", run)
+
+
+async def detach_voice(memoir_id: str, user_id: str, expected_revision: int) -> tuple[str, Any]:
+    """책의 음성편지를 지운다. ('ok' · 'conflict', 지금 revision) · ('no_message' · 'memoir_not_found', None)."""
+    async def run(con):
+        async with con.transaction():
+            v = await con.fetchrow("SELECT revision, upload_id FROM memoir_voice "
+                                   "WHERE memoir_id = $1 AND user_id = $2 FOR UPDATE", memoir_id, user_id)
+            if v is None:
+                alive = await con.fetchval("SELECT 1 FROM memoir WHERE memoir_id = $1 AND user_id = $2 "
+                                           "AND deleted_at IS NULL", memoir_id, user_id)
+                return ("no_message" if alive else "memoir_not_found"), None
+            if v["revision"] != expected_revision:
+                return "conflict", v["revision"]
+            if not v["upload_id"]:
+                return "no_message", None
+            await con.execute("UPDATE voice_upload SET state = 'released', released_at = now() WHERE upload_id = $1",
+                              v["upload_id"])
+            await con.execute("UPDATE memoir_voice SET upload_id = NULL, revision = revision + 1, last_request_id = NULL, "
+                              "updated_at = now() WHERE memoir_id = $1 AND user_id = $2", memoir_id, user_id)
+            return "ok", None
+    return await _auth_write("음성편지 지우기", run)
+
+
+async def voice_to_purge(limit: int = 50) -> list[dict]:
+    """바이트를 지울 파일 — 기한이 지난 미연결 업로드 · 버린 것 · 교체 · 삭제로 참조가 끊긴 것. 연결된 파일은 없다."""
+    async def run(con):
+        return await con.fetch(
+            f"""
+            SELECT {_VOICE_COLS} FROM voice_upload
+             WHERE (state = 'uploaded' AND expires_at < now()) OR state IN ('released', 'discarded')
+             ORDER BY created_at LIMIT $1
+            """, limit)
+    return [_voice_row(r) for r in await _auth_write("음성편지 정리 대상 읽기", run)]
+
+
+async def mark_voice_purged(upload_id: str) -> bool:
+    """바이트를 지웠다. 그사이 연결된 줄(attached)은 건드리지 않는다."""
+    async def run(con):
+        return await con.fetchval(
+            "UPDATE voice_upload SET state = 'purged' WHERE upload_id = $1 "
+            "AND (state IN ('released', 'discarded') OR (state = 'uploaded' AND expires_at < now())) RETURNING upload_id",
+            upload_id)
+    return bool(await _auth_write("음성편지 정리 기록", run))
+
+
+async def set_share_source(share_id: str, user_id: str, memoir_id: str) -> None:
+    """공유 링크에 원본 자서전을 단다 — 그 사람의 지운 적 없는 책일 때만."""
+    if _pool is None:
+        return
+
+    async def run(con):
+        await con.execute(
+            """
+            UPDATE memoir_share SET source_memoir_id = $3
+             WHERE share_id = $1 AND user_id = $2
+               AND EXISTS (SELECT 1 FROM memoir WHERE memoir_id = $3 AND user_id = $2 AND deleted_at IS NULL)
+            """, share_id, user_id, memoir_id)
+    await _auth_write("공유 원본 연결", run)
+
+
+async def load_share_by_id(share_id: str) -> dict | None:
+    async def run(con):
+        return await con.fetchrow(f"SELECT {_SHARE_COLS} FROM memoir_share WHERE share_id = $1", share_id)
+    row = await _auth_write("공유 읽기", run)
+    return _share_row(row) if row else None
 
 # ---------------------------------------------------------------- 회차 숨기기 (015)
 

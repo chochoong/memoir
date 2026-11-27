@@ -117,6 +117,7 @@ async def issue(user_id: str, prep: dict) -> tuple[dict, str]:
         "link_id": f"l_{uuid.uuid4().hex}", "token_hash": _hash(raw), "user_id": user_id,
         "elder_id": prep["elder_id"], "title": prep["title"], "seed": prep["seed"],
         "theme": prep["theme"], "topic": prep["topic"], "photo_id": prep["photo_id"],
+        "voice": prep.get("voice") or "default",
         "expires_at": datetime.now(timezone.utc) + timedelta(hours=link_hours()),
     }
     await read(store.create_link(rec))
@@ -189,6 +190,7 @@ def summary(link: dict) -> dict:
     return {
         "link_id": link["link_id"], "elder_id": link["elder_id"], "title": link["title"],
         "theme": link["theme"], "topic": link["topic"], "picked_topic": link.get("picked_topic"),
+        "voice": link.get("voice") or "default",
         "state": state_of(link),
         "session_id": link["session_id"],
         "created_at": link["created_at"].isoformat(), "expires_at": link["expires_at"].isoformat(),
