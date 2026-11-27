@@ -2,7 +2,8 @@
   'use strict';
   /* ═══════════════════════════════════════════════════════════════
      srv-memoir — 자서전 만들기 · 책장 (시안 화면 + 서버)
-       · 만들기: POST /api/memoirs {session_ids, style} → 202 {job_id}
+       · 만들기: POST /api/memoirs {session_ids, style, illust_style} → 202 {job_id}
+                 illust_style 은 삽화 그림체 (illust-style.js — 수채화 · 애니풍 · 유화, 기본 수채화). 문체와 따로다.
                  → GET /api/memoirs/{job_id} 를 몇 초마다 (running · done · failed)
                  409 busy 면 이미 만드는 작업(job_id)을 이어서 기다린다.
                  작업 번호는 이 브라우저에 기억한다 — 새로고침해도 이어서 기다린다 (v0.54 와 같다).
@@ -51,6 +52,7 @@
     too_much: '이야기가 너무 많아 한 번에 만들 수 없어요. 넣지 않을 엽서를 몇 장 빼 주세요.',
     job_not_found: '만들던 자서전을 찾을 수 없어요. 다시 만들어 주세요.',
     unsupported_style: '지금은 이 문체로 만들 수 없어요. 다른 문체를 골라 주세요.',
+    unsupported_illust_style: '지금은 이 그림체로 만들 수 없어요. 다른 삽화 그림체를 골라 주세요.',
     insufficient_material: '자서전에 담을 만큼 분명한 이야기가 모이지 않았어요. 엽서를 더 골라 주세요.',
     cancelled: '자서전 만들기를 그만두었어요.',
   };
@@ -160,13 +162,16 @@
     // 서버는 회차가 만들어진 순서로 엮는다. 화면도 같은 순서로 보낸다
     const ids = chosen.sort((a, b) => Date.parse(a.created_at) - Date.parse(b.created_at)).map((r) => r.session_id);
     const style = styles.some((s) => s.id === state.style) ? state.style : (styles[0] ? styles[0].id : 'essay');
+    const illustStyle = window.SrvIllustStyle ? window.SrvIllustStyle.value() : undefined;   // 없으면 서버가 수채화
     state.generating = true;
     stagePast = false; clock = null; shown = '';
     dialog.querySelector('#generation-stage').textContent = '자서전 만들기를 시작하고 있어요…';
+    const stopBtn = dialog.querySelector('[data-gen="stop"]'); if (stopBtn) stopBtn.hidden = false;
+    { const nt = dialog.querySelector('.srv-gen-note'); if (nt) nt.hidden = false; const hb = dialog.querySelector('[data-gen="hide"]'); if (hb) hb.textContent = '닫고 기다리기'; }
     if (!dialog.open) dialog.showModal();
     let first;
     try {
-      first = await api.memoirStart({ids}, style);
+      first = await api.memoirStart({ids}, style, illustStyle);
     } catch (e) {
       if (e.status === 409 && e.code === 'busy' && e.body && e.body.job_id) {
         first = {job_id: e.body.job_id, status: 'running'};
@@ -177,8 +182,9 @@
         return;
       }
     }
-    job = {job_id: first.job_id, elderId: AUTH.elderId, style, title: state.pendingMemoirTitle || ''};
+    job = {job_id: first.job_id, elderId: AUTH.elderId, style, illustStyle, title: state.pendingMemoirTitle || ''};
     jobKeep(job);
+    if (window.MemoirVoiceLetter) window.MemoirVoiceLetter.jobStarted(job.job_id);   // 가족 음성편지 — 이 작업 동안 녹음한 음성은 이 책에
     void wait(job, true);
   }
 
@@ -196,7 +202,7 @@
       catch (e) {
         if (my !== seq) return;
         // 작업은 서버 메모리에 30분만 남는다. 다 만든 책은 DB 에 저장되므로 오래 지나 돌아왔으면 책장을 본다
-        if (e.status === 404) { finish(); void reloadLibrary(); toast(visible ? SAYS.job_not_found : '만들던 자서전은 「자서전 보기」 책장에서 확인해 주세요.'); return; }
+        if (e.status === 404) { const keepV = voiceLost(j); finish(keepV); if (keepV) stageSay('자서전 작업을 찾을 수 없어요.'); void reloadLibrary(); toast(visible ? SAYS.job_not_found : '만들던 자서전은 「자서전 보기」 책장에서 확인해 주세요.'); return; }
         if (++misses >= 5) { finish(); toast('자서전 소식을 받지 못하고 있어요. 잠시 뒤 다시 열어 주세요.'); return; }
         await sleepMs(CONFIG.memoir.pollMs); continue;
       }
@@ -206,17 +212,22 @@
         if (Date.now() - t0 > CONFIG.memoir.jobMaxMs) { finish(); toast(FAIL[504]); return; }
         await sleepMs(CONFIG.memoir.pollMs); continue;
       }
-      if (r.status === 'failed') { finish(); toast(why(r)); return; }
+      if (r.status === 'failed') { const keep = voiceLost(j); finish(keep); if (keep) stageSay(why(r)); toast(why(r)); return; }
       // done
       let view;
       try { view = contract.jobView(r, {elder_id: j.elderId, uiStyle: j.style}); } catch (_) { view = null; }
       if (!view || !view.canRead) {
-        finish();
+        const keepV = voiceLost(j); finish(keepV);
         const st = r.result && r.result.status;
+        if (keepV) stageSay('자서전을 만들지 못했어요.');
         toast(SAYS[st] || (st === 'partial' || st === 'incomplete' ? '자서전 몇 장을 만들지 못했어요. 다시 해 주세요.' : FAIL.other));
         return;
       }
-      finish();
+      // 가족 음성편지: 녹음 · 저장이 진행 중이면 진행 창을 닫지 않고 화면도 옮기지 않는다 (업무지시서 02)
+      const memoirId = r.memoir_id || (r.result && r.result.memoir_id) || null;
+      const hold = !!(window.MemoirVoiceLetter && window.MemoirVoiceLetter.jobDone(j.job_id, memoirId, view.document.title));
+      finish(hold);
+      if (hold) { stageSay('자서전이 다 만들어졌어요.'); const sb = dialog.querySelector('[data-gen="stop"]'); if (sb) sb.hidden = true; }
       state.document = view.document; state.title = view.document.title; state.body = [...view.document.body];
       state.style = styles.some((s) => s.id === r.style) ? r.style : j.style;
       state.draftElderId = j.elderId; state.spread = 0; state.pendingMemoirTitle = null;
@@ -227,24 +238,32 @@
       state.selected.clear(); state.pickRecords = false;
       // 자서전을 고르던 화면에 있을 때만 초안으로 옮긴다 — 인터뷰 · 다른 화면을 보고 있으면 알리기만 한다
       const here = ['#style', '#records', '#draft'].includes(location.hash) && !window.SrvInterview?.busy();
-      if (AUTH.elderId === j.elderId && here) { navigate('draft'); toast('자서전 초안이 나왔어요. 읽어 보고 책으로 보관해 주세요.'); }
+      if (hold) toast('자서전이 다 만들어졌어요. 음성편지를 마친 뒤 「초안 보기」를 눌러 주세요.', 5000);
+      else if (AUTH.elderId === j.elderId && here) { navigate('draft'); toast('자서전 초안이 나왔어요. 읽어 보고 책으로 보관해 주세요.'); }
       else if (AUTH.elderId === j.elderId) toast('자서전이 다 만들어졌어요. 「자서전 보기」 책장에서 펼쳐 보세요.');
       else toast('다른 이야기 주인공의 자서전이 다 만들어졌어요. 그분을 고르면 책장에서 볼 수 있어요.');
       void reloadLibrary();
       return;
     }
   }
-  function finish() { state.generating = false; job = null; jobKeep(null); if (dialog.open) dialog.close(); paintPill(); }
+  // keep: 가족 음성편지 녹음 · 저장이 남아 진행 창을 열어 둔다
+  function finish(keep) { state.generating = false; job = null; jobKeep(null); if (dialog.open && !keep) dialog.close(); paintPill(); }
+  const voiceLost = (j) => !!(window.MemoirVoiceLetter && window.MemoirVoiceLetter.jobFailed(j.job_id));
+  // 다 만들었거나 실패했는데 음성편지 때문에 창을 열어 둘 때 — 「몇 분 걸릴 수 있어요」 안내를 빼고 단추는 「닫기」로
+  const stageSay = (t) => { dialog.querySelector('#generation-stage').textContent = t; const nt = dialog.querySelector('.srv-gen-note'); if (nt) nt.hidden = true; const hb = dialog.querySelector('[data-gen="hide"]'); if (hb) hb.textContent = '닫기'; };
   const sleepMs = (ms) => new Promise((r) => setTimeout(r, ms));
 
+  // Esc 로 닫을 때도 녹음 중 · 저장 전 음성편지를 확인한다
+  dialog.addEventListener('cancel', (e) => { if (window.MemoirVoiceLetter && !window.MemoirVoiceLetter.canCloseGen()) e.preventDefault(); });
   dialog.addEventListener('click', async (e) => {
     const b = e.target.closest('[data-gen]');
     if (!b) return;
-    if (b.dataset.gen === 'hide') { dialog.close(); toast('다 만들어지면 알려 드릴게요. 「자서전 만드는 중」 알림을 누르면 진행 상황을 볼 수 있어요.'); return; }
+    if (b.dataset.gen === 'hide') { if (window.MemoirVoiceLetter && !window.MemoirVoiceLetter.canCloseGen()) return; dialog.close(); toast('다 만들어지면 알려 드릴게요. 「자서전 만드는 중」 알림을 누르면 진행 상황을 볼 수 있어요.'); return; }
     if (b.dataset.gen === 'stop' && job) {
       if (!window.confirm('자서전 만들기를 그만둘까요?')) return;
       const id = job.job_id;
-      seq++; finish();
+      seq++; const keep = voiceLost({job_id: id}); finish(keep);
+      if (keep) { stageSay(SAYS.cancelled); b.hidden = true; }
       try { await api.memoirCancel(id); } catch (_) {}
       toast(SAYS.cancelled);
     }
@@ -314,26 +333,64 @@
        {chapters: [{no, figures: [{kind, url, after_paragraph, width, height, ai_generated, caption}]}]}
        after_paragraph 는 그 장 안 문단 번호(0부터) — 읽기 화면의 문단 번호(sections)로 바꿔 둔다.
        이 기기에서 글을 고친 책은 문단 자리가 달라졌을 수 있어 그림을 넣지 않는다. */
-  const figStore = new Map(); // memoir_id → {status, at: {문단 번호: [그림]}}
+  const figStore = new Map(); // memoir_id → {status, at: {문단 번호: [그림]}, server: [그림], unplaced: [사진], editable, ill}
+  /* 사진 편집(photo-edit.js)을 위해 그림마다 placement_id · origin(auto · manual · ai) · display_order · photo_id 를 함께 둔다 (서버 9-C1).
+     서버가 한 장 안 figures 를 이미 정렬해 준다(같은 문단: display_order → 넣은 순서, AI 삽화는 사진 뒤) — 배열 순서를 그대로 쓴다.
+     배치는 서버에만 저장한다 — 이 기기에 따로 두지 않는다. */
+  function serverFigures(ill) {
+    const out = [];
+    if (ill && Array.isArray(ill.chapters)) ill.chapters.forEach((ch) => (ch.figures || []).forEach((f, k) => {
+      if (!f || !f.url) return;
+      out.push({kind: f.kind === 'illustration' ? 'illustration' : 'photo', url: f.url, w: f.width || 4, h: f.height || 3,
+        ai: !!f.ai_generated || f.kind === 'illustration', caption: f.caption || '', ch: ch.no, para: Number.isInteger(f.after_paragraph) ? f.after_paragraph : null,
+        id: f.placement_id ? String(f.placement_id) : null, origin: f.origin || null, order: Number.isInteger(f.display_order) ? f.display_order : null,
+        photoId: f.photo_id ? String(f.photo_id) : null, hasOrigin: Object.prototype.hasOwnProperty.call(f, 'origin')});
+    }));
+    return out;   // 서버 차례 그대로
+  }
   function mapFigures(doc, ill) {
     const at = {};
-    if (doc && !doc.edited && Array.isArray(doc.sections) && ill && Array.isArray(ill.chapters)) {
-      ill.chapters.forEach((ch) => (ch.figures || []).forEach((f) => {
-        if (!f || !f.url) return;
-        let i = doc.sections.findIndex((s) => s.chapterNo === ch.no && s.paragraphIndex === f.after_paragraph);
+    const server = serverFigures(ill);
+    if (doc && !doc.edited && Array.isArray(doc.sections)) {
+      server.forEach((f) => {
+        let i = doc.sections.findIndex((s) => s.chapterNo === f.ch && s.paragraphIndex === f.para);
         if (i < 0) { // 자리를 모르면 그 장 끝에
-          const last = doc.sections.map((s, k) => (s.chapterNo === ch.no ? k : -1)).filter((k) => k >= 0).pop();
+          const last = doc.sections.map((s, k) => (s.chapterNo === f.ch ? k : -1)).filter((k) => k >= 0).pop();
           if (last === undefined) return; i = last;
         }
-        (at[i] = at[i] || []).push({kind: f.kind, url: f.url, w: f.width || 4, h: f.height || 3, caption: f.caption || '', ai: !!f.ai_generated});
-      }));
+        (at[i] = at[i] || []).push({kind: f.kind, url: f.url, w: f.w, h: f.h, caption: f.caption, ai: f.ai});
+      });
     }
-    return {status: (ill && ill.status) || 'off', at};
+    // 회차에 붙였지만 어느 장에도 놓지 못한 사진 (서버 95b5cd9 · view().unplaced_photos) — book-unplaced.js 가 안내한다
+    const unplaced = (ill && Array.isArray(ill.unplaced_photos) ? ill.unplaced_photos : [])
+      .filter((u) => u && (u.photo_id || u.url))
+      .map((u) => ({id: String(u.photo_id || u.url), url: u.url || null, reason: String(u.reason || ''), sessionId: u.session_id || null, chapters: Array.isArray(u.chapters) ? u.chapters : []}));
+    // 사진 편집을 서버가 받는가 — 9-C1 서버는 그림마다 origin 칸을 준다(AI 삽화는 placement_id 가 null).
+    // 그림이 하나도 없는 책은 알 길이 없어 받는다고 보고, 실제로 못 받으면 요청이 실패해 오류 문구가 나온다(성공처럼 꾸미지 않는다).
+    const editable = !!(ill && (ill.photo_edit === true || server.some((f) => f.hasOrigin) || (!server.length && Array.isArray(ill.chapters))));
+    return {status: (ill && ill.status) || 'off', at, server, unplaced, editable, ill: ill || null};
   }
+  const figuresChanged = (id) => window.dispatchEvent(new CustomEvent('memoir:figures', {detail: {id}}));
   function setFigures(book, ill) {
     const v = mapFigures(book.document, ill);
-    book.figureStatus = v.status; book.figures = v.at; figStore.set(book.id, v);
+    book.figureStatus = v.status; book.figures = v.at; figStore.set(book.id, v); figuresChanged(book.id);
   }
+  /** 사진 편집기가 쓰는 것 — 서버 배치(placement_id 포함) · 넣지 못한 사진 · 편집 가능 여부 */
+  function arrangeInfo(id) { const v = figStore.get(id) || {}; return {status: v.status || 'off', server: v.server || [], unplaced: v.unplaced || [], editable: !!v.editable, loaded: figStore.has(id)}; }
+  /** 사진을 고친 뒤 — 서버에서 다시 받아 읽기 화면 · 초안 · PDF 가 같은 배치를 쓰게 한다. 못 받으면 던진다 */
+  async function refreshArrange(id, doc) {
+    const ill = await window.Srv.call(`/memoirs/saved/${encodeURIComponent(id)}/illustrations`);
+    const book = window.MemoirLibrary.getBook(id);
+    const d = doc || (book && book.document) || (state.savedMemoirId === id ? state.document : null);
+    const v = mapFigures(d, ill); figStore.set(id, v);
+    if (book && book.document === d) { book.figures = v.at; book.figureStatus = v.status; }
+    if (window.MemoirFigures && window.MemoirFigures.load) await window.MemoirFigures.load(id);   // 초안 화면(book-figures.js)도 새로
+    figuresChanged(id);
+    if (location.hash === '#reader') window.dispatchEvent(new Event('resize'));
+    return v;
+  }
+  /** 그 책에 넣지 못한 사진 — [{id, url|null, reason, sessionId, chapters}] */
+  function unplaced(id) { return (id && (figStore.get(id) || {}).unplaced) || []; }
   /** 그 책의 그림 — 읽기 화면 · PDF 가 쓴다. 고친 글이면 넣지 않는다 */
   function figures(id, doc) {
     if (!id || (doc && doc.edited)) return {};
@@ -347,7 +404,7 @@
       const ill = await window.Srv.call(`/memoirs/saved/${encodeURIComponent(id)}/illustrations`);
       const before = JSON.stringify((figStore.get(id) || {}).at || {});
       const v = mapFigures(doc, ill);
-      figStore.set(id, v);
+      figStore.set(id, v); figuresChanged(id);
       const book = window.MemoirLibrary.getBook(id);
       if (book && book.document === doc) { book.figureStatus = v.status; book.figures = v.at; }
       if (JSON.stringify(v.at) !== before && location.hash === '#reader' && state.savedMemoirId === id) window.dispatchEvent(new Event('resize'));
@@ -422,6 +479,6 @@
   // 「자서전 보기」에 들어올 때마다 서버 책장을 다시 본다 — 다른 기기 · 창에서 만든 책도 바로 보이게
   window.addEventListener('memoir:screen', (e) => { if (e.detail.screen === 'library' && AUTH.user) void reloadLibrary(); });
 
-  window.SrvLibrary = {reload: reloadLibrary, ensure, removeSaved, styleTitle, readEdit, writeEdit, refreshFigures, figures, loadFigures};
+  window.SrvLibrary = {reload: reloadLibrary, ensure, removeSaved, styleTitle, readEdit, writeEdit, refreshFigures, figures, loadFigures, unplaced, arrangeInfo, refreshArrange};
   void ApiError;
 }());

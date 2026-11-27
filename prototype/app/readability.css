@@ -250,7 +250,18 @@ body:not(.ebook-mode) .aq-hear .icon { width: 15px; height: 15px; }
   }
   dialog::backdrop { background: rgba(36, 28, 26, .62) !important; backdrop-filter: none !important; -webkit-backdrop-filter: none !important; }
   .review-dialog p, .elder-pick-dialog p { line-height: 1.7; }
-  html body.ebook-mode { --page-grain: none !important; --desk-grain: linear-gradient(transparent, transparent) !important; }
   body.ebook-mode :is(.ebook-section p, .book-page p) { -webkit-text-stroke: .25px currentColor; }
   body.ebook-mode :is(.ebook-section, .ebook-content) { text-rendering: optimizeLegibility; }
 }
+/* 6-4. PC 에서도 「자서전 자글자글한 질감 없애 달라」 — 화면 크기와 상관없이 책 읽기의 종이 잔무늬(노이즈) · 책상 결 무늬를 뺀다.
+   종이색 · 책등 그늘 · 표지 판은 그대로라 펼친 책 모양은 유지된다. (휴대폰은 6-3 에서 이미 뺐음) */
+html body.ebook-mode { --page-grain: none !important; --desk-grain: linear-gradient(transparent, transparent) !important; }
+/* 6-5. 첫 화면 「최근 나눈 이야기」 (v1.17) — 팀장 요청
+   · 마우스를 올린 줄 바탕이 화면 바탕(#F6F4F1)과 거의 같은 회베이지(#F2EFEB)라 「활성화」로 보이지 않았다 → 강조색 계열의 아주 옅은 노랑 + 옅은 노랑 테두리
+   · 왼쪽 아이콘 상자도 바탕이 화면 바탕과 같은 색이라 흰 카드 위에서 거의 안 보였다 → 평소에도 옅은 노랑 바탕 · 갈색 아이콘(예전 마우스 올림 색)
+     마우스를 올리면 줄 바탕만 바뀌고 아이콘 상자는 한 단계 진해진다. 「전체 웜톤」 판(tone=warm)은 그 판 색을 그대로 둔다. */
+html:not(.tone-warm) body:not(.ebook-mode) .recent-row .memory-thumbnail { background: #FFF1D1; color: #997115; border-color: #F3DDA4; }
+html:not(.tone-warm) body:not(.ebook-mode) .recent-row:hover { background: #FFF8E6; border-color: #F3DDA4; }
+html:not(.tone-warm) body:not(.ebook-mode) .recent-row:hover .memory-thumbnail.memory-thumbnail { background: #FDE7B0; color: #8A6410; border-color: #EBCB78; }
+html:not(.tone-warm) body:not(.ebook-mode) .recent-row:active { background: #FDF0CF; }
+html:not(.tone-warm) body:not(.ebook-mode) .recent-row:focus-visible { background: #FFF8E6; }

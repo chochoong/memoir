@@ -117,6 +117,7 @@
     return `<figure class="ebook-figure ${f.ai?'is-ai':'is-photo'}"><span class="ebook-figure-frame" style="aspect-ratio:${Number(f.w)||4} / ${Number(f.h)||3}"><img alt="${escapeText(f.ai?'AI가 그린 그림':(f.caption||'이야기와 함께 남긴 사진'))}" data-fig-src="${escapeText(f.url)}"></span>${label?`<figcaption>${escapeText(label)}</figcaption>`:''}</figure>`;
   }
   function blockHTML(block){
+    if(block.voice)return window.MemoirVoiceLetter?.pageHTML?.()||'';   // 가족 음성편지 쪽 (voice-letter.js · 마지막 쪽)
     const heading=headingFor(block.section);
     // 쪽 모드: 그림은 그림만 든 칸(block.figure)으로 따로 온다 / 세로 스크롤: 문단 뒤에 바로
     if(block.figure)return `<section class="ebook-section ebook-figure-only" data-section-index="${block.section}"><p hidden></p>${figuresAt(block.section).map(figureHTML).join('')}</section>`;
@@ -195,7 +196,7 @@
     if(animate&&oldHTML)animateTurn(oldHTML,direction,underHTML);
     updateProgress();
   }
-  function renderScroll(){query('#ebook-content').innerHTML=`${coverHTML()}<div class="ebook-divider" aria-hidden="true"></div>${sections.map((text,section)=>blockHTML({section,start:0,text})).join('')}<div class="ebook-endmark"><span>✧</span><p>당신의 이야기는 계속됩니다.</p></div>`;}
+  function renderScroll(){query('#ebook-content').innerHTML=`${coverHTML()}<div class="ebook-divider" aria-hidden="true"></div>${sections.map((text,section)=>blockHTML({section,start:0,text})).join('')}${window.MemoirVoiceLetter?.pageHTML?.()||''}<div class="ebook-endmark"><span>✧</span><p>당신의 이야기는 계속됩니다.</p></div>`;}
   function relayout(location=reading.location,atStart=reading.atStart){
     if(!active)return;
     restoring=true;cancelTurn();
@@ -215,6 +216,8 @@
       const viewport=query('#ebook-viewport');
       measure.style.width=`${query('#ebook-content').clientWidth}px`;measure.style.height=`${viewport.clientHeight}px`;
       pages=pager.paginate(sections,(blocks)=>{measure.innerHTML=blocks.map(blockHTML).join('');return measure.scrollHeight<=measure.clientHeight+1;},(section)=>figuresAt(section).length>0);
+      // 가족 음성편지 — 책 마지막에 한 쪽 (있으면 듣기, 없으면 남기기). 읽던 자리 계산이 깨지지 않게 마지막 문단 끝을 가리킨다
+      const voicePage=window.MemoirVoiceLetter?.pageBlock?.(sections);if(voicePage)pages.push([voicePage]);
       measure.innerHTML='';
     }else renderScroll();
     scrollToLocation(location,atStart);
@@ -257,6 +260,8 @@
   window.addEventListener('memoir:before-screen',event=>{if(active)saveProgress();if(event.detail.screen!=='reader')setMode(event.detail.screen);});
   window.addEventListener('memoir:screen',event=>{const screen=event.detail.screen;if(screen==='reader'&&previousScreen!=='reader')returnScreen=previousScreen;setMode(screen);previousScreen=screen;});
   window.addEventListener('pagehide',saveProgress);
+  // 서버가 삽화를 새로 넣었다 — 지금 읽던 자리를 지키며 다시 그린다
+  window.addEventListener('memoir:figures',()=>{if(!active)return;const location={...reading.location},atStart=reading.atStart;cancelAnimationFrame(layoutFrame);layoutFrame=requestAnimationFrame(()=>relayout(location,atStart));});
   window.addEventListener('resize',()=>{if(!active)return;const location={...reading.location},atStart=reading.atStart;cancelAnimationFrame(layoutFrame);layoutFrame=requestAnimationFrame(()=>relayout(location,atStart));});
   document.fonts?.ready.then(()=>{if(active)relayout({...reading.location},reading.atStart);});
   window.addEventListener('scroll',()=>{if(!active||paged||restoring)return;cancelAnimationFrame(scrollFrame);scrollFrame=requestAnimationFrame(updateProgress);clearTimeout(saveTimer);saveTimer=setTimeout(saveProgress,180);},{passive:true});
